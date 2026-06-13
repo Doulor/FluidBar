@@ -1,0 +1,210 @@
+<Window x:Class="FluidBar.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FluidBar"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Loaded="Window_Loaded"
+        Closing="Window_Closing"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
+
+    <Border x:Name="PillBorder"
+            Padding="16,12"
+            MinWidth="160"
+            MaxWidth="600"
+            Opacity="0"
+            UseLayoutRounding="True"
+            SnapsToDevicePixels="True">
+        <Border.Background>
+            <SolidColorBrush x:Name="PillBackground" Color="#E8202022"/>
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30" Opacity="0.45" ShadowDepth="1" Color="#000000"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 图标区域 - 精美圆形背景 + Segoe MDL2 图标 -->
+            <Border x:Name="IconBorder"
+                    Grid.Column="0"
+                    Width="32" Height="32"
+                    CornerRadius="16"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center"
+                    RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="IconScale" ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Border.Background>
+                    <SolidColorBrush x:Name="IconBackground" Color="#0A84FF"/>
+                </Border.Background>
+                <Border.Effect>
+                    <DropShadowEffect x:Name="IconGlow"
+                                      BlurRadius="12" Opacity="0.3" ShadowDepth="0" Color="#0A84FF"/>
+                </Border.Effect>
+                <TextBlock x:Name="IconText"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="15"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Text="&#xE16F;"/>
+            </Border>
+
+            <!-- 内容区域 -->
+            <Grid Grid.Column="1" VerticalAlignment="Center" x:Name="ContentGrid"
+                  ClipToBounds="True">
+                <StackPanel x:Name="ContentPanel"
+                            VerticalAlignment="Center"
+                            Opacity="0">
+                    <!-- 标题 -->
+                    <TextBlock x:Name="TitleText"
+                               FontSize="10"
+                               FontFamily="Segoe UI, Microsoft YaHei UI"
+                               Foreground="#999999"
+                               Margin="0,0,0,3"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <!-- 普通文本 -->
+                    <TextBlock x:Name="ContentText"
+                               FontSize="13"
+                               FontFamily="Segoe UI, Microsoft YaHei UI"
+                               Foreground="#FFFFFF"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="420"
+                               TextWrapping="NoWrap"
+                               Visibility="Collapsed"/>
+
+                    <!-- 进度条（音量/亮度） -->
+                    <Grid x:Name="ProgressBarPanel"
+                          Visibility="Collapsed"
+                          Margin="0,3,0,0"
+                          MaxWidth="220"
+                          HorizontalAlignment="Left">
+                        <Border Height="5" CornerRadius="3" Background="#2C2C2E"/>
+                        <Border x:Name="ProgressTrack" Height="5" CornerRadius="3" ClipToBounds="True">
+                            <Border x:Name="ProgressFill"
+                                    Height="5"
+                                    CornerRadius="3"
+                                    HorizontalAlignment="Left"
+                                    Width="0">
+                                <Border.Background>
+                                    <LinearGradientBrush EndPoint="1,0">
+                                        <GradientStop Color="#0A84FF" Offset="0"/>
+                                        <GradientStop Color="#5AC8FA" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="6" Opacity="0.5" ShadowDepth="0" Color="#0A84FF"/>
+                                </Border.Effect>
+                            </Border>
+                        </Border>
+                    </Grid>
+
+                    <!-- 状态指示器（电池/网络/蓝牙/USB） -->
+                    <Grid x:Name="StatusPanel"
+                          Visibility="Collapsed"
+                          Margin="0,2,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- 状态图标 -->
+                        <TextBlock x:Name="StatusIconText"
+                                   Grid.Column="0"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="11"
+                                   Foreground="#34C759"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+                        <TextBlock x:Name="StatusText"
+                                   Grid.Column="1"
+                                   FontSize="12"
+                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#CCCCCC"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- 锁键指示 -->
+                    <Grid x:Name="LockKeyPanel"
+                          Visibility="Collapsed"
+                          Margin="0,2,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LockKeyText"
+                                   Grid.Column="0"
+                                   FontSize="12"
+                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#CCCCCC"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"/>
+                        <Border x:Name="LedDot"
+                                Grid.Column="1"
+                                Width="10" Height="10"
+                                CornerRadius="5"
+                                Margin="0,0,8,0"
+                                VerticalAlignment="Center">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="LedColor" Color="#3A3A3C"/>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="LedShadow"
+                                                  BlurRadius="6" Opacity="0" ShadowDepth="0" Color="#34C759"/>
+                            </Border.Effect>
+                        </Border>
+                        <TextBlock x:Name="LockKeyStatus"
+                                   Grid.Column="2"
+                                   FontSize="11"
+                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#888888"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- 输入法指示 -->
+                    <Border x:Name="ImePanel"
+                            Visibility="Collapsed"
+                            CornerRadius="5"
+                            Padding="8,3"
+                            Margin="0,2,0,0"
+                            HorizontalAlignment="Left"
+                            BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="ImeBadgeColor" Color="#0A84FF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush x:Name="ImeBorderColor" Color="#33FFFFFF"/>
+                        </Border.BorderBrush>
+                        <TextBlock x:Name="ImeText"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                   Foreground="White"/>
+                    </Border>
+
+                    <!-- 滚动文本 -->
+                    <Canvas x:Name="ScrollCanvas"
+                            Height="18"
+                            ClipToBounds="True"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="ScrollText"
+                                   FontSize="13"
+                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#FFFFFF"
+                                   Canvas.Top="1"/>
+                    </Canvas>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
