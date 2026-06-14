@@ -216,6 +216,13 @@ internal sealed class IslandSnapshotWindow : Window
             return;
         }
 
+        // .NET 10 throws if DoubleAnimation origin is NaN (first-time placement).
+        // Seed position/size directly before animating.
+        if (double.IsNaN(Left)) Left = left;
+        if (double.IsNaN(Top)) Top = top;
+        if (double.IsNaN(Width)) Width = targetWidth;
+        if (double.IsNaN(Height)) Height = targetHeight;
+
         var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
         BeginAnimation(LeftProperty, new DoubleAnimation(left, TimeSpan.FromMilliseconds(360)) { EasingFunction = ease });
         BeginAnimation(TopProperty, new DoubleAnimation(top, TimeSpan.FromMilliseconds(360)) { EasingFunction = ease });
