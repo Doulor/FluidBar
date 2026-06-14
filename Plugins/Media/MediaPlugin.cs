@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Threading;
 
 namespace FluidBar;
@@ -20,6 +23,31 @@ public sealed class MediaPlugin : IIslandPlugin
     private string _lastSignature = string.Empty;
     private bool _isPolling;
     private bool _disposed;
+
+    // Known media player process names → friendly source name
+    private static readonly Dictionary<string, string> FallbackPlayers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["kugou"]      = "酷狗音乐",
+        ["cloudmusic"] = "网易云音乐",
+        ["qqmusic"]    = "QQ 音乐",
+        ["kwmusic"]    = "酷我音乐",
+        ["spotify"]    = "Spotify",
+        ["wmplayer"]   = "Media Player",
+    };
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     public MediaPlugin()
     {
@@ -84,16 +112,29 @@ public sealed class MediaPlugin : IIslandPlugin
 
     private async Task PollAsync()
     {
-        if (_isPolling || _sessionProvider is null)
+        if (_isPolling)
             return;
 
         _isPolling = true;
         try
         {
-            var snapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
+            MediaSnapshot? snapshot = null;
+
+            // 1. Try WinRT GSMTC first (works for browsers, Spotify, etc.)
+            if (_sessionProvider is not null)
+            {
+                snapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
+            }
+
+            // 2. Fallback: window title monitoring (for Kugou, Netease, etc. that don't use GSMTC)
             if (snapshot is null)
             {
-                // Media stopped — send a stopped event to collapse the island
+                snapshot = FindPlayingMediaFallback();
+            }
+
+            if (snapshot is null)
+            {
+                // Media stopped
                 if (!string.IsNullOrEmpty(_lastSignature))
                 {
                     _lastSignature = string.Empty;
@@ -119,6 +160,135 @@ public sealed class MediaPlugin : IIslandPlugin
         {
             _isPolling = false;
         }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [ThreadStatic]
+    private static List<(IntPtr Hwnd, string Title, string ProcessName, string SourceName)>? _fallbackWindows;
+
+    private static MediaSnapshot? FindPlayingMediaFallback()
+    {
+        // Build a map of known process IDs → source names
+        var knownProcessIds = new Dictionary<uint, string>();
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (FallbackPlayers.TryGetValue(process.ProcessName, out var sourceName))
+                    knownProcessIds[(uint)process.Id] = sourceName;
+            }
+            catch { }
+        }
+
+        if (knownProcessIds.Count == 0)
+            return null;
+
+        // Enumerate all top-level windows and match by process ID
+        _fallbackWindows = new List<(IntPtr, string, string, string)>();
+
+        EnumWindows((hWnd, _) =>
+        {
+            if (!IsWindowVisible(hWnd))
+                return true;
+
+            GetWindowThreadProcessId(hWnd, out uint pid);
+            if (!knownProcessIds.TryGetValue(pid, out var sourceName))
+                return true;
+
+            var title = GetWindowTitle(hWnd);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                GetWindowThreadProcessId(hWnd, out uint _);
+                _fallbackWindows!.Add((hWnd, title, "", sourceName));
+
+                // Also search child windows for song info
+                if (!title.Contains(" - ", StringComparison.Ordinal))
+                {
+                    EnumChildWindows(hWnd, (childHwnd, __) =>
+                    {
+                        if (!IsWindowVisible(childHwnd))
+                            return true;
+                        var childTitle = GetWindowTitle(childHwnd);
+                        if (!string.IsNullOrWhiteSpace(childTitle) &&
+                            childTitle.Contains(" - ", StringComparison.Ordinal))
+                        {
+                            _fallbackWindows!.Add((childHwnd, childTitle, "", sourceName));
+                            return false;
+                        }
+                        return true;
+                    }, IntPtr.Zero);
+                }
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        var candidates = _fallbackWindows;
+        _fallbackWindows = null;
+
+        // Prefer windows with " - " pattern (Artist - Song)
+        var best = candidates
+            .OrderByDescending(t => t.Title.Contains(" - ", StringComparison.Ordinal) ? 100 : t.Title.Length)
+            .FirstOrDefault();
+
+        if (best.Title is null)
+            return null;
+
+        var (artist, song) = ParseMediaTitle(best.Title, best.ProcessName);
+        if (string.IsNullOrWhiteSpace(song))
+            return null;
+
+        return new MediaSnapshot(
+            SourceAppUserModelId: best.SourceName,
+            SourceName: best.SourceName,
+            Title: song,
+            Artist: artist,
+            Album: "",
+            IsPlaying: true,
+            ProgressPercent: 0);
+    }
+
+    private static (string Artist, string Song) ParseMediaTitle(string title, string processName)
+    {
+        var dashIndex = title.IndexOf(" - ", StringComparison.Ordinal);
+        if (dashIndex > 0 && dashIndex < title.Length - 3)
+        {
+            var artist = title[..dashIndex].Trim();
+            var song = title[(dashIndex + 3)..].Trim();
+
+            var extraDash = song.LastIndexOf(" - ", StringComparison.Ordinal);
+            if (extraDash > 0)
+            {
+                var suffix = song[(extraDash + 3)..].Trim();
+                if (suffix.Contains("云音乐", StringComparison.Ordinal) ||
+                    suffix.Contains("Music", StringComparison.Ordinal) ||
+                    suffix.Contains("音乐", StringComparison.Ordinal) ||
+                    suffix.Contains("酷狗", StringComparison.Ordinal))
+                {
+                    song = song[..extraDash].Trim();
+                }
+            }
+
+            return (artist, song);
+        }
+
+        return ("", title.Trim());
+    }
+
+    private static string GetWindowTitle(IntPtr hWnd)
+    {
+        var length = GetWindowTextLength(hWnd);
+        if (length <= 0)
+            return string.Empty;
+
+        var builder = new StringBuilder(length + 1);
+        GetWindowText(hWnd, builder, builder.Capacity);
+        return builder.ToString();
     }
 
     private static string BuildSignature(MediaSnapshot snapshot)
