@@ -1,65 +1,28 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Threading;
+using Windows.UI.Notifications;
+using Windows.UI.Notifications.Management;
 
 namespace FluidBar;
 
-/// <summary>
-/// Windows notification plugin.
-/// Uses a lightweight Win32 window-title polling fallback when the WinRT
-/// UserNotificationListener is unavailable (requires net10.0-windows10.0.19041.0 TFM).
-/// </summary>
 public sealed class NotificationsPlugin : IIslandPlugin
 {
     private readonly DispatcherTimer _timer;
-    private readonly HashSet<string> _seenKeys = new();
+    private readonly HashSet<uint> _seenIds = new();
     private bool _isPolling;
     private bool _disposed;
 
     public string Id => "notifications";
     public string Name => "Windows 通知";
-    public string Description => "监听 Windows toast 通知，在灵动岛上显示应用来源、标题和正文。需 WinRT SDK 支持以获取完整通知内容。";
+    public string Description => "监听 Windows toast 通知，在灵动岛上显示应用来源、标题和正文";
     public string Icon => "\uE7F4";
     public bool Enabled { get; set; } = true;
     public IPluginConfig? Config => null;
     public event Action<IslandEvent>? EventTriggered;
 
-    // Known notification-related window class names
-    private static readonly HashSet<string> NotificationClasses = new(StringComparer.Ordinal)
-    {
-        "Windows.UI.Core.CoreWindow",
-        "ToastNotification",
-        "NotificationWindow",
-    };
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
-
-    [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-
-    [DllImport("user32.dll")]
-    private static extern int GetWindowTextLength(IntPtr hWnd);
-
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    // Store found windows to avoid repeated callbacks
-    [ThreadStatic]
-    private static List<WindowInfo>? _foundWindows;
-
-    private sealed record WindowInfo(string Title, string ClassName);
-
     public NotificationsPlugin()
     {
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2000) };
-        _timer.Tick += (_, _) => SafePoll();
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1600) };
+        _timer.Tick += (_, _) => _ = SafePollAsync();
     }
 
     public void Initialize() { }
@@ -82,27 +45,34 @@ public sealed class NotificationsPlugin : IIslandPlugin
         Stop();
     }
 
-    public Task<string> RequestAccessAsync()
+    public async Task<string> RequestAccessAsync()
     {
-        // Non-WinRT path: always report as "Unavailable" since we can't use UserNotificationListener
-        return Task.FromResult("WinRT Unavailable");
+        try
+        {
+            var status = await UserNotificationListener.Current.RequestAccessAsync();
+            return status.ToString();
+        }
+        catch (Exception ex)
+        {
+            return ex.GetType().Name;
+        }
     }
 
-    private void SafePoll()
+    private async Task SafePollAsync()
     {
         if (_disposed)
             return;
 
         try
         {
-            Poll();
+            await PollAsync();
         }
         catch
         {
         }
     }
 
-    private void Poll()
+    private async Task PollAsync()
     {
         if (_isPolling)
             return;
@@ -110,16 +80,18 @@ public sealed class NotificationsPlugin : IIslandPlugin
         _isPolling = true;
         try
         {
-            // Try to read system toast text via Win32 window enumeration.
-            // This is a best-effort fallback; full toast access requires WinRT.
-            var windows = EnumerateNotificationWindows();
-            foreach (var window in windows)
+            var listener = UserNotificationListener.Current;
+            var access = listener.GetAccessStatus();
+            if (access != UserNotificationListenerAccessStatus.Allowed)
+                return;
+
+            var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+            foreach (var notification in notifications.OrderBy(item => item.CreationTime))
             {
-                var key = $"{window.ClassName}|{window.Title}";
-                if (!_seenKeys.Add(key))
+                if (!_seenIds.Add(notification.Id))
                     continue;
 
-                var snapshot = CreateSnapshot(window);
+                var snapshot = TryCreateSnapshot(notification);
                 if (snapshot is not null)
                     EventTriggered?.Invoke(NotificationIslandEventFactory.FromSnapshot(snapshot));
             }
@@ -133,52 +105,31 @@ public sealed class NotificationsPlugin : IIslandPlugin
         }
     }
 
-    private static List<WindowInfo> EnumerateNotificationWindows()
+    private static NotificationSnapshot? TryCreateSnapshot(UserNotification notification)
     {
-        _foundWindows = new List<WindowInfo>();
-        EnumWindows(EnumProc, IntPtr.Zero);
-        var result = _foundWindows;
-        _foundWindows = null;
-        return result;
-    }
+        try
+        {
+            var appName = notification.AppInfo?.DisplayInfo.DisplayName ?? "系统通知";
+            var binding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+            var texts = binding?.GetTextElements()
+                .Select(element => element.Text)
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .ToArray() ?? Array.Empty<string>();
+            var title = texts.ElementAtOrDefault(0) ?? appName;
+            var body = texts.Length > 1
+                ? string.Join(Environment.NewLine, texts.Skip(1))
+                : "新的通知";
 
-    private static bool EnumProc(IntPtr hWnd, IntPtr lParam)
-    {
-        if (!IsWindowVisible(hWnd))
-            return true;
-
-        var className = new StringBuilder(256);
-        GetClassName(hWnd, className, 256);
-
-        if (!NotificationClasses.Contains(className.ToString()))
-            return true;
-
-        var length = GetWindowTextLength(hWnd);
-        if (length <= 0)
-            return true;
-
-        var title = new StringBuilder(length + 1);
-        GetWindowText(hWnd, title, length + 1);
-
-        var titleStr = title.ToString().Trim();
-        if (!string.IsNullOrWhiteSpace(titleStr))
-            _foundWindows?.Add(new WindowInfo(titleStr, className.ToString()));
-
-        return true;
-    }
-
-    private static NotificationSnapshot? CreateSnapshot(WindowInfo window)
-    {
-        if (string.IsNullOrWhiteSpace(window.Title))
+            return new NotificationSnapshot(
+                notification.Id,
+                appName,
+                title,
+                body,
+                notification.CreationTime);
+        }
+        catch
+        {
             return null;
-
-        // Use the window title as notification title
-        // Try to extract app name from process associated with this class
-        return new NotificationSnapshot(
-            Id: (uint)window.Title.GetHashCode(),
-            AppName: "系统通知",
-            Title: window.Title,
-            Body: "",
-            Timestamp: DateTimeOffset.Now);
+        }
     }
 }
