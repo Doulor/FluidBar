@@ -15,6 +15,19 @@ public sealed record MediaSnapshot(
 
 public static class MediaIslandEventFactory
 {
+    public static IslandEvent CreateStopped()
+    {
+        return new IslandEvent(
+            Source: "media",
+            Title: "媒体已停止",
+            Content: "没有正在播放的媒体",
+            IconKind: "media",
+            Payload: new IslandEventPayload(
+                Kind: IslandEventKind.Media,
+                IsActive: false,
+                ShowsAudioWave: false));
+    }
+
     public static IslandEvent FromSnapshot(MediaSnapshot snapshot)
     {
         var sourceName = string.IsNullOrWhiteSpace(snapshot.SourceName)

@@ -527,6 +527,12 @@ public partial class MainWindow : Window
             if (view.Kind != IslandViewKind.Progress && ShouldEmphasizeSource(evt.Source))
                 NudgePill();
         }
+
+        // 媒体播放时保持灵动岛常驻不消失
+        if (view.Kind == IslandViewKind.Media && view.ShowsAudioWave)
+        {
+            _collapseTimer.Stop();
+        }
     }
 
     private void ApplyStackPolicy(IslandEvent evt, IslandViewPresentation view)

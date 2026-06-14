@@ -92,7 +92,15 @@ public sealed class MediaPlugin : IIslandPlugin
         {
             var snapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
             if (snapshot is null)
+            {
+                // Media stopped — send a stopped event to collapse the island
+                if (!string.IsNullOrEmpty(_lastSignature))
+                {
+                    _lastSignature = string.Empty;
+                    EventTriggered?.Invoke(MediaIslandEventFactory.CreateStopped());
+                }
                 return;
+            }
 
             if (!snapshot.IsPlaying && !_settings.ShowWhenPaused)
                 return;
