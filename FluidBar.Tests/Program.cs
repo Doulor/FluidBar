@@ -70,6 +70,178 @@ Test("monitor feature settings are created with hover card enabled", () =>
     AssertEqual(3000, feature.DisplayDurationMs);
 });
 
+Test("display strategy defaults to latest only", () =>
+{
+    var defaultSettings = new FluidBarSettings();
+
+    AssertEqual(IslandDisplayStrategy.LatestOnly, defaultSettings.DisplayStrategy);
+    AssertEqual(false, IslandStackPolicy.CanStack(defaultSettings));
+});
+
+Test("multiple display strategy appends non clock islands up to the max count", () =>
+{
+    var multiSettings = new FluidBarSettings
+    {
+        DisplayStrategy = IslandDisplayStrategy.Multiple,
+        MaxVisibleIslands = 3
+    };
+    var first = IslandPresentation.FromEvent(
+        new IslandEvent("volume", "音量 40%", "40%", "volume"),
+        settings);
+    var second = IslandPresentation.FromEvent(
+        new IslandEvent("battery", "电池 88%", "电池供电中", "battery"),
+        settings);
+    var third = IslandPresentation.FromEvent(
+        new IslandEvent("clipboard", "已复制", "一段复制内容", "clipboard"),
+        settings);
+    var fourth = IslandPresentation.FromEvent(
+        new IslandEvent("network", "网络已连接", "Wi-Fi", "network"),
+        settings);
+
+    var stack = IslandStackPolicy.Apply(Array.Empty<IslandStackItem>(), first, "volume", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, second, "battery", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, third, "clipboard", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, fourth, "network", multiSettings);
+
+    AssertEqual(3, stack.Count);
+    AssertEqual("battery", stack[0].Source);
+    AssertEqual("clipboard", stack[1].Source);
+    AssertEqual("network", stack[2].Source);
+});
+
+Test("multiple display strategy updates an existing source as the newest island", () =>
+{
+    var multiSettings = new FluidBarSettings
+    {
+        DisplayStrategy = IslandDisplayStrategy.Multiple
+    };
+    var firstVolume = IslandPresentation.FromEvent(
+        new IslandEvent("volume", "音量 40%", "40%", "volume"),
+        settings);
+    var battery = IslandPresentation.FromEvent(
+        new IslandEvent("battery", "电池 88%", "电池供电中", "battery"),
+        settings);
+    var secondVolume = IslandPresentation.FromEvent(
+        new IslandEvent("volume", "音量 62%", "62%", "volume"),
+        settings);
+
+    var stack = IslandStackPolicy.Apply(Array.Empty<IslandStackItem>(), firstVolume, "volume", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, battery, "battery", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, secondVolume, "volume", multiSettings);
+
+    AssertEqual(2, stack.Count);
+    AssertEqual("battery", stack[0].Source);
+    AssertEqual("volume", stack[1].Source);
+    AssertEqual(62, stack[1].View.ProgressPercent);
+});
+
+Test("clock island never joins the multi island stack", () =>
+{
+    var multiSettings = new FluidBarSettings
+    {
+        DisplayStrategy = IslandDisplayStrategy.Multiple
+    };
+    var volume = IslandPresentation.FromEvent(
+        new IslandEvent("volume", "音量 40%", "40%", "volume"),
+        settings);
+    var clock = IslandPresentation.FromEvent(
+        new IslandEvent("clock", "18:30", "6月14日 周日", "clock"),
+        settings);
+
+    var stack = IslandStackPolicy.Apply(Array.Empty<IslandStackItem>(), volume, "volume", multiSettings);
+    stack = IslandStackPolicy.Apply(stack, clock, "clock", multiSettings);
+
+    AssertEqual(1, stack.Count);
+    AssertEqual("volume", stack[0].Source);
+});
+
+Test("switching back to latest only keeps just the newest island", () =>
+{
+    var latestSettings = new FluidBarSettings
+    {
+        DisplayStrategy = IslandDisplayStrategy.LatestOnly
+    };
+    var existing = new[]
+    {
+        new IslandStackItem("volume", IslandPresentation.FromEvent(
+            new IslandEvent("volume", "音量 40%", "40%", "volume"),
+            settings), DateTimeOffset.UnixEpoch)
+    };
+    var battery = IslandPresentation.FromEvent(
+        new IslandEvent("battery", "电池 88%", "电池供电中", "battery"),
+        settings);
+
+    var stack = IslandStackPolicy.Apply(existing, battery, "battery", latestSettings);
+
+    AssertEqual(1, stack.Count);
+    AssertEqual("battery", stack[0].Source);
+});
+
+Test("multi island group stays centered around the base anchor", () =>
+{
+    var slots = new[]
+    {
+        new IslandSlotMetrics(180, 56),
+        new IslandSlotMetrics(260, 56)
+    };
+
+    var layout = IslandGroupLayout.Calculate(
+        slots,
+        position: "Top",
+        screenWidth: 1000,
+        screenHeight: 700,
+        offsetX: 0,
+        offsetY: 0,
+        gap: 10);
+
+    AssertEqual(450.0, layout.VisualWidth);
+    AssertNear(275, layout.Left, 0.1);
+    AssertEqual(0.0, layout.Slots[0].OffsetX);
+    AssertEqual(190.0, layout.Slots[1].OffsetX);
+});
+
+Test("left anchored multi island keeps the first island at the base edge", () =>
+{
+    var slots = new[]
+    {
+        new IslandSlotMetrics(180, 56),
+        new IslandSlotMetrics(260, 56)
+    };
+
+    var layout = IslandGroupLayout.Calculate(
+        slots,
+        position: "TopLeft",
+        screenWidth: 1000,
+        screenHeight: 700,
+        offsetX: 0,
+        offsetY: 0,
+        gap: 10);
+
+    AssertNear(16, layout.Left, 0.1);
+    AssertEqual(190.0, layout.Slots[1].OffsetX);
+});
+
+Test("right anchored multi island keeps the group right edge at the base edge", () =>
+{
+    var slots = new[]
+    {
+        new IslandSlotMetrics(180, 56),
+        new IslandSlotMetrics(260, 56)
+    };
+
+    var layout = IslandGroupLayout.Calculate(
+        slots,
+        position: "TopRight",
+        screenWidth: 1000,
+        screenHeight: 700,
+        offsetX: 0,
+        offsetY: 0,
+        gap: 10);
+
+    AssertNear(534, layout.Left, 0.1);
+    AssertNear(984, layout.Left + layout.VisualWidth, 0.1);
+});
+
 Test("clock hover card can be disabled from feature settings", () =>
 {
     var clockSettings = new FluidBarSettings();

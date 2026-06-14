@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private readonly SpringValue _hoverWidthSpring = new();
     private readonly SpringValue _hoverHeightSpring = new();
     private HoverCardMotionPlan? _hoverMotionPlan;
+    private readonly List<IslandStackItem> _islandStack = new();
+    private readonly List<IslandSnapshotWindow> _snapshotWindows = new();
     private bool _hoverRenderingAttached;
     private bool _hoverSpringHasRenderTime;
     private TimeSpan _hoverSpringLastRenderTime;
@@ -156,6 +158,7 @@ public partial class MainWindow : Window
         _waveTimer.Stop();
         StopHoverRendering();
         StopRimBreathing();
+        CloseSnapshotWindows(immediate: true);
     }
 
     private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -211,6 +214,13 @@ public partial class MainWindow : Window
     public void ApplySettings()
     {
         CoerceLayoutSettings();
+        CoerceMultiIslandSettings();
+
+        if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
+        {
+            _islandStack.Clear();
+            CloseSnapshotWindows(immediate: false);
+        }
 
         PillBorder.CornerRadius = new CornerRadius(Math.Max(18, _settings.CornerRadius));
         PillBorder.Opacity = (_isExpanded || _settings.AlwaysVisible || _settingsPanelOpen)
@@ -257,6 +267,7 @@ public partial class MainWindow : Window
                 _lastEvent,
                 _settings,
                 _clipboardPluginSettings?.MinFullDisplayChars ?? 20);
+            SeedCurrentStackFromActiveView();
             if (_isHoverCard)
             {
                 var card = HoverCardPresentation.FromCompact(_currentView, _settings);
@@ -311,11 +322,27 @@ public partial class MainWindow : Window
             IslandPresentationFactory.MaximumExpandedHeight);
     }
 
+    private void CoerceMultiIslandSettings()
+    {
+        _settings.MaxVisibleIslands = Math.Clamp(_settings.MaxVisibleIslands, 1, 8);
+        _settings.MultiIslandGap = Math.Clamp(_settings.MultiIslandGap, 0, 28);
+    }
+
     public void PositionWindow()
     {
         CoerceLayoutSettings();
-        CalculatePosition(_settings.CollapsedWidth, _settings.CollapsedHeight,
-            out double x, out double y);
+        if (!TryCalculateStackedMainPosition(
+                _settings.CollapsedWidth,
+                _settings.CollapsedHeight,
+                out double x,
+                out double y,
+                out var layout))
+        {
+            CalculatePosition(_settings.CollapsedWidth, _settings.CollapsedHeight,
+                out x, out y);
+        }
+
+        SyncSnapshotWindows(layout, animated: false);
         ClearPositionAnimations();
         Left = x;
         Top = y;
@@ -331,7 +358,10 @@ public partial class MainWindow : Window
         if (w < 10) w = _settings.CollapsedWidth;
         if (h < 10) h = _settings.CollapsedHeight;
 
-        CalculatePosition(w, h, out double x, out double y);
+        if (!TryCalculateStackedMainPosition(w, h, out double x, out double y, out var layout))
+            CalculatePosition(w, h, out x, out y);
+
+        SyncSnapshotWindows(layout, animated: false);
         ClearPositionAnimations();
         Left = x;
         Top = y;
@@ -411,6 +441,8 @@ public partial class MainWindow : Window
         if (view.Kind == IslandViewKind.Clock && !_settings.AlwaysVisible && !_isExpanded)
             return;
 
+        ApplyStackPolicy(evt, view);
+
         _currentView = view;
         _currentSource = evt.Source;
         _lastEvent = evt;
@@ -468,6 +500,195 @@ public partial class MainWindow : Window
             if (view.Kind != IslandViewKind.Progress && ShouldEmphasizeSource(evt.Source))
                 NudgePill();
         }
+    }
+
+    private void ApplyStackPolicy(IslandEvent evt, IslandViewPresentation view)
+    {
+        if (view.Kind == IslandViewKind.Clock || evt.Source == "clock")
+        {
+            ClearIslandStack(animated: true);
+            return;
+        }
+
+        if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
+        {
+            _islandStack.Clear();
+            CloseSnapshotWindows(immediate: false);
+            return;
+        }
+
+        if (_isHoverCard)
+            ExitHoverCardForIncomingStack();
+
+        var next = IslandStackPolicy.Apply(_islandStack, view, evt.Source, _settings);
+        _islandStack.Clear();
+        _islandStack.AddRange(next);
+    }
+
+    private bool IsStackedIslandActive()
+    {
+        return _settings.DisplayStrategy == IslandDisplayStrategy.Multiple
+            && _islandStack.Count > 1
+            && _currentView?.Kind != IslandViewKind.Clock;
+    }
+
+    private void ClearIslandStack(bool animated)
+    {
+        _islandStack.Clear();
+        CloseSnapshotWindows(immediate: !animated);
+    }
+
+    private void SeedCurrentStackFromActiveView()
+    {
+        if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple
+            || !_isExpanded
+            || _currentView is null
+            || string.IsNullOrWhiteSpace(_currentSource)
+            || _currentSource is "clock" or "app"
+            || _currentView.Kind == IslandViewKind.Clock)
+        {
+            return;
+        }
+
+        if (_islandStack.Count == 0 || _islandStack[^1].Source != _currentSource)
+            _islandStack.Add(new IslandStackItem(_currentSource, _currentView, DateTimeOffset.UtcNow));
+        else
+            _islandStack[^1] = _islandStack[^1] with { View = _currentView };
+
+        var max = Math.Clamp(_settings.MaxVisibleIslands, 1, 8);
+        if (_islandStack.Count > max)
+            _islandStack.RemoveRange(0, _islandStack.Count - max);
+    }
+
+    private void ExitHoverCardForIncomingStack()
+    {
+        _isHoverCard = false;
+        StopHoverSpring();
+        HoverCardGrid.BeginAnimation(OpacityProperty, null);
+        HoverCardTranslate.BeginAnimation(TranslateTransform.YProperty, null);
+        IslandContent.BeginAnimation(OpacityProperty, null);
+        HoverCardGrid.Visibility = Visibility.Collapsed;
+        HoverCardGrid.Opacity = 0;
+        HoverCardTranslate.Y = 0;
+        IslandContent.Opacity = 1;
+        PillBorder.CornerRadius = new CornerRadius(Math.Max(18, _settings.CornerRadius));
+        PillBorder.MaxWidth = _settings.ExpandedMaxWidth;
+    }
+
+    private double SnapshotWidth(IslandViewPresentation view)
+    {
+        var max = Math.Min(280, Math.Max(180, _settings.ExpandedMaxWidth * 0.72));
+        var preferred = view.Kind switch
+        {
+            IslandViewKind.Progress => 210,
+            IslandViewKind.Status => 224,
+            IslandViewKind.ScrollingText => 240,
+            IslandViewKind.LockKey => 176,
+            IslandViewKind.InputMethod => 156,
+            _ => 198
+        };
+
+        return Math.Clamp(Math.Min(view.TargetWidth, preferred), 148, max);
+    }
+
+    private double SnapshotHeight(IslandViewPresentation view)
+    {
+        return Math.Clamp(view.TargetHeight, _settings.CollapsedHeight, _settings.ExpandedHeight);
+    }
+
+    private IReadOnlyList<IslandSlotMetrics> BuildStackedSlotMetrics(
+        double latestWidth,
+        double latestHeight)
+    {
+        var slots = new List<IslandSlotMetrics>(_islandStack.Count);
+        for (var i = 0; i < Math.Max(0, _islandStack.Count - 1); i++)
+        {
+            var view = _islandStack[i].View;
+            slots.Add(new IslandSlotMetrics(SnapshotWidth(view), SnapshotHeight(view)));
+        }
+
+        slots.Add(new IslandSlotMetrics(latestWidth, latestHeight));
+        return slots;
+    }
+
+    private bool TryCalculateStackedMainPosition(
+        double latestWidth,
+        double latestHeight,
+        out double left,
+        out double top,
+        out IslandGroupLayoutResult? layout)
+    {
+        left = 0;
+        top = 0;
+        layout = null;
+
+        if (!IsStackedIslandActive())
+            return false;
+
+        layout = IslandGroupLayout.Calculate(
+            BuildStackedSlotMetrics(latestWidth, latestHeight),
+            _settings.Position,
+            SystemParameters.PrimaryScreenWidth,
+            SystemParameters.PrimaryScreenHeight,
+            _settings.OffsetX,
+            _settings.OffsetY,
+            _settings.MultiIslandGap);
+
+        var currentSlot = layout.Slots[^1];
+        left = layout.Left + currentSlot.OffsetX - ShellBleedMargin;
+        top = layout.Top + currentSlot.OffsetY;
+        return true;
+    }
+
+    private void SyncSnapshotWindows(
+        IslandGroupLayoutResult? layout,
+        bool animated)
+    {
+        if (!IsStackedIslandActive() || layout == null)
+        {
+            CloseSnapshotWindows(immediate: false);
+            return;
+        }
+
+        var snapshotCount = _islandStack.Count - 1;
+        while (_snapshotWindows.Count < snapshotCount)
+            _snapshotWindows.Add(new IslandSnapshotWindow());
+
+        while (_snapshotWindows.Count > snapshotCount)
+        {
+            var last = _snapshotWindows[^1];
+            _snapshotWindows.RemoveAt(_snapshotWindows.Count - 1);
+            last.Dismiss();
+        }
+
+        for (var i = 0; i < snapshotCount; i++)
+        {
+            var item = _islandStack[i];
+            var slot = layout.Slots[i];
+            var window = _snapshotWindows[i];
+            window.Topmost = _settings.AlwaysOnTop;
+            window.SetView(item, _settings);
+            window.Place(
+                layout.Left + slot.OffsetX - ShellBleedMargin,
+                layout.Top + slot.OffsetY,
+                slot.Width,
+                slot.Height,
+                animated);
+            window.Reveal();
+        }
+    }
+
+    private void CloseSnapshotWindows(bool immediate)
+    {
+        foreach (var window in _snapshotWindows)
+        {
+            if (immediate)
+                window.Close();
+            else
+                window.Dismiss();
+        }
+
+        _snapshotWindows.Clear();
     }
 
     private MonitorFeatureSettings? GetCurrentMonitorFeatureSettings()
@@ -604,7 +825,10 @@ public partial class MainWindow : Window
         _activeTargetWidth = targetWidth;
         _activeTargetHeight = targetHeight;
         PillBorder.MaxWidth = Math.Max(_settings.ExpandedMaxWidth, targetWidth);
-        CalculatePosition(targetWidth, targetHeight, out var left, out var top);
+        if (!TryCalculateStackedMainPosition(targetWidth, targetHeight, out var left, out var top, out var layout))
+            CalculatePosition(targetWidth, targetHeight, out left, out top);
+
+        SyncSnapshotWindows(layout, animated: true);
         ClearPositionAnimations();
 
         var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
@@ -655,7 +879,17 @@ public partial class MainWindow : Window
         _hoverSpringHasRenderTime = false;
 
         ClearPositionAnimations();
-        CalculatePosition(_hoverHostWidth, _hoverHostHeight, out var hostLeft, out var hostTop);
+        if (!TryCalculateStackedMainPosition(
+                _hoverHostWidth,
+                _hoverHostHeight,
+                out var hostLeft,
+                out var hostTop,
+                out var layout))
+        {
+            CalculatePosition(_hoverHostWidth, _hoverHostHeight, out hostLeft, out hostTop);
+        }
+
+        SyncSnapshotWindows(layout, animated: true);
         Left = hostLeft;
         Top = hostTop;
         Width = ToWindowSize(_hoverHostWidth);
@@ -725,7 +959,9 @@ public partial class MainWindow : Window
 
     private void ApplyHoverHostAlignment()
     {
-        IslandRoot.HorizontalAlignment = _settings.Position.Contains("Left", StringComparison.OrdinalIgnoreCase)
+        IslandRoot.HorizontalAlignment = IsStackedIslandActive()
+            ? System.Windows.HorizontalAlignment.Left
+            : _settings.Position.Contains("Left", StringComparison.OrdinalIgnoreCase)
             ? System.Windows.HorizontalAlignment.Left
             : _settings.Position.Contains("Right", StringComparison.OrdinalIgnoreCase)
                 ? System.Windows.HorizontalAlignment.Right
@@ -769,7 +1005,17 @@ public partial class MainWindow : Window
             return;
 
         ClearHoverHostLayout();
-        CalculatePosition(_currentView.TargetWidth, _currentView.TargetHeight, out var left, out var top);
+        if (!TryCalculateStackedMainPosition(
+                _currentView.TargetWidth,
+                _currentView.TargetHeight,
+                out var left,
+                out var top,
+                out var layout))
+        {
+            CalculatePosition(_currentView.TargetWidth, _currentView.TargetHeight, out left, out top);
+        }
+
+        SyncSnapshotWindows(layout, animated: true);
         Left = left;
         Top = top;
         Width = ToWindowSize(_currentView.TargetWidth);
@@ -1308,6 +1554,7 @@ public partial class MainWindow : Window
 
     private void ShowIdleClock()
     {
+        ClearIslandStack(animated: true);
         var now = DateTime.Now;
         var evt = new IslandEvent(
             "clock",
@@ -1422,6 +1669,7 @@ public partial class MainWindow : Window
 
     private void ExpandWithContent(string text, string? iconKind = null)
     {
+        ClearIslandStack(animated: true);
         var evt = new IslandEvent("app", "FluidBar", text, iconKind ?? "info");
         var view = IslandPresentation.FromEvent(evt, _settings);
         _currentView = view;
@@ -1451,8 +1699,18 @@ public partial class MainWindow : Window
         StopHoverSpring();
         _activeTargetWidth = view.TargetWidth;
         _activeTargetHeight = view.TargetHeight;
-        CalculatePosition(_activeTargetWidth, _activeTargetHeight,
-            out double tl, out double tt);
+        if (!TryCalculateStackedMainPosition(
+                _activeTargetWidth,
+                _activeTargetHeight,
+                out double tl,
+                out double tt,
+                out var layout))
+        {
+            CalculatePosition(_activeTargetWidth, _activeTargetHeight,
+                out tl, out tt);
+        }
+
+        SyncSnapshotWindows(layout, animated: !opening);
 
         AnimateShell(_activeTargetWidth, _activeTargetHeight, tl, tt, opening);
         AnimateContentIn(opening);
@@ -1572,6 +1830,7 @@ public partial class MainWindow : Window
         var collapseDur = TimeSpan.FromMilliseconds(340);
         var easeOut = new QuarticEase { EasingMode = EasingMode.EaseInOut };
 
+        ClearIslandStack(animated: true);
         CalculatePosition(_settings.CollapsedWidth, _settings.CollapsedHeight,
             out double tl, out double tt);
 

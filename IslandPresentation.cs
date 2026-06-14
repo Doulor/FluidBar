@@ -370,3 +370,130 @@ public static class HoverCardPolicy
         return settings.GetMonitorFeatureSettings(currentSource).HoverCardEnabled;
     }
 }
+
+public sealed record IslandStackItem(
+    string Source,
+    IslandViewPresentation View,
+    DateTimeOffset CreatedAt);
+
+public static class IslandStackPolicy
+{
+    public static bool CanStack(FluidBarSettings settings)
+    {
+        return settings.DisplayStrategy == IslandDisplayStrategy.Multiple;
+    }
+
+    public static IReadOnlyList<IslandStackItem> Apply(
+        IEnumerable<IslandStackItem> currentItems,
+        IslandViewPresentation nextView,
+        string source,
+        FluidBarSettings settings)
+    {
+        if (nextView.Kind == IslandViewKind.Clock || source == "clock")
+            return currentItems.ToList();
+
+        if (!CanStack(settings))
+        {
+            return new[]
+            {
+                new IslandStackItem(source, nextView, DateTimeOffset.UtcNow)
+            };
+        }
+
+        var next = currentItems
+            .Where(item => item.View.Kind != IslandViewKind.Clock && item.Source != source)
+            .ToList();
+        next.Add(new IslandStackItem(source, nextView, DateTimeOffset.UtcNow));
+
+        var max = Math.Clamp(settings.MaxVisibleIslands, 1, 8);
+        if (next.Count > max)
+            next.RemoveRange(0, next.Count - max);
+
+        return next;
+    }
+}
+
+public sealed record IslandSlotMetrics(double Width, double Height);
+
+public sealed record IslandSlotLayout(
+    double OffsetX,
+    double OffsetY,
+    double Width,
+    double Height);
+
+public sealed record IslandGroupLayoutResult(
+    double Left,
+    double Top,
+    double VisualWidth,
+    double VisualHeight,
+    IReadOnlyList<IslandSlotLayout> Slots);
+
+public static class IslandGroupLayout
+{
+    private const double EdgeX = 16;
+    private const double TopY = 8;
+    private const double BottomY = 12;
+    private const double ScreenMargin = 8;
+
+    public static IslandGroupLayoutResult Calculate(
+        IReadOnlyList<IslandSlotMetrics> slots,
+        string position,
+        double screenWidth,
+        double screenHeight,
+        double offsetX,
+        double offsetY,
+        double gap)
+    {
+        if (slots.Count == 0)
+        {
+            return new IslandGroupLayoutResult(
+                EdgeX + offsetX,
+                TopY + offsetY,
+                0,
+                0,
+                Array.Empty<IslandSlotLayout>());
+        }
+
+        gap = Math.Max(0, gap);
+        var visualWidth = slots.Sum(slot => slot.Width) + gap * Math.Max(0, slots.Count - 1);
+        var visualHeight = slots.Max(slot => slot.Height);
+        var left = ResolveLeft(position, screenWidth, visualWidth, offsetX);
+        var top = ResolveTop(position, screenHeight, visualHeight, offsetY);
+
+        left = Math.Clamp(left, ScreenMargin, Math.Max(ScreenMargin, screenWidth - visualWidth - ScreenMargin));
+        top = Math.Clamp(top, ScreenMargin, Math.Max(ScreenMargin, screenHeight - visualHeight - ScreenMargin));
+
+        var layouts = new List<IslandSlotLayout>(slots.Count);
+        var x = 0.0;
+        foreach (var slot in slots)
+        {
+            layouts.Add(new IslandSlotLayout(
+                x,
+                Math.Max(0, (visualHeight - slot.Height) / 2),
+                slot.Width,
+                slot.Height));
+            x += slot.Width + gap;
+        }
+
+        return new IslandGroupLayoutResult(left, top, visualWidth, visualHeight, layouts);
+    }
+
+    private static double ResolveLeft(string position, double screenWidth, double width, double offsetX)
+    {
+        return position switch
+        {
+            "TopLeft" or "BottomLeft" => EdgeX + offsetX,
+            "TopRight" or "BottomRight" => screenWidth - width - EdgeX + offsetX,
+            _ => (screenWidth - width) / 2 + offsetX
+        };
+    }
+
+    private static double ResolveTop(string position, double screenHeight, double height, double offsetY)
+    {
+        return position switch
+        {
+            "Bottom" or "BottomLeft" or "BottomRight" => screenHeight - height - BottomY + offsetY,
+            _ => TopY + offsetY
+        };
+    }
+}

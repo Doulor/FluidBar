@@ -825,6 +825,21 @@
                                                   Unchecked="AlwaysVisibleToggle_Changed"/>
                                 </Grid>
 
+                                <Grid Margin="0,0,0,14" Height="34">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="显示策略"
+                                               Style="{StaticResource SettingLabel}"/>
+                                    <ComboBox x:Name="DisplayStrategyCombo"
+                                              Grid.Column="1" Margin="8,0"
+                                              SelectionChanged="DisplayStrategyCombo_Changed">
+                                        <ComboBoxItem Content="只显示最新" Tag="LatestOnly"/>
+                                        <ComboBoxItem Content="同时显示多个" Tag="Multiple"/>
+                                    </ComboBox>
+                                </Grid>
+
                                 <Border Style="{StaticResource Separator}"/>
                                 <TextBlock Text="环绕微光" Style="{StaticResource SectionHeader}"/>
 

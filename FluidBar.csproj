@@ -19,7 +19,11 @@
 
   <ItemGroup>
     <Compile Remove="FluidBar.Tests\**\*.cs" />
+    <Compile Remove="FluidBar\**\*.cs" />
+    <Page Remove="FluidBar\**\*.xaml" />
+    <ApplicationDefinition Remove="FluidBar\App.xaml" />
     <None Remove="FluidBar.Tests\**\*" />
+    <None Remove="FluidBar\**\*" />
   </ItemGroup>
 
 

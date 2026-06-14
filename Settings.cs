@@ -4,6 +4,12 @@ using System.Text.Json.Serialization;
 
 namespace FluidBar;
 
+public enum IslandDisplayStrategy
+{
+    LatestOnly,
+    Multiple
+}
+
 /// <summary>
 /// FluidBar 配置模型 + JSON 持久化
 /// </summary>
@@ -40,6 +46,9 @@ public sealed class FluidBarSettings
     public bool AlwaysOnTop { get; set; } = true;
     public bool AlwaysVisible { get; set; } = false;
     public int AutoHideDelayMs { get; set; } = 3000;
+    public IslandDisplayStrategy DisplayStrategy { get; set; } = IslandDisplayStrategy.LatestOnly;
+    public int MaxVisibleIslands { get; set; } = 4;
+    public double MultiIslandGap { get; set; } = 10;
 
     // === 环绕微光 ===
     // "Always" = 始终旋转, "Event" = 新状态时旋转(除时钟), "Plugin" = 仅插件状态旋转
@@ -121,6 +130,9 @@ public sealed class FluidBarSettings
         AlwaysOnTop = defaults.AlwaysOnTop;
         AlwaysVisible = defaults.AlwaysVisible;
         AutoHideDelayMs = defaults.AutoHideDelayMs;
+        DisplayStrategy = defaults.DisplayStrategy;
+        MaxVisibleIslands = defaults.MaxVisibleIslands;
+        MultiIslandGap = defaults.MultiIslandGap;
         RimMode = defaults.RimMode;
         ClipboardEnabled = defaults.ClipboardEnabled;
         MonitorFeatureSettings = new Dictionary<string, MonitorFeatureSettings>();

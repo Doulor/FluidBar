@@ -111,6 +111,7 @@ public partial class SettingsWindow : Window
 
         AlwaysVisibleToggle.IsChecked = _settings.AlwaysVisible;
         HideTrayToggle.IsChecked = _settings.HideTrayIcon;
+        SetDisplayStrategyCombo(_settings.DisplayStrategy);
 
         // 环绕微光模式
         SetRimModeCombo(_settings.RimMode);
@@ -247,6 +248,35 @@ public partial class SettingsWindow : Window
     {
         if (_isLoading) return;
         _settings.AlwaysVisible = AlwaysVisibleToggle.IsChecked == true;
+        _settings.Save();
+        _onSettingsChanged?.Invoke();
+    }
+
+    private void SetDisplayStrategyCombo(IslandDisplayStrategy strategy)
+    {
+        var tag = strategy.ToString();
+        foreach (ComboBoxItem item in DisplayStrategyCombo.Items)
+        {
+            if (item.Tag?.ToString() == tag)
+            {
+                DisplayStrategyCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        DisplayStrategyCombo.SelectedIndex = 0;
+    }
+
+    private void DisplayStrategyCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        if (DisplayStrategyCombo.SelectedItem is not ComboBoxItem item)
+            return;
+
+        var tag = item.Tag?.ToString();
+        _settings.DisplayStrategy = tag == nameof(IslandDisplayStrategy.Multiple)
+            ? IslandDisplayStrategy.Multiple
+            : IslandDisplayStrategy.LatestOnly;
         _settings.Save();
         _onSettingsChanged?.Invoke();
     }
