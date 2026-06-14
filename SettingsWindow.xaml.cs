@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Win32;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfRadioButton = System.Windows.Controls.RadioButton;
@@ -18,6 +19,9 @@ public partial class SettingsWindow : Window
     private readonly SystemMonitorManager _monitorManager;
     private readonly Action _onSettingsChanged;
     private bool _isLoading;
+    private IIslandPlugin? _detailPlugin;
+    private ISystemMonitor? _detailMonitor;
+    private int _detailTransitionToken;
     private const string StartupRegistryKey =
         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "FluidBar";
@@ -81,6 +85,7 @@ public partial class SettingsWindow : Window
     private void LoadValuesFromSettings()
     {
         _isLoading = true;
+        CoerceLayoutSettings();
 
         CornerRadiusSlider.Value = _settings.CornerRadius;
         CornerRadiusValue.Text = _settings.CornerRadius.ToString("F0");
@@ -88,11 +93,11 @@ public partial class SettingsWindow : Window
         OpacitySlider.Value = _settings.Opacity;
         OpacityValue.Text = ((int)(_settings.Opacity * 100)) + "%";
 
-        CollapsedWidthSlider.Value = _settings.CollapsedWidth;
-        CollapsedWidthValue.Text = _settings.CollapsedWidth.ToString("F0");
+        IslandWidthSlider.Value = _settings.ExpandedMaxWidth;
+        IslandWidthValue.Text = _settings.ExpandedMaxWidth.ToString("F0");
 
-        ExpandedWidthSlider.Value = _settings.ExpandedMaxWidth;
-        ExpandedWidthValue.Text = _settings.ExpandedMaxWidth.ToString("F0");
+        IslandHeightSlider.Value = _settings.ExpandedHeight;
+        IslandHeightValue.Text = _settings.ExpandedHeight.ToString("F0");
 
         OffsetXSlider.Value = _settings.OffsetX;
         OffsetXValue.Text = _settings.OffsetX.ToString("F0");
@@ -107,6 +112,9 @@ public partial class SettingsWindow : Window
         AlwaysVisibleToggle.IsChecked = _settings.AlwaysVisible;
         HideTrayToggle.IsChecked = _settings.HideTrayIcon;
 
+        // 环绕微光模式
+        SetRimModeCombo(_settings.RimMode);
+
         SetPositionRadio(_settings.Position);
         UpdatePositionPreview(_settings.Position);
 
@@ -118,6 +126,21 @@ public partial class SettingsWindow : Window
         catch { StartupToggle.IsChecked = false; }
 
         _isLoading = false;
+    }
+
+    private void CoerceLayoutSettings()
+    {
+        _settings.CollapsedWidth = Math.Max(
+            _settings.CollapsedWidth, IslandPresentationFactory.MinimumCollapsedWidth);
+        _settings.CollapsedHeight = Math.Max(
+            _settings.CollapsedHeight, IslandPresentationFactory.MinimumCollapsedHeight);
+        _settings.ExpandedMaxWidth = Math.Max(
+            _settings.ExpandedMaxWidth, IslandPresentationFactory.MinimumExpandedWidth);
+        _settings.ExpandedHeight = Math.Clamp(
+            Math.Max(_settings.ExpandedHeight, IslandPresentationFactory.MinimumExpandedHeight),
+            IslandPresentationFactory.MinimumExpandedHeight,
+            IslandPresentationFactory.MaximumExpandedHeight);
+        _settings.CornerRadius = Math.Max(18, _settings.CornerRadius);
     }
 
     private void SetPositionRadio(string position)
@@ -156,7 +179,7 @@ public partial class SettingsWindow : Window
 
         if (sender == CornerRadiusSlider)
         {
-            _settings.CornerRadius = Math.Round(e.NewValue);
+            _settings.CornerRadius = Math.Max(18, Math.Round(e.NewValue));
             CornerRadiusValue.Text = _settings.CornerRadius.ToString("F0");
         }
         else if (sender == OpacitySlider)
@@ -164,15 +187,27 @@ public partial class SettingsWindow : Window
             _settings.Opacity = Math.Round(e.NewValue, 2);
             OpacityValue.Text = ((int)(_settings.Opacity * 100)) + "%";
         }
-        else if (sender == CollapsedWidthSlider)
+        else if (sender == IslandWidthSlider)
         {
-            _settings.CollapsedWidth = Math.Round(e.NewValue);
-            CollapsedWidthValue.Text = _settings.CollapsedWidth.ToString("F0");
+            _settings.ExpandedMaxWidth = Math.Max(
+                IslandPresentationFactory.MinimumExpandedWidth,
+                Math.Round(e.NewValue));
+            _settings.CollapsedWidth = Math.Clamp(
+                Math.Round(_settings.ExpandedMaxWidth * 0.34),
+                IslandPresentationFactory.MinimumCollapsedWidth,
+                220);
+            IslandWidthValue.Text = _settings.ExpandedMaxWidth.ToString("F0");
         }
-        else if (sender == ExpandedWidthSlider)
+        else if (sender == IslandHeightSlider)
         {
-            _settings.ExpandedMaxWidth = Math.Round(e.NewValue);
-            ExpandedWidthValue.Text = _settings.ExpandedMaxWidth.ToString("F0");
+            _settings.ExpandedHeight = Math.Clamp(
+                Math.Round(e.NewValue),
+                IslandPresentationFactory.MinimumExpandedHeight,
+                IslandPresentationFactory.MaximumExpandedHeight);
+            _settings.CollapsedHeight = Math.Max(
+                IslandPresentationFactory.MinimumCollapsedHeight,
+                Math.Round(_settings.ExpandedHeight * 0.53));
+            IslandHeightValue.Text = _settings.ExpandedHeight.ToString("F0");
         }
         else if (sender == OffsetXSlider)
         {
@@ -214,6 +249,30 @@ public partial class SettingsWindow : Window
         _settings.AlwaysVisible = AlwaysVisibleToggle.IsChecked == true;
         _settings.Save();
         _onSettingsChanged?.Invoke();
+    }
+
+    private void SetRimModeCombo(string mode)
+    {
+        foreach (ComboBoxItem item in RimModeCombo.Items)
+        {
+            if (item.Tag?.ToString() == mode)
+            {
+                RimModeCombo.SelectedItem = item;
+                return;
+            }
+        }
+        RimModeCombo.SelectedIndex = 1; // 默认 "Event"
+    }
+
+    private void RimModeCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        if (RimModeCombo.SelectedItem is ComboBoxItem item && item.Tag is string mode)
+        {
+            _settings.RimMode = mode;
+            _settings.Save();
+            _onSettingsChanged?.Invoke();
+        }
     }
 
     private void HideTrayToggle_Changed(object sender, RoutedEventArgs e)
@@ -282,12 +341,14 @@ public partial class SettingsWindow : Window
 
     private void ShowPluginDetail(IIslandPlugin plugin)
     {
-        MainTabs.Visibility = Visibility.Collapsed;
-        PluginDetailPanel.Visibility = Visibility.Visible;
+        _detailPlugin = plugin;
+        _detailMonitor = null;
 
         BackBtn.Visibility = Visibility.Visible;
         LogoIcon.Visibility = Visibility.Collapsed;
         HeaderTitle.Text = plugin.Name;
+        DetailEnabledLabel.Text = "启用插件";
+        DetailSettingsHeader.Text = "插件设置";
 
         DetailIcon.Text = plugin.Icon;
         DetailName.Text = plugin.Name;
@@ -300,6 +361,50 @@ public partial class SettingsWindow : Window
         {
             BuildClipboardPluginSettings(plugin);
         }
+
+        ShowDetailPanel();
+    }
+
+    private void ShowDetailPanel()
+    {
+        var token = ++_detailTransitionToken;
+        MainTabs.BeginAnimation(OpacityProperty, null);
+        MainTabsTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+        PluginDetailPanel.BeginAnimation(OpacityProperty, null);
+        DetailPanelTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+
+        PluginDetailPanel.Visibility = Visibility.Visible;
+        PluginDetailPanel.Opacity = 0;
+        DetailPanelTranslate.X = 32;
+
+        MainTabs.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(150))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+        MainTabsTranslate.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(-22, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+
+        var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(230))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(80),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        var slideIn = new DoubleAnimation(0, TimeSpan.FromMilliseconds(300))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(45),
+            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeIn.Completed += (_, _) =>
+        {
+            if (token == _detailTransitionToken)
+                MainTabs.Visibility = Visibility.Collapsed;
+        };
+        PluginDetailPanel.BeginAnimation(OpacityProperty, fadeIn);
+        DetailPanelTranslate.BeginAnimation(TranslateTransform.XProperty, slideIn);
     }
 
     private void BuildClipboardPluginSettings(IIslandPlugin plugin)
@@ -328,7 +433,7 @@ public partial class SettingsWindow : Window
     {
         formatValue ??= val => val.ToString("F0");
 
-        var grid = new Grid { Margin = new Thickness(0, 0, 0, 14) };
+        var grid = new Grid { MinHeight = 44 };
         grid.ColumnDefinitions.Add(
             new ColumnDefinition { Width = new GridLength(80) });
         grid.ColumnDefinitions.Add(
@@ -368,28 +473,176 @@ public partial class SettingsWindow : Window
         grid.Children.Add(slider);
         grid.Children.Add(valueText);
 
-        return grid;
+        return CreateInteractiveSettingRow(grid);
+    }
+
+    private UIElement CreateToggleRow(string label, string description,
+        bool value, Action<bool> onChanged)
+    {
+        var grid = new Grid { MinHeight = 48 };
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+
+        var textPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(MediaColor.FromRgb(216, 216, 220)),
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI")
+        });
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = description,
+            FontSize = 11,
+            Foreground = new SolidColorBrush(MediaColor.FromRgb(122, 122, 130)),
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
+            TextWrapping = TextWrapping.Wrap
+        });
+        Grid.SetColumn(textPanel, 0);
+
+        var toggle = new WpfToggleButton
+        {
+            Width = 44,
+            Height = 22,
+            IsChecked = value,
+            Style = (Style)FindResource("ToggleSwitchStyle"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+        toggle.Checked += (_, _) => onChanged(true);
+        toggle.Unchecked += (_, _) => onChanged(false);
+        Grid.SetColumn(toggle, 1);
+
+        grid.Children.Add(textPanel);
+        grid.Children.Add(toggle);
+
+        return CreateInteractiveSettingRow(grid);
+    }
+
+    private Border CreateInteractiveSettingRow(UIElement content)
+    {
+        var scale = new ScaleTransform(1, 1);
+        var translate = new TranslateTransform(0, 0);
+        var transform = new TransformGroup();
+        transform.Children.Add(scale);
+        transform.Children.Add(translate);
+
+        var row = new Border
+        {
+            Margin = new Thickness(0, 0, 0, 10),
+            Padding = new Thickness(10, 8, 10, 8),
+            CornerRadius = new CornerRadius(12),
+            Background = new SolidColorBrush(MediaColor.FromArgb(12, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(MediaColor.FromArgb(16, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+            RenderTransform = transform,
+            Child = content
+        };
+
+        row.MouseEnter += (_, _) =>
+        {
+            row.Background = new SolidColorBrush(MediaColor.FromArgb(24, 255, 255, 255));
+            AnimateTransform(scale, ScaleTransform.ScaleXProperty, 1.01, 140);
+            AnimateTransform(scale, ScaleTransform.ScaleYProperty, 1.01, 140);
+            AnimateTransform(translate, TranslateTransform.XProperty, 2, 140);
+        };
+        row.MouseLeave += (_, _) =>
+        {
+            row.Background = new SolidColorBrush(MediaColor.FromArgb(12, 255, 255, 255));
+            AnimateTransform(scale, ScaleTransform.ScaleXProperty, 1, 160);
+            AnimateTransform(scale, ScaleTransform.ScaleYProperty, 1, 160);
+            AnimateTransform(translate, TranslateTransform.XProperty, 0, 160);
+        };
+
+        return row;
+    }
+
+    private static void AnimateTransform(
+        Animatable target,
+        DependencyProperty property,
+        double value,
+        int milliseconds)
+    {
+        target.BeginAnimation(property,
+            new DoubleAnimation(value, TimeSpan.FromMilliseconds(milliseconds))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
     }
 
     private void DetailEnabled_Changed(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
-        if (PluginList.SelectedItem is IIslandPlugin plugin)
+        if (_detailPlugin is IIslandPlugin plugin)
         {
             var enabled = DetailEnabledToggle.IsChecked == true;
             _pluginManager.SetEnabled(plugin, enabled);
+        }
+        else if (_detailMonitor is ISystemMonitor monitor)
+        {
+            var enabled = DetailEnabledToggle.IsChecked == true;
+            _monitorManager.SetEnabled(monitor, enabled);
         }
     }
 
     private void BackBtn_Click(object sender, RoutedEventArgs e)
     {
-        PluginDetailPanel.Visibility = Visibility.Collapsed;
-        MainTabs.Visibility = Visibility.Visible;
+        ShowMainTabs();
 
         BackBtn.Visibility = Visibility.Collapsed;
         LogoIcon.Visibility = Visibility.Visible;
         HeaderTitle.Text = "FluidBar";
         PluginList.SelectedItem = null;
+        MonitorList.SelectedItem = null;
+        _detailPlugin = null;
+        _detailMonitor = null;
+    }
+
+    private void ShowMainTabs()
+    {
+        var token = ++_detailTransitionToken;
+        MainTabs.BeginAnimation(OpacityProperty, null);
+        MainTabsTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+        PluginDetailPanel.BeginAnimation(OpacityProperty, null);
+        DetailPanelTranslate.BeginAnimation(TranslateTransform.XProperty, null);
+
+        MainTabs.Visibility = Visibility.Visible;
+        MainTabs.Opacity = 0;
+        MainTabsTranslate.X = -18;
+
+        PluginDetailPanel.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(140))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+        DetailPanelTranslate.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation(24, TimeSpan.FromMilliseconds(170))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+
+        var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(220))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(70),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        var slideIn = new DoubleAnimation(0, TimeSpan.FromMilliseconds(260))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(40),
+            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeIn.Completed += (_, _) =>
+        {
+            if (token == _detailTransitionToken)
+                PluginDetailPanel.Visibility = Visibility.Collapsed;
+        };
+        MainTabs.BeginAnimation(OpacityProperty, fadeIn);
+        MainTabsTranslate.BeginAnimation(TranslateTransform.XProperty, slideIn);
     }
 
     #endregion
@@ -404,7 +657,55 @@ public partial class SettingsWindow : Window
     private void MonitorList_SelectionChanged(object sender,
         SelectionChangedEventArgs e)
     {
-        // Toggle 直接控制，不需要进入详情
+        if (MonitorList.SelectedItem is ISystemMonitor monitor)
+            ShowMonitorDetail(monitor);
+    }
+
+    private void ShowMonitorDetail(ISystemMonitor monitor)
+    {
+        _detailPlugin = null;
+        _detailMonitor = monitor;
+
+        BackBtn.Visibility = Visibility.Visible;
+        LogoIcon.Visibility = Visibility.Collapsed;
+        HeaderTitle.Text = monitor.Name;
+        DetailEnabledLabel.Text = "启用功能";
+        DetailSettingsHeader.Text = "功能设置";
+
+        DetailIcon.Text = monitor.Icon;
+        DetailName.Text = monitor.Name;
+        DetailDesc.Text = monitor.Description;
+        DetailEnabledToggle.IsChecked = monitor.Enabled;
+
+        PluginSettingsContainer.Children.Clear();
+        BuildMonitorFeatureSettings(monitor);
+        ShowDetailPanel();
+    }
+
+    private void BuildMonitorFeatureSettings(ISystemMonitor monitor)
+    {
+        var feature = _settings.GetMonitorFeatureSettings(monitor.Id);
+
+        PluginSettingsContainer.Children.Add(CreateToggleRow(
+            "悬停卡片",
+            "鼠标移入灵动岛时放大为更明显的卡片状态",
+            feature.HoverCardEnabled,
+            val => { feature.HoverCardEnabled = val; _settings.Save(); }));
+
+        PluginSettingsContainer.Children.Add(CreateSliderRow(
+            "显示时长", 1, 8, 0.5, feature.DisplayDurationMs / 1000.0,
+            val =>
+            {
+                feature.DisplayDurationMs = (int)(val * 1000);
+                _settings.Save();
+            },
+            val => val.ToString("F1") + "s"));
+
+        PluginSettingsContainer.Children.Add(CreateToggleRow(
+            "强调动画",
+            "新状态到来时使用更明显的回弹和环绕微光",
+            feature.EmphasizeTransitions,
+            val => { feature.EmphasizeTransitions = val; _settings.Save(); }));
     }
 
     private void MonitorToggle_Changed(object sender, RoutedEventArgs e)

@@ -25,15 +25,15 @@ public sealed class FluidBarSettings
     public double OffsetY { get; set; } = 0;
 
     // === 尺寸 ===
-    public double CollapsedWidth { get; set; } = 176;
-    public double CollapsedHeight { get; set; } = 48;
-    public double ExpandedMaxWidth { get; set; } = 500;
+    public double CollapsedWidth { get; set; } = 126;
+    public double CollapsedHeight { get; set; } = 38;
+    public double ExpandedMaxWidth { get; set; } = 430;
     public double ExpandedHeight { get; set; } = 76;
 
     // === 外观 ===
     public double CornerRadius { get; set; } = 24;
-    public double Opacity { get; set; } = 0.92;
-    public string BackgroundColor { get; set; } = "#E6000000";
+    public double Opacity { get; set; } = 0.96;
+    public string BackgroundColor { get; set; } = "#F4000000";
     public string AccentColor { get; set; } = "#0A84FF";
 
     // === 行为 ===
@@ -41,11 +41,28 @@ public sealed class FluidBarSettings
     public bool AlwaysVisible { get; set; } = false;
     public int AutoHideDelayMs { get; set; } = 3000;
 
+    // === 环绕微光 ===
+    // "Always" = 始终旋转, "Event" = 新状态时旋转(除时钟), "Plugin" = 仅插件状态旋转
+    public string RimMode { get; set; } = "Event";
+
     // === 事件开关 ===
     public bool ClipboardEnabled { get; set; } = true;
 
+    // === 功能详情配置 ===
+    public Dictionary<string, MonitorFeatureSettings> MonitorFeatureSettings { get; set; } = new();
+
     // === 杂项 ===
     public bool HideTrayIcon { get; set; } = false;
+
+    public MonitorFeatureSettings GetMonitorFeatureSettings(string id)
+    {
+        if (!MonitorFeatureSettings.TryGetValue(id, out var settings))
+        {
+            settings = new MonitorFeatureSettings();
+            MonitorFeatureSettings[id] = settings;
+        }
+        return settings;
+    }
 
     /// <summary>
     /// 保存配置到 JSON 文件
@@ -104,7 +121,16 @@ public sealed class FluidBarSettings
         AlwaysOnTop = defaults.AlwaysOnTop;
         AlwaysVisible = defaults.AlwaysVisible;
         AutoHideDelayMs = defaults.AutoHideDelayMs;
+        RimMode = defaults.RimMode;
         ClipboardEnabled = defaults.ClipboardEnabled;
+        MonitorFeatureSettings = new Dictionary<string, MonitorFeatureSettings>();
         HideTrayIcon = defaults.HideTrayIcon;
     }
+}
+
+public sealed class MonitorFeatureSettings
+{
+    public bool HoverCardEnabled { get; set; } = true;
+    public int DisplayDurationMs { get; set; } = 3000;
+    public bool EmphasizeTransitions { get; set; } = true;
 }

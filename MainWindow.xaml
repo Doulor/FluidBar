@@ -10,91 +10,465 @@
         ResizeMode="NoResize"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
-        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown"
+        MouseEnter="Window_MouseEnter"
+        MouseLeave="Window_MouseLeave"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
 
-    <!-- 主药丸容器 — 无 DropShadow（避免方角伪影），纯色深黑 + 微光环边 -->
-    <Border x:Name="PillBorder"
-            Padding="18,14"
-            MinWidth="160"
-            MaxWidth="600"
-            Opacity="0"
-            UseLayoutRounding="True"
-            SnapsToDevicePixels="True">
-        <Border.Background>
-            <SolidColorBrush x:Name="PillBackground" Color="#E6000000"/>
-        </Border.Background>
-        <!-- 微光环边（苹果风格 rim light） -->
-        <Border.BorderBrush>
-            <SolidColorBrush x:Name="PillRimBrush" Color="#10FFFFFF"/>
-        </Border.BorderBrush>
-        <Border.BorderThickness>0.5</Border.BorderThickness>
+    <Grid x:Name="IslandRoot" Margin="14" ClipToBounds="False">
+        <Border x:Name="OuterBloom"
+                Margin="1"
+                CornerRadius="28"
+                Opacity="0"
+                IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.15"
+                                     GradientOrigin="0.5,0.1"
+                                     RadiusX="0.85"
+                                     RadiusY="1.25">
+                    <GradientStop Color="#220A84FF" Offset="0"/>
+                    <GradientStop Color="#10000000" Offset="0.58"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
 
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <Border x:Name="PillBorder"
+                Padding="12,8"
+                MinWidth="126"
+                MinHeight="38"
+                MaxWidth="640"
+                CornerRadius="24"
+                Opacity="0"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True"
+                ClipToBounds="True"
+                RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="PillScale" ScaleX="1" ScaleY="1"/>
+                    <SkewTransform x:Name="PillSkew" AngleX="0" AngleY="0"/>
+                </TransformGroup>
+            </Border.RenderTransform>
+            <Border.Background>
+                <SolidColorBrush x:Name="PillBackground" Color="#F8000000"/>
+            </Border.Background>
+            <Border.BorderBrush>
+                <LinearGradientBrush x:Name="RimBrush"
+                                     Opacity="0"
+                                     StartPoint="0,0"
+                                     EndPoint="1,1"
+                                     MappingMode="RelativeToBoundingBox">
+                    <LinearGradientBrush.RelativeTransform>
+                        <RotateTransform x:Name="RimRotation"
+                                         CenterX="0.5"
+                                         CenterY="0.5"
+                                         Angle="0"/>
+                    </LinearGradientBrush.RelativeTransform>
+                    <GradientStop x:Name="RimStop0" Color="#12FFFFFF" Offset="0"/>
+                    <GradientStop x:Name="RimStop1" Color="#08000000" Offset="0.28"/>
+                    <GradientStop x:Name="RimStop2" Color="#CC0A84FF" Offset="0.5"/>
+                    <GradientStop x:Name="RimStop3" Color="#08000000" Offset="0.72"/>
+                    <GradientStop x:Name="RimStop4" Color="#14FFFFFF" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+            <Border.BorderThickness>1.4</Border.BorderThickness>
 
-            <!-- 图标区域 -->
-            <Border x:Name="IconBorder"
-                    Grid.Column="0"
-                    Width="32" Height="32"
-                    CornerRadius="16"
-                    Margin="0,0,12,0"
-                    VerticalAlignment="Center"
-                    RenderTransformOrigin="0.5,0.5">
-                <Border.RenderTransform>
-                    <ScaleTransform x:Name="IconScale" ScaleX="1" ScaleY="1"/>
-                </Border.RenderTransform>
-                <Border.Background>
-                    <SolidColorBrush x:Name="IconBackground" Color="#0A84FF"/>
-                </Border.Background>
-                <Border.Effect>
-                    <DropShadowEffect x:Name="IconGlow"
-                                      BlurRadius="14" Opacity="0.35" ShadowDepth="0" Color="#0A84FF"/>
-                </Border.Effect>
-                <TextBlock x:Name="IconText"
-                           FontFamily="Segoe MDL2 Assets"
-                           FontSize="14"
-                           Foreground="White"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Text="&#xE16F;"/>
-            </Border>
+            <Grid x:Name="IslandSurface" ClipToBounds="True">
+                <Border x:Name="TopSpecular"
+                        Height="14"
+                        VerticalAlignment="Top"
+                        CornerRadius="22,22,9,9"
+                        Opacity="0.18"
+                        IsHitTestVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#12FFFFFF" Offset="0"/>
+                            <GradientStop Color="#03000000" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
 
-            <!-- 内容区域 -->
-            <Grid Grid.Column="1" VerticalAlignment="Center" x:Name="ContentGrid">
-                <StackPanel x:Name="ContentPanel"
-                            VerticalAlignment="Center"
-                            Opacity="0">
-                    <!-- 标题 -->
-                    <TextBlock x:Name="TitleText"
-                               FontSize="10"
-                               FontFamily="Segoe UI, Microsoft YaHei UI"
-                               Foreground="#999999"
-                               Margin="0,0,0,3"
-                               TextTrimming="CharacterEllipsis"/>
+                <Border x:Name="DepthShade"
+                        VerticalAlignment="Bottom"
+                        Height="18"
+                        Opacity="0.2"
+                        IsHitTestVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#00000000" Offset="0"/>
+                            <GradientStop Color="#24000000" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
 
-                    <!-- 普通文本 -->
-                    <TextBlock x:Name="ContentText"
-                               FontSize="13"
-                               FontFamily="Segoe UI, Microsoft YaHei UI"
-                               Foreground="#F7F7F7"
-                               TextTrimming="CharacterEllipsis"
-                               MaxWidth="420"
-                               TextWrapping="NoWrap"
-                               Visibility="Collapsed"/>
+                <Grid x:Name="IslandContent">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <!-- 进度条（音量/亮度） -->
-                    <Grid x:Name="ProgressBarPanel"
-                          Visibility="Collapsed"
-                          Margin="0,3,0,0"
-                          HorizontalAlignment="Stretch">
-                        <Border Height="4" CornerRadius="2" Background="#1AFFFFFF"/>
-                        <Border x:Name="ProgressTrack" Height="4" CornerRadius="2" ClipToBounds="True">
-                            <Border x:Name="ProgressFill"
-                                    Height="4"
-                                    CornerRadius="2"
+                    <Grid x:Name="IconHost"
+                          Grid.Column="0"
+                          Width="38"
+                          Height="38"
+                          Margin="0,0,12,0"
+                          VerticalAlignment="Center"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <ScaleTransform x:Name="IconScale" ScaleX="1" ScaleY="1"/>
+                        </Grid.RenderTransform>
+
+                        <Ellipse x:Name="IconPulse"
+                                 Width="38"
+                                 Height="38"
+                                 Opacity="0.18"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <ScaleTransform x:Name="IconPulseScale"
+                                                ScaleX="1"
+                                                ScaleY="1"/>
+                            </Ellipse.RenderTransform>
+                            <Ellipse.Fill>
+                                <SolidColorBrush x:Name="IconPulseBrush" Color="#0A84FF"/>
+                            </Ellipse.Fill>
+                        </Ellipse>
+
+                        <Border x:Name="IconBorder"
+                                Width="32"
+                                Height="32"
+                                CornerRadius="16"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="IconBackground" Color="#0A84FF"/>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="IconGlow"
+                                                  BlurRadius="18"
+                                                  Opacity="0.46"
+                                                  ShadowDepth="0"
+                                                  Color="#0A84FF"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Border CornerRadius="16"
+                                        Opacity="0.45"
+                                        IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#33FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#00000000" Offset="0.82"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <TextBlock x:Name="IconText"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Text="&#xE16F;"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.Column="1"
+                          VerticalAlignment="Center"
+                          x:Name="ContentGrid"
+                          MinWidth="124">
+                        <StackPanel x:Name="ContentPanel"
+                                    VerticalAlignment="Center"
+                                    Opacity="0"
+                                    RenderTransformOrigin="0.5,0.5">
+                            <StackPanel.RenderTransform>
+                                <TranslateTransform x:Name="ContentTranslate" X="0" Y="4"/>
+                            </StackPanel.RenderTransform>
+
+                            <TextBlock x:Name="TitleText"
+                                       FontSize="10.5"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#9C9CA1"
+                                       Margin="0,0,0,3"
+                                       TextTrimming="CharacterEllipsis"/>
+
+                            <TextBlock x:Name="ContentText"
+                                       FontSize="13.5"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#F7F7F9"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxWidth="430"
+                                       TextWrapping="NoWrap"
+                                       Visibility="Collapsed"/>
+
+                            <Grid x:Name="ProgressBarPanel"
+                                  Visibility="Collapsed"
+                                  Margin="0,5,0,0"
+                                  HorizontalAlignment="Left">
+                                <Border x:Name="ProgressTrack"
+                                        Width="190"
+                                        Height="7"
+                                        CornerRadius="3.5"
+                                        Background="#24FFFFFF"
+                                        ClipToBounds="True">
+                                    <Grid>
+                                        <Border Height="7"
+                                                CornerRadius="3.5"
+                                                Opacity="0.35">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                    <GradientStop Color="#18FFFFFF" Offset="0"/>
+                                                    <GradientStop Color="#05000000" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                        <Border x:Name="ProgressFill"
+                                                Height="7"
+                                                CornerRadius="3.5"
+                                                HorizontalAlignment="Left"
+                                                Width="0">
+                                            <Border.Background>
+                                                <LinearGradientBrush EndPoint="1,0">
+                                                    <GradientStop Color="#0A84FF" Offset="0"/>
+                                                    <GradientStop Color="#5AC8FA" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+
+                            <Grid x:Name="StatusPanel"
+                                  Visibility="Collapsed"
+                                  Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="StatusBadgeBorder"
+                                        Grid.Column="0"
+                                        CornerRadius="7"
+                                        Padding="6,2"
+                                        Margin="0,0,7,0"
+                                        VerticalAlignment="Center"
+                                        Background="#2734C759"
+                                        BorderBrush="#3334C759"
+                                        BorderThickness="1">
+                                    <TextBlock x:Name="StatusBadgeText"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                               Foreground="#DDFBE3"/>
+                                </Border>
+                                <TextBlock x:Name="StatusIconText"
+                                           Grid.Column="1"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="11"
+                                           Foreground="#34C759"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock x:Name="StatusText"
+                                           Grid.Column="2"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                           Foreground="#D6D6DA"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Grid x:Name="LockKeyPanel"
+                                  Visibility="Collapsed"
+                                  Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LockKeyText"
+                                           Grid.Column="0"
+                                           FontSize="12.5"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                           Foreground="#D6D6DA"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,7,0"/>
+                                <Border x:Name="LedDot"
+                                        Grid.Column="1"
+                                        Width="10"
+                                        Height="10"
+                                        CornerRadius="5"
+                                        Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
+                                    <Border.Background>
+                                        <SolidColorBrush x:Name="LedColor" Color="#3A3A3C"/>
+                                    </Border.Background>
+                                    <Border.Effect>
+                                        <DropShadowEffect x:Name="LedShadow"
+                                                          BlurRadius="8"
+                                                          Opacity="0"
+                                                          ShadowDepth="0"
+                                                          Color="#34C759"/>
+                                    </Border.Effect>
+                                </Border>
+                                <TextBlock x:Name="LockKeyStatus"
+                                           Grid.Column="2"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                           Foreground="#8E8E93"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Border x:Name="ImePanel"
+                                    Visibility="Collapsed"
+                                    CornerRadius="8"
+                                    Padding="9,4"
+                                    Margin="0,3,0,0"
+                                    HorizontalAlignment="Left"
+                                    BorderThickness="1">
+                                <Border.Background>
+                                    <SolidColorBrush x:Name="ImeBadgeColor" Color="#0A84FF"/>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <SolidColorBrush x:Name="ImeBorderColor" Color="#33FFFFFF"/>
+                                </Border.BorderBrush>
+                                <TextBlock x:Name="ImeText"
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI"
+                                           Foreground="White"/>
+                            </Border>
+
+                            <Canvas x:Name="ScrollCanvas"
+                                    Height="20"
+                                    Width="220"
+                                    ClipToBounds="True"
+                                    Visibility="Collapsed">
+                                <TextBlock x:Name="ScrollText"
+                                           FontSize="13.5"
+                                           FontWeight="SemiBold"
+                                           FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                           Foreground="#FFFFFF"
+                                           Canvas.Top="1"/>
+                            </Canvas>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="AccessoryGrid"
+                          Grid.Column="2"
+                          Width="40"
+                          Margin="10,0,0,0"
+                          VerticalAlignment="Center"
+                          Visibility="Collapsed">
+                        <StackPanel x:Name="AudioWavePanel"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="Collapsed"
+                                    Height="24">
+                            <Border x:Name="Wave1" Width="3" Height="8" CornerRadius="1.5" Background="#30D158" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                            <Border x:Name="Wave2" Width="3" Height="15" CornerRadius="1.5" Background="#30D158" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                            <Border x:Name="Wave3" Width="3" Height="6" CornerRadius="1.5" Background="#30D158" Margin="0,0,3,0" VerticalAlignment="Center"/>
+                            <Border x:Name="Wave4" Width="3" Height="12" CornerRadius="1.5" Background="#30D158" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <Grid x:Name="HoverCardGrid"
+                      Opacity="0"
+                      Visibility="Collapsed"
+                      Margin="10"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="HoverCardTranslate" Y="10"/>
+                    </Grid.RenderTransform>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Width="48"
+                                Height="48"
+                                CornerRadius="18"
+                                Background="{Binding ElementName=IconBorder, Path=Background}">
+                            <TextBlock x:Name="HoverIconText"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="21"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1"
+                                    Margin="13,1,12,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock x:Name="HoverTitleText"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#FAFAFC"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="HoverSubtitleText"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#8F8F96"
+                                       TextTrimming="CharacterEllipsis"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+
+                        <Border x:Name="HoverBadgeBorder"
+                                Grid.Column="2"
+                                CornerRadius="9"
+                                Padding="8,4"
+                                VerticalAlignment="Top"
+                                Background="#2734C759"
+                                BorderBrush="#3334C759"
+                                BorderThickness="1">
+                            <TextBlock x:Name="HoverBadgeText"
+                                       FontSize="10.5"
+                                       FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#DDFBE3"/>
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <TextBlock x:Name="HoverBodyText"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   LineHeight="19"
+                                   FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#E7E7EA"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <Grid x:Name="HoverProgressPanel"
+                              Visibility="Collapsed"
+                              VerticalAlignment="Bottom"
+                              Margin="0,0,0,8">
+                            <Border Height="8"
+                                    CornerRadius="4"
+                                    Background="#24FFFFFF"/>
+                            <Border x:Name="HoverProgressFill"
+                                    Height="8"
+                                    CornerRadius="4"
                                     HorizontalAlignment="Left"
                                     Width="0">
                                 <Border.Background>
@@ -104,104 +478,28 @@
                                     </LinearGradientBrush>
                                 </Border.Background>
                             </Border>
-                        </Border>
+                        </Grid>
                     </Grid>
 
-                    <!-- 状态指示器（电池/网络/蓝牙/USB） -->
-                    <Grid x:Name="StatusPanel"
-                          Visibility="Collapsed"
-                          Margin="0,2,0,0">
+                    <Grid Grid.Row="2" Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="StatusIconText"
+                        <TextBlock x:Name="HoverMetaText"
                                    Grid.Column="0"
-                                   FontFamily="Segoe MDL2 Assets"
                                    FontSize="11"
-                                   Foreground="#34C759"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,6,0"/>
-                        <TextBlock x:Name="StatusText"
+                                   FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#77777E"/>
+                        <TextBlock x:Name="HoverHintText"
                                    Grid.Column="1"
-                                   FontSize="12"
-                                   FontFamily="Segoe UI, Microsoft YaHei UI"
-                                   Foreground="#CCCCCC"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-
-                    <!-- 锁键指示 -->
-                    <Grid x:Name="LockKeyPanel"
-                          Visibility="Collapsed"
-                          Margin="0,2,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="LockKeyText"
-                                   Grid.Column="0"
-                                   FontSize="12"
-                                   FontFamily="Segoe UI, Microsoft YaHei UI"
-                                   Foreground="#CCCCCC"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,6,0"/>
-                        <Border x:Name="LedDot"
-                                Grid.Column="1"
-                                Width="10" Height="10"
-                                CornerRadius="5"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center">
-                            <Border.Background>
-                                <SolidColorBrush x:Name="LedColor" Color="#3A3A3C"/>
-                            </Border.Background>
-                            <Border.Effect>
-                                <DropShadowEffect x:Name="LedShadow"
-                                                  BlurRadius="6" Opacity="0" ShadowDepth="0" Color="#34C759"/>
-                            </Border.Effect>
-                        </Border>
-                        <TextBlock x:Name="LockKeyStatus"
-                                   Grid.Column="2"
+                                   Text="移开收起"
                                    FontSize="11"
-                                   FontFamily="Segoe UI, Microsoft YaHei UI"
-                                   Foreground="#888888"
-                                   VerticalAlignment="Center"/>
+                                   FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#5F5F66"/>
                     </Grid>
-
-                    <!-- 输入法指示 -->
-                    <Border x:Name="ImePanel"
-                            Visibility="Collapsed"
-                            CornerRadius="5"
-                            Padding="8,3"
-                            Margin="0,2,0,0"
-                            HorizontalAlignment="Left"
-                            BorderThickness="1">
-                        <Border.Background>
-                            <SolidColorBrush x:Name="ImeBadgeColor" Color="#0A84FF"/>
-                        </Border.Background>
-                        <Border.BorderBrush>
-                            <SolidColorBrush x:Name="ImeBorderColor" Color="#33FFFFFF"/>
-                        </Border.BorderBrush>
-                        <TextBlock x:Name="ImeText"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"
-                                   FontFamily="Segoe UI, Microsoft YaHei UI"
-                                   Foreground="White"/>
-                    </Border>
-
-                    <!-- 滚动文本 -->
-                    <Canvas x:Name="ScrollCanvas"
-                            Height="18"
-                            ClipToBounds="True"
-                            Visibility="Collapsed">
-                        <TextBlock x:Name="ScrollText"
-                                   FontSize="13"
-                                   FontFamily="Segoe UI, Microsoft YaHei UI"
-                                   Foreground="#FFFFFF"
-                                   Canvas.Top="1"/>
-                    </Canvas>
-                </StackPanel>
+                </Grid>
             </Grid>
-        </Grid>
-    </Border>
+        </Border>
+    </Grid>
 </Window>

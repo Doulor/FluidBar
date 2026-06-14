@@ -151,27 +151,27 @@ public partial class App : Application
         g.Clear(Color.Transparent);
 
         using var path = new GraphicsPath();
-        int cr = 8;
-        var rect = new Rectangle(2, 2, size - 4, size - 4);
+        int cr = 7;
+        var rect = new Rectangle(3, 9, size - 6, 14);
         path.AddArc(rect.X, rect.Y, cr * 2, cr * 2, 180, 90);
         path.AddArc(rect.Right - cr * 2, rect.Y, cr * 2, cr * 2, 270, 90);
         path.AddArc(rect.Right - cr * 2, rect.Bottom - cr * 2, cr * 2, cr * 2, 0, 90);
         path.AddArc(rect.X, rect.Bottom - cr * 2, cr * 2, cr * 2, 90, 90);
         path.CloseFigure();
 
-        using var brush = new SolidBrush(Color.FromArgb(200, 20, 20, 20));
+        using var glow = new SolidBrush(Color.FromArgb(60, 10, 132, 255));
+        g.FillEllipse(glow, 4, 4, 24, 24);
+
+        using var brush = new SolidBrush(Color.FromArgb(245, 0, 0, 0));
         g.FillPath(brush, path);
 
-        using var font = new DrawingFont("Segoe MDL2 Assets", 14f,
-            DrawingFontStyle.Regular, GraphicsUnit.Pixel);
-        using var textBrush = new SolidBrush(Color.FromArgb(230, 10, 132, 255));
-        var sf = new StringFormat
-        {
-            Alignment = StringAlignment.Center,
-            LineAlignment = StringAlignment.Center
-        };
-        g.DrawString("\uE16F", font, textBrush,
-            new RectangleF(0, 0, size, size), sf);
+        using var rimPen = new Pen(Color.FromArgb(65, 255, 255, 255), 1f);
+        g.DrawPath(rimPen, path);
+
+        using var accent = new SolidBrush(Color.FromArgb(235, 10, 132, 255));
+        g.FillEllipse(accent, 11, 13, 4, 4);
+        using var soft = new SolidBrush(Color.FromArgb(210, 48, 209, 88));
+        g.FillEllipse(soft, 17, 13, 4, 4);
 
         return Icon.FromHandle(bmp.GetHicon());
     }
@@ -194,6 +194,9 @@ public partial class App : Application
             };
         }
 
+        // 重置透明度（淡出动画可能将其设为 0）
+        _settingsWindow.BeginAnimation(UIElement.OpacityProperty, null);
+        _settingsWindow.Opacity = 1;
         _settingsWindow.Show();
         _settingsWindow.Activate();
     }

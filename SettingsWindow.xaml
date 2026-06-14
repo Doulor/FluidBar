@@ -119,28 +119,101 @@
 
         <!-- === ToggleSwitch 样式 === -->
         <Style x:Key="ToggleSwitchStyle" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Grid>
+                        <Grid x:Name="SwitchRoot"
+                              Width="44"
+                              Height="22"
+                              RenderTransformOrigin="0.5,0.5">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             To="1" Duration="0:0:0.14"/>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="MouseOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             To="1.06" Duration="0:0:0.14"/>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1.06" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             To="0.94" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="0.94" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled"/>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualState x:Name="Unchecked">
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="TrackBrush"
+                                                            Storyboard.TargetProperty="Color"
+                                                            To="#3A3A3C" Duration="0:0:0.18"/>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTranslate"
+                                                             Storyboard.TargetProperty="X"
+                                                             To="0" Duration="0:0:0.2">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <QuarticEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <Storyboard>
+                                            <ColorAnimation Storyboard.TargetName="TrackBrush"
+                                                            Storyboard.TargetProperty="Color"
+                                                            To="#34C759" Duration="0:0:0.18"/>
+                                            <DoubleAnimation Storyboard.TargetName="ThumbTranslate"
+                                                             Storyboard.TargetProperty="X"
+                                                             To="22" Duration="0:0:0.24">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase EasingMode="EaseOut" Amplitude="0.25"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid.RenderTransform>
+                                <ScaleTransform x:Name="SwitchScale" ScaleX="1" ScaleY="1"/>
+                            </Grid.RenderTransform>
                             <Border x:Name="Track" CornerRadius="11"
-                                    Background="#3A3A3C" Width="44" Height="22"/>
+                                    Width="44" Height="22">
+                                <Border.Background>
+                                    <SolidColorBrush x:Name="TrackBrush" Color="#3A3A3C"/>
+                                </Border.Background>
+                            </Border>
                             <Border x:Name="Thumb" CornerRadius="9"
                                     Background="#FFFFFF" Width="18" Height="18"
                                     HorizontalAlignment="Left" Margin="2,0,0,0">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="ThumbTranslate" X="0"/>
+                                </Border.RenderTransform>
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="4" Opacity="0.3"
                                                       ShadowDepth="1"/>
                                 </Border.Effect>
                             </Border>
                         </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="#34C759"/>
-                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
-                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,2,0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -193,30 +266,110 @@
             </Setter>
         </Style>
 
-        <!-- === ComboBox 样式 === -->
+        <!-- === ComboBox 样式（深色圆角风格） === -->
         <Style TargetType="ComboBox">
             <Setter Property="Height" Value="34"/>
-            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
             <Setter Property="Background" Value="#2C2C2E"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="BorderBrush" Value="#3A3A3C"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8"/>
+                            <!-- 全区域可点击的透明 ToggleButton -->
+                            <ToggleButton x:Name="Toggle"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Background="Transparent" BorderThickness="0"
+                                          Cursor="Hand"/>
+                            <!-- 选中内容（在 ToggleButton 外面，直接绑定 ComboBox 的 SelectedItem） -->
+                            <ContentPresenter IsHitTestVisible="False"
+                                              VerticalAlignment="Center"
+                                              Margin="10,0,28,0"
+                                              Content="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <!-- 下拉箭头 -->
+                            <Path Data="M0,0 L4,4 L8,0"
+                                  Stroke="#888888" StrokeThickness="1.5"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,10,0"
+                                  IsHitTestVisible="False"
+                                  Stretch="Uniform" Width="8" Height="5"/>
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom" AllowsTransparency="True"
+                                   Focusable="False" PopupAnimation="Slide">
+                                <Border x:Name="DropDownBorder"
+                                        Background="#2C2C2E" BorderBrush="#3A3A3C"
+                                        BorderThickness="1" CornerRadius="8"
+                                        MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="200"
+                                        Margin="0,4,0,0">
+                                    <ScrollViewer>
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#555555"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#0A84FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- === ComboBoxItem 样式 === -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
+            <Setter Property="Foreground" Value="#CCCCCC"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1AFFFFFF"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#260A84FF"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- === 通用样式 === -->
         <Style x:Key="SettingLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#CCCCCC"/>
-            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
+            <Setter Property="Foreground" Value="#D8D8DC"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style x:Key="ValueLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="#888888"/>
-            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
+            <Setter Property="Foreground" Value="#9A9AA0"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="MinWidth" Value="40"/>
             <Setter Property="TextAlignment" Value="Right"/>
@@ -225,8 +378,8 @@
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#666666"/>
-            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
+            <Setter Property="Foreground" Value="#7B7B82"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"/>
             <Setter Property="Margin" Value="0,0,0,12"/>
         </Style>
 
@@ -241,18 +394,46 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Bg" Background="Transparent"
-                                CornerRadius="6" Cursor="Hand">
+                                CornerRadius="6" Cursor="Hand"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="PosScale" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="PosScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             To="1.035" Duration="0:0:0.14"/>
+                                            <DoubleAnimation Storyboard.TargetName="PosScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1.035" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="PosScale"
+                                                             Storyboard.TargetProperty="ScaleX"
+                                                             To="1" Duration="0:0:0.14"/>
+                                            <DoubleAnimation Storyboard.TargetName="PosScale"
+                                                             Storyboard.TargetProperty="ScaleY"
+                                                             To="1" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                                <Setter TargetName="Bg" Property="Background"
+                                        Value="#0DFFFFFF"/>
+                            </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bg" Property="Background"
                                         Value="#1A0A84FF"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background"
-                                        Value="#0DFFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -262,12 +443,12 @@
     </Window.Resources>
 
     <!-- 主容器 -->
-    <Border CornerRadius="16"
-            Background="#F01A1A1C"
-            BorderBrush="#20FFFFFF"
+    <Border CornerRadius="22"
+            Background="#F50B0B0D"
+            BorderBrush="#28FFFFFF"
             BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="40" Opacity="0.6" ShadowDepth="0" Color="#000000"/>
+            <DropShadowEffect BlurRadius="48" Opacity="0.72" ShadowDepth="0" Color="#000000"/>
         </Border.Effect>
 
         <Grid>
@@ -292,13 +473,22 @@
                                    VerticalAlignment="Center"/>
                     </Border>
                     <Border x:Name="LogoIcon"
-                            Width="28" Height="28" CornerRadius="8"
-                            Background="#0A84FF" Margin="0,0,10,0">
-                        <TextBlock Text="&#xE16F;"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   FontSize="14" Foreground="White"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                            Width="44" Height="22" CornerRadius="11"
+                            Background="#F4000000" Margin="0,0,12,0"
+                            BorderBrush="#22FFFFFF"
+                            BorderThickness="1">
+                        <Grid>
+                            <Ellipse Width="5" Height="5"
+                                     Fill="#0A84FF"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Margin="-8,0,0,0"/>
+                            <Ellipse Width="5" Height="5"
+                                     Fill="#30D158"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Margin="8,0,0,0"/>
+                        </Grid>
                     </Border>
                     <TextBlock x:Name="HeaderTitle"
                                Text="FluidBar"
@@ -341,10 +531,15 @@
                             Margin="16,4,16,0"
                             Background="Transparent"
                             BorderThickness="0"
+                            Opacity="1"
+                            RenderTransformOrigin="0.5,0.5"
                             SelectedIndex="0">
+                    <TabControl.RenderTransform>
+                        <TranslateTransform x:Name="MainTabsTranslate" X="0"/>
+                    </TabControl.RenderTransform>
                     <TabControl.Resources>
                         <Style TargetType="TabPanel">
-                            <Setter Property="Background" Value="#1AFFFFFF"/>
+                            <Setter Property="Background" Value="#10101012"/>
                             <Setter Property="Height" Value="40"/>
                         </Style>
                     </TabControl.Resources>
@@ -368,7 +563,7 @@
                                     <TextBlock Grid.Column="0" Text="圆角"
                                                Style="{StaticResource SettingLabel}"/>
                                     <Slider x:Name="CornerRadiusSlider" Grid.Column="1"
-                                            Minimum="4" Maximum="40"
+                                            Minimum="18" Maximum="34"
                                             TickFrequency="1"
                                             IsSnapToTickEnabled="True"
                                             Margin="8,0"
@@ -404,15 +599,15 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="44"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="收缩宽度"
+                                    <TextBlock Grid.Column="0" Text="灵动岛宽度"
                                                Style="{StaticResource SettingLabel}"/>
-                                    <Slider x:Name="CollapsedWidthSlider" Grid.Column="1"
-                                            Minimum="100" Maximum="240"
+                                    <Slider x:Name="IslandWidthSlider" Grid.Column="1"
+                                            Minimum="280" Maximum="640"
                                             TickFrequency="10"
                                             IsSnapToTickEnabled="True"
                                             Margin="8,0"
                                             ValueChanged="Setting_ValueChanged"/>
-                                    <TextBlock x:Name="CollapsedWidthValue" Grid.Column="2"
+                                    <TextBlock x:Name="IslandWidthValue" Grid.Column="2"
                                                Style="{StaticResource ValueLabel}"/>
                                 </Grid>
 
@@ -422,15 +617,15 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="44"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="展开宽度"
+                                    <TextBlock Grid.Column="0" Text="灵动岛高度"
                                                Style="{StaticResource SettingLabel}"/>
-                                    <Slider x:Name="ExpandedWidthSlider" Grid.Column="1"
-                                            Minimum="300" Maximum="800"
-                                            TickFrequency="25"
+                                    <Slider x:Name="IslandHeightSlider" Grid.Column="1"
+                                            Minimum="56" Maximum="96"
+                                            TickFrequency="2"
                                             IsSnapToTickEnabled="True"
                                             Margin="8,0"
                                             ValueChanged="Setting_ValueChanged"/>
-                                    <TextBlock x:Name="ExpandedWidthValue" Grid.Column="2"
+                                    <TextBlock x:Name="IslandHeightValue" Grid.Column="2"
                                                Style="{StaticResource ValueLabel}"/>
                                 </Grid>
 
@@ -629,6 +824,25 @@
                                                   Checked="AlwaysVisibleToggle_Changed"
                                                   Unchecked="AlwaysVisibleToggle_Changed"/>
                                 </Grid>
+
+                                <Border Style="{StaticResource Separator}"/>
+                                <TextBlock Text="环绕微光" Style="{StaticResource SectionHeader}"/>
+
+                                <Grid Margin="0,0,0,14" Height="34">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="流转模式"
+                                               Style="{StaticResource SettingLabel}"/>
+                                    <ComboBox x:Name="RimModeCombo"
+                                              Grid.Column="1" Margin="8,0"
+                                              SelectionChanged="RimModeCombo_Changed">
+                                        <ComboBoxItem Content="始终流转" Tag="Always"/>
+                                        <ComboBoxItem Content="新状态流转" Tag="Event"/>
+                                        <ComboBoxItem Content="仅插件流转" Tag="Plugin"/>
+                                    </ComboBox>
+                                </Grid>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -652,21 +866,62 @@
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="ListBoxItem">
                                                     <Border x:Name="Bd"
-                                                            Background="Transparent"
                                                             CornerRadius="10" Padding="12"
-                                                            Cursor="Hand">
+                                                            Cursor="Hand"
+                                                            RenderTransformOrigin="0.5,0.5">
+                                                        <Border.Background>
+                                                            <SolidColorBrush x:Name="ListItemBrush" Color="#00000000"/>
+                                                        </Border.Background>
+                                                        <Border.RenderTransform>
+                                                            <TransformGroup>
+                                                                <ScaleTransform x:Name="ItemScale" ScaleX="1" ScaleY="1"/>
+                                                                <TranslateTransform x:Name="ItemTranslate" X="0"/>
+                                                            </TransformGroup>
+                                                        </Border.RenderTransform>
                                                         <ContentPresenter/>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="Bd"
-                                                                    Property="Background"
-                                                                    Value="#1AFFFFFF"/>
+                                                            <Trigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
+                                                                                        Storyboard.TargetProperty="Color"
+                                                                                        To="#1EFFFFFF" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleX"
+                                                                                         To="1.012" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleY"
+                                                                                         To="1.012" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
+                                                                                         Storyboard.TargetProperty="X"
+                                                                                         To="3" Duration="0:0:0.16"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.EnterActions>
+                                                            <Trigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
+                                                                                        Storyboard.TargetProperty="Color"
+                                                                                        To="#00000000" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleX"
+                                                                                         To="1" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleY"
+                                                                                         To="1" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
+                                                                                         Storyboard.TargetProperty="X"
+                                                                                         To="0" Duration="0:0:0.18"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.ExitActions>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="Bd"
-                                                                    Property="Background"
-                                                                    Value="#26FFFFFF"/>
+                                                            <Setter TargetName="Bd" Property="Background"
+                                                                    Value="#260A84FF"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -741,21 +996,62 @@
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="ListBoxItem">
                                                     <Border x:Name="Bd"
-                                                            Background="Transparent"
                                                             CornerRadius="10" Padding="12"
-                                                            Cursor="Hand">
+                                                            Cursor="Hand"
+                                                            RenderTransformOrigin="0.5,0.5">
+                                                        <Border.Background>
+                                                            <SolidColorBrush x:Name="ListItemBrush" Color="#00000000"/>
+                                                        </Border.Background>
+                                                        <Border.RenderTransform>
+                                                            <TransformGroup>
+                                                                <ScaleTransform x:Name="ItemScale" ScaleX="1" ScaleY="1"/>
+                                                                <TranslateTransform x:Name="ItemTranslate" X="0"/>
+                                                            </TransformGroup>
+                                                        </Border.RenderTransform>
                                                         <ContentPresenter/>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="Bd"
-                                                                    Property="Background"
-                                                                    Value="#1AFFFFFF"/>
+                                                            <Trigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
+                                                                                        Storyboard.TargetProperty="Color"
+                                                                                        To="#1EFFFFFF" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleX"
+                                                                                         To="1.012" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleY"
+                                                                                         To="1.012" Duration="0:0:0.16"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
+                                                                                         Storyboard.TargetProperty="X"
+                                                                                         To="3" Duration="0:0:0.16"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.EnterActions>
+                                                            <Trigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
+                                                                                        Storyboard.TargetProperty="Color"
+                                                                                        To="#00000000" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleX"
+                                                                                         To="1" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
+                                                                                         Storyboard.TargetProperty="ScaleY"
+                                                                                         To="1" Duration="0:0:0.18"/>
+                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
+                                                                                         Storyboard.TargetProperty="X"
+                                                                                         To="0" Duration="0:0:0.18"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </Trigger.ExitActions>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="Bd"
-                                                                    Property="Background"
-                                                                    Value="#26FFFFFF"/>
+                                                            <Setter TargetName="Bd" Property="Background"
+                                                                    Value="#260A84FF"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -868,7 +1164,7 @@
                                                Foreground="#CCCCCC"
                                                FontFamily="Segoe UI, Microsoft YaHei UI"
                                                VerticalAlignment="Center"/>
-                                    <TextBlock Text="1.1.0" FontSize="12"
+                                    <TextBlock Text="2.0.0" FontSize="12"
                                                Foreground="#666666"
                                                FontFamily="Segoe UI, Microsoft YaHei UI"
                                                VerticalAlignment="Center"
@@ -922,7 +1218,12 @@
 
                 <!-- 插件详情页 -->
                 <Grid x:Name="PluginDetailPanel" Visibility="Collapsed"
-                      Margin="16,4,16,0">
+                      Margin="16,4,16,0"
+                      Opacity="0"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <TranslateTransform x:Name="DetailPanelTranslate" X="28"/>
+                    </Grid.RenderTransform>
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
@@ -955,7 +1256,8 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="启用插件" FontSize="13"
+                                <TextBlock x:Name="DetailEnabledLabel"
+                                           Grid.Column="0" Text="启用项目" FontSize="13"
                                            Foreground="#CCCCCC"
                                            FontFamily="Segoe UI, Microsoft YaHei UI"
                                            VerticalAlignment="Center"/>
@@ -967,7 +1269,8 @@
                             </Grid>
 
                             <Border Style="{StaticResource Separator}"/>
-                            <TextBlock Text="插件设置"
+                            <TextBlock x:Name="DetailSettingsHeader"
+                                       Text="项目设置"
                                        Style="{StaticResource SectionHeader}"/>
                             <StackPanel x:Name="PluginSettingsContainer"/>
                         </StackPanel>

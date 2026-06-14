@@ -17,5 +17,10 @@
     <PackageReference Include="System.Management" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="FluidBar.Tests\**\*.cs" />
+    <None Remove="FluidBar.Tests\**\*" />
+  </ItemGroup>
+
 
 </Project>
