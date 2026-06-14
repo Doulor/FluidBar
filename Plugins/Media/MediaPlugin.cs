@@ -19,6 +19,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private ILyricsProvider _lyricsProvider = new NullLyricsProvider();
     private string _lastSignature = string.Empty;
     private bool _isPolling;
+    private bool _disposed;
 
     public MediaPlugin()
     {
@@ -27,7 +28,7 @@ public sealed class MediaPlugin : IIslandPlugin
         {
             Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 400, 5000))
         };
-        _timer.Tick += async (_, _) => await PollAsync();
+        _timer.Tick += (_, _) => _ = SafePollAsync();
     }
 
     public void Initialize()
@@ -40,7 +41,7 @@ public sealed class MediaPlugin : IIslandPlugin
 
     public void Start()
     {
-        if (_timer.IsEnabled)
+        if (_disposed || _timer.IsEnabled)
             return;
 
         _timer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 400, 5000));
@@ -54,8 +55,23 @@ public sealed class MediaPlugin : IIslandPlugin
 
     public void Dispose()
     {
+        _disposed = true;
         Stop();
         _config?.Save();
+    }
+
+    private async Task SafePollAsync()
+    {
+        if (_disposed)
+            return;
+
+        try
+        {
+            await PollAsync();
+        }
+        catch
+        {
+        }
     }
 
     private async Task PollAsync()

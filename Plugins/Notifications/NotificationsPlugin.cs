@@ -9,6 +9,7 @@ public sealed class NotificationsPlugin : IIslandPlugin
     private readonly DispatcherTimer _timer;
     private readonly HashSet<uint> _seenIds = new();
     private bool _isPolling;
+    private bool _disposed;
 
     public string Id => "notifications";
     public string Name => "Windows 通知";
@@ -21,7 +22,7 @@ public sealed class NotificationsPlugin : IIslandPlugin
     public NotificationsPlugin()
     {
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1600) };
-        _timer.Tick += async (_, _) => await PollAsync();
+        _timer.Tick += (_, _) => _ = SafePollAsync();
     }
 
     public void Initialize()
@@ -30,8 +31,9 @@ public sealed class NotificationsPlugin : IIslandPlugin
 
     public void Start()
     {
-        if (!_timer.IsEnabled)
-            _timer.Start();
+        if (_disposed || _timer.IsEnabled)
+            return;
+        _timer.Start();
     }
 
     public void Stop()
@@ -39,7 +41,11 @@ public sealed class NotificationsPlugin : IIslandPlugin
         _timer.Stop();
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        _disposed = true;
+        Stop();
+    }
 
     public async Task<string> RequestAccessAsync()
     {
@@ -51,6 +57,20 @@ public sealed class NotificationsPlugin : IIslandPlugin
         catch (Exception ex)
         {
             return ex.GetType().Name;
+        }
+    }
+
+    private async Task SafePollAsync()
+    {
+        if (_disposed)
+            return;
+
+        try
+        {
+            await PollAsync();
+        }
+        catch
+        {
         }
     }
 
