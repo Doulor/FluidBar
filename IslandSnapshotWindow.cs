@@ -20,6 +20,7 @@ internal sealed class IslandSnapshotWindow : Window
     private readonly TextBlock _title;
     private readonly TextBlock _content;
     private readonly DropShadowEffect _glow;
+    private bool _isClosing;
 
     private static readonly Dictionary<string, string> IconGlyphs = new()
     {
@@ -150,6 +151,7 @@ internal sealed class IslandSnapshotWindow : Window
         Content = root;
 
         Tag = iconBorder;
+        Closed += (_, _) => _isClosing = true;
     }
 
     public void SetView(IslandStackItem item, FluidBarSettings settings)
@@ -189,6 +191,9 @@ internal sealed class IslandSnapshotWindow : Window
 
     public void Place(double left, double top, double visualWidth, double visualHeight, bool animated)
     {
+        if (_isClosing)
+            return;
+
         var targetWidth = visualWidth + ShellBleed;
         var targetHeight = visualHeight + ShellBleed;
 
@@ -214,6 +219,9 @@ internal sealed class IslandSnapshotWindow : Window
 
     public void Reveal()
     {
+        if (_isClosing)
+            return;
+
         if (!IsVisible)
             Show();
 
@@ -226,11 +234,27 @@ internal sealed class IslandSnapshotWindow : Window
 
     public void Dismiss()
     {
+        if (_isClosing)
+            return;
+
+        _isClosing = true;
+        BeginAnimation(OpacityProperty, null);
         var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(160))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
         };
-        fade.Completed += (_, _) => Close();
+        fade.Completed += (_, _) => TryClose();
         BeginAnimation(OpacityProperty, fade);
+    }
+
+    private void TryClose()
+    {
+        try
+        {
+            Close();
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfRadioButton = System.Windows.Controls.RadioButton;
@@ -22,6 +23,7 @@ public partial class SettingsWindow : Window
     private IIslandPlugin? _detailPlugin;
     private ISystemMonitor? _detailMonitor;
     private int _detailTransitionToken;
+    private int _settingsApplyToken;
     private const string StartupRegistryKey =
         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "FluidBar";
@@ -40,6 +42,16 @@ public partial class SettingsWindow : Window
         _monitorManager = monitorManager;
         _onSettingsChanged = onSettingsChanged;
         InitializeComponent();
+    }
+
+    private void ScheduleSettingsChanged()
+    {
+        var token = ++_settingsApplyToken;
+        Dispatcher.BeginInvoke((Action)(() =>
+        {
+            if (token == _settingsApplyToken)
+                _onSettingsChanged?.Invoke();
+        }), DispatcherPriority.Background);
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -274,11 +286,15 @@ public partial class SettingsWindow : Window
             return;
 
         var tag = item.Tag?.ToString();
-        _settings.DisplayStrategy = tag == nameof(IslandDisplayStrategy.Multiple)
+        var nextStrategy = tag == nameof(IslandDisplayStrategy.Multiple)
             ? IslandDisplayStrategy.Multiple
             : IslandDisplayStrategy.LatestOnly;
+        if (_settings.DisplayStrategy == nextStrategy)
+            return;
+
+        _settings.DisplayStrategy = nextStrategy;
         _settings.Save();
-        _onSettingsChanged?.Invoke();
+        ScheduleSettingsChanged();
     }
 
     private void SetRimModeCombo(string mode)
@@ -299,9 +315,12 @@ public partial class SettingsWindow : Window
         if (_isLoading) return;
         if (RimModeCombo.SelectedItem is ComboBoxItem item && item.Tag is string mode)
         {
+            if (_settings.RimMode == mode)
+                return;
+
             _settings.RimMode = mode;
             _settings.Save();
-            _onSettingsChanged?.Invoke();
+            ScheduleSettingsChanged();
         }
     }
 

@@ -186,6 +186,7 @@ public partial class MainWindow : Window
         _settingsPanelOpen = true;
         _collapseTimer.Stop();
         _scrollTimer.Stop();
+        ClearIslandStack(animated: false);
 
         Dispatcher.BeginInvoke(() =>
         {
@@ -204,6 +205,12 @@ public partial class MainWindow : Window
     public void OnSettingsPanelClosed()
     {
         _settingsPanelOpen = false;
+        if (_isExpanded && _lastEvent != null)
+        {
+            SeedCurrentStackFromActiveView();
+            PositionAtCurrentSize();
+        }
+
         if (!_settings.AlwaysVisible && !_settingsPanelOpen)
         {
             _collapseTimer.Stop();
@@ -219,7 +226,11 @@ public partial class MainWindow : Window
         if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
         {
             _islandStack.Clear();
-            CloseSnapshotWindows(immediate: false);
+            CloseSnapshotWindows(immediate: _settingsPanelOpen);
+        }
+        else if (_settingsPanelOpen)
+        {
+            ClearIslandStack(animated: false);
         }
 
         PillBorder.CornerRadius = new CornerRadius(Math.Max(18, _settings.CornerRadius));
@@ -513,7 +524,13 @@ public partial class MainWindow : Window
         if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
         {
             _islandStack.Clear();
-            CloseSnapshotWindows(immediate: false);
+            CloseSnapshotWindows(immediate: _settingsPanelOpen);
+            return;
+        }
+
+        if (_settingsPanelOpen)
+        {
+            ClearIslandStack(animated: false);
             return;
         }
 
@@ -527,20 +544,23 @@ public partial class MainWindow : Window
 
     private bool IsStackedIslandActive()
     {
-        return _settings.DisplayStrategy == IslandDisplayStrategy.Multiple
-            && _islandStack.Count > 1
-            && _currentView?.Kind != IslandViewKind.Clock;
+        return IslandStackVisibilityPolicy.ShouldRender(
+            _settings,
+            _islandStack.Count,
+            _settingsPanelOpen,
+            _currentView?.Kind);
     }
 
     private void ClearIslandStack(bool animated)
     {
         _islandStack.Clear();
-        CloseSnapshotWindows(immediate: !animated);
+        CloseSnapshotWindows(immediate: !animated || _settingsPanelOpen);
     }
 
     private void SeedCurrentStackFromActiveView()
     {
         if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple
+            || _settingsPanelOpen
             || !_isExpanded
             || _currentView is null
             || string.IsNullOrWhiteSpace(_currentSource)
@@ -646,7 +666,7 @@ public partial class MainWindow : Window
     {
         if (!IsStackedIslandActive() || layout == null)
         {
-            CloseSnapshotWindows(immediate: false);
+            CloseSnapshotWindows(immediate: _settingsPanelOpen);
             return;
         }
 
@@ -658,7 +678,15 @@ public partial class MainWindow : Window
         {
             var last = _snapshotWindows[^1];
             _snapshotWindows.RemoveAt(_snapshotWindows.Count - 1);
-            last.Dismiss();
+            if (_settingsPanelOpen)
+            {
+                try { last.Close(); }
+                catch (InvalidOperationException) { }
+            }
+            else
+            {
+                last.Dismiss();
+            }
         }
 
         for (var i = 0; i < snapshotCount; i++)
@@ -680,12 +708,18 @@ public partial class MainWindow : Window
 
     private void CloseSnapshotWindows(bool immediate)
     {
-        foreach (var window in _snapshotWindows)
+        foreach (var window in _snapshotWindows.ToArray())
         {
-            if (immediate)
-                window.Close();
-            else
-                window.Dismiss();
+            try
+            {
+                if (immediate)
+                    window.Close();
+                else
+                    window.Dismiss();
+            }
+            catch (InvalidOperationException)
+            {
+            }
         }
 
         _snapshotWindows.Clear();

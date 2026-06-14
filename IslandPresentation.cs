@@ -413,6 +413,21 @@ public static class IslandStackPolicy
     }
 }
 
+public static class IslandStackVisibilityPolicy
+{
+    public static bool ShouldRender(
+        FluidBarSettings settings,
+        int stackCount,
+        bool isSettingsPanelOpen,
+        IslandViewKind? currentKind)
+    {
+        return settings.DisplayStrategy == IslandDisplayStrategy.Multiple
+            && stackCount > 1
+            && !isSettingsPanelOpen
+            && currentKind != IslandViewKind.Clock;
+    }
+}
+
 public sealed record IslandSlotMetrics(double Width, double Height);
 
 public sealed record IslandSlotLayout(

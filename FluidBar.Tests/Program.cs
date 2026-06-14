@@ -78,6 +78,30 @@ Test("display strategy defaults to latest only", () =>
     AssertEqual(false, IslandStackPolicy.CanStack(defaultSettings));
 });
 
+Test("settings panel suppresses multi island snapshot rendering", () =>
+{
+    var multiSettings = new FluidBarSettings
+    {
+        DisplayStrategy = IslandDisplayStrategy.Multiple
+    };
+
+    AssertEqual(true, IslandStackVisibilityPolicy.ShouldRender(
+        multiSettings,
+        stackCount: 2,
+        isSettingsPanelOpen: false,
+        currentKind: IslandViewKind.Status));
+    AssertEqual(false, IslandStackVisibilityPolicy.ShouldRender(
+        multiSettings,
+        stackCount: 2,
+        isSettingsPanelOpen: true,
+        currentKind: IslandViewKind.Status));
+    AssertEqual(false, IslandStackVisibilityPolicy.ShouldRender(
+        multiSettings,
+        stackCount: 2,
+        isSettingsPanelOpen: false,
+        currentKind: IslandViewKind.Clock));
+});
+
 Test("multiple display strategy appends non clock islands up to the max count", () =>
 {
     var multiSettings = new FluidBarSettings
