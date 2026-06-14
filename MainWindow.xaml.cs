@@ -60,6 +60,9 @@ public partial class MainWindow : Window
         ["brightness"]    = "\uE706",
         ["bluetooth"]     = "\uE702",
         ["clock"]         = "\uE121",
+        ["media"]         = "\uE768",
+        ["notification"]  = "\uE7F4",
+        ["agent"]         = "\uE8F2",
         ["info"]          = "\uE946",
     };
 
@@ -80,6 +83,9 @@ public partial class MainWindow : Window
         ["brightness"]    = MediaColor.FromRgb(255, 214, 10),
         ["bluetooth"]     = MediaColor.FromRgb(10, 132, 255),
         ["clock"]         = MediaColor.FromRgb(142, 142, 147),
+        ["media"]         = MediaColor.FromRgb(255, 45, 85),
+        ["notification"]  = MediaColor.FromRgb(90, 200, 250),
+        ["agent"]         = MediaColor.FromRgb(191, 90, 242),
         ["info"]          = MediaColor.FromRgb(142, 142, 147),
     };
 
@@ -99,6 +105,9 @@ public partial class MainWindow : Window
         ["brightness"]    = MediaColor.FromArgb(100, 255, 214, 10),
         ["bluetooth"]     = MediaColor.FromArgb(76, 10, 132, 255),
         ["clock"]         = MediaColor.FromArgb(50, 142, 142, 147),
+        ["media"]         = MediaColor.FromArgb(96, 255, 45, 85),
+        ["notification"]  = MediaColor.FromArgb(86, 90, 200, 250),
+        ["agent"]         = MediaColor.FromArgb(86, 191, 90, 242),
         ["info"]          = MediaColor.FromArgb(50, 142, 142, 147),
     };
 
@@ -467,6 +476,13 @@ public partial class MainWindow : Window
                 break;
             case IslandViewKind.Status:
                 ShowStatusIndicator(evt, view);
+                break;
+            case IslandViewKind.Media:
+                ShowMediaContent(evt, view);
+                break;
+            case IslandViewKind.Notification:
+            case IslandViewKind.Agent:
+                ShowRichStatusContent(evt, view);
                 break;
             case IslandViewKind.LockKey:
                 ShowLockKeyIndicator(evt);
@@ -1096,7 +1112,23 @@ public partial class MainWindow : Window
             ? c
             : IconColors["info"]);
 
-        HoverProgressPanel.Visibility = card.Kind == IslandViewKind.Progress
+        // Style lyrics in subtitle for media
+        if (card.Kind == IslandViewKind.Media && !string.IsNullOrWhiteSpace(card.LyricLine))
+        {
+            HoverSubtitleText.FontSize = 13;
+            HoverSubtitleText.FontStyle = FontStyles.Italic;
+            HoverSubtitleText.Foreground = new SolidColorBrush(
+                MediaColor.FromRgb(200, 200, 210));
+        }
+        else
+        {
+            HoverSubtitleText.FontSize = 11.5;
+            HoverSubtitleText.FontStyle = FontStyles.Normal;
+            HoverSubtitleText.Foreground = new SolidColorBrush(
+                MediaColor.FromRgb(143, 143, 150));
+        }
+
+        HoverProgressPanel.Visibility = card.Kind is IslandViewKind.Progress or IslandViewKind.Media
             ? Visibility.Visible
             : Visibility.Collapsed;
         if (card.Kind == IslandViewKind.Progress)
@@ -1104,6 +1136,12 @@ public partial class MainWindow : Window
             HoverBodyText.Text = card.IconKind == "volume_mute"
                 ? "当前输出已静音"
                 : $"{card.Title} · {card.ProgressPercent}%";
+            var trackWidth = Math.Max(220, card.TargetWidth - 40);
+            HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
+        }
+        else if (card.Kind == IslandViewKind.Media)
+        {
+            HoverBodyText.Text = card.Content;
             var trackWidth = Math.Max(220, card.TargetWidth - 40);
             HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
         }
@@ -1129,6 +1167,9 @@ public partial class MainWindow : Window
             "bluetooth" => "蓝牙设备",
             "lockkey" => "锁键状态",
             "inputmethod" => "输入法状态",
+            "media" => "媒体播放",
+            "agent-status" => "Agent 任务",
+            "notifications" => "系统通知",
             _ => "FluidBar"
         };
     }
@@ -1142,6 +1183,9 @@ public partial class MainWindow : Window
             IslandViewKind.Clock => "时钟",
             IslandViewKind.InputMethod => "输入法",
             IslandViewKind.LockKey => "锁键",
+            IslandViewKind.Media => "媒体",
+            IslandViewKind.Agent => "Agent",
+            IslandViewKind.Notification => "通知",
             _ => "详情"
         };
     }
@@ -1152,6 +1196,22 @@ public partial class MainWindow : Window
             return card.IconKind == "brightness" ? "屏幕亮度变化" : "系统音量变化";
         if (card.Kind == IslandViewKind.Status)
             return card.StatusBadge;
+        if (card.Kind == IslandViewKind.Media)
+        {
+            // Show lyrics prominently when available, fall back to artist·album
+            if (!string.IsNullOrWhiteSpace(card.LyricLine))
+            {
+                var lyricText = card.LyricLine;
+                if (!string.IsNullOrWhiteSpace(card.SecondaryLyricLine))
+                    lyricText += $"  ›  {card.SecondaryLyricLine}";
+                return lyricText;
+            }
+            return string.IsNullOrWhiteSpace(card.Subtitle) ? "媒体播放" : card.Subtitle;
+        }
+        if (card.Kind == IslandViewKind.Agent)
+            return string.IsNullOrWhiteSpace(card.SourceName) ? "Agent 任务状态" : card.SourceName;
+        if (card.Kind == IslandViewKind.Notification)
+            return string.IsNullOrWhiteSpace(card.SourceName) ? "系统通知" : card.SourceName;
         if (card.AllowsMultilineContent)
             return $"可显示 {card.DetailLines} 行内容";
         return ModeLabel(card.Kind);
@@ -1510,6 +1570,51 @@ public partial class MainWindow : Window
             StatusIconText.Text = "\uE930"; // Checkmark
             SetStatusBadgeColors(MediaColor.FromRgb(48, 209, 88));
         }
+    }
+
+    private void ShowMediaContent(IslandEvent evt, IslandViewPresentation view)
+    {
+        // Compact title line: source name · artist, or song title as fallback
+        var sourceLabel = string.IsNullOrWhiteSpace(view.SourceName) ? "" : view.SourceName;
+        var subtitleLabel = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
+        TitleText.Text = string.IsNullOrWhiteSpace(sourceLabel)
+            ? view.Content
+            : string.IsNullOrWhiteSpace(subtitleLabel)
+                ? sourceLabel
+                : $"{sourceLabel} · {subtitleLabel}";
+
+        ProgressBarPanel.Visibility = Visibility.Visible;
+
+        AccessoryGrid.Visibility = Visibility.Visible;
+        AudioWavePanel.Visibility = Visibility.Visible;
+        AudioWavePanel.Opacity = view.ShowsAudioWave ? 1 : 0.42;
+        if (view.ShowsAudioWave)
+            _waveTimer.Start();
+        else
+            SetWaveHeights(5, 5, 5, 5, TimeSpan.FromMilliseconds(180));
+
+        var maxBarWidth = Math.Max(150, view.TargetWidth - 154);
+        ProgressTrack.Width = maxBarWidth;
+        var targetWidth = Math.Max(0, view.ProgressPercent / 100.0 * maxBarWidth);
+        ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+        ProgressFill.Width = targetWidth;
+        ProgressFill.Background = new LinearGradientBrush(
+            MediaColor.FromRgb(255, 45, 85), MediaColor.FromRgb(255, 149, 0), 0);
+    }
+
+    private void ShowRichStatusContent(IslandEvent evt, IslandViewPresentation view)
+    {
+        TitleText.Text = evt.Title;
+        StatusPanel.Visibility = Visibility.Visible;
+        StatusText.Text = view.StatusText;
+        StatusBadgeText.Text = view.StatusBadge;
+
+        var color = IconColors.TryGetValue(view.IconKind, out var c)
+            ? c
+            : MediaColor.FromRgb(10, 132, 255);
+        StatusIconText.Foreground = new SolidColorBrush(color);
+        StatusIconText.Text = view.Kind == IslandViewKind.Agent ? "\uE930" : "\uE7F4";
+        SetStatusBadgeColors(color);
     }
 
     private void SetStatusBadgeColors(MediaColor color)

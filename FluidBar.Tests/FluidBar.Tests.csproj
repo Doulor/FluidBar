@@ -10,6 +10,10 @@
   <ItemGroup>
     <Compile Include="..\EventSystem.cs" Link="EventSystem.cs" />
     <Compile Include="..\IslandPresentation.cs" Link="IslandPresentation.cs" />
+    <Compile Include="..\PluginCatalog.cs" Link="PluginCatalog.cs" />
+    <Compile Include="..\Plugins\AgentStatus\AgentStatusModels.cs" Link="AgentStatusModels.cs" />
+    <Compile Include="..\Plugins\Media\MediaModels.cs" Link="MediaModels.cs" />
+    <Compile Include="..\Plugins\Notifications\NotificationModels.cs" Link="NotificationModels.cs" />
     <Compile Include="..\Settings.cs" Link="Settings.cs" />
   </ItemGroup>
 

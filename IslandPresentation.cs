@@ -10,7 +10,10 @@ public enum IslandViewKind
     Status,
     LockKey,
     InputMethod,
-    Clock
+    Clock,
+    Media,
+    Notification,
+    Agent
 }
 
 public enum IslandDisplayMode
@@ -146,7 +149,12 @@ public sealed record IslandViewPresentation(
     double TargetWidth,
     double TargetHeight,
     double CollapsedWidth,
-    double CollapsedHeight);
+    double CollapsedHeight,
+    string Subtitle = "",
+    string SourceName = "",
+    string LyricLine = "",
+    string SecondaryLyricLine = "",
+    IReadOnlyList<string>? DetailLines = null);
 
 public sealed record HoverCardPresentation(
     IslandViewKind Kind,
@@ -161,7 +169,11 @@ public sealed record HoverCardPresentation(
     double TargetHeight,
     int DetailLines,
     bool AllowsMultilineContent,
-    IslandDisplayMode Mode)
+    IslandDisplayMode Mode,
+    string Subtitle = "",
+    string SourceName = "",
+    string LyricLine = "",
+    string SecondaryLyricLine = "")
 {
     public static HoverCardPresentation FromCompact(
         IslandViewPresentation compact,
@@ -176,20 +188,29 @@ public sealed record HoverCardPresentation(
         var targetHeight = compact.Kind switch
         {
             IslandViewKind.ScrollingText or IslandViewKind.Text => 210,
+            IslandViewKind.Media => string.IsNullOrWhiteSpace(compact.LyricLine) ? 206 : 232,
+            IslandViewKind.Notification => 218,
+            IslandViewKind.Agent => 198,
             IslandViewKind.Progress => 176,
             IslandViewKind.Status => 184,
             IslandViewKind.Clock => 176,
             _ => 178
         };
-        var detailLines = compact.Kind is IslandViewKind.ScrollingText or IslandViewKind.Text
-            ? 5
-            : 3;
+        var detailLines = compact.Kind switch
+        {
+            IslandViewKind.ScrollingText or IslandViewKind.Text => 5,
+            IslandViewKind.Notification => 5,
+            IslandViewKind.Media => string.IsNullOrWhiteSpace(compact.LyricLine) ? 4 : 5,
+            IslandViewKind.Agent => 4,
+            _ => 3
+        };
+        var body = BuildHoverBody(compact);
 
         return new HoverCardPresentation(
             compact.Kind,
             compact.IconKind,
             compact.Title,
-            compact.Content,
+            body,
             compact.StatusText,
             compact.StatusBadge,
             compact.ProgressPercent,
@@ -197,8 +218,42 @@ public sealed record HoverCardPresentation(
             targetWidth,
             targetHeight,
             detailLines,
-            compact.Kind is IslandViewKind.ScrollingText or IslandViewKind.Text,
-            IslandDisplayMode.HoverCard);
+            compact.Kind is IslandViewKind.ScrollingText or IslandViewKind.Text or
+                IslandViewKind.Notification or IslandViewKind.Agent or IslandViewKind.Media,
+            IslandDisplayMode.HoverCard,
+            compact.Subtitle,
+            compact.SourceName,
+            compact.LyricLine,
+            compact.SecondaryLyricLine);
+    }
+
+    private static string BuildHoverBody(IslandViewPresentation compact)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(compact.Content))
+            lines.Add(compact.Content);
+
+        // For media: lyrics appear in the subtitle area, skip them in body
+        if (compact.Kind != IslandViewKind.Media)
+        {
+            if (!string.IsNullOrWhiteSpace(compact.LyricLine))
+                lines.Add(compact.LyricLine);
+            if (!string.IsNullOrWhiteSpace(compact.SecondaryLyricLine))
+                lines.Add(compact.SecondaryLyricLine);
+        }
+        else
+        {
+            // For media without lyrics, show artist·album info in body
+            if (string.IsNullOrWhiteSpace(compact.LyricLine) &&
+                !string.IsNullOrWhiteSpace(compact.Subtitle))
+            {
+                lines.Add(compact.Subtitle);
+            }
+        }
+
+        if (compact.DetailLines is not null)
+            lines.AddRange(compact.DetailLines.Where(line => !string.IsNullOrWhiteSpace(line)));
+        return string.Join(Environment.NewLine, lines.Distinct());
     }
 }
 
@@ -225,12 +280,15 @@ public static class IslandPresentationFactory
             MinimumExpandedHeight,
             MaximumExpandedHeight);
 
-        var kind = ResolveKind(iconKind, evt.Content, scrollThreshold);
+        var kind = ResolveKind(evt, iconKind, evt.Content, scrollThreshold);
         var targetWidth = ResolveWidth(kind, evt, collapsedWidth, targetConfiguredWidth);
-        var progressPercent = kind == IslandViewKind.Progress
-            ? ParsePercent(evt.Content)
-            : 0;
-        var status = ResolveStatus(iconKind, evt.Content);
+        var progressPercent = evt.Payload?.ProgressPercent is int payloadPercent
+            ? Math.Clamp(payloadPercent, 0, 100)
+            : kind == IslandViewKind.Progress
+                ? ParsePercent(evt.Content)
+                : 0;
+        var status = ResolveStatus(evt, iconKind, evt.Content);
+        var payload = evt.Payload;
 
         return new IslandViewPresentation(
             kind,
@@ -240,11 +298,16 @@ public static class IslandPresentationFactory
             status.Text,
             status.Badge,
             progressPercent,
-            iconKind is "volume" or "volume_mute",
+            payload?.ShowsAudioWave ?? iconKind is "volume" or "volume_mute",
             targetWidth,
             expandedHeight,
             collapsedWidth,
-            collapsedHeight);
+            collapsedHeight,
+            payload?.Subtitle ?? "",
+            payload?.SourceName ?? "",
+            payload?.LyricLine ?? "",
+            payload?.SecondaryLyricLine ?? "",
+            payload?.DetailLines);
     }
 
     public static int ParsePercent(string content)
@@ -256,10 +319,26 @@ public static class IslandPresentationFactory
     }
 
     private static IslandViewKind ResolveKind(
+        IslandEvent evt,
         string iconKind,
         string content,
         int scrollThreshold)
     {
+        if (evt.Payload?.Kind is { } payloadKind && payloadKind != IslandEventKind.Auto)
+        {
+            return payloadKind switch
+            {
+                IslandEventKind.Text => IslandViewKind.Text,
+                IslandEventKind.ScrollingText => IslandViewKind.ScrollingText,
+                IslandEventKind.Progress => IslandViewKind.Progress,
+                IslandEventKind.Status => IslandViewKind.Status,
+                IslandEventKind.Media => IslandViewKind.Media,
+                IslandEventKind.Notification => IslandViewKind.Notification,
+                IslandEventKind.Agent => IslandViewKind.Agent,
+                _ => IslandViewKind.Text
+            };
+        }
+
         return iconKind switch
         {
             "volume" or "volume_mute" or "brightness" => IslandViewKind.Progress,
@@ -268,6 +347,9 @@ public static class IslandPresentationFactory
             "lockkey" => IslandViewKind.LockKey,
             "inputmethod" => IslandViewKind.InputMethod,
             "clock" => IslandViewKind.Clock,
+            "media" => IslandViewKind.Media,
+            "notification" => IslandViewKind.Notification,
+            "agent" => IslandViewKind.Agent,
             _ when content.Length > scrollThreshold => IslandViewKind.ScrollingText,
             _ => IslandViewKind.Text
         };
@@ -287,6 +369,9 @@ public static class IslandPresentationFactory
             IslandViewKind.LockKey => 282,
             IslandViewKind.InputMethod => 214,
             IslandViewKind.Clock => 244,
+            IslandViewKind.Media => 390,
+            IslandViewKind.Notification => 360,
+            IslandViewKind.Agent => 352,
             IslandViewKind.ScrollingText => Math.Min(430, 270 + evt.Content.Length * 1.8),
             _ => Math.Min(360, 244 + evt.Content.Length * 5.2)
         };
@@ -294,8 +379,33 @@ public static class IslandPresentationFactory
         return Math.Max(Math.Max(minimum, configuredWidth), contentMinimum);
     }
 
-    private static (string Text, string Badge) ResolveStatus(string iconKind, string content)
+    private static (string Text, string Badge) ResolveStatus(
+        IslandEvent evt,
+        string iconKind,
+        string content)
     {
+        if (evt.Payload is { } payload && payload.Kind != IslandEventKind.Auto)
+        {
+            var text = string.Join(" · ", new[]
+            {
+                payload.Subtitle,
+                string.IsNullOrWhiteSpace(payload.LyricLine) ? null : payload.LyricLine
+            }.Where(part => !string.IsNullOrWhiteSpace(part)));
+            if (string.IsNullOrWhiteSpace(text))
+                text = content;
+            var badge = !string.IsNullOrWhiteSpace(payload.Badge)
+                ? payload.Badge!
+                : !string.IsNullOrWhiteSpace(payload.SourceName)
+                    ? payload.SourceName!
+                    : "就绪";
+            if (!string.IsNullOrWhiteSpace(payload.SourceName) &&
+                !badge.Contains(payload.SourceName, StringComparison.Ordinal))
+            {
+                badge = $"{payload.SourceName} · {badge}";
+            }
+            return (text, badge);
+        }
+
         return iconKind switch
         {
             "battery_charge" => (

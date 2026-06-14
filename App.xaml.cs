@@ -20,6 +20,9 @@ public partial class App : Application
     private PluginManager? _pluginManager;
     private SystemMonitorManager? _monitorManager;
     private ClipboardPlugin? _clipboardPlugin;
+    private MediaPlugin? _mediaPlugin;
+    private AgentStatusPlugin? _agentStatusPlugin;
+    private NotificationsPlugin? _notificationsPlugin;
     private FluidBarSettings? _settings;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -41,7 +44,14 @@ public partial class App : Application
         _pluginManager = new PluginManager(_bus, _settings);
         _clipboardPlugin = new ClipboardPlugin();
         _pluginManager.Register(_clipboardPlugin);
-        _clipboardPlugin.Start(_mainWindow);
+        _clipboardPlugin.AttachWindow(_mainWindow);
+        _mediaPlugin = new MediaPlugin();
+        _pluginManager.Register(_mediaPlugin);
+        _agentStatusPlugin = new AgentStatusPlugin();
+        _pluginManager.Register(_agentStatusPlugin);
+        _notificationsPlugin = new NotificationsPlugin();
+        _pluginManager.Register(_notificationsPlugin);
+        _pluginManager.StartAll();
 
         if (_clipboardPlugin.Config is ClipboardPluginConfig cfg)
         {

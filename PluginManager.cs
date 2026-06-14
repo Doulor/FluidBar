@@ -50,6 +50,7 @@ public sealed class PluginManager : IDisposable
     /// </summary>
     public void Register(IIslandPlugin plugin)
     {
+        plugin.Enabled = _settings.IsPluginEnabled(plugin.Id, plugin.Enabled);
         plugin.Initialize();
         plugin.EventTriggered += evt => _bus.Publish(evt);
         _plugins.Add(plugin);
@@ -72,6 +73,8 @@ public sealed class PluginManager : IDisposable
     public void SetEnabled(IIslandPlugin plugin, bool enabled)
     {
         plugin.Enabled = enabled;
+        _settings.SetPluginEnabled(plugin.Id, enabled);
+        _settings.Save();
         if (enabled)
             plugin.Start();
         else

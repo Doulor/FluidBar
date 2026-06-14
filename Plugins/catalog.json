@@ -1,0 +1,41 @@
+{
+  "plugins": [
+    {
+      "id": "clipboard",
+      "name": "剪贴板显示",
+      "description": "复制文本时在灵动岛上显示内容，支持长文本滚动和悬停卡片多行显示。",
+      "category": "productivity",
+      "entryPoint": "Plugins/Clipboard/ClipboardPlugin.cs",
+      "status": "built-in",
+      "builtIn": true
+    },
+    {
+      "id": "media",
+      "name": "媒体播放",
+      "description": "监听 Windows 当前媒体会话，显示来源、曲目、艺术家、播放状态、进度、波形和可用歌词。",
+      "category": "system",
+      "entryPoint": "Plugins/Media/MediaPlugin.cs",
+      "status": "built-in",
+      "builtIn": true
+    },
+    {
+      "id": "agent-status",
+      "name": "Agent 任务状态",
+      "description": "接收 Claude Code 和 Codex 等本地 hook 事件，在任务完成或失败时显示灵动岛提醒。",
+      "category": "developer",
+      "entryPoint": "Plugins/AgentStatus/AgentStatusPlugin.cs",
+      "status": "built-in",
+      "builtIn": true
+    },
+    {
+      "id": "notifications",
+      "name": "Windows 通知",
+      "description": "接管可读取的 Windows toast 通知，在灵动岛上显示应用来源、标题和正文。",
+      "category": "system",
+      "entryPoint": "Plugins/Notifications/NotificationsPlugin.cs",
+      "status": "built-in",
+      "builtIn": true
+    }
+  ]
+}
+

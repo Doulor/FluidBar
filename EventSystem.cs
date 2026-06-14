@@ -1,5 +1,31 @@
 namespace FluidBar;
 
+public enum IslandEventKind
+{
+    Auto,
+    Text,
+    ScrollingText,
+    Progress,
+    Status,
+    Media,
+    Notification,
+    Agent
+}
+
+public sealed record IslandEventPayload(
+    IslandEventKind Kind = IslandEventKind.Auto,
+    string? Subtitle = null,
+    string? Badge = null,
+    string? SourceName = null,
+    int? ProgressPercent = null,
+    bool? IsActive = null,
+    bool? ShowsAudioWave = null,
+    string? AlbumArtPath = null,
+    string? AppIconPath = null,
+    string? LyricLine = null,
+    string? SecondaryLyricLine = null,
+    IReadOnlyList<string>? DetailLines = null);
+
 /// <summary>
 /// 灵动岛事件数据
 /// </summary>
@@ -7,11 +33,13 @@ namespace FluidBar;
 /// <param name="Title">标题（如 "已复制"）</param>
 /// <param name="Content">内容文本</param>
 /// <param name="IconKind">图标类型标识，用于 UI 区分</param>
+/// <param name="Payload">可选富事件数据，用于媒体、通知、Agent 状态等复杂插件</param>
 public sealed record IslandEvent(
     string Source,
     string Title,
     string Content,
-    string? IconKind = null);
+    string? IconKind = null,
+    IslandEventPayload? Payload = null);
 
 /// <summary>
 /// 事件总线 - 所有事件源通过此接口触发灵动岛

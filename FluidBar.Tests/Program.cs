@@ -1,4 +1,5 @@
 using FluidBar;
+using System.IO;
 
 var settings = new FluidBarSettings
 {
@@ -76,6 +77,182 @@ Test("display strategy defaults to latest only", () =>
 
     AssertEqual(IslandDisplayStrategy.LatestOnly, defaultSettings.DisplayStrategy);
     AssertEqual(false, IslandStackPolicy.CanStack(defaultSettings));
+});
+
+Test("plugin catalog contains the official source plugins", () =>
+{
+    var catalogPath = Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory,
+        "..", "..", "..", "..",
+        "Plugins",
+        "catalog.json"));
+    var catalog = PluginCatalog.Load(catalogPath);
+
+    AssertEqual(4, catalog.Plugins.Count);
+    AssertEqual(true, catalog.Contains("clipboard"));
+    AssertEqual(true, catalog.Contains("media"));
+    AssertEqual(true, catalog.Contains("agent-status"));
+    AssertEqual(true, catalog.Contains("notifications"));
+    foreach (var plugin in catalog.Plugins)
+    {
+        AssertNotEmpty(plugin.Name);
+        AssertNotEmpty(plugin.Category);
+        AssertNotEmpty(plugin.EntryPoint);
+    }
+});
+
+Test("legacy island events stay text compatible", () =>
+{
+    var evt = new IslandEvent("legacy", "旧插件", "普通内容", "info");
+    var view = IslandPresentation.FromEvent(evt, settings);
+
+    AssertEqual(IslandViewKind.Text, view.Kind);
+    AssertEqual("旧插件", view.Title);
+    AssertEqual("普通内容", view.Content);
+    AssertEqual("info", view.IconKind);
+});
+
+Test("media payload projects to wave progress and lyrics", () =>
+{
+    var evt = new IslandEvent(
+        "media",
+        "在播放",
+        "Cornfield Chase",
+        "media",
+        new IslandEventPayload(
+            Kind: IslandEventKind.Media,
+            Subtitle: "Hans Zimmer",
+            Badge: "Spotify",
+            SourceName: "Spotify",
+            ProgressPercent: 42,
+            IsActive: true,
+            ShowsAudioWave: true,
+            LyricLine: "I'm going home",
+            SecondaryLyricLine: "Cooper Station"));
+
+    var view = IslandPresentation.FromEvent(evt, settings);
+    var card = HoverCardPresentation.FromCompact(view, settings);
+
+    AssertEqual(IslandViewKind.Media, view.Kind);
+    AssertEqual(true, view.ShowsAudioWave);
+    AssertEqual(42, view.ProgressPercent);
+    AssertContains("Hans Zimmer", view.StatusText);
+    // Lyrics appear in the hover subtitle for media
+    AssertContains("I'm going home", card.LyricLine ?? "");
+    AssertEqual("Spotify", card.StatusBadge);
+});
+
+Test("media snapshot creates a rich island event", () =>
+{
+    var snapshot = new MediaSnapshot(
+        SourceAppUserModelId: "SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify",
+        SourceName: "Spotify",
+        Title: "Cornfield Chase",
+        Artist: "Hans Zimmer",
+        Album: "Interstellar",
+        IsPlaying: true,
+        ProgressPercent: 42,
+        LyricLine: "I'm going home",
+        SecondaryLyricLine: "Cooper Station");
+
+    var evt = MediaIslandEventFactory.FromSnapshot(snapshot);
+
+    AssertEqual("media", evt.Source);
+    AssertEqual("media", evt.IconKind);
+    AssertEqual(IslandEventKind.Media, evt.Payload?.Kind);
+    AssertEqual(true, evt.Payload?.ShowsAudioWave);
+    AssertEqual(42, evt.Payload?.ProgressPercent);
+    AssertContains("Hans Zimmer", evt.Payload?.Subtitle ?? "");
+    AssertContains("I'm going home", evt.Payload?.LyricLine ?? "");
+});
+
+Test("agent payload projects to agent status view", () =>
+{
+    var evt = new IslandEvent(
+        "agent-status",
+        "Claude Code 完成",
+        "重构完成",
+        "agent",
+        new IslandEventPayload(
+            Kind: IslandEventKind.Agent,
+            Subtitle: "FluidBar",
+            Badge: "完成",
+            SourceName: "Claude Code",
+            IsActive: false,
+            DetailLines: new[] { "分支 main", "耗时 46s" }));
+
+    var view = IslandPresentation.FromEvent(evt, settings);
+    var card = HoverCardPresentation.FromCompact(view, settings);
+
+    AssertEqual(IslandViewKind.Agent, view.Kind);
+    AssertContains("Claude Code", view.StatusBadge);
+    AssertContains("分支 main", card.Content);
+});
+
+Test("agent hook json creates completion island event", () =>
+{
+    const string json = """
+    {
+      "tool": "claude-code",
+      "status": "completed",
+      "project": "FluidBar",
+      "summary": "任务完成",
+      "branch": "main",
+      "durationMs": 46000
+    }
+    """;
+
+    var hook = AgentHookEvent.Parse(json);
+    var evt = AgentStatusIslandEventFactory.FromHook(hook);
+
+    AssertEqual("agent-status", evt.Source);
+    AssertEqual("agent", evt.IconKind);
+    AssertEqual(IslandEventKind.Agent, evt.Payload?.Kind);
+    AssertContains("Claude Code", evt.Payload?.SourceName ?? "");
+    AssertContains("FluidBar", evt.Payload?.Subtitle ?? "");
+    AssertContains("46s", string.Join(" ", evt.Payload?.DetailLines ?? Array.Empty<string>()));
+});
+
+Test("notification payload projects to notification view", () =>
+{
+    var evt = new IslandEvent(
+        "notifications",
+        "微信",
+        "新的消息",
+        "notification",
+        new IslandEventPayload(
+            Kind: IslandEventKind.Notification,
+            Subtitle: "张三",
+            Badge: "系统通知",
+            SourceName: "微信",
+            DetailLines: new[] { "今晚 8 点开会", "点击系统通知查看详情" }));
+
+    var view = IslandPresentation.FromEvent(evt, settings);
+    var card = HoverCardPresentation.FromCompact(view, settings);
+
+    AssertEqual(IslandViewKind.Notification, view.Kind);
+    AssertContains("张三", view.StatusText);
+    AssertContains("今晚 8 点开会", card.Content);
+});
+
+Test("notification snapshot creates a rich island event", () =>
+{
+    var snapshot = new NotificationSnapshot(
+        Id: 42,
+        AppName: "微信",
+        Title: "张三",
+        Body: "今晚 8 点开会",
+        Timestamp: new DateTimeOffset(2026, 6, 14, 20, 0, 0, TimeSpan.FromHours(8)),
+        AppIconPath: null);
+
+    var evt = NotificationIslandEventFactory.FromSnapshot(snapshot);
+
+    AssertEqual("notifications", evt.Source);
+    AssertEqual("notification", evt.IconKind);
+    AssertEqual(IslandEventKind.Notification, evt.Payload?.Kind);
+    AssertContains("微信", evt.Payload?.SourceName ?? "");
+    AssertContains("张三", evt.Payload?.Subtitle ?? "");
+    AssertContains("今晚 8 点开会", string.Join(" ", evt.Payload?.DetailLines ?? Array.Empty<string>()));
 });
 
 Test("settings panel suppresses multi island snapshot rendering", () =>
@@ -451,6 +628,12 @@ static void AssertDoesNotContain(string unexpected, string actual)
 {
     if (actual.Contains(unexpected, StringComparison.Ordinal))
         throw new InvalidOperationException($"expected '{actual}' not to contain '{unexpected}'");
+}
+
+static void AssertNotEmpty(string actual)
+{
+    if (string.IsNullOrWhiteSpace(actual))
+        throw new InvalidOperationException("expected non-empty text");
 }
 
 static void AssertAtLeast(double minimum, double actual)

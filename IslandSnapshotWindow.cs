@@ -37,6 +37,9 @@ internal sealed class IslandSnapshotWindow : Window
         ["usb"] = "\uE88E",
         ["brightness"] = "\uE706",
         ["bluetooth"] = "\uE702",
+        ["media"] = "\uE768",
+        ["notification"] = "\uE7F4",
+        ["agent"] = "\uE8F2",
         ["info"] = "\uE946",
     };
 
@@ -55,6 +58,9 @@ internal sealed class IslandSnapshotWindow : Window
         ["usb"] = MediaColor.FromRgb(255, 159, 10),
         ["brightness"] = MediaColor.FromRgb(255, 214, 10),
         ["bluetooth"] = MediaColor.FromRgb(10, 132, 255),
+        ["media"] = MediaColor.FromRgb(255, 45, 85),
+        ["notification"] = MediaColor.FromRgb(90, 200, 250),
+        ["agent"] = MediaColor.FromRgb(191, 90, 242),
         ["info"] = MediaColor.FromRgb(142, 142, 147),
     };
 

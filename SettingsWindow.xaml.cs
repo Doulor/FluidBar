@@ -410,6 +410,18 @@ public partial class SettingsWindow : Window
         {
             BuildClipboardPluginSettings(plugin);
         }
+        else if (plugin.Id == "media")
+        {
+            BuildMediaPluginSettings(plugin);
+        }
+        else if (plugin.Id == "agent-status")
+        {
+            BuildAgentStatusPluginSettings();
+        }
+        else if (plugin.Id == "notifications")
+        {
+            BuildNotificationsPluginSettings(plugin);
+        }
 
         ShowDetailPanel();
     }
@@ -474,6 +486,179 @@ public partial class SettingsWindow : Window
             "滚动速度", 0.5, 5, 0.5, cfg.ScrollSpeed,
             val => { cfg.ScrollSpeed = val; cfg.Save(); },
             val => val.ToString("F1") + "px"));
+    }
+
+    private void BuildMediaPluginSettings(IIslandPlugin plugin)
+    {
+        var cfg = plugin.Config as MediaPluginConfig;
+        if (cfg == null) return;
+
+        PluginSettingsContainer.Children.Add(CreateToggleRow(
+            "歌词显示",
+            "有可用歌词时在悬停卡片中显示当前歌词行",
+            cfg.ShowLyrics,
+            val => { cfg.ShowLyrics = val; cfg.Save(); }));
+
+        PluginSettingsContainer.Children.Add(CreateToggleRow(
+            "暂停显示",
+            "媒体暂停时仍然显示当前曲目状态",
+            cfg.ShowWhenPaused,
+            val => { cfg.ShowWhenPaused = val; cfg.Save(); }));
+
+        PluginSettingsContainer.Children.Add(CreateSliderRow(
+            "刷新间隔", 0.4, 5, 0.2, cfg.PollIntervalMs / 1000.0,
+            val => { cfg.PollIntervalMs = (int)(val * 1000); cfg.Save(); },
+            val => val.ToString("F1") + "s"));
+
+        PluginSettingsContainer.Children.Add(CreateTextRow(
+            "歌词目录",
+            cfg.LyricsDirectory,
+            val => { cfg.LyricsDirectory = val; cfg.Save(); }));
+    }
+
+    private void BuildAgentStatusPluginSettings()
+    {
+        var inbox = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "FluidBar",
+            "agent-events",
+            "inbox");
+
+        PluginSettingsContainer.Children.Add(CreateInfoRow(
+            "Hook Inbox",
+            inbox));
+        PluginSettingsContainer.Children.Add(CreateInfoRow(
+            "事件格式",
+            "写入 JSON: tool/status/project/summary/branch/durationMs"));
+    }
+
+    private void BuildNotificationsPluginSettings(IIslandPlugin plugin)
+    {
+        if (plugin is not NotificationsPlugin notifications)
+            return;
+
+        PluginSettingsContainer.Children.Add(CreateButtonRow(
+            "通知权限",
+            "请求 Windows 通知读取权限",
+            "请求授权",
+            async () =>
+            {
+                var status = await notifications.RequestAccessAsync();
+                WpfMessageBox.Show(
+                    $"Windows 通知权限状态：{status}",
+                    "FluidBar 通知插件",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }));
+    }
+
+    private UIElement CreateInfoRow(string label, string value)
+    {
+        var grid = new Grid { MinHeight = 46 };
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(86) });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var labelText = new TextBlock
+        {
+            Text = label,
+            Style = (Style)FindResource("SettingLabel")
+        };
+        Grid.SetColumn(labelText, 0);
+
+        var valueText = new TextBlock
+        {
+            Text = value,
+            Style = (Style)FindResource("ValueLabel"),
+            TextWrapping = TextWrapping.Wrap
+        };
+        Grid.SetColumn(valueText, 1);
+
+        grid.Children.Add(labelText);
+        grid.Children.Add(valueText);
+        return CreateInteractiveSettingRow(grid);
+    }
+
+    private UIElement CreateButtonRow(
+        string label,
+        string description,
+        string buttonText,
+        Func<Task> onClick)
+    {
+        var grid = new Grid { MinHeight = 54 };
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+
+        var textPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(MediaColor.FromRgb(216, 216, 220)),
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI")
+        });
+        textPanel.Children.Add(new TextBlock
+        {
+            Text = description,
+            FontSize = 11,
+            Foreground = new SolidColorBrush(MediaColor.FromRgb(122, 122, 130)),
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
+            TextWrapping = TextWrapping.Wrap
+        });
+        Grid.SetColumn(textPanel, 0);
+
+        var button = new System.Windows.Controls.Button
+        {
+            Content = buttonText,
+            MinWidth = 76,
+            Height = 30,
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+        button.Click += async (_, _) => await onClick();
+        Grid.SetColumn(button, 1);
+
+        grid.Children.Add(textPanel);
+        grid.Children.Add(button);
+        return CreateInteractiveSettingRow(grid);
+    }
+
+    private UIElement CreateTextRow(string label, string value, Action<string> onChanged)
+    {
+        var grid = new Grid { MinHeight = 46 };
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(80) });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var labelText = new TextBlock
+        {
+            Text = label,
+            Style = (Style)FindResource("SettingLabel")
+        };
+        Grid.SetColumn(labelText, 0);
+
+        var textBox = new System.Windows.Controls.TextBox
+        {
+            Text = value,
+            Margin = new Thickness(8, 0, 0, 0),
+            MinHeight = 28,
+            Padding = new Thickness(8, 4, 8, 4),
+            Background = new SolidColorBrush(MediaColor.FromArgb(18, 255, 255, 255)),
+            Foreground = new SolidColorBrush(MediaColor.FromRgb(232, 232, 236)),
+            BorderBrush = new SolidColorBrush(MediaColor.FromArgb(32, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI")
+        };
+        textBox.LostFocus += (_, _) => onChanged(textBox.Text);
+        Grid.SetColumn(textBox, 1);
+
+        grid.Children.Add(labelText);
+        grid.Children.Add(textBox);
+        return CreateInteractiveSettingRow(grid);
     }
 
     private UIElement CreateSliderRow(string label, double min, double max,

@@ -42,10 +42,15 @@ public sealed class ClipboardPlugin : IIslandPlugin
         _config = new ClipboardPluginConfig(_settings);
     }
 
+    public void AttachWindow(Window window)
+    {
+        _window = window;
+    }
+
     public void Start(Window window)
     {
         if (_isRunning) return;
-        _window = window;
+        AttachWindow(window);
         var helper = new WindowInteropHelper(window);
         _hwndSource = HwndSource.FromHwnd(helper.Handle);
         _hwndSource?.AddHook(WndProc);

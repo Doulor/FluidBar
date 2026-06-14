@@ -56,6 +56,7 @@ public sealed class FluidBarSettings
 
     // === 事件开关 ===
     public bool ClipboardEnabled { get; set; } = true;
+    public Dictionary<string, bool> PluginEnabled { get; set; } = new();
 
     // === 功能详情配置 ===
     public Dictionary<string, MonitorFeatureSettings> MonitorFeatureSettings { get; set; } = new();
@@ -71,6 +72,20 @@ public sealed class FluidBarSettings
             MonitorFeatureSettings[id] = settings;
         }
         return settings;
+    }
+
+    public bool IsPluginEnabled(string id, bool defaultValue = true)
+    {
+        return PluginEnabled.TryGetValue(id, out var enabled)
+            ? enabled
+            : defaultValue;
+    }
+
+    public void SetPluginEnabled(string id, bool enabled)
+    {
+        PluginEnabled[id] = enabled;
+        if (id == "clipboard")
+            ClipboardEnabled = enabled;
     }
 
     /// <summary>
@@ -135,6 +150,7 @@ public sealed class FluidBarSettings
         MultiIslandGap = defaults.MultiIslandGap;
         RimMode = defaults.RimMode;
         ClipboardEnabled = defaults.ClipboardEnabled;
+        PluginEnabled = new Dictionary<string, bool>();
         MonitorFeatureSettings = new Dictionary<string, MonitorFeatureSettings>();
         HideTrayIcon = defaults.HideTrayIcon;
     }
