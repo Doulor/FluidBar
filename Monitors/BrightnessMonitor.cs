@@ -1,10 +1,11 @@
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
 namespace FluidBar.Monitors;
 
 /// <summary>
-/// 亮度监控 - 屏幕亮度变化
+/// 亮度监控 - 屏幕亮度变化。优先使用 DDC/CI 原生 API，失败时回退到 WMI。
 /// </summary>
 public sealed class BrightnessMonitor : ISystemMonitor
 {
@@ -51,13 +52,14 @@ public sealed class BrightnessMonitor : ISystemMonitor
     private DispatcherTimer? _pollTimer;
     private bool _isRunning;
     private int _lastBrightness = -1;
+    private bool _useWmiFallback;
 
     public void Start()
     {
         if (_isRunning) return;
         _isRunning = true;
 
-        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _pollTimer.Tick += (_, _) => PollBrightness();
         _pollTimer.Start();
         PollBrightness();
@@ -74,7 +76,13 @@ public sealed class BrightnessMonitor : ISystemMonitor
     {
         try
         {
-            var brightness = GetCurrentBrightness();
+            var brightness = _useWmiFallback ? GetBrightnessWmi() : GetCurrentBrightness();
+            if (brightness < 0)
+            {
+                // DDC/CI 失败，切换到 WMI
+                brightness = GetBrightnessWmi();
+                _useWmiFallback = true;
+            }
             if (brightness >= 0 && brightness != _lastBrightness)
             {
                 _lastBrightness = brightness;
@@ -83,6 +91,25 @@ public sealed class BrightnessMonitor : ISystemMonitor
             }
         }
         catch { }
+    }
+
+    /// <summary>通过 WMI 获取笔记本内建屏幕亮度 (Win8+)</summary>
+    private static int GetBrightnessWmi()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\WMI", "SELECT CurrentBrightness FROM WmiMonitorBrightness");
+            foreach (ManagementObject obj in searcher.Get())
+            {
+                var val = obj["CurrentBrightness"];
+                if (val != null && byte.TryParse(val.ToString(), out var b))
+                    return b;
+                break;
+            }
+        }
+        catch { }
+        return -1;
     }
 
     private static int GetCurrentBrightness()

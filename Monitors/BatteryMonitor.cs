@@ -24,7 +24,7 @@ public sealed class BatteryMonitor : ISystemMonitor
         if (_isRunning) return;
         _isRunning = true;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _timer.Tick += (_, _) => CheckBattery();
         _timer.Start();
         CheckBattery();
@@ -42,10 +42,22 @@ public sealed class BatteryMonitor : ISystemMonitor
         try
         {
             var status = System.Windows.Forms.SystemInformation.PowerStatus;
+
+            // 桌面端无电池，直接停止监控
+            if (status.BatteryChargeStatus ==
+                System.Windows.Forms.BatteryChargeStatus.NoSystemBattery)
+            {
+                Stop();
+                return;
+            }
+
             var percent = (int)(status.BatteryLifePercent * 100);
             var charging = status.PowerLineStatus ==
                            System.Windows.Forms.PowerLineStatus.Online;
             var remaining = status.BatteryLifeRemaining;
+
+            // 忽略无效电量（桌面端可能返回 25500%）
+            if (percent < 0 || percent > 100) return;
 
             if (percent != _lastPercent || charging != _lastCharging)
             {

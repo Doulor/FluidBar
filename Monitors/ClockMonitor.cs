@@ -22,7 +22,7 @@ public sealed class ClockMonitor : ISystemMonitor
         if (_isRunning) return;
         _isRunning = true;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _timer.Tick += (_, _) => ShowTime();
         _timer.Start();
         ShowTime();

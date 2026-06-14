@@ -263,11 +263,11 @@
 
     <!-- 主容器 -->
     <Border CornerRadius="16"
-            Background="#F01C1C1E"
-            BorderBrush="#2AFFFFFF"
+            Background="#F01A1A1C"
+            BorderBrush="#20FFFFFF"
             BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="32" Opacity="0.5" ShadowDepth="2" Color="#000000"/>
+            <DropShadowEffect BlurRadius="40" Opacity="0.6" ShadowDepth="0" Color="#000000"/>
         </Border.Effect>
 
         <Grid>

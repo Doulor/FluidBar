@@ -52,7 +52,7 @@ public sealed class VolumeMonitor : ISystemMonitor
         if (_isRunning) return;
         _isRunning = true;
 
-        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _pollTimer.Tick += (_, _) => PollVolume();
         _pollTimer.Start();
         PollVolume();
@@ -84,7 +84,7 @@ public sealed class VolumeMonitor : ISystemMonitor
         }
         catch
         {
-            _pollTimer?.Stop();
+            // COM 调用偶尔失败，不停止轮询
         }
     }
 

@@ -51,7 +51,6 @@ public partial class App : Application
 
         // 初始化系统监控
         _monitorManager = new SystemMonitorManager(_bus);
-        _monitorManager.Register(new ClockMonitor());
         _monitorManager.Register(new VolumeMonitor());
         _monitorManager.Register(new BatteryMonitor());
         _monitorManager.Register(new InputMethodMonitor());
@@ -60,14 +59,20 @@ public partial class App : Application
         _monitorManager.Register(new UsbMonitor());
         _monitorManager.Register(new BrightnessMonitor());
         _monitorManager.Register(new BluetoothMonitor());
-        _monitorManager.StartAll();
+        _monitorManager.Register(new ClockMonitor());
+
+        // 延迟启动：确保 Window_Loaded 先完成（PositionWindow + ApplySettings）
+        // 否则事件触发时窗口尚未就位，动画被 PositionWindow 覆盖
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Background,
+            new Action(() => _monitorManager.StartAll()));
 
         // 启动时根据配置隐藏托盘图标
         if (_settings.HideTrayIcon && _trayIcon != null)
             _trayIcon.Visible = false;
 
-        // 推送系统主题事件
-        _bus.Publish(new IslandEvent("system", "", GetSystemTheme(), "info"));
+        // 不再在启动时推送系统主题（避免弹出 "Dark"/"Light" 文字）
+        // 系统主题变更由 SetupThemeWatcher 中的 UserPreferenceChanged 事件处理
     }
 
     #region 系统主题检测

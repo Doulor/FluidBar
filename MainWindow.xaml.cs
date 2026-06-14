@@ -100,6 +100,9 @@ public partial class MainWindow : Window
 
         _scrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _scrollTimer.Tick += ScrollTimer_Tick;
+
+        // 提前绑定事件，避免 StartAll 时 Window_Loaded 尚未触发的竞态
+        _bus.EventTriggered += OnEventTriggered;
     }
 
     public void SetClipboardPluginSettings(ClipboardPluginSettings s)
@@ -111,7 +114,6 @@ public partial class MainWindow : Window
     {
         PositionWindow();
         ApplySettings();
-        _bus.EventTriggered += OnEventTriggered;
 
         if (_settings.AlwaysVisible)
         {
@@ -177,12 +179,13 @@ public partial class MainWindow : Window
             PillBackground.Color =
                 (MediaColor)MediaColorConverter.ConvertFromString(_settings.BackgroundColor);
         }
-        catch { PillBackground.Color = MediaColor.FromArgb(0xE0, 0x20, 0x20, 0x22); }
+        catch { PillBackground.Color = MediaColor.FromArgb(0xE6, 0x00, 0x00, 0x00); }
 
         try
         {
-            IconBackground.Color =
-                (MediaColor)MediaColorConverter.ConvertFromString(_settings.AccentColor);
+            var accentColor = (MediaColor)MediaColorConverter.ConvertFromString(_settings.AccentColor);
+            IconBackground.Color = accentColor;
+            PillRimBrush.Color = MediaColor.FromArgb(25, accentColor.R, accentColor.G, accentColor.B);
         }
         catch { IconBackground.Color = MediaColor.FromRgb(10, 132, 255); }
 
@@ -329,30 +332,72 @@ public partial class MainWindow : Window
                 break;
         }
 
+        // 时钟事件：已展开时静默更新，未展开时忽略
+        if (evt.IconKind == "clock")
+        {
+            if (!_isExpanded) return;
+            TitleText.Text = evt.Title;
+            ContentText.Text = evt.Content;
+            return;
+        }
+
         if (!_isExpanded)
             Expand();
         else
+        {
             RefreshDisplay();
+            // 微动弹性：仅离散事件触发（进度类高频事件跳过）
+            if (evt.IconKind is not ("volume" or "volume_mute" or "brightness"))
+                NudgePill();
+        }
     }
 
-    /// <summary>已展开时刷新内容（弹入动画 + 重置隐藏计时器）</summary>
+    /// <summary>微动弹性 — 新事件到达时给药丸一个微小的缩放脉冲</summary>
+    private void NudgePill()
+    {
+        var currentTransform = PillBorder.RenderTransform as ScaleTransform;
+        var startScale = currentTransform != null
+            ? currentTransform.ScaleX
+            : 1.0;
+
+        // 动画在自身基础上缩放，不替换 RenderTransform
+        PillBorder.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+        var st = PillBorder.RenderTransform as ScaleTransform
+                 ?? new ScaleTransform(startScale, startScale);
+
+        if (!ReferenceEquals(st, PillBorder.RenderTransform))
+            PillBorder.RenderTransform = st;
+
+        st.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        st.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        st.ScaleX = startScale;
+        st.ScaleY = startScale;
+
+        var nudgeAnim = new DoubleAnimation(startScale * 0.97, startScale, TimeSpan.FromMilliseconds(260))
+        {
+            EasingFunction = new ElasticEase
+            {
+                EasingMode = EasingMode.EaseOut,
+                Oscillations = 1,
+                Springiness = 3
+            }
+        };
+        st.BeginAnimation(ScaleTransform.ScaleXProperty, nudgeAnim);
+        st.BeginAnimation(ScaleTransform.ScaleYProperty, nudgeAnim);
+    }
+
+    /// <summary>已展开时刷新内容（柔和的淡入过渡 + 重置隐藏计时器）</summary>
     private void RefreshDisplay()
     {
-        // 清除旧动画占用
+        // 清除旧动画
         ContentPanel.BeginAnimation(OpacityProperty, null);
-        ContentPanel.Opacity = 0;
-        ContentPanel.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
-        ContentPanel.RenderTransform = new ScaleTransform(0.95, 0.95);
+        ContentPanel.RenderTransform = null;
 
-        ContentPanel.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
-        var s = (ScaleTransform)ContentPanel.RenderTransform;
-        s.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 3 } });
-        s.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(300))
-            { EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 3 } });
+        var fadeOverlay = new DoubleAnimation(0.8, 1, TimeSpan.FromMilliseconds(180))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        ContentPanel.BeginAnimation(OpacityProperty, fadeOverlay);
 
         ResetCollapseTimer();
     }
@@ -385,32 +430,41 @@ public partial class MainWindow : Window
         TitleText.Text = evt.Title;
         ProgressBarPanel.Visibility = Visibility.Visible;
 
-        var maxBarWidth = Math.Min(220, _settings.ExpandedMaxWidth - 100);
-        ProgressFill.Width = Math.Max(0, percent / 100.0 * maxBarWidth);
+        // 进度条容器宽度 = Pill宽 - 左右padding(36) - 图标(32) - 图标margin(12)
+        var maxBarWidth = Math.Max(80, PillBorder.ActualWidth - 80);
+        var targetWidth = Math.Max(0, percent / 100.0 * maxBarWidth);
 
+        // 从上一值动画到新值（避免从0跳起）
+        var currentWidth = ProgressFill.Width;
+        ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+        ProgressFill.Width = currentWidth;
+
+        var isIncreasing = targetWidth > currentWidth;
+        var duration = isIncreasing
+            ? TimeSpan.FromMilliseconds(180)
+            : TimeSpan.FromMilliseconds(280);
+        var ease = isIncreasing
+            ? (IEasingFunction)new CubicEase { EasingMode = EasingMode.EaseOut }
+            : new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+        ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty,
+            new DoubleAnimation(targetWidth, duration) { EasingFunction = ease });
+
+        // 进度条颜色
         if (evt.IconKind == "brightness")
         {
             ProgressFill.Background = new LinearGradientBrush(
                 MediaColor.FromRgb(255, 214, 10), MediaColor.FromRgb(255, 179, 0), 0);
-            var s = (DropShadowEffect)ProgressFill.Effect;
-            s.Color = MediaColor.FromRgb(255, 214, 10);
-            s.Opacity = 0.5;
         }
         else if (evt.IconKind == "volume_mute")
         {
             ProgressFill.Background = new LinearGradientBrush(
                 MediaColor.FromRgb(142, 142, 147), MediaColor.FromRgb(99, 99, 102), 0);
-            var s = (DropShadowEffect)ProgressFill.Effect;
-            s.Color = MediaColor.FromRgb(142, 142, 147);
-            s.Opacity = 0.2;
         }
         else
         {
             ProgressFill.Background = new LinearGradientBrush(
                 MediaColor.FromRgb(10, 132, 255), MediaColor.FromRgb(90, 200, 250), 0);
-            var s = (DropShadowEffect)ProgressFill.Effect;
-            s.Color = MediaColor.FromRgb(10, 132, 255);
-            s.Opacity = 0.5;
         }
     }
 
@@ -440,13 +494,12 @@ public partial class MainWindow : Window
         LockKeyStatus.Text = evt.Content.Contains("ON") ? "开" : "关";
 
         var isOn = evt.Content.Contains("ON");
-        LedColor.Color = isOn
+        var targetColor = isOn
             ? MediaColor.FromRgb(52, 199, 89)
             : MediaColor.FromRgb(58, 58, 60);
 
-        LedShadow.Color = isOn
-            ? MediaColor.FromRgb(52, 199, 89)
-            : MediaColor.FromRgb(58, 58, 60);
+        LedColor.Color = targetColor;
+        LedShadow.Color = targetColor;
         LedShadow.Opacity = isOn ? 0.8 : 0;
     }
 
@@ -496,6 +549,28 @@ public partial class MainWindow : Window
         TitleText.Text = now.ToString("HH:mm");
         ContentText.Visibility = Visibility.Visible;
         ContentText.Text = now.ToString("M月d日 dddd");
+
+        // 如果是首次显示（未展开），触发完整展开动画
+        if (!_isExpanded)
+        {
+            _isExpanded = true;
+            var targetWidth = Math.Min(_settings.ExpandedMaxWidth,
+                Math.Max(_settings.CollapsedWidth, 200));
+            CalculatePosition(targetWidth, _settings.ExpandedHeight,
+                out double tl, out double tt);
+            AnimateExpand(targetWidth, _settings.ExpandedHeight, tl, tt);
+        }
+        else
+        {
+            // 已展开：平滑更新内容
+            ContentPanel.BeginAnimation(OpacityProperty, null);
+            ContentPanel.RenderTransform = null;
+            var fadeIn = new DoubleAnimation(0.85, 1, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            ContentPanel.BeginAnimation(OpacityProperty, fadeIn);
+        }
     }
 
     private void UpdateIcon(string? iconKind)
@@ -509,13 +584,14 @@ public partial class MainWindow : Window
         var glowColor = GlowColors.TryGetValue(kind, out var gc) ? gc : GlowColors["info"];
         IconGlow.Color = glowColor;
 
-        var scaleAnim = new DoubleAnimation(0.85, 1.0, TimeSpan.FromMilliseconds(300))
+        // 图标精致缩放过渡 — 微妙的弹性
+        var scaleAnim = new DoubleAnimation(0.8, 1.0, TimeSpan.FromMilliseconds(320))
         {
             EasingFunction = new ElasticEase
             {
                 EasingMode = EasingMode.EaseOut,
-                Oscillations = 2,
-                Springiness = 4
+                Oscillations = 1,
+                Springiness = 3
             }
         };
         IconScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
@@ -567,35 +643,56 @@ public partial class MainWindow : Window
         ResetCollapseTimer();
     }
 
+    /// <summary>
+    /// 苹果灵动岛风格展开动画。
+    /// 借鉴 SpringValue 自适应刚度：扩大时更快/更紧，缩小时更慢/更柔。
+    /// 单次连续缓动替代分阶段动画，更自然流畅。
+    /// </summary>
     private void AnimateExpand(double tw, double th, double tl, double tt)
     {
         ClearPositionAnimations();
 
-        var dur = TimeSpan.FromMilliseconds(350);
-        var spring = new ExponentialEase { EasingMode = EasingMode.EaseOut };
+        // 主尺寸动画：CubicEaseOut 模拟弹簧快速响应 + 平滑减速
+        var expandDur = TimeSpan.FromMilliseconds(350);
+        var expandEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-        AnimateProperty(WidthProperty, tw, dur, spring);
-        AnimateProperty(HeightProperty, th, dur, spring);
-        AnimateProperty(LeftProperty, tl, dur, spring);
-        AnimateProperty(TopProperty, tt, dur, spring);
+        AnimateProperty(WidthProperty, tw, expandDur, expandEase);
+        AnimateProperty(HeightProperty, th, expandDur, expandEase);
+        AnimateProperty(LeftProperty, tl, expandDur, expandEase);
+        AnimateProperty(TopProperty, tt, expandDur, expandEase);
 
+        // PillBorder 透明度快速淡入
         PillBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(220)));
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(180)));
 
-        var pillScale = new ScaleTransform(0.96, 0.96);
+        // Pill 整体缩放：BackEase 提供微妙的弹性（仅一次回弹，不振荡）
+        var pillScale = new ScaleTransform(0.94, 0.94);
         PillBorder.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
         PillBorder.RenderTransform = pillScale;
-        pillScale.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(400))
-            { EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 3 } });
-        pillScale.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(400))
-            { EasingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 1, Springiness = 3 } });
+        var scaleAnim = new DoubleAnimation(1, TimeSpan.FromMilliseconds(400))
+        {
+            EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.25 }
+        };
+        pillScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+        pillScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
 
-        ContentPanel.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)));
+        // 内容在 pill 形变开始后 60ms 渐进淡入（形状先行，内容后随）
+        ContentPanel.BeginAnimation(OpacityProperty, null);
+        ContentPanel.Opacity = 0;
+        var fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        fadeTimer.Tick += (_, _) =>
+        {
+            fadeTimer.Stop();
+            if (!_isExpanded) return;
+            ContentPanel.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(1, TimeSpan.FromMilliseconds(220)));
+        };
+        fadeTimer.Start();
     }
 
+    /// <summary>
+    /// 收起动画。借鉴 SpringValue 的低刚度/高阻尼策略：缓慢平滑地收缩。
+    /// </summary>
     private void Collapse()
     {
         if (!_isExpanded || _settingsPanelOpen || _settings.AlwaysVisible) return;
@@ -606,18 +703,21 @@ public partial class MainWindow : Window
         ClearPositionAnimations();
 
         var collapseDur = TimeSpan.FromMilliseconds(280);
-        var easeIn = new QuadraticEase { EasingMode = EasingMode.EaseIn };
+        var easeInOut = new CircleEase { EasingMode = EasingMode.EaseInOut };
 
         CalculatePosition(_settings.CollapsedWidth, _settings.CollapsedHeight,
             out double tl, out double tt);
 
-        AnimateProperty(WidthProperty, _settings.CollapsedWidth, collapseDur, easeIn);
-        AnimateProperty(HeightProperty, _settings.CollapsedHeight, collapseDur, easeIn);
-        AnimateProperty(LeftProperty, tl, collapseDur, easeIn);
-        AnimateProperty(TopProperty, tt, collapseDur, easeIn);
+        AnimateProperty(WidthProperty, _settings.CollapsedWidth, collapseDur, easeInOut);
+        AnimateProperty(HeightProperty, _settings.CollapsedHeight, collapseDur, easeInOut);
+        AnimateProperty(LeftProperty, tl, collapseDur, easeInOut);
+        AnimateProperty(TopProperty, tt, collapseDur, easeInOut);
 
+        // Pill 透明度平滑消失 — 延迟于尺寸动画，避免突兀
         PillBorder.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(100)));
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(180)));
+
+        // 内容先于 pill 淡出
         ContentPanel.BeginAnimation(OpacityProperty,
             new DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
     }

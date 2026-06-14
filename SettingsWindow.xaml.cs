@@ -40,6 +40,12 @@ public partial class SettingsWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        // 平滑淡入动画
+        Opacity = 0;
+        BeginAnimation(OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(
+                1, TimeSpan.FromMilliseconds(200)));
+
         // 收集位置预览 Border
         _previewBorders = new Dictionary<string, Border>
         {
@@ -64,7 +70,10 @@ public partial class SettingsWindow : Window
 
     private void CloseBtn_Click(object sender, RoutedEventArgs e)
     {
-        Hide();
+        var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(
+            0, TimeSpan.FromMilliseconds(150));
+        fadeOut.Completed += (_, _) => Hide();
+        BeginAnimation(OpacityProperty, fadeOut);
     }
 
     #region 主面板

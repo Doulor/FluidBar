@@ -12,19 +12,22 @@
         Closing="Window_Closing"
         PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown">
 
+    <!-- 主药丸容器 — 无 DropShadow（避免方角伪影），纯色深黑 + 微光环边 -->
     <Border x:Name="PillBorder"
-            Padding="16,12"
+            Padding="18,14"
             MinWidth="160"
             MaxWidth="600"
             Opacity="0"
             UseLayoutRounding="True"
             SnapsToDevicePixels="True">
         <Border.Background>
-            <SolidColorBrush x:Name="PillBackground" Color="#E8202022"/>
+            <SolidColorBrush x:Name="PillBackground" Color="#E6000000"/>
         </Border.Background>
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="30" Opacity="0.45" ShadowDepth="1" Color="#000000"/>
-        </Border.Effect>
+        <!-- 微光环边（苹果风格 rim light） -->
+        <Border.BorderBrush>
+            <SolidColorBrush x:Name="PillRimBrush" Color="#10FFFFFF"/>
+        </Border.BorderBrush>
+        <Border.BorderThickness>0.5</Border.BorderThickness>
 
         <Grid>
             <Grid.ColumnDefinitions>
@@ -32,7 +35,7 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 图标区域 - 精美圆形背景 + Segoe MDL2 图标 -->
+            <!-- 图标区域 -->
             <Border x:Name="IconBorder"
                     Grid.Column="0"
                     Width="32" Height="32"
@@ -48,11 +51,11 @@
                 </Border.Background>
                 <Border.Effect>
                     <DropShadowEffect x:Name="IconGlow"
-                                      BlurRadius="12" Opacity="0.3" ShadowDepth="0" Color="#0A84FF"/>
+                                      BlurRadius="14" Opacity="0.35" ShadowDepth="0" Color="#0A84FF"/>
                 </Border.Effect>
                 <TextBlock x:Name="IconText"
                            FontFamily="Segoe MDL2 Assets"
-                           FontSize="15"
+                           FontSize="14"
                            Foreground="White"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -60,8 +63,7 @@
             </Border>
 
             <!-- 内容区域 -->
-            <Grid Grid.Column="1" VerticalAlignment="Center" x:Name="ContentGrid"
-                  ClipToBounds="True">
+            <Grid Grid.Column="1" VerticalAlignment="Center" x:Name="ContentGrid">
                 <StackPanel x:Name="ContentPanel"
                             VerticalAlignment="Center"
                             Opacity="0">
@@ -77,7 +79,7 @@
                     <TextBlock x:Name="ContentText"
                                FontSize="13"
                                FontFamily="Segoe UI, Microsoft YaHei UI"
-                               Foreground="#FFFFFF"
+                               Foreground="#F7F7F7"
                                TextTrimming="CharacterEllipsis"
                                MaxWidth="420"
                                TextWrapping="NoWrap"
@@ -87,13 +89,12 @@
                     <Grid x:Name="ProgressBarPanel"
                           Visibility="Collapsed"
                           Margin="0,3,0,0"
-                          MaxWidth="220"
-                          HorizontalAlignment="Left">
-                        <Border Height="5" CornerRadius="3" Background="#2C2C2E"/>
-                        <Border x:Name="ProgressTrack" Height="5" CornerRadius="3" ClipToBounds="True">
+                          HorizontalAlignment="Stretch">
+                        <Border Height="4" CornerRadius="2" Background="#1AFFFFFF"/>
+                        <Border x:Name="ProgressTrack" Height="4" CornerRadius="2" ClipToBounds="True">
                             <Border x:Name="ProgressFill"
-                                    Height="5"
-                                    CornerRadius="3"
+                                    Height="4"
+                                    CornerRadius="2"
                                     HorizontalAlignment="Left"
                                     Width="0">
                                 <Border.Background>
@@ -102,9 +103,6 @@
                                         <GradientStop Color="#5AC8FA" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
-                                <Border.Effect>
-                                    <DropShadowEffect BlurRadius="6" Opacity="0.5" ShadowDepth="0" Color="#0A84FF"/>
-                                </Border.Effect>
                             </Border>
                         </Border>
                     </Grid>
@@ -117,7 +115,6 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <!-- 状态图标 -->
                         <TextBlock x:Name="StatusIconText"
                                    Grid.Column="0"
                                    FontFamily="Segoe MDL2 Assets"

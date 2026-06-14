@@ -25,15 +25,15 @@ public sealed class FluidBarSettings
     public double OffsetY { get; set; } = 0;
 
     // === 尺寸 ===
-    public double CollapsedWidth { get; set; } = 160;
-    public double CollapsedHeight { get; set; } = 40;
+    public double CollapsedWidth { get; set; } = 176;
+    public double CollapsedHeight { get; set; } = 48;
     public double ExpandedMaxWidth { get; set; } = 500;
-    public double ExpandedHeight { get; set; } = 60;
+    public double ExpandedHeight { get; set; } = 76;
 
     // === 外观 ===
     public double CornerRadius { get; set; } = 24;
     public double Opacity { get; set; } = 0.92;
-    public string BackgroundColor { get; set; } = "#E0000000";
+    public string BackgroundColor { get; set; } = "#E6000000";
     public string AccentColor { get; set; } = "#0A84FF";
 
     // === 行为 ===
