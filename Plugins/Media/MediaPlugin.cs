@@ -1,5 +1,4 @@
 using System.Windows.Threading;
-using Windows.Media.Control;
 
 namespace FluidBar;
 
@@ -17,6 +16,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private MediaPluginSettings _settings;
     private MediaPluginConfig? _config;
     private ILyricsProvider _lyricsProvider = new NullLyricsProvider();
+    private IMediaSessionProvider? _sessionProvider;
     private string _lastSignature = string.Empty;
     private bool _isPolling;
     private bool _disposed;
@@ -37,6 +37,17 @@ public sealed class MediaPlugin : IIslandPlugin
         _lyricsProvider = _settings.ShowLyrics
             ? new LocalLrcLyricsProvider(_settings.LyricsDirectory)
             : new NullLyricsProvider();
+
+        // Lazy-load the WinRT provider; if Windows.Media.Control is unavailable,
+        // the plugin runs harmlessly without producing media events.
+        try
+        {
+            _sessionProvider = MediaSessionProviderFactory.Create();
+        }
+        catch
+        {
+            _sessionProvider = null;
+        }
     }
 
     public void Start()
@@ -76,13 +87,13 @@ public sealed class MediaPlugin : IIslandPlugin
 
     private async Task PollAsync()
     {
-        if (_isPolling)
+        if (_isPolling || _sessionProvider is null)
             return;
 
         _isPolling = true;
         try
         {
-            var snapshot = await TryReadSnapshotAsync();
+            var snapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
             if (snapshot is null)
                 return;
 
@@ -105,49 +116,6 @@ public sealed class MediaPlugin : IIslandPlugin
         }
     }
 
-    private async Task<MediaSnapshot?> TryReadSnapshotAsync()
-    {
-        var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-        var session = manager.GetCurrentSession();
-        if (session is null)
-            return null;
-
-        var properties = await session.TryGetMediaPropertiesAsync();
-        var playback = session.GetPlaybackInfo();
-        var timeline = session.GetTimelineProperties();
-        var isPlaying = playback.PlaybackStatus ==
-                        GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-        var progress = CalculateProgressPercent(timeline.Position, timeline.StartTime, timeline.EndTime);
-        var sourceId = session.SourceAppUserModelId ?? "";
-        var sourceName = MediaIslandEventFactory.FriendlySourceName(sourceId);
-
-        var baseSnapshot = new MediaSnapshot(
-            SourceAppUserModelId: sourceId,
-            SourceName: sourceName,
-            Title: properties.Title,
-            Artist: properties.Artist,
-            Album: properties.AlbumTitle,
-            IsPlaying: isPlaying,
-            ProgressPercent: progress);
-        var lyric = _settings.ShowLyrics
-            ? _lyricsProvider.TryGetCurrentLine(baseSnapshot, timeline.Position)
-            : null;
-
-        return baseSnapshot with { LyricLine = lyric };
-    }
-
-    private static int CalculateProgressPercent(TimeSpan position, TimeSpan start, TimeSpan end)
-    {
-        var duration = end - start;
-        if (duration.TotalMilliseconds <= 0)
-            return 0;
-
-        return Math.Clamp(
-            (int)Math.Round((position - start).TotalMilliseconds / duration.TotalMilliseconds * 100),
-            0,
-            100);
-    }
-
     private static string BuildSignature(MediaSnapshot snapshot)
     {
         return string.Join("|", new[]
@@ -162,4 +130,3 @@ public sealed class MediaPlugin : IIslandPlugin
         });
     }
 }
-

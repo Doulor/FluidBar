@@ -1,6 +1,4 @@
 using System.Windows.Threading;
-using Windows.UI.Notifications;
-using Windows.UI.Notifications.Management;
 
 namespace FluidBar;
 
@@ -8,6 +6,7 @@ public sealed class NotificationsPlugin : IIslandPlugin
 {
     private readonly DispatcherTimer _timer;
     private readonly HashSet<uint> _seenIds = new();
+    private INotificationListener? _listener;
     private bool _isPolling;
     private bool _disposed;
 
@@ -27,6 +26,15 @@ public sealed class NotificationsPlugin : IIslandPlugin
 
     public void Initialize()
     {
+        // Lazy-load the WinRT listener; if unavailable, the plugin runs without producing events.
+        try
+        {
+            _listener = NotificationListenerFactory.Create();
+        }
+        catch
+        {
+            _listener = null;
+        }
     }
 
     public void Start()
@@ -49,10 +57,12 @@ public sealed class NotificationsPlugin : IIslandPlugin
 
     public async Task<string> RequestAccessAsync()
     {
+        if (_listener is null)
+            return "Unavailable";
+
         try
         {
-            var status = await UserNotificationListener.Current.RequestAccessAsync();
-            return status.ToString();
+            return await _listener.RequestAccessAsync();
         }
         catch (Exception ex)
         {
@@ -76,24 +86,22 @@ public sealed class NotificationsPlugin : IIslandPlugin
 
     private async Task PollAsync()
     {
-        if (_isPolling)
+        if (_isPolling || _listener is null)
             return;
 
         _isPolling = true;
         try
         {
-            var listener = UserNotificationListener.Current;
-            var access = listener.GetAccessStatus();
-            if (access != UserNotificationListenerAccessStatus.Allowed)
+            if (!_listener.IsAccessAllowed())
                 return;
 
-            var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
-            foreach (var notification in notifications.OrderBy(item => item.CreationTime))
+            var notifications = await _listener.GetToastNotificationsAsync();
+            foreach (var info in notifications.OrderBy(item => item.Timestamp))
             {
-                if (!_seenIds.Add(notification.Id))
+                if (!_seenIds.Add(info.Id))
                     continue;
 
-                var snapshot = TryCreateSnapshot(notification);
+                var snapshot = CreateSnapshot(info);
                 if (snapshot is not null)
                     EventTriggered?.Invoke(NotificationIslandEventFactory.FromSnapshot(snapshot));
             }
@@ -107,31 +115,18 @@ public sealed class NotificationsPlugin : IIslandPlugin
         }
     }
 
-    private static NotificationSnapshot? TryCreateSnapshot(UserNotification notification)
+    private static NotificationSnapshot? CreateSnapshot(ToastNotificationInfo info)
     {
-        try
-        {
-            var appName = notification.AppInfo?.DisplayInfo.DisplayName ?? "系统通知";
-            var binding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-            var texts = binding?.GetTextElements()
-                .Select(element => element.Text)
-                .Where(text => !string.IsNullOrWhiteSpace(text))
-                .ToArray() ?? Array.Empty<string>();
-            var title = texts.ElementAtOrDefault(0) ?? appName;
-            var body = texts.Length > 1
-                ? string.Join(Environment.NewLine, texts.Skip(1))
-                : "新的通知";
+        var title = info.Texts.ElementAtOrDefault(0) ?? info.AppName;
+        var body = info.Texts.Count > 1
+            ? string.Join(Environment.NewLine, info.Texts.Skip(1))
+            : "新的通知";
 
-            return new NotificationSnapshot(
-                notification.Id,
-                appName,
-                title,
-                body,
-                notification.CreationTime);
-        }
-        catch
-        {
-            return null;
-        }
+        return new NotificationSnapshot(
+            info.Id,
+            info.AppName,
+            title,
+            body,
+            info.Timestamp);
     }
 }
