@@ -118,19 +118,17 @@ public sealed class MediaPlugin : IIslandPlugin
         _isPolling = true;
         try
         {
-            MediaSnapshot? snapshot = null;
+            // Run BOTH sources and prefer the higher-priority one.
+            // This ensures music apps (Kugou etc.) take precedence over browser sessions.
+            MediaSnapshot? gsmSnapshot = null;
+            MediaSnapshot? fallbackSnapshot = null;
 
-            // 1. Try WinRT GSMTC first (works for browsers, Spotify, etc.)
             if (_sessionProvider is not null)
-            {
-                snapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
-            }
+                gsmSnapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
 
-            // 2. Fallback: window title monitoring (for Kugou, Netease, etc. that don't use GSMTC)
-            if (snapshot is null)
-            {
-                snapshot = FindPlayingMediaFallback();
-            }
+            fallbackSnapshot = FindPlayingMediaFallback();
+
+            var snapshot = ChooseBestSnapshot(gsmSnapshot, fallbackSnapshot);
 
             if (snapshot is null)
             {
@@ -289,6 +287,30 @@ public sealed class MediaPlugin : IIslandPlugin
         var builder = new StringBuilder(length + 1);
         GetWindowText(hWnd, builder, builder.Capacity);
         return builder.ToString();
+    }
+
+    private static MediaSnapshot? ChooseBestSnapshot(MediaSnapshot? gsm, MediaSnapshot? fallback)
+    {
+        if (gsm is null) return fallback;
+        if (fallback is null) return gsm;
+
+        // Music apps from fallback always beat browser sessions from GSMTC
+        var gsmPriority = GetSourcePriority(gsm.SourceAppUserModelId);
+        var fbPriority = GetSourcePriority(fallback.SourceAppUserModelId);
+        return fbPriority >= gsmPriority ? fallback : gsm;
+    }
+
+    private static int GetSourcePriority(string sourceId)
+    {
+        if (string.IsNullOrWhiteSpace(sourceId))
+            return 0;
+        var lower = sourceId.ToLowerInvariant();
+        if (lower.Contains("kugou") || lower.Contains("cloudmusic") || lower.Contains("netease") ||
+            lower.Contains("qqmusic") || lower.Contains("spotify") || lower.Contains("kwmusic"))
+            return 100;
+        if (lower.Contains("chrome") || lower.Contains("edge") || lower.Contains("firefox"))
+            return 50;
+        return 10;
     }
 
     private static string BuildSignature(MediaSnapshot snapshot)

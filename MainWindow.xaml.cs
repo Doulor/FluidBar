@@ -528,11 +528,6 @@ public partial class MainWindow : Window
                 NudgePill();
         }
 
-        // 媒体播放时保持灵动岛常驻不消失
-        if (view.Kind == IslandViewKind.Media && view.ShowsAudioWave)
-        {
-            _collapseTimer.Stop();
-        }
     }
 
     private void ApplyStackPolicy(IslandEvent evt, IslandViewPresentation view)
@@ -1440,6 +1435,13 @@ public partial class MainWindow : Window
     private void ResetCollapseTimer()
     {
         if (_isHoverCard)
+        {
+            _collapseTimer.Stop();
+            return;
+        }
+
+        // 媒体播放中不自动隐藏
+        if (_currentView?.Kind == IslandViewKind.Media && _currentView.ShowsAudioWave)
         {
             _collapseTimer.Stop();
             return;
