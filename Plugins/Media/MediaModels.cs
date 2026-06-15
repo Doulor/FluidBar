@@ -40,12 +40,28 @@ public static class MediaIslandEventFactory
         var title = string.IsNullOrWhiteSpace(snapshot.Title)
             ? "正在播放"
             : snapshot.Title;
-        var artist = string.IsNullOrWhiteSpace(snapshot.Artist)
-            ? "未知艺术家"
-            : snapshot.Artist;
-        var subtitle = string.IsNullOrWhiteSpace(snapshot.Album)
-            ? artist
-            : $"{artist} · {snapshot.Album}";
+        var isBrowser = IsBrowserSource(snapshot.SourceAppUserModelId);
+
+        // Browser: show "Platform • Title", skip "未知艺术家"
+        string content;
+        string subtitle;
+        if (isBrowser)
+        {
+            var siteName = !string.IsNullOrWhiteSpace(snapshot.SourceBadge)
+                ? SiteFriendlyName(snapshot.SourceBadge) : sourceName;
+            content = $"{siteName} \u2022 {title}";
+            subtitle = string.Empty; // No "未知艺术家" for browser
+        }
+        else
+        {
+            content = title;
+            var artist = string.IsNullOrWhiteSpace(snapshot.Artist)
+                ? "" : snapshot.Artist;
+            subtitle = string.IsNullOrWhiteSpace(snapshot.Album)
+                ? artist
+                : string.IsNullOrWhiteSpace(artist) ? snapshot.Album : $"{artist} \u2022 {snapshot.Album}";
+        }
+
         var badge = !string.IsNullOrWhiteSpace(snapshot.SourceBadge)
             ? snapshot.SourceBadge
             : sourceName;
@@ -53,7 +69,7 @@ public static class MediaIslandEventFactory
         return new IslandEvent(
             Source: "media",
             Title: snapshot.IsPlaying ? "正在播放" : "媒体已暂停",
-            Content: title,
+            Content: content,
             IconKind: "media",
             Payload: new IslandEventPayload(
                 Kind: IslandEventKind.Media,
@@ -71,6 +87,32 @@ public static class MediaIslandEventFactory
                 PositionTicks: snapshot.PositionTicks,
                 EndTicks: snapshot.EndTicks,
                 LastUpdatedTicks: snapshot.LastUpdatedTicks));
+    }
+
+    private static bool IsBrowserSource(string sourceId)
+    {
+        if (string.IsNullOrWhiteSpace(sourceId)) return false;
+        var lower = sourceId.ToLowerInvariant();
+        return lower.Contains("chrome") || lower.Contains("edge") ||
+               lower.Contains("msedge") || lower.Contains("firefox");
+    }
+
+    private static string SiteFriendlyName(string badge)
+    {
+        return badge switch
+        {
+            "YT" => "YouTube",
+            "B" => "BiliBili",
+            "NF" => "Netflix",
+            "SP" => "Spotify",
+            "SC" => "SoundCloud",
+            "PV" => "Prime Video",
+            "D+" => "Disney+",
+            "iQ" => "爱奇艺",
+            "YK" => "优酷",
+            "WEB" => "Web",
+            _ => badge
+        };
     }
 
     public static string FriendlySourceName(string sourceAppUserModelId)

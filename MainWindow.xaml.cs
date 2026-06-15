@@ -479,8 +479,10 @@ public partial class MainWindow : Window
             _mediaActive = view.Kind == IslandViewKind.Media && view.ShowsAudioWave;
         }
 
-        // 媒体播放中，非媒体事件不覆盖当前显示（时钟/电池/音量等不能打乱媒体显示）
-        if (_mediaActive && evt.Source != "media")
+        // 媒体播放中，非媒体事件不覆盖主显示。
+        // 多岛屿模式下仍允许入栈（ApplyStackPolicy 会创建独立岛屿）。
+        if (_mediaActive && evt.Source != "media"
+            && _settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
             return;
 
         ApplyStackPolicy(evt, view);
@@ -1614,15 +1616,11 @@ public partial class MainWindow : Window
 
     private void ShowMediaContent(IslandEvent evt, IslandViewPresentation view)
     {
-        // Compact title line: source name · artist, or song title as fallback
-        var sourceLabel = string.IsNullOrWhiteSpace(view.SourceName) ? "" : view.SourceName;
-        var subtitleLabel = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
-        TitleText.Text = string.IsNullOrWhiteSpace(sourceLabel)
-            ? view.Content
-            : string.IsNullOrWhiteSpace(subtitleLabel)
-                ? sourceLabel
-                : $"{sourceLabel} · {subtitleLabel}";
+        // Compact content: use scrolling for long titles
+        var displayText = view.Content;
+        var isLongText = displayText.Length > 22;
 
+        TitleText.Text = evt.Title;
         ProgressBarPanel.Visibility = Visibility.Visible;
 
         AccessoryGrid.Visibility = Visibility.Visible;
@@ -1632,6 +1630,28 @@ public partial class MainWindow : Window
             _waveTimer.Start();
         else
             SetWaveHeights(5, 5, 5, 5, TimeSpan.FromMilliseconds(180));
+
+        if (isLongText)
+        {
+            // Marquee scroll long titles (e.g. browser video names)
+            ScrollCanvas.Visibility = Visibility.Visible;
+            ScrollCanvas.Width = Math.Max(160, view.TargetWidth - 118);
+            ScrollText.Text = displayText;
+            ScrollCanvas.Margin = new Thickness(0, 0, 0, 4);
+            ProgressBarPanel.Margin = new Thickness(0, 0, 0, 0);
+            Dispatcher.BeginInvoke(() =>
+            {
+                var canvasWidth = ScrollCanvas.ActualWidth > 0
+                    ? ScrollCanvas.ActualWidth : ScrollCanvas.Width;
+                StartScrolling(canvasWidth);
+            }, DispatcherPriority.Background);
+        }
+        else
+        {
+            ContentText.Visibility = Visibility.Visible;
+            ContentText.Text = displayText;
+            ProgressBarPanel.Margin = new Thickness(0, 5, 0, 0);
+        }
 
         // Store ticks for real-time progress interpolation
         _mediaPositionTicks = view.PositionTicks;
@@ -2100,17 +2120,25 @@ public partial class MainWindow : Window
         var h4 = 11 + Math.Sin(_wavePhase + 3.5) * 6;
         SetWaveHeights(h1, h2, h3, h4, TimeSpan.FromMilliseconds(90));
 
-        // Real-time progress bar interpolation using ticks
+        // Interpolate progress bar smoothly between GSMTC polls.
+        // Only add a fraction of elapsed time to prevent overshoot
+        // (GSMTC Position.Ticks already reflects near-current time).
         if (_mediaEndTicks > 0 && _mediaLastUpdatedTicks > 0 && _currentView?.ShowsAudioWave == true)
         {
             var currentSec = _mediaPositionTicks / 10_000_000.0;
             var durationSec = _mediaEndTicks / 10_000_000.0;
-            currentSec += (Environment.TickCount64 - _mediaLastUpdatedTicks) / 1000.0;
-            currentSec = Math.Max(0, Math.Min(currentSec, durationSec));
-            var progress = durationSec > 0 ? currentSec / durationSec : 0;
-            var targetWidth = Math.Max(0, progress * _mediaProgressTrackWidth);
-            ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
-            ProgressFill.Width = targetWidth;
+            if (durationSec > 0)
+            {
+                var elapsedMs = Environment.TickCount64 - _mediaLastUpdatedTicks;
+                // Cap interpolation at half the poll interval to avoid overshoot
+                var cappedMs = Math.Min(elapsedMs, 400); // 400ms max advance
+                currentSec += cappedMs / 1000.0;
+                currentSec = Math.Max(0, Math.Min(currentSec, durationSec));
+                var progress = currentSec / durationSec;
+                var targetWidth = Math.Max(0, progress * _mediaProgressTrackWidth);
+                ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+                ProgressFill.Width = targetWidth;
+            }
         }
     }
 

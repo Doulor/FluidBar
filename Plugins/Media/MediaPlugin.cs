@@ -222,22 +222,10 @@ public sealed class MediaPlugin : IIslandPlugin
                 GetWindowThreadProcessId(hWnd, out uint _);
                 _fallbackWindows!.Add((hWnd, title, "", sourceName));
 
-                // Also search child windows for song info
+                // Also search child windows recursively for song info
                 if (!title.Contains(" - ", StringComparison.Ordinal))
                 {
-                    EnumChildWindows(hWnd, (childHwnd, __) =>
-                    {
-                        if (!IsWindowVisible(childHwnd))
-                            return true;
-                        var childTitle = GetWindowTitle(childHwnd);
-                        if (!string.IsNullOrWhiteSpace(childTitle) &&
-                            childTitle.Contains(" - ", StringComparison.Ordinal))
-                        {
-                            _fallbackWindows!.Add((childHwnd, childTitle, "", sourceName));
-                            return false;
-                        }
-                        return true;
-                    }, IntPtr.Zero);
+                    SearchChildWindowsRecursive(hWnd, sourceName);
                 }
             }
 
@@ -267,6 +255,23 @@ public sealed class MediaPlugin : IIslandPlugin
             Album: "",
             IsPlaying: true,
             ProgressPercent: 0);
+    }
+
+    private static void SearchChildWindowsRecursive(IntPtr parent, string sourceName)
+    {
+        EnumChildWindows(parent, (childHwnd, _) =>
+        {
+            var childTitle = GetWindowTitle(childHwnd);
+            if (!string.IsNullOrWhiteSpace(childTitle) &&
+                childTitle.Contains(" - ", StringComparison.Ordinal))
+            {
+                _fallbackWindows!.Add((childHwnd, childTitle, "", sourceName));
+                return false; // Found, stop this branch
+            }
+            // Recurse into grandchildren
+            SearchChildWindowsRecursive(childHwnd, sourceName);
+            return true;
+        }, IntPtr.Zero);
     }
 
     private static (string Artist, string Song) ParseMediaTitle(string title, string processName)

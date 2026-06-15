@@ -26,7 +26,7 @@ public sealed class BluetoothMonitor : ISystemMonitor
 
         _lastDevices = GetConnectedDevices();
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _timer.Tick += (_, _) => CheckDevices();
         _timer.Start();
     }
