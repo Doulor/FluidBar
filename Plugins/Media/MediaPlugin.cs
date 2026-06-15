@@ -24,6 +24,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private bool _isPolling;
     private bool _disposed;
     private bool _lastFromGsm;
+    private readonly KugouLyricsProvider _kugouLyrics = new();
 
     public IMediaSessionProvider? SessionProvider => _sessionProvider;
 
@@ -162,6 +163,14 @@ public sealed class MediaPlugin : IIslandPlugin
             if (!snapshot.IsPlaying && !_settings.ShowWhenPaused)
                 return;
 
+            // For Kugou and other fallback sources, try to fetch lyrics from API
+            if (string.IsNullOrWhiteSpace(snapshot.LyricLine) && !_lastFromGsm)
+            {
+                var lyric = _kugouLyrics.TryGetCurrentLine(snapshot, TimeSpan.Zero);
+                if (!string.IsNullOrWhiteSpace(lyric))
+                    snapshot = snapshot with { LyricLine = lyric };
+            }
+
             var signature = BuildSignature(snapshot);
             if (signature == _lastSignature)
                 return;
@@ -262,13 +271,13 @@ public sealed class MediaPlugin : IIslandPlugin
     }
 
     [ThreadStatic]
-    private static string? _kugouLyrics;
+    private static string? _kugouWindowLyrics;
 
     private static string? TryGetKugouLyrics()
     {
         try
         {
-            _kugouLyrics = null;
+            _kugouWindowLyrics = null;
             var kugouWindow = IntPtr.Zero;
 
             // Find Kugou's main window first
@@ -294,10 +303,10 @@ public sealed class MediaPlugin : IIslandPlugin
 
             // Search for lyrics window among Kugou's children
             // Kugou lyrics window typically has class containing "Lyric" or title containing "歌词"
-            _kugouLyrics = null;
+            _kugouWindowLyrics = null;
             SearchLyricsWindow(kugouWindow);
 
-            return _kugouLyrics;
+            return _kugouWindowLyrics;
         }
         catch
         {
@@ -325,7 +334,7 @@ public sealed class MediaPlugin : IIslandPlugin
                 var t = GetWindowTitle(child);
                 if (!string.IsNullOrWhiteSpace(t) && t.Length > 4 && !t.Contains("酷狗"))
                 {
-                    _kugouLyrics = t;
+                    _kugouWindowLyrics = t;
                     return false;
                 }
                 // Also try WM_GETTEXT for rich edit controls
@@ -334,13 +343,13 @@ public sealed class MediaPlugin : IIslandPlugin
                 var rt = textSb.ToString();
                 if (!string.IsNullOrWhiteSpace(rt) && rt.Length > 4 && !rt.Contains("酷狗"))
                 {
-                    _kugouLyrics = rt;
+                    _kugouWindowLyrics = rt;
                     return false;
                 }
                 return true;
             }, IntPtr.Zero);
 
-            if (!string.IsNullOrWhiteSpace(_kugouLyrics))
+            if (!string.IsNullOrWhiteSpace(_kugouWindowLyrics))
                 return;
         }
 
@@ -348,7 +357,7 @@ public sealed class MediaPlugin : IIslandPlugin
         EnumChildWindows(parent, (child, _) =>
         {
             SearchLyricsWindow(child);
-            return _kugouLyrics is null; // Continue if not found
+            return _kugouWindowLyrics is null; // Continue if not found
         }, IntPtr.Zero);
     }
 

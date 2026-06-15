@@ -42,18 +42,21 @@ public static class MediaIslandEventFactory
             : snapshot.Title;
         var isBrowser = IsBrowserSource(snapshot.SourceAppUserModelId);
 
-        // Browser: show "Platform • Title", skip "未知艺术家"
+        // Browser: TitleText = source name, Content = video title
         string content;
         string subtitle;
+        string eventTitle;
         if (isBrowser)
         {
             var siteName = !string.IsNullOrWhiteSpace(snapshot.SourceBadge)
                 ? SiteFriendlyName(snapshot.SourceBadge) : sourceName;
-            content = $"{siteName} \u2022 {title}";
-            subtitle = string.Empty; // No "未知艺术家" for browser
+            eventTitle = siteName;
+            content = title;
+            subtitle = string.Empty;
         }
         else
         {
+            eventTitle = sourceName;
             content = title;
             var artist = string.IsNullOrWhiteSpace(snapshot.Artist)
                 ? "" : snapshot.Artist;
@@ -68,7 +71,7 @@ public static class MediaIslandEventFactory
 
         return new IslandEvent(
             Source: "media",
-            Title: snapshot.IsPlaying ? "正在播放" : "媒体已暂停",
+            Title: eventTitle,
             Content: content,
             IconKind: "media",
             Payload: new IslandEventPayload(

@@ -496,7 +496,8 @@ public static class HoverCardPolicy
 public sealed record IslandStackItem(
     string Source,
     IslandViewPresentation View,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt = default);
 
 public static class IslandStackPolicy
 {
@@ -512,7 +513,7 @@ public static class IslandStackPolicy
         FluidBarSettings settings)
     {
         if (nextView.Kind == IslandViewKind.Clock || source == "clock")
-            return currentItems.ToList();
+            return PruneExpired(currentItems).ToList();
 
         if (!CanStack(settings))
         {
@@ -522,16 +523,29 @@ public static class IslandStackPolicy
             };
         }
 
-        var next = currentItems
+        var now = DateTimeOffset.UtcNow;
+        var next = PruneExpired(currentItems)
             .Where(item => item.View.Kind != IslandViewKind.Clock && item.Source != source)
             .ToList();
-        next.Add(new IslandStackItem(source, nextView, DateTimeOffset.UtcNow));
+
+        // Non-media events expire after 5 seconds; media stays indefinitely
+        var expires = source == "media"
+            ? DateTimeOffset.MaxValue
+            : now.AddSeconds(5);
+        next.Add(new IslandStackItem(source, nextView, now, expires));
 
         var max = Math.Clamp(settings.MaxVisibleIslands, 1, 8);
         if (next.Count > max)
             next.RemoveRange(0, next.Count - max);
 
         return next;
+    }
+
+    private static IEnumerable<IslandStackItem> PruneExpired(IEnumerable<IslandStackItem> items)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return items.Where(item =>
+            item.ExpiresAt == default || item.ExpiresAt == DateTimeOffset.MaxValue || item.ExpiresAt > now);
     }
 }
 

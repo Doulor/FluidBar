@@ -480,12 +480,23 @@ public partial class MainWindow : Window
         }
 
         // 媒体播放中，非媒体事件不覆盖主显示。
-        // 多岛屿模式下只入栈，不更新主岛内容。
+        // 多岛屿模式下只入栈并同步快照窗口，不更新主岛内容。
         if (_mediaActive && evt.Source != "media")
         {
             if (_settings.DisplayStrategy == IslandDisplayStrategy.Multiple)
             {
                 ApplyStackPolicy(evt, view);
+                // Sync snapshot windows to reflect expired items
+                if (IsStackedIslandActive())
+                {
+                    if (!TryCalculateStackedMainPosition(
+                            _activeTargetWidth, _activeTargetHeight,
+                            out var left, out var top, out var layout))
+                    {
+                        layout = null;
+                    }
+                    SyncSnapshotWindows(layout, animated: true);
+                }
                 return;
             }
             return;
@@ -1656,7 +1667,7 @@ public partial class MainWindow : Window
                 var canvasWidth = ScrollCanvas.ActualWidth > 0
                     ? ScrollCanvas.ActualWidth : ScrollCanvas.Width;
                 StartScrolling(canvasWidth);
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Loaded);
         }
         else
         {
@@ -2131,26 +2142,8 @@ public partial class MainWindow : Window
         var h4 = 11 + Math.Sin(_wavePhase + 3.5) * 6;
         SetWaveHeights(h1, h2, h3, h4, TimeSpan.FromMilliseconds(90));
 
-        // Interpolate progress bar smoothly between GSMTC polls.
-        // Only add a fraction of elapsed time to prevent overshoot
-        // (GSMTC Position.Ticks already reflects near-current time).
-        if (_mediaEndTicks > 0 && _mediaLastUpdatedTicks > 0 && _currentView?.ShowsAudioWave == true)
-        {
-            var currentSec = _mediaPositionTicks / 10_000_000.0;
-            var durationSec = _mediaEndTicks / 10_000_000.0;
-            if (durationSec > 0)
-            {
-                var elapsedMs = Environment.TickCount64 - _mediaLastUpdatedTicks;
-                // Cap interpolation at half the poll interval to avoid overshoot
-                var cappedMs = Math.Min(elapsedMs, 400); // 400ms max advance
-                currentSec += cappedMs / 1000.0;
-                currentSec = Math.Max(0, Math.Min(currentSec, durationSec));
-                var progress = currentSec / durationSec;
-                var targetWidth = Math.Max(0, progress * _mediaProgressTrackWidth);
-                ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
-                ProgressFill.Width = targetWidth;
-            }
-        }
+        // Progress bar updates when a new media event arrives.
+        // No tick-based interpolation — GSMTC ProgressPercent is already accurate.
     }
 
     private void SetWaveHeights(double h1, double h2, double h3, double h4, TimeSpan duration)
