@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private double _activeTargetWidth;
     private double _activeTargetHeight;
     private double _wavePhase;
+    private bool _mediaActive;
     private long _mediaPositionTicks;
     private long _mediaEndTicks;
     private long _mediaLastUpdatedTicks;
@@ -474,6 +475,12 @@ public partial class MainWindow : Window
 
         ApplyStackPolicy(evt, view);
 
+        // 独立追踪媒体播放状态，不依赖 _currentView（会被其他事件覆盖）
+        if (evt.Source == "media")
+        {
+            _mediaActive = view.Kind == IslandViewKind.Media && view.ShowsAudioWave;
+        }
+
         _currentView = view;
         _currentSource = evt.Source;
         _lastEvent = evt;
@@ -764,7 +771,7 @@ public partial class MainWindow : Window
 
     private bool IsMediaPlaying()
     {
-        return _currentView?.Kind == IslandViewKind.Media && _currentView.ShowsAudioWave;
+        return _mediaActive;
     }
 
     private bool ShouldEmphasizeSource(string? source)
@@ -1993,6 +2000,7 @@ public partial class MainWindow : Window
 
         _isExpanded = false;
         _isHoverCard = false;
+        _mediaActive = false;
         _currentIconKind = null; // 收起后重置，下次展开时动画正常播放
         StopScrolling();
         StopHoverSpring();
