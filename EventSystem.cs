@@ -24,7 +24,10 @@ public sealed record IslandEventPayload(
     string? AppIconPath = null,
     string? LyricLine = null,
     string? SecondaryLyricLine = null,
-    IReadOnlyList<string>? DetailLines = null);
+    IReadOnlyList<string>? DetailLines = null,
+    long PositionTicks = 0,
+    long EndTicks = 0,
+    long LastUpdatedTicks = 0);
 
 /// <summary>
 /// 灵动岛事件数据

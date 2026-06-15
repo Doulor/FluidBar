@@ -24,6 +24,8 @@ public sealed class MediaPlugin : IIslandPlugin
     private bool _isPolling;
     private bool _disposed;
 
+    public IMediaSessionProvider? SessionProvider => _sessionProvider;
+
     // Known media player process names → friendly source name
     private static readonly Dictionary<string, string> FallbackPlayers = new(StringComparer.OrdinalIgnoreCase)
     {

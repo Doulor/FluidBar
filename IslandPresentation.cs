@@ -154,7 +154,10 @@ public sealed record IslandViewPresentation(
     string SourceName = "",
     string LyricLine = "",
     string SecondaryLyricLine = "",
-    IReadOnlyList<string>? DetailLines = null);
+    IReadOnlyList<string>? DetailLines = null,
+    long PositionTicks = 0,
+    long EndTicks = 0,
+    long LastUpdatedTicks = 0);
 
 public sealed record HoverCardPresentation(
     IslandViewKind Kind,
@@ -173,7 +176,10 @@ public sealed record HoverCardPresentation(
     string Subtitle = "",
     string SourceName = "",
     string LyricLine = "",
-    string SecondaryLyricLine = "")
+    string SecondaryLyricLine = "",
+    long PositionTicks = 0,
+    long EndTicks = 0,
+    long LastUpdatedTicks = 0)
 {
     public static HoverCardPresentation FromCompact(
         IslandViewPresentation compact,
@@ -224,7 +230,10 @@ public sealed record HoverCardPresentation(
             compact.Subtitle,
             compact.SourceName,
             compact.LyricLine,
-            compact.SecondaryLyricLine);
+            compact.SecondaryLyricLine,
+            compact.PositionTicks,
+            compact.EndTicks,
+            compact.LastUpdatedTicks);
     }
 
     private static string BuildHoverBody(IslandViewPresentation compact)
@@ -307,7 +316,10 @@ public static class IslandPresentationFactory
             payload?.SourceName ?? "",
             payload?.LyricLine ?? "",
             payload?.SecondaryLyricLine ?? "",
-            payload?.DetailLines);
+            payload?.DetailLines,
+            payload?.PositionTicks ?? 0,
+            payload?.EndTicks ?? 0,
+            payload?.LastUpdatedTicks ?? 0);
     }
 
     public static int ParsePercent(string content)

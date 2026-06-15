@@ -479,6 +479,57 @@
                                 </Border.Background>
                             </Border>
                         </Grid>
+
+                        <!-- Media controls: prev / play-pause / next -->
+                        <StackPanel x:Name="MediaControlsPanel"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom"
+                                    Margin="0,0,0,8"
+                                    Visibility="Collapsed">
+                            <Border x:Name="MediaPrevBtn"
+                                    Width="32" Height="32"
+                                    CornerRadius="16"
+                                    Background="#14FFFFFF"
+                                    Cursor="Hand"
+                                    Margin="0,0,12,0"
+                                    MouseLeftButtonDown="MediaPrevBtn_Click">
+                                <TextBlock Text="&#xE892;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12"
+                                           Foreground="#B0B0B6"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="MediaPlayPauseBtn"
+                                    Width="40" Height="40"
+                                    CornerRadius="20"
+                                    Background="#20FFFFFF"
+                                    Cursor="Hand"
+                                    Margin="0,0,12,0"
+                                    MouseLeftButtonDown="MediaPlayPauseBtn_Click">
+                                <TextBlock x:Name="MediaPlayPauseIcon"
+                                           Text="&#xE769;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="16"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="MediaNextBtn"
+                                    Width="32" Height="32"
+                                    CornerRadius="16"
+                                    Background="#14FFFFFF"
+                                    Cursor="Hand"
+                                    MouseLeftButtonDown="MediaNextBtn_Click">
+                                <TextBlock Text="&#xE893;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12"
+                                           Foreground="#B0B0B6"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
                     </Grid>
 
                     <Grid Grid.Row="2" Margin="0,12,0,0">

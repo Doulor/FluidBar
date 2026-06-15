@@ -11,7 +11,11 @@ public sealed record MediaSnapshot(
     string? LyricLine = null,
     string? SecondaryLyricLine = null,
     string? AlbumArtPath = null,
-    string? SourceIconPath = null);
+    string? SourceIconPath = null,
+    string? SourceBadge = null,
+    long PositionTicks = 0,
+    long EndTicks = 0,
+    long LastUpdatedTicks = 0);
 
 public static class MediaIslandEventFactory
 {
@@ -42,6 +46,9 @@ public static class MediaIslandEventFactory
         var subtitle = string.IsNullOrWhiteSpace(snapshot.Album)
             ? artist
             : $"{artist} · {snapshot.Album}";
+        var badge = !string.IsNullOrWhiteSpace(snapshot.SourceBadge)
+            ? snapshot.SourceBadge
+            : sourceName;
 
         return new IslandEvent(
             Source: "media",
@@ -51,7 +58,7 @@ public static class MediaIslandEventFactory
             Payload: new IslandEventPayload(
                 Kind: IslandEventKind.Media,
                 Subtitle: subtitle,
-                Badge: sourceName,
+                Badge: badge,
                 SourceName: sourceName,
                 ProgressPercent: snapshot.ProgressPercent,
                 IsActive: snapshot.IsPlaying,
@@ -60,7 +67,10 @@ public static class MediaIslandEventFactory
                 AppIconPath: snapshot.SourceIconPath,
                 LyricLine: snapshot.LyricLine,
                 SecondaryLyricLine: snapshot.SecondaryLyricLine,
-                DetailLines: BuildDetailLines(snapshot, sourceName)));
+                DetailLines: BuildDetailLines(snapshot, sourceName),
+                PositionTicks: snapshot.PositionTicks,
+                EndTicks: snapshot.EndTicks,
+                LastUpdatedTicks: snapshot.LastUpdatedTicks));
     }
 
     public static string FriendlySourceName(string sourceAppUserModelId)

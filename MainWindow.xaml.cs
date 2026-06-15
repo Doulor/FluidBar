@@ -37,11 +37,16 @@ public partial class MainWindow : Window
     private double _activeTargetWidth;
     private double _activeTargetHeight;
     private double _wavePhase;
+    private long _mediaPositionTicks;
+    private long _mediaEndTicks;
+    private long _mediaLastUpdatedTicks;
+    private double _mediaProgressTrackWidth;
     private const double ShellBleedMargin = 14;
     private const double ShellBleed = ShellBleedMargin * 2;
     private const double HoverHostPadding = 16;
 
     private ClipboardPluginSettings? _clipboardPluginSettings;
+    private IMediaSessionProvider? _mediaSessionProvider;
 
     // Segoe MDL2 Assets 图标映射
     private static readonly Dictionary<string, string> IconGlyphs = new()
@@ -125,9 +130,10 @@ public partial class MainWindow : Window
             _collapseTimer.Stop();
             if (!_settingsPanelOpen)
             {
-                if (_settings.AlwaysVisible)
+                // 媒体播放中不切换到时钟，保持当前显示
+                if (_settings.AlwaysVisible && !IsMediaPlaying())
                     ShowIdleClock();
-                else
+                else if (!_settings.AlwaysVisible && !IsMediaPlaying())
                     Collapse();
             }
         };
@@ -145,6 +151,11 @@ public partial class MainWindow : Window
     public void SetClipboardPluginSettings(ClipboardPluginSettings s)
     {
         _clipboardPluginSettings = s;
+    }
+
+    public void SetMediaSessionProvider(IMediaSessionProvider provider)
+    {
+        _mediaSessionProvider = provider;
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -751,6 +762,11 @@ public partial class MainWindow : Window
         return _settings.GetMonitorFeatureSettings(_currentSource);
     }
 
+    private bool IsMediaPlaying()
+    {
+        return _currentView?.Kind == IslandViewKind.Media && _currentView.ShowsAudioWave;
+    }
+
     private bool ShouldEmphasizeSource(string? source)
     {
         if (string.IsNullOrWhiteSpace(source))
@@ -1132,6 +1148,9 @@ public partial class MainWindow : Window
         HoverProgressPanel.Visibility = card.Kind is IslandViewKind.Progress or IslandViewKind.Media
             ? Visibility.Visible
             : Visibility.Collapsed;
+        MediaControlsPanel.Visibility = card.Kind == IslandViewKind.Media
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         if (card.Kind == IslandViewKind.Progress)
         {
             HoverBodyText.Text = card.IconKind == "volume_mute"
@@ -1145,6 +1164,10 @@ public partial class MainWindow : Window
             HoverBodyText.Text = card.Content;
             var trackWidth = Math.Max(220, card.TargetWidth - 40);
             HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
+
+            // Show media controls
+            MediaControlsPanel.Visibility = Visibility.Visible;
+            MediaPlayPauseIcon.Text = card.ShowsAudioWave ? "\uE769" : "\uE768"; // Pause : Play
         }
         else if (card.Kind == IslandViewKind.Status)
         {
@@ -1601,8 +1624,14 @@ public partial class MainWindow : Window
         else
             SetWaveHeights(5, 5, 5, 5, TimeSpan.FromMilliseconds(180));
 
+        // Store ticks for real-time progress interpolation
+        _mediaPositionTicks = view.PositionTicks;
+        _mediaEndTicks = view.EndTicks;
+        _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+
         var maxBarWidth = Math.Max(150, view.TargetWidth - 154);
         ProgressTrack.Width = maxBarWidth;
+        _mediaProgressTrackWidth = maxBarWidth;
         var targetWidth = Math.Max(0, view.ProgressPercent / 100.0 * maxBarWidth);
         ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
         ProgressFill.Width = targetWidth;
@@ -2060,6 +2089,19 @@ public partial class MainWindow : Window
         var h3 = 8 + Math.Sin(_wavePhase + 2.6) * 5;
         var h4 = 11 + Math.Sin(_wavePhase + 3.5) * 6;
         SetWaveHeights(h1, h2, h3, h4, TimeSpan.FromMilliseconds(90));
+
+        // Real-time progress bar interpolation using ticks
+        if (_mediaEndTicks > 0 && _mediaLastUpdatedTicks > 0 && _currentView?.ShowsAudioWave == true)
+        {
+            var currentSec = _mediaPositionTicks / 10_000_000.0;
+            var durationSec = _mediaEndTicks / 10_000_000.0;
+            currentSec += (Environment.TickCount64 - _mediaLastUpdatedTicks) / 1000.0;
+            currentSec = Math.Max(0, Math.Min(currentSec, durationSec));
+            var progress = durationSec > 0 ? currentSec / durationSec : 0;
+            var targetWidth = Math.Max(0, progress * _mediaProgressTrackWidth);
+            ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+            ProgressFill.Width = targetWidth;
+        }
     }
 
     private void SetWaveHeights(double h1, double h2, double h3, double h4, TimeSpan duration)
@@ -2083,5 +2125,30 @@ public partial class MainWindow : Window
         IEasingFunction easing)
     {
         BeginAnimation(prop, new DoubleAnimation(to, dur) { EasingFunction = easing });
+    }
+
+    // Media control click handlers
+    private async void MediaPlayPauseBtn_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_mediaSessionProvider is null) return;
+        try { await _mediaSessionProvider.TryTogglePlayPauseAsync(); }
+        catch { }
+    }
+
+    private async void MediaNextBtn_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_mediaSessionProvider is null) return;
+        try { await _mediaSessionProvider.TrySkipNextAsync(); }
+        catch { }
+    }
+
+    private async void MediaPrevBtn_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_mediaSessionProvider is null) return;
+        try { await _mediaSessionProvider.TrySkipPreviousAsync(); }
+        catch { }
     }
 }

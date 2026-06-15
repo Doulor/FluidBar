@@ -59,6 +59,11 @@ public partial class App : Application
                 (ClipboardPluginSettings)cfg.CreateSettingsPanel());
         }
 
+        if (_mediaPlugin?.SessionProvider is IMediaSessionProvider mediaProvider)
+        {
+            _mainWindow.SetMediaSessionProvider(mediaProvider);
+        }
+
         // 初始化系统监控
         _monitorManager = new SystemMonitorManager(_bus);
         _monitorManager.Register(new VolumeMonitor());
