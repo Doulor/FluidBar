@@ -23,6 +23,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private string _lastSignature = string.Empty;
     private bool _isPolling;
     private bool _disposed;
+    private bool _lastFromGsm;
 
     public IMediaSessionProvider? SessionProvider => _sessionProvider;
 
@@ -130,10 +131,22 @@ public sealed class MediaPlugin : IIslandPlugin
 
             fallbackSnapshot = FindPlayingMediaFallback();
 
-            var snapshot = ChooseBestSnapshot(gsmSnapshot, fallbackSnapshot);
+            // When GSMTC was the last active provider and now returns null,
+            // suppress the fallback to avoid flashing paused Kugou window.
+            MediaSnapshot? snapshot;
+            if (_lastFromGsm && gsmSnapshot is null && fallbackSnapshot is not null)
+            {
+                // GSMTC was playing but stopped — don't fall back to window title
+                snapshot = null;
+            }
+            else
+            {
+                snapshot = ChooseBestSnapshot(gsmSnapshot, fallbackSnapshot);
+            }
 
             if (snapshot is null)
             {
+                _lastFromGsm = false;
                 // Media stopped
                 if (!string.IsNullOrEmpty(_lastSignature))
                 {
@@ -142,6 +155,9 @@ public sealed class MediaPlugin : IIslandPlugin
                 }
                 return;
             }
+
+            // Track active provider
+            _lastFromGsm = snapshot.PositionTicks > 0;
 
             if (!snapshot.IsPlaying && !_settings.ShowWhenPaused)
                 return;

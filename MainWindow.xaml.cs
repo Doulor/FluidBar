@@ -473,13 +473,17 @@ public partial class MainWindow : Window
         if (view.Kind == IslandViewKind.Clock && !_settings.AlwaysVisible && !_isExpanded)
             return;
 
-        ApplyStackPolicy(evt, view);
-
         // 独立追踪媒体播放状态，不依赖 _currentView（会被其他事件覆盖）
         if (evt.Source == "media")
         {
             _mediaActive = view.Kind == IslandViewKind.Media && view.ShowsAudioWave;
         }
+
+        // 媒体播放中，非媒体事件不覆盖当前显示（时钟/电池/音量等不能打乱媒体显示）
+        if (_mediaActive && evt.Source != "media")
+            return;
+
+        ApplyStackPolicy(evt, view);
 
         _currentView = view;
         _currentSource = evt.Source;
@@ -1155,7 +1159,7 @@ public partial class MainWindow : Window
         HoverProgressPanel.Visibility = card.Kind is IslandViewKind.Progress or IslandViewKind.Media
             ? Visibility.Visible
             : Visibility.Collapsed;
-        MediaControlsPanel.Visibility = card.Kind == IslandViewKind.Media
+        MediaControlsPanel.Visibility = (card.Kind == IslandViewKind.Media && card.PositionTicks > 0)
             ? Visibility.Visible
             : Visibility.Collapsed;
         if (card.Kind == IslandViewKind.Progress)
@@ -1172,8 +1176,6 @@ public partial class MainWindow : Window
             var trackWidth = Math.Max(220, card.TargetWidth - 40);
             HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
 
-            // Show media controls
-            MediaControlsPanel.Visibility = Visibility.Visible;
             MediaPlayPauseIcon.Text = card.ShowsAudioWave ? "\uE769" : "\uE768"; // Pause : Play
         }
         else if (card.Kind == IslandViewKind.Status)
