@@ -247,6 +247,9 @@ public sealed class MediaPlugin : IIslandPlugin
         if (string.IsNullOrWhiteSpace(song))
             return null;
 
+        // Try to read Kugou desktop lyrics for this song
+        var lyricLine = TryGetKugouLyrics();
+
         return new MediaSnapshot(
             SourceAppUserModelId: best.SourceName,
             SourceName: best.SourceName,
@@ -254,8 +257,108 @@ public sealed class MediaPlugin : IIslandPlugin
             Artist: artist,
             Album: "",
             IsPlaying: true,
-            ProgressPercent: 0);
+            ProgressPercent: 0,
+            LyricLine: lyricLine);
     }
+
+    [ThreadStatic]
+    private static string? _kugouLyrics;
+
+    private static string? TryGetKugouLyrics()
+    {
+        try
+        {
+            _kugouLyrics = null;
+            var kugouWindow = IntPtr.Zero;
+
+            // Find Kugou's main window first
+            EnumWindows((hWnd, _) =>
+            {
+                GetWindowThreadProcessId(hWnd, out uint pid);
+                try
+                {
+                    using var proc = Process.GetProcessById((int)pid);
+                    if (proc.ProcessName.Equals("kugou", StringComparison.OrdinalIgnoreCase)
+                        || proc.ProcessName.Equals("KuGou", StringComparison.OrdinalIgnoreCase))
+                    {
+                        kugouWindow = hWnd;
+                        return false; // Stop
+                    }
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+
+            if (kugouWindow == IntPtr.Zero)
+                return null;
+
+            // Search for lyrics window among Kugou's children
+            // Kugou lyrics window typically has class containing "Lyric" or title containing "歌词"
+            _kugouLyrics = null;
+            SearchLyricsWindow(kugouWindow);
+
+            return _kugouLyrics;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void SearchLyricsWindow(IntPtr parent)
+    {
+        var sb = new StringBuilder(128);
+        GetWindowText(parent, sb, sb.Capacity);
+        var title = sb.ToString();
+        sb.Clear();
+        GetClassName(parent, sb, sb.Capacity);
+        var cls = sb.ToString().ToLowerInvariant();
+
+        // Check if this is a lyrics window
+        if (title.Contains("歌词", StringComparison.Ordinal) ||
+            title.Contains("Lyric", StringComparison.OrdinalIgnoreCase) ||
+            cls.Contains("lyric") || cls.Contains("kugou_desktoplyric"))
+        {
+            // Try to read lyrics text from this window's child controls
+            EnumChildWindows(parent, (child, _) =>
+            {
+                var t = GetWindowTitle(child);
+                if (!string.IsNullOrWhiteSpace(t) && t.Length > 4 && !t.Contains("酷狗"))
+                {
+                    _kugouLyrics = t;
+                    return false;
+                }
+                // Also try WM_GETTEXT for rich edit controls
+                var textSb = new StringBuilder(512);
+                SendMessage(child, WM_GETTEXT, (IntPtr)511, textSb);
+                var rt = textSb.ToString();
+                if (!string.IsNullOrWhiteSpace(rt) && rt.Length > 4 && !rt.Contains("酷狗"))
+                {
+                    _kugouLyrics = rt;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (!string.IsNullOrWhiteSpace(_kugouLyrics))
+                return;
+        }
+
+        // Recurse into children
+        EnumChildWindows(parent, (child, _) =>
+        {
+            SearchLyricsWindow(child);
+            return _kugouLyrics is null; // Continue if not found
+        }, IntPtr.Zero);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    private const uint WM_GETTEXT = 0x000D;
 
     private static void SearchChildWindowsRecursive(IntPtr parent, string sourceName)
     {

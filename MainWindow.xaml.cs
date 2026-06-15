@@ -480,10 +480,16 @@ public partial class MainWindow : Window
         }
 
         // 媒体播放中，非媒体事件不覆盖主显示。
-        // 多岛屿模式下仍允许入栈（ApplyStackPolicy 会创建独立岛屿）。
-        if (_mediaActive && evt.Source != "media"
-            && _settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
+        // 多岛屿模式下只入栈，不更新主岛内容。
+        if (_mediaActive && evt.Source != "media")
+        {
+            if (_settings.DisplayStrategy == IslandDisplayStrategy.Multiple)
+            {
+                ApplyStackPolicy(evt, view);
+                return;
+            }
             return;
+        }
 
         ApplyStackPolicy(evt, view);
 
@@ -558,6 +564,9 @@ public partial class MainWindow : Window
     {
         if (view.Kind == IslandViewKind.Clock || evt.Source == "clock")
         {
+            // 媒体播放中不清理岛屿栈（防止时钟事件清掉媒体岛）
+            if (_mediaActive)
+                return;
             ClearIslandStack(animated: true);
             return;
         }
@@ -1616,11 +1625,15 @@ public partial class MainWindow : Window
 
     private void ShowMediaContent(IslandEvent evt, IslandViewPresentation view)
     {
-        // Compact content: use scrolling for long titles
-        var displayText = view.Content;
-        var isLongText = displayText.Length > 22;
+        // Compact title line: source/artist info
+        var sourceLabel = string.IsNullOrWhiteSpace(view.SourceName) ? "" : view.SourceName;
+        var subtitleLabel = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
+        TitleText.Text = string.IsNullOrWhiteSpace(sourceLabel)
+            ? view.Content
+            : string.IsNullOrWhiteSpace(subtitleLabel)
+                ? sourceLabel
+                : $"{sourceLabel} \u2022 {subtitleLabel}";
 
-        TitleText.Text = evt.Title;
         ProgressBarPanel.Visibility = Visibility.Visible;
 
         AccessoryGrid.Visibility = Visibility.Visible;
@@ -1631,14 +1644,13 @@ public partial class MainWindow : Window
         else
             SetWaveHeights(5, 5, 5, 5, TimeSpan.FromMilliseconds(180));
 
-        if (isLongText)
+        // Content area: marquee scroll for long titles
+        var displayText = view.Content;
+        if (displayText.Length > 22)
         {
-            // Marquee scroll long titles (e.g. browser video names)
             ScrollCanvas.Visibility = Visibility.Visible;
             ScrollCanvas.Width = Math.Max(160, view.TargetWidth - 118);
             ScrollText.Text = displayText;
-            ScrollCanvas.Margin = new Thickness(0, 0, 0, 4);
-            ProgressBarPanel.Margin = new Thickness(0, 0, 0, 0);
             Dispatcher.BeginInvoke(() =>
             {
                 var canvasWidth = ScrollCanvas.ActualWidth > 0
@@ -1650,7 +1662,6 @@ public partial class MainWindow : Window
         {
             ContentText.Visibility = Visibility.Visible;
             ContentText.Text = displayText;
-            ProgressBarPanel.Margin = new Thickness(0, 5, 0, 0);
         }
 
         // Store ticks for real-time progress interpolation
