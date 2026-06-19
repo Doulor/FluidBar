@@ -46,6 +46,7 @@
                 UseLayoutRounding="True"
                 SnapsToDevicePixels="True"
                 ClipToBounds="True"
+                SizeChanged="PillBorder_SizeChanged"
                 RenderTransformOrigin="0.5,0.5">
             <Border.RenderTransform>
                 <TransformGroup>
@@ -393,13 +394,15 @@
                       Opacity="0"
                       Visibility="Collapsed"
                       Margin="10"
+                      Background="Transparent"
                       RenderTransformOrigin="0.5,0.5">
                     <Grid.RenderTransform>
                         <TranslateTransform x:Name="HoverCardTranslate" Y="10"/>
                     </Grid.RenderTransform>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
@@ -475,6 +478,13 @@
                     </Grid>
 
                     <Grid Grid.Row="1">
+                        <!-- Lyrics scroll area for media -->
+                        <Canvas x:Name="HoverLyricsCanvas"
+                                ClipToBounds="True"
+                                Visibility="Collapsed"
+                                Height="60"
+                                Margin="0,8,0,4"/>
+                        <!-- Fallback body text for non-media -->
                         <TextBlock x:Name="HoverBodyText"
                                    FontSize="13"
                                    FontWeight="SemiBold"
@@ -505,59 +515,60 @@
                             </Border>
                         </Grid>
 
-                        <!-- Media controls: prev / play-pause / next -->
-                        <StackPanel x:Name="MediaControlsPanel"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Bottom"
-                                    Margin="0,0,0,24"
-                                    Visibility="Collapsed">
-                            <Border x:Name="MediaPrevBtn"
-                                    Width="32" Height="32"
-                                    CornerRadius="16"
-                                    Background="#14FFFFFF"
-                                    Cursor="Hand"
-                                    Margin="0,0,12,0"
-                                    MouseLeftButtonDown="MediaPrevBtn_Click">
-                                <TextBlock Text="&#xE892;"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           FontSize="12"
-                                           Foreground="#B0B0B6"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                            <Border x:Name="MediaPlayPauseBtn"
-                                    Width="40" Height="40"
-                                    CornerRadius="20"
-                                    Background="#20FFFFFF"
-                                    Cursor="Hand"
-                                    Margin="0,0,12,0"
-                                    MouseLeftButtonDown="MediaPlayPauseBtn_Click">
-                                <TextBlock x:Name="MediaPlayPauseIcon"
-                                           Text="&#xE769;"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           FontSize="16"
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                            <Border x:Name="MediaNextBtn"
-                                    Width="32" Height="32"
-                                    CornerRadius="16"
-                                    Background="#14FFFFFF"
-                                    Cursor="Hand"
-                                    MouseLeftButtonDown="MediaNextBtn_Click">
-                                <TextBlock Text="&#xE893;"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           FontSize="12"
-                                           Foreground="#B0B0B6"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </StackPanel>
                     </Grid>
 
-                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <!-- Media controls: prev / play-pause / next -->
+                    <StackPanel x:Name="MediaControlsPanel"
+                                Grid.Row="2"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                Margin="0,4,0,4"
+                                Visibility="Collapsed">
+                        <Border x:Name="MediaPrevBtn"
+                                Width="32" Height="32"
+                                CornerRadius="16"
+                                Background="#14FFFFFF"
+                                Cursor="Hand"
+                                Margin="0,0,12,0"
+                                MouseLeftButtonDown="MediaPrevBtn_Click">
+                            <TextBlock Text="&#xE892;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12"
+                                       Foreground="#B0B0B6"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <Border x:Name="MediaPlayPauseBtn"
+                                Width="40" Height="40"
+                                CornerRadius="20"
+                                Background="#20FFFFFF"
+                                Cursor="Hand"
+                                Margin="0,0,12,0"
+                                MouseLeftButtonDown="MediaPlayPauseBtn_Click">
+                            <TextBlock x:Name="MediaPlayPauseIcon"
+                                       Text="&#xE769;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="16"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <Border x:Name="MediaNextBtn"
+                                Width="32" Height="32"
+                                CornerRadius="16"
+                                Background="#14FFFFFF"
+                                Cursor="Hand"
+                                MouseLeftButtonDown="MediaNextBtn_Click">
+                            <TextBlock Text="&#xE893;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="12"
+                                       Foreground="#B0B0B6"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                    </StackPanel>
+
+                    <Grid Grid.Row="3" Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>

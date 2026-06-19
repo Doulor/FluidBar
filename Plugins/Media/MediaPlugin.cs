@@ -38,6 +38,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private string? _lastEnrichmentKey;
     private MediaSnapshot? _lastEnrichedSnapshot;
     private string? _currentTrackKey;
+    private bool _bgEnrichmentPending;
 
     // Track lyric changes separately (lyrics excluded from main signature to avoid island jump)
     private string _lastLyricSignature = string.Empty;
@@ -229,7 +230,7 @@ public sealed class MediaPlugin : IIslandPlugin
                 if (trackChanged)
                 {
                     // New track — clear old enrichment, fire event immediately
-                    _lastEnrichmentKey = null;
+                    _lastEnrichmentKey = enrichKey;
                     _lastEnrichedSnapshot = null;
                     // Clear old lyrics to prevent stale lyrics from previous song
                     snapshot = snapshot with { LyricLine = null, SecondaryLyricLine = null };
@@ -246,6 +247,7 @@ public sealed class MediaPlugin : IIslandPlugin
                     // Enrich in background — lyrics will arrive on next poll
                     if (needsLyric || needsArt)
                     {
+                        _bgEnrichmentPending = true;
                         var snap = snapshot;
                         var pos = snapshot.PositionTicks > 0
                             ? TimeSpan.FromTicks(snapshot.PositionTicks)
@@ -253,7 +255,25 @@ public sealed class MediaPlugin : IIslandPlugin
                         _ = Task.Run(() => EnrichInBackground(snap, pos, enrichKey));
                     }
                 }
-                else if (needsLyric || needsArt)
+                else if (_lastEnrichedSnapshot is not null)
+                {
+                    // Same track with cached enrichment — reuse it (preserves album art, avoids HTTP)
+                    snapshot = _lastEnrichedSnapshot with
+                    {
+                        IsPlaying = snapshot.IsPlaying,
+                        ProgressPercent = snapshot.ProgressPercent,
+                        PositionTicks = snapshot.PositionTicks,
+                        LastUpdatedTicks = snapshot.LastUpdatedTicks,
+                    };
+                    // Re-select lyrics based on current position (no HTTP, reads from cache)
+                    var pos = snapshot.PositionTicks > 0
+                        ? TimeSpan.FromTicks(snapshot.PositionTicks)
+                        : TimeSpan.Zero;
+                    var reselected = _kugouLyrics.ReSelectLyrics(snapshot, pos);
+                    if (reselected is not null)
+                        snapshot = reselected;
+                }
+                else if (!_bgEnrichmentPending && (needsLyric || needsArt))
                 {
                     // Same track, missing data — throttle for instrumental tracks (skip app-name titles)
                     var isAppTitle = MediaSnapshotSelectionPolicy.IsAppNameString(snapshot.Title);
@@ -280,17 +300,6 @@ public sealed class MediaPlugin : IIslandPlugin
                         if (needsLyric && !isAppTitle)
                             snapshot = snapshot with { LyricLine = "纯音乐，请欣赏" };
                     }
-                }
-                else if (_lastEnrichedSnapshot is not null)
-                {
-                    // Same track with lyrics+art — reuse cached enrichment
-                    snapshot = _lastEnrichedSnapshot with
-                    {
-                        IsPlaying = snapshot.IsPlaying,
-                        ProgressPercent = snapshot.ProgressPercent,
-                        PositionTicks = snapshot.PositionTicks,
-                        LastUpdatedTicks = snapshot.LastUpdatedTicks,
-                    };
                 }
             }
 
@@ -365,7 +374,10 @@ public sealed class MediaPlugin : IIslandPlugin
             var enriched = await Task.Run(() => _kugouLyrics.EnrichSnapshot(snapshot, position));
             // Only store if the song hasn't changed during the async enrichment
             if (enrichKey != _currentTrackKey)
+            {
+                _bgEnrichmentPending = false;
                 return;
+            }
 
             if (!string.IsNullOrWhiteSpace(enriched.LyricLine) ||
                 !string.IsNullOrWhiteSpace(enriched.AlbumArtPath))
@@ -373,18 +385,20 @@ public sealed class MediaPlugin : IIslandPlugin
                 _lastEnrichmentKey = enrichKey;
                 _lastEnrichedSnapshot = enriched;
                 _enrichmentFailedKey = null;
+                _bgEnrichmentPending = false;
                 // Update signature so the next poll doesn't overwrite with basic snapshot
                 _lastSignature = MediaSnapshotSelectionPolicy.BuildSignature(enriched);
-                EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(enriched));
+                _timer.Dispatcher.BeginInvoke(() =>
+                    EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(enriched)));
             }
             else
             {
-                // Mark as failed to avoid re-fetching every poll
+                _bgEnrichmentPending = false;
                 _enrichmentFailedKey = enrichKey;
                 _enrichmentFailedTime = DateTime.UtcNow;
             }
         }
-        catch { }
+        catch { _bgEnrichmentPending = false; }
     }
 
     private static bool HasArtistSongPattern(string title, string processName)

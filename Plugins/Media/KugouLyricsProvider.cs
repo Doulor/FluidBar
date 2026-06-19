@@ -553,6 +553,28 @@ public sealed class KugouLyricsProvider : ILyricsProvider
         return null; // At the end of the song
     }
 
+    /// <summary>
+    /// Re-select lyrics from cache based on current position. No HTTP requests.
+    /// Returns updated snapshot with lyrics at the given position, or null if no cached lyrics.
+    /// </summary>
+    public MediaSnapshot? ReSelectLyrics(MediaSnapshot snapshot, TimeSpan position)
+    {
+        foreach (var (title, artist) in BuildLookupCandidates(snapshot.Title, snapshot.Artist))
+        {
+            if (string.IsNullOrWhiteSpace(title) || IsKnownNonSongString(title))
+                continue;
+
+            var cacheKey = MakeCacheKey(title, artist);
+            if (_lyricsCache.TryGetValue(cacheKey, out var lines) && lines.Count > 0)
+            {
+                var current = SelectCurrentLine(lines, position);
+                var next = SelectNextLine(lines, position);
+                return snapshot with { LyricLine = current, SecondaryLyricLine = next };
+            }
+        }
+        return null;
+    }
+
     private static string? DownloadAlbumArt(string albumArtUrl, string cacheKey)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "FluidBar", "art");

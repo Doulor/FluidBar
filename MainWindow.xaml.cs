@@ -524,9 +524,23 @@ public partial class MainWindow : Window
         {
             var newLyric = evt.Payload?.LyricLine ?? "";
             var oldLyric = cur.LyricLine ?? "";
-            if (newLyric != oldLyric)
+            var newArt = evt.Payload?.AlbumArtPath;
+            var artChanged = !string.IsNullOrWhiteSpace(newArt) && newArt != cur.AlbumArtPath;
+            if (newLyric != oldLyric || artChanged)
             {
-                _currentView = cur with { LyricLine = newLyric, SecondaryLyricLine = evt.Payload?.SecondaryLyricLine };
+                _currentView = cur with
+                {
+                    LyricLine = newLyric,
+                    SecondaryLyricLine = evt.Payload?.SecondaryLyricLine,
+                    AlbumArtPath = string.IsNullOrWhiteSpace(newArt) ? cur.AlbumArtPath : newArt,
+                };
+                // If album art arrived from BG enrichment, re-apply icon
+                if (artChanged)
+                {
+                    _lastTriedIconPath = null;
+                    _lastTriedIconResult = null;
+                    ApplyCompactMediaIcon(_currentView.AlbumArtPath, _currentView.AppIconPath);
+                }
                 if (_isHoverCard && HoverLyricsCanvas.Visibility == Visibility.Visible)
                 {
                     // Only update lyrics canvas — do NOT call ApplyHoverCardContent (it would re-render the card)
@@ -2267,6 +2281,13 @@ public partial class MainWindow : Window
         if (ProgressBarPanel.Visibility == Visibility.Visible)
             ProgressFill.Background = CreateAccentGradientBrush(mediaAccent);
 
+        // Retry album art loading if showing default icon (art may arrive from BG enrichment)
+        var isMusicApp2 = !IsBrowserSourceId(view.SourceName) && !string.IsNullOrWhiteSpace(view.SourceName);
+        if (isMusicApp2 && string.IsNullOrWhiteSpace(view.AlbumArtPath) && _currentMediaIcon is null)
+            StartArtRetry();
+        else
+            StopArtRetry();
+
         // Store ticks for real-time progress interpolation
         _mediaPositionTicks = view.PositionTicks;
         _mediaEndTicks = view.EndTicks;
@@ -2276,6 +2297,10 @@ public partial class MainWindow : Window
 
     private string? _lastTriedIconPath;
     private LoadedMediaIcon? _lastTriedIconResult;
+    private DispatcherTimer? _artRetryTimer;
+    private int _artRetryCount;
+    private const int ArtRetryMaxAttempts = 10;
+    private const int ArtRetryIntervalMs = 500;
 
     private MediaColor ApplyCompactMediaIcon(string? albumArtPath, string? appIconPath)
     {
@@ -2322,6 +2347,44 @@ public partial class MainWindow : Window
         IconBackground.Color = MediaColor.FromArgb(0, 255, 255, 255);
         ApplyIconAccent(loaded.Accent, includeBackground: false, glowOpacity: 0.62, milliseconds: 220);
         return loaded.Accent;
+    }
+
+    private void StartArtRetry()
+    {
+        if (_artRetryTimer is not null) return;
+        _artRetryCount = 0;
+        _artRetryTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(ArtRetryIntervalMs)
+        };
+        _artRetryTimer.Tick += (_, _) =>
+        {
+            _artRetryCount++;
+            if (_artRetryCount > ArtRetryMaxAttempts || _currentMediaIcon is not null)
+            {
+                StopArtRetry();
+                return;
+            }
+
+            // Check if art has arrived from BG enrichment
+            var artPath = _currentView?.AlbumArtPath;
+            if (!string.IsNullOrWhiteSpace(artPath) && IsUsableImagePath(artPath))
+            {
+                // Clear cached icon to force reload
+                _lastTriedIconPath = null;
+                _lastTriedIconResult = null;
+                ApplyCompactMediaIcon(artPath, _currentView?.AppIconPath);
+                StopArtRetry();
+            }
+        };
+        _artRetryTimer.Start();
+    }
+
+    private void StopArtRetry()
+    {
+        if (_artRetryTimer is null) return;
+        _artRetryTimer.Stop();
+        _artRetryTimer = null;
     }
 
     private LoadedMediaIcon? TryLoadMediaIcon(string? albumArtPath, string? appIconPath)
