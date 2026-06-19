@@ -5,3 +5,7 @@ obj/
 .vs/
 *.cache
 FluidBar/
+publish/
+*.bak
+*.zip
+example.txt
