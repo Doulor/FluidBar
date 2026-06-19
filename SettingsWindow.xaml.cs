@@ -573,10 +573,6 @@ public partial class SettingsWindow : Window
         {
             BuildAgentStatusPluginSettings();
         }
-        else if (plugin.Id == "notifications")
-        {
-            BuildNotificationsPluginSettings(plugin);
-        }
 
         ShowDetailPanel();
     }
@@ -680,26 +676,6 @@ public partial class SettingsWindow : Window
         PluginSettingsContainer.Children.Add(CreateInfoRow(
             "事件格式",
             "写入 JSON: tool/status/project/summary/branch/durationMs"));
-    }
-
-    private void BuildNotificationsPluginSettings(IIslandPlugin plugin)
-    {
-        if (plugin is not NotificationsPlugin notifications)
-            return;
-
-        PluginSettingsContainer.Children.Add(CreateButtonRow(
-            "通知权限",
-            "请求 Windows 通知读取权限",
-            "请求授权",
-            async () =>
-            {
-                var status = await notifications.RequestAccessAsync();
-                WpfMessageBox.Show(
-                    $"Windows 通知权限状态：{status}",
-                    "FluidBar 通知插件",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }));
     }
 
     private UIElement CreateInfoRow(string label, string value)
@@ -1085,6 +1061,24 @@ public partial class SettingsWindow : Window
             "新状态到来时使用更明显的回弹和环绕微光",
             feature.EmphasizeTransitions,
             val => { feature.EmphasizeTransitions = val; ScheduleSettingsSaveAndChanged(); }));
+
+        // Notification-specific: permission request
+        if (monitor is NotificationMonitor notifications)
+        {
+            PluginSettingsContainer.Children.Add(CreateButtonRow(
+                "通知权限",
+                "请求 Windows 通知读取权限",
+                "请求授权",
+                async () =>
+                {
+                    var status = await notifications.RequestAccessAsync();
+                    System.Windows.MessageBox.Show(
+                        $"Windows 通知权限状态：{status}",
+                        "FluidBar 通知",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }));
+        }
     }
 
     private void MonitorToggle_Changed(object sender, RoutedEventArgs e)

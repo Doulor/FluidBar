@@ -22,7 +22,6 @@ public partial class App : Application
     private ClipboardPlugin? _clipboardPlugin;
     private MediaPlugin? _mediaPlugin;
     private AgentStatusPlugin? _agentStatusPlugin;
-    private NotificationsPlugin? _notificationsPlugin;
     private FluidBarSettings? _settings;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -49,8 +48,6 @@ public partial class App : Application
         _pluginManager.Register(_mediaPlugin);
         _agentStatusPlugin = new AgentStatusPlugin();
         _pluginManager.Register(_agentStatusPlugin);
-        _notificationsPlugin = new NotificationsPlugin();
-        _pluginManager.Register(_notificationsPlugin);
         _pluginManager.StartAll();
 
         if (_clipboardPlugin.Config is ClipboardPluginConfig cfg)
@@ -75,6 +72,7 @@ public partial class App : Application
         _monitorManager.Register(new BrightnessMonitor());
         _monitorManager.Register(new BluetoothMonitor());
         _monitorManager.Register(new ClockMonitor());
+        _monitorManager.Register(new NotificationMonitor());
 
         // 延迟启动：确保 Window_Loaded 先完成（PositionWindow + ApplySettings）
         // 否则事件触发时窗口尚未就位，动画被 PositionWindow 覆盖

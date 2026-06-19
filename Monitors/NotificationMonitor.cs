@@ -1,50 +1,41 @@
-using System.Windows.Threading;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
-namespace FluidBar;
+namespace FluidBar.Monitors;
 
-public sealed class NotificationsPlugin : IIslandPlugin
+/// <summary>
+/// Windows 通知监控 - 监听系统 toast 通知
+/// </summary>
+public sealed class NotificationMonitor : ISystemMonitor
 {
-    private readonly DispatcherTimer _timer;
-    private readonly HashSet<uint> _seenIds = new();
-    private bool _isPolling;
-    private bool _disposed;
-    private DateTimeOffset _startTime;
-
     public string Id => "notifications";
     public string Name => "Windows 通知";
     public string Description => "监听 Windows toast 通知，在灵动岛上显示应用来源、标题和正文";
     public string Icon => "\uE7F4";
     public bool Enabled { get; set; } = true;
-    public IPluginConfig? Config => null;
     public event Action<IslandEvent>? EventTriggered;
 
-    public NotificationsPlugin()
-    {
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1600) };
-        _timer.Tick += (_, _) => _ = SafePollAsync();
-    }
-
-    public void Initialize() { }
+    private readonly HashSet<uint> _seenIds = new();
+    private System.Windows.Threading.DispatcherTimer? _timer;
+    private bool _isRunning;
+    private DateTimeOffset _startTime;
 
     public void Start()
     {
-        if (_disposed || _timer.IsEnabled)
-            return;
+        if (_isRunning) return;
+        _isRunning = true;
         _startTime = DateTimeOffset.Now;
+        _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1600) };
+        _timer.Tick += (_, _) => _ = SafePollAsync();
         _timer.Start();
     }
 
     public void Stop()
     {
-        _timer.Stop();
-    }
-
-    public void Dispose()
-    {
-        _disposed = true;
-        Stop();
+        if (!_isRunning) return;
+        _isRunning = false;
+        _timer?.Stop();
+        _timer = null;
     }
 
     public async Task<string> RequestAccessAsync()
@@ -62,52 +53,29 @@ public sealed class NotificationsPlugin : IIslandPlugin
 
     private async Task SafePollAsync()
     {
-        if (_disposed)
-            return;
-
-        try
-        {
-            await PollAsync();
-        }
-        catch
-        {
-        }
+        if (!_isRunning) return;
+        try { await PollAsync(); } catch { }
     }
 
     private async Task PollAsync()
     {
-        if (_isPolling)
+        var listener = UserNotificationListener.Current;
+        var access = listener.GetAccessStatus();
+        if (access != UserNotificationListenerAccessStatus.Allowed)
             return;
 
-        _isPolling = true;
-        try
+        var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+        foreach (var notification in notifications.OrderBy(item => item.CreationTime))
         {
-            var listener = UserNotificationListener.Current;
-            var access = listener.GetAccessStatus();
-            if (access != UserNotificationListenerAccessStatus.Allowed)
-                return;
+            if (!_seenIds.Add(notification.Id))
+                continue;
 
-            var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast);
-            foreach (var notification in notifications.OrderBy(item => item.CreationTime))
-            {
-                if (!_seenIds.Add(notification.Id))
-                    continue;
+            if (notification.CreationTime < _startTime)
+                continue;
 
-                // Ignore notifications from before plugin started
-                if (notification.CreationTime < _startTime)
-                    continue;
-
-                var snapshot = TryCreateSnapshot(notification);
-                if (snapshot is not null)
-                    EventTriggered?.Invoke(NotificationIslandEventFactory.FromSnapshot(snapshot));
-            }
-        }
-        catch
-        {
-        }
-        finally
-        {
-            _isPolling = false;
+            var snapshot = TryCreateSnapshot(notification);
+            if (snapshot is not null)
+                EventTriggered?.Invoke(NotificationIslandEventFactory.FromSnapshot(snapshot));
         }
     }
 
@@ -138,4 +106,6 @@ public sealed class NotificationsPlugin : IIslandPlugin
             return null;
         }
     }
+
+    public void Dispose() => Stop();
 }
