@@ -37,6 +37,7 @@ public sealed class MediaPlugin : IIslandPlugin
     // Throttle enrichment to avoid repeated HTTP calls
     private string? _lastEnrichmentKey;
     private MediaSnapshot? _lastEnrichedSnapshot;
+    private string? _currentTrackKey;
 
     // Track lyric changes separately (lyrics excluded from main signature to avoid island jump)
     private string _lastLyricSignature = string.Empty;
@@ -220,6 +221,7 @@ public sealed class MediaPlugin : IIslandPlugin
             if (MediaSnapshotSelectionPolicy.GetSourcePriority(snapshot.SourceAppUserModelId) >= 100)
             {
                 var enrichKey = $"{snapshot.Title}|{snapshot.Artist}";
+                _currentTrackKey = enrichKey;
                 var needsLyric = string.IsNullOrWhiteSpace(snapshot.LyricLine);
                 var needsArt = string.IsNullOrWhiteSpace(snapshot.AlbumArtPath);
                 var trackChanged = enrichKey != _lastEnrichmentKey;
@@ -268,8 +270,15 @@ public sealed class MediaPlugin : IIslandPlugin
                         {
                             _enrichmentFailedKey = enrichKey;
                             _enrichmentFailedTime = DateTime.UtcNow;
+                            enriched = enriched with { LyricLine = "纯音乐，请欣赏" };
                         }
                         snapshot = enriched;
+                    }
+                    else
+                    {
+                        // Throttled — enrichment failed before, show instrumental message
+                        if (needsLyric && !isAppTitle)
+                            snapshot = snapshot with { LyricLine = "纯音乐，请欣赏" };
                     }
                 }
                 else if (_lastEnrichedSnapshot is not null)
@@ -286,21 +295,21 @@ public sealed class MediaPlugin : IIslandPlugin
             }
 
             var signature = MediaSnapshotSelectionPolicy.BuildSignature(snapshot);
-            var lyricSignature = $"{snapshot.LyricLine ?? ""}|{snapshot.SecondaryLyricLine ?? ""}";
+            var lyricSig = $"{snapshot.LyricLine ?? ""}|{snapshot.SecondaryLyricLine ?? ""}";
 
             if (signature == _lastSignature)
             {
-                // Same song/state — only update if lyrics changed
-                if (lyricSignature != _lastLyricSignature)
+                // Same song — update lyrics if they changed (via ProcessEvent lyric-only fast path)
+                if (lyricSig != _lastLyricSignature)
                 {
-                    _lastLyricSignature = lyricSignature;
+                    _lastLyricSignature = lyricSig;
                     EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
                 }
                 return;
             }
 
             _lastSignature = signature;
-            _lastLyricSignature = string.Empty; // Force lyric re-render on song/state change
+            _lastLyricSignature = lyricSig;
             EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
         }
         catch
@@ -320,9 +329,9 @@ public sealed class MediaPlugin : IIslandPlugin
 
         if (trackKey != _fallbackTrackKey)
         {
-            // Song changed — reset tracking
+            // Song changed — reset tracking, start with small offset to account for detection delay
             _fallbackTrackKey = trackKey;
-            _fallbackEstimatedTicks = 0;
+            _fallbackEstimatedTicks = TimeSpan.FromSeconds(2).Ticks; // ~2s detection lag
             _fallbackIsPaused = !isPlaying;
             _fallbackLastPollTime = now;
         }
@@ -354,8 +363,8 @@ public sealed class MediaPlugin : IIslandPlugin
         try
         {
             var enriched = await Task.Run(() => _kugouLyrics.EnrichSnapshot(snapshot, position));
-            // Only publish if the song hasn't changed during the async enrichment
-            if (enrichKey != _fallbackTrackKey)
+            // Only store if the song hasn't changed during the async enrichment
+            if (enrichKey != _currentTrackKey)
                 return;
 
             if (!string.IsNullOrWhiteSpace(enriched.LyricLine) ||

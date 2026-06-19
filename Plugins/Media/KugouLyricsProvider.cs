@@ -237,7 +237,7 @@ public sealed class KugouLyricsProvider : ILyricsProvider
         if (_lyricsMissUntil.TryGetValue(cacheKey, out var missUntil) &&
             missUntil > DateTime.Now)
         {
-            return _lastLyrics;
+            return null;
         }
 
         try
@@ -246,7 +246,7 @@ public sealed class KugouLyricsProvider : ILyricsProvider
             if (candidate is null)
             {
                 _lyricsMissUntil[cacheKey] = DateTime.Now.Add(LyricsMissTtl);
-                return _lastLyrics;
+                return null;
             }
 
             var lrcDownloadPath = $"/download?ver=1&client=pc&id={WebUtility.UrlEncode(candidate.Id)}&accesskey={WebUtility.UrlEncode(candidate.AccessKey)}&fmt=lrc&charset=utf8";
@@ -256,7 +256,7 @@ public sealed class KugouLyricsProvider : ILyricsProvider
             if (parsed.Count == 0)
             {
                 _lyricsMissUntil[cacheKey] = DateTime.Now.Add(LyricsMissTtl);
-                return _lastLyrics;
+                return null;
             }
 
             _lyricsCache[cacheKey] = parsed;
@@ -267,7 +267,7 @@ public sealed class KugouLyricsProvider : ILyricsProvider
         catch
         {
             _lyricsMissUntil[cacheKey] = DateTime.Now.Add(LyricsMissTtl);
-            return _lastLyrics;
+            return null;
         }
     }
 

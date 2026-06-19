@@ -193,6 +193,14 @@ public partial class MainWindow : Window
         _mediaSessionProvider = provider;
     }
 
+    private void PillBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var border = (Border)sender;
+        var rect = new Rect(0, 0, border.ActualWidth, border.ActualHeight);
+        var radius = border.CornerRadius.TopLeft;
+        border.Clip = new RectangleGeometry(rect, radius, radius);
+    }
+
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         PositionWindow();
@@ -512,17 +520,17 @@ public partial class MainWindow : Window
         // Lyric-only update: same source/title/artist, only lyrics changed — update text directly
         // without re-rendering the entire island (avoids "jump" and hover card disruption)
         if (evt.Source == "media" && _currentView is { Kind: IslandViewKind.Media } cur &&
-            evt.Title == cur.Title && evt.Content == cur.Content && cur.SourceName == _currentSource)
+            evt.Title == cur.Title && evt.Content == cur.Content && evt.Source == _currentSource)
         {
             var newLyric = evt.Payload?.LyricLine ?? "";
             var oldLyric = cur.LyricLine ?? "";
             if (newLyric != oldLyric)
             {
                 _currentView = cur with { LyricLine = newLyric, SecondaryLyricLine = evt.Payload?.SecondaryLyricLine };
-                if (_isHoverCard)
+                if (_isHoverCard && HoverLyricsCanvas.Visibility == Visibility.Visible)
                 {
-                    var card = HoverCardPresentation.FromCompact(_currentView, _settings);
-                    ApplyHoverCardContent(card);
+                    // Only update lyrics canvas — do NOT call ApplyHoverCardContent (it would re-render the card)
+                    UpdateHoverLyrics(newLyric, evt.Payload?.SecondaryLyricLine);
                 }
                 else
                 {
@@ -1351,27 +1359,63 @@ public partial class MainWindow : Window
     {
         _activeMediaControlSourceName = card.Kind == IslandViewKind.Media ? card.SourceName : null;
         var hoverAccent = ApplyHoverIcon(card);
-        HoverTitleText.Text = card.Title;
-        HoverSubtitleText.Text = BuildHoverSubtitle(card);
         HoverBadgeText.Text = string.IsNullOrWhiteSpace(card.StatusBadge)
             ? ModeLabel(card.Kind)
             : card.StatusBadge;
         SetHoverBadgeColors(hoverAccent);
 
-        // Style lyrics in subtitle for media
-        if (card.Kind == IslandViewKind.Media && !string.IsNullOrWhiteSpace(card.LyricLine))
+        if (card.Kind == IslandViewKind.Media && IsBrowserSourceId(card.SourceName))
         {
-            HoverSubtitleText.FontSize = 13;
-            HoverSubtitleText.FontStyle = FontStyles.Italic;
-            HoverSubtitleText.Foreground = new SolidColorBrush(
-                MediaColor.FromRgb(200, 200, 210));
+            // Browser: keep original layout (title = browser name, subtitle = video title)
+            HoverTitleText.Text = card.Title;
+            HoverSubtitleText.Text = BuildHoverSubtitle(card);
+            HoverSubtitleText.FontSize = 11.5;
+            HoverSubtitleText.FontStyle = FontStyles.Normal;
+            HoverSubtitleText.Foreground = new SolidColorBrush(MediaColor.FromRgb(143, 143, 150));
+            HoverBodyText.Text = card.Content;
+            HoverBodyText.Visibility = Visibility.Visible;
+            HoverLyricsCanvas.Visibility = Visibility.Collapsed;
+        }
+        else if (card.Kind == IslandViewKind.Media)
+        {
+            // Music app: song name (large) + artist (smaller) + lyrics scroll
+            HoverTitleText.Text = string.IsNullOrWhiteSpace(card.Content) ? card.Title : card.Content;
+            HoverSubtitleText.Text = string.IsNullOrWhiteSpace(card.Subtitle) ? "" : card.Subtitle;
+            HoverSubtitleText.FontSize = 12;
+            HoverSubtitleText.FontStyle = FontStyles.Normal;
+            HoverSubtitleText.Foreground = new SolidColorBrush(MediaColor.FromRgb(180, 180, 190));
+            HoverBodyText.Visibility = Visibility.Collapsed;
+            // Show lyrics canvas if lyrics available
+            if (!string.IsNullOrWhiteSpace(card.LyricLine) || !string.IsNullOrWhiteSpace(card.SecondaryLyricLine))
+            {
+                HoverLyricsCanvas.Visibility = Visibility.Visible;
+                UpdateHoverLyrics(card.LyricLine, card.SecondaryLyricLine);
+            }
+            else
+            {
+                HoverLyricsCanvas.Visibility = Visibility.Collapsed;
+            }
         }
         else
         {
+            HoverTitleText.Text = card.Title;
+            HoverSubtitleText.Text = BuildHoverSubtitle(card);
             HoverSubtitleText.FontSize = 11.5;
             HoverSubtitleText.FontStyle = FontStyles.Normal;
-            HoverSubtitleText.Foreground = new SolidColorBrush(
-                MediaColor.FromRgb(143, 143, 150));
+            HoverSubtitleText.Foreground = new SolidColorBrush(MediaColor.FromRgb(143, 143, 150));
+            HoverBodyText.Visibility = Visibility.Visible;
+            HoverLyricsCanvas.Visibility = Visibility.Collapsed;
+
+            if (card.Kind == IslandViewKind.Progress)
+            {
+                HoverBodyText.Text = card.IconKind == "volume_mute"
+                    ? "当前输出已静音"
+                    : $"{card.Title} · {card.ProgressPercent}%";
+            }
+            else
+            {
+                HoverBodyText.Text = card.Content;
+            }
         }
 
         var hoverHasPosition = card.PositionTicks > 0 || card.EndTicks > card.StartTimeTicks;
@@ -1386,23 +1430,29 @@ public partial class MainWindow : Window
         MediaControlsPanel.Visibility = MediaPlaybackUiPolicy.ShouldShowTransportControls(card.Kind)
             ? Visibility.Visible
             : Visibility.Collapsed;
-        if (card.Kind == IslandViewKind.Progress)
+        if (card.Kind == IslandViewKind.Media && !IsBrowserSourceId(card.SourceName))
         {
-            HoverBodyText.Text = card.IconKind == "volume_mute"
-                ? "当前输出已静音"
-                : $"{card.Title} · {card.ProgressPercent}%";
-            var trackWidth = Math.Max(220, card.TargetWidth - 40);
-            HoverProgressFill.Width = trackWidth * Math.Max(0, card.ProgressPercent) / 100.0;
-        }
-        else if (card.Kind == IslandViewKind.Media)
-        {
-            HoverBodyText.Text = card.Content;
+            // Music app: no progress bar for Kugou
+            HoverProgressPanel.Visibility = Visibility.Collapsed;
             if (card.ProgressPercent >= 0)
             {
                 var hoverTrackWidth = Math.Max(220, card.TargetWidth - 40);
                 HoverProgressFill.Width = hoverTrackWidth * card.ProgressPercent / 100.0;
             }
-
+            MediaPlayPauseIcon.Text = MediaPlaybackUiPolicy.PlayPauseGlyph(card.ShowsAudioWave);
+        }
+        else if (card.Kind == IslandViewKind.Progress)
+        {
+            var trackWidth = Math.Max(220, card.TargetWidth - 40);
+            HoverProgressFill.Width = trackWidth * Math.Max(0, card.ProgressPercent) / 100.0;
+        }
+        else if (card.Kind == IslandViewKind.Media)
+        {
+            if (card.ProgressPercent >= 0)
+            {
+                var hoverTrackWidth = Math.Max(220, card.TargetWidth - 40);
+                HoverProgressFill.Width = hoverTrackWidth * card.ProgressPercent / 100.0;
+            }
             MediaPlayPauseIcon.Text = MediaPlaybackUiPolicy.PlayPauseGlyph(card.ShowsAudioWave);
         }
         else if (card.Kind == IslandViewKind.Status)
@@ -1477,6 +1527,108 @@ public partial class MainWindow : Window
         return ModeLabel(card.Kind);
     }
 
+    private string? _lastHoverLyricCurrent;
+    private string? _lastHoverLyricNext;
+
+    private void UpdateHoverLyrics(string? currentLine, string? nextLine)
+    {
+        // Skip if lyrics haven't changed
+        if (currentLine == _lastHoverLyricCurrent && nextLine == _lastHoverLyricNext)
+            return;
+        _lastHoverLyricCurrent = currentLine;
+        _lastHoverLyricNext = nextLine;
+
+        UpdateHoverLyricsInternal(currentLine, nextLine);
+
+        // Re-center when parent size changes (e.g., during hover card open animation)
+        var parent = HoverLyricsCanvas.Parent as System.Windows.FrameworkElement;
+        if (parent != null)
+        {
+            parent.SizeChanged -= OnHoverLyricsParentSizeChanged;
+            parent.SizeChanged += OnHoverLyricsParentSizeChanged;
+        }
+    }
+
+    private void OnHoverLyricsParentSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Re-center lyrics when parent width changes
+        if (!string.IsNullOrWhiteSpace(_lastHoverLyricCurrent) || !string.IsNullOrWhiteSpace(_lastHoverLyricNext))
+        {
+            UpdateHoverLyricsInternal(_lastHoverLyricCurrent, _lastHoverLyricNext);
+        }
+    }
+
+    private void UpdateHoverLyricsInternal(string? currentLine, string? nextLine)
+    {
+        var parentWidth = HoverLyricsCanvas.Parent is System.Windows.FrameworkElement fe && fe.ActualWidth > 0
+            ? fe.ActualWidth : 280;
+        const double mainFontSize = 14;
+        const double fadeFontSize = 11;
+        const double lineSpacing = 4; // Gap between current and next line
+
+        var lyrics = new List<(string Text, double FontSize, double Opacity)>();
+        if (!string.IsNullOrWhiteSpace(currentLine))
+            lyrics.Add((currentLine, mainFontSize, 1.0));
+        if (!string.IsNullOrWhiteSpace(nextLine))
+            lyrics.Add((nextLine, fadeFontSize, 0.4));
+
+        // Create new text blocks with fade-in animation
+        var newChildren = new List<UIElement>();
+        double yOffset = 0;
+        foreach (var (text, fontSize, opacity) in lyrics)
+        {
+            var tb = new TextBlock
+            {
+                Text = text,
+                FontSize = fontSize,
+                FontWeight = fontSize >= mainFontSize ? FontWeights.SemiBold : FontWeights.Normal,
+                Foreground = new SolidColorBrush(MediaColor.FromArgb(
+                    (byte)(opacity * 255), 230, 230, 235)),
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = parentWidth,
+                Opacity = 0, // Start transparent for fade-in
+            };
+            // Force measure to get ActualWidth for centering
+            tb.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            var textWidth = tb.DesiredSize.Width;
+            Canvas.SetLeft(tb, Math.Max(0, (parentWidth - textWidth) / 2));
+            Canvas.SetTop(tb, yOffset);
+            newChildren.Add(tb);
+            yOffset += fontSize + lineSpacing;
+        }
+
+        // Animate transition: fade out old, then replace with new and fade in
+        var oldChildren = HoverLyricsCanvas.Children.Cast<UIElement>().ToList();
+        if (oldChildren.Count > 0)
+        {
+            // Fade out old children
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(80));
+            fadeOut.Completed += (_, _) =>
+            {
+                HoverLyricsCanvas.Children.Clear();
+                foreach (var child in newChildren)
+                    HoverLyricsCanvas.Children.Add(child);
+                // Fade in new children
+                var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120));
+                foreach (var child in newChildren)
+                    child.BeginAnimation(OpacityProperty, fadeIn);
+            };
+            foreach (var child in oldChildren)
+                child.BeginAnimation(OpacityProperty, fadeOut);
+        }
+        else
+        {
+            // No old children — just add new ones with fade-in
+            foreach (var child in newChildren)
+                HoverLyricsCanvas.Children.Add(child);
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120));
+            foreach (var child in newChildren)
+                child.BeginAnimation(OpacityProperty, fadeIn);
+        }
+    }
+
     private MediaColor ApplyHoverIcon(HoverCardPresentation card)
     {
         var fallbackColor = IconColors.TryGetValue(card.IconKind, out var color)
@@ -1489,7 +1641,14 @@ public partial class MainWindow : Window
             if (loaded is null ||
                 !MediaIconMatches(loaded, card.AlbumArtPath, card.AppIconPath))
             {
-                loaded = TryLoadMediaIcon(card.AlbumArtPath, card.AppIconPath);
+                // Use cached result if same path, otherwise try load
+                var tryPath = IsUsableImagePath(card.AlbumArtPath) ? card.AlbumArtPath
+                            : IsUsableImagePath(card.AppIconPath) ? card.AppIconPath
+                            : null;
+                if (tryPath is not null && tryPath == _lastTriedIconPath && _lastTriedIconResult is not null)
+                    loaded = _lastTriedIconResult;
+                else
+                    loaded = TryLoadMediaIcon(card.AlbumArtPath, card.AppIconPath);
             }
 
             if (loaded is not null)
@@ -2115,9 +2274,28 @@ public partial class MainWindow : Window
         _mediaLastUpdatedTicks = view.LastUpdatedTicks;
     }
 
+    private string? _lastTriedIconPath;
+    private LoadedMediaIcon? _lastTriedIconResult;
+
     private MediaColor ApplyCompactMediaIcon(string? albumArtPath, string? appIconPath)
     {
-        var loaded = TryLoadMediaIcon(albumArtPath, appIconPath);
+        // Determine which path to try (album art first, then app icon)
+        var tryPath = IsUsableImagePath(albumArtPath) ? albumArtPath
+                    : IsUsableImagePath(appIconPath) ? appIconPath
+                    : null;
+
+        // Only try loading if the path changed (avoid retrying failed loads every poll)
+        LoadedMediaIcon? loaded = null;
+        if (tryPath is not null && tryPath == _lastTriedIconPath && _lastTriedIconResult is not null)
+        {
+            loaded = _lastTriedIconResult;
+        }
+        else if (tryPath is not null)
+        {
+            loaded = TryLoadMediaIcon(albumArtPath, appIconPath);
+            _lastTriedIconPath = tryPath;
+            _lastTriedIconResult = loaded;
+        }
 
         if (loaded is null)
         {

@@ -386,28 +386,19 @@ public sealed record HoverCardPresentation(
     private static string BuildHoverBody(IslandViewPresentation compact)
     {
         var lines = new List<string>();
-        if (compact.Kind != IslandViewKind.Media &&
-            !string.IsNullOrWhiteSpace(compact.Content))
+        // Include content (song name) for all kinds including media
+        if (!string.IsNullOrWhiteSpace(compact.Content))
         {
             lines.Add(compact.Content);
         }
 
-        // For media: lyrics appear in the subtitle area, skip them in body
+        // For non-media: include lyrics in body
         if (compact.Kind != IslandViewKind.Media)
         {
             if (!string.IsNullOrWhiteSpace(compact.LyricLine))
                 lines.Add(compact.LyricLine);
             if (!string.IsNullOrWhiteSpace(compact.SecondaryLyricLine))
                 lines.Add(compact.SecondaryLyricLine);
-        }
-        else
-        {
-            // For media without lyrics, show artist·album info in body
-            if (string.IsNullOrWhiteSpace(compact.LyricLine) &&
-                !string.IsNullOrWhiteSpace(compact.Subtitle))
-            {
-                lines.Add(compact.Subtitle);
-            }
         }
 
         if (compact.DetailLines is not null)
