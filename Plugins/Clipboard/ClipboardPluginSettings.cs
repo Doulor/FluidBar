@@ -16,7 +16,7 @@ public sealed class ClipboardPluginSettings
 
     public int MinFullDisplayChars { get; set; } = 20;
     public int DisplayDurationMs { get; set; } = 3000;
-    public double ScrollSpeed { get; set; } = 2.0;
+    public double ScrollSpeed { get; set; } = 1.0;
 
     public static ClipboardPluginSettings Load()
     {
@@ -53,7 +53,7 @@ public sealed class ClipboardPluginSettings
     {
         MinFullDisplayChars = 20;
         DisplayDurationMs = 3000;
-        ScrollSpeed = 2.0;
+        ScrollSpeed = 1.0;
     }
 }
 

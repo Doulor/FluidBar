@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace FluidBar;
@@ -20,6 +21,143 @@ public enum IslandDisplayMode
 {
     Compact,
     HoverCard
+}
+
+public enum IslandMediaIconKind
+{
+    DefaultGlyph,
+    Artwork,
+    AppIcon
+}
+
+public sealed record IslandMediaIconChoice(IslandMediaIconKind Kind, string? Path)
+{
+    public bool UsesImage => Kind != IslandMediaIconKind.DefaultGlyph && !string.IsNullOrWhiteSpace(Path);
+}
+
+public sealed record IslandMediaImageMetrics(double ImageWidth, double ImageHeight, bool CropsToCircle);
+
+public static class IslandMediaVisualPolicy
+{
+    public static IslandMediaIconChoice ChooseIcon(
+        string? albumArtPath,
+        string? appIconPath,
+        Func<string, bool>? fileExists = null)
+    {
+        fileExists ??= File.Exists;
+
+        if (IsUsablePath(albumArtPath, fileExists))
+            return new IslandMediaIconChoice(IslandMediaIconKind.Artwork, albumArtPath);
+
+        if (IsUsablePath(appIconPath, fileExists))
+            return new IslandMediaIconChoice(IslandMediaIconKind.AppIcon, appIconPath);
+
+        return new IslandMediaIconChoice(IslandMediaIconKind.DefaultGlyph, null);
+    }
+
+    public static IslandMediaImageMetrics ResolveImageMetrics(IslandMediaIconKind iconKind)
+    {
+        return iconKind switch
+        {
+            IslandMediaIconKind.Artwork => new IslandMediaImageMetrics(34, 34, true),
+            IslandMediaIconKind.AppIcon => new IslandMediaImageMetrics(31, 31, false),
+            _ => new IslandMediaImageMetrics(20, 20, false)
+        };
+    }
+
+    private static bool IsUsablePath(string? path, Func<string, bool> fileExists)
+    {
+        return !string.IsNullOrWhiteSpace(path) && fileExists(path);
+    }
+}
+
+public sealed record MediaHoverTransportLayout(
+    double ProgressBottomFromBottom,
+    double ProgressTopFromBottom,
+    double ProgressHeight,
+    double ControlsBottomFromBottom);
+
+public static class MediaLayoutPolicy
+{
+    private const double PillHorizontalPadding = 24;
+    private const double CompactIconSlotWidth = 50;
+    private const double CompactWaveSlotWidth = 50;
+    private const double CompactTrailingReserve = 30;
+
+    public static double CompactContentWidth(double targetWidth, bool showsAudioWave)
+    {
+        var reserved = PillHorizontalPadding + CompactIconSlotWidth + CompactTrailingReserve;
+        if (showsAudioWave)
+            reserved += CompactWaveSlotWidth;
+
+        var available = targetWidth - reserved;
+        return Math.Max(72, available);
+    }
+
+    public static double CompactTextWidth(double targetWidth, bool showsAudioWave) =>
+        CompactContentWidth(targetWidth, showsAudioWave);
+
+    public static double CompactProgressWidth(double targetWidth, bool showsAudioWave) =>
+        CompactContentWidth(targetWidth, showsAudioWave);
+
+    public static MediaHoverTransportLayout HoverTransportLayout()
+    {
+        const double progressHeight = 8;
+        const double progressBottom = 0;
+        const double controlsBottom = 24;
+
+        return new MediaHoverTransportLayout(
+            progressBottom,
+            progressBottom + progressHeight,
+            progressHeight,
+            controlsBottom);
+    }
+}
+
+public sealed record IslandAnimationPerformanceProfile(
+    int OpenMilliseconds,
+    int ResizeMilliseconds,
+    int PositionMilliseconds,
+    int OpenScaleMilliseconds,
+    int ResizeScaleMilliseconds,
+    int ContentOpenMilliseconds,
+    int ContentResizeMilliseconds,
+    double HoverFrameApplyThreshold,
+    bool UsesElasticShellEase);
+
+public static class IslandAnimationPerformancePolicy
+{
+    public static IslandAnimationPerformanceProfile Default { get; } = new(
+        OpenMilliseconds: 260,
+        ResizeMilliseconds: 220,
+        PositionMilliseconds: 240,
+        OpenScaleMilliseconds: 260,
+        ResizeScaleMilliseconds: 220,
+        ContentOpenMilliseconds: 180,
+        ContentResizeMilliseconds: 150,
+        HoverFrameApplyThreshold: 0.75,
+        UsesElasticShellEase: false);
+}
+
+public static class MediaPlaybackUiPolicy
+{
+    public const string PlayGlyph = "\uE768";
+    public const string PauseGlyph = "\uE769";
+
+    public static string PlayPauseGlyph(bool isPlaying) => isPlaying ? PauseGlyph : PlayGlyph;
+
+    public static bool ShouldKeepHoverCardForInactiveMedia(
+        bool isHoverCard,
+        string? sourceName = null)
+    {
+        if (!isHoverCard)
+            return false;
+
+        return MediaSnapshotSelectionPolicy.GetSourcePriority(sourceName) < 100;
+    }
+
+    public static bool ShouldShowTransportControls(IslandViewKind kind) =>
+        kind == IslandViewKind.Media;
 }
 
 public enum HoverCardMotionKind
@@ -157,7 +295,10 @@ public sealed record IslandViewPresentation(
     IReadOnlyList<string>? DetailLines = null,
     long PositionTicks = 0,
     long EndTicks = 0,
-    long LastUpdatedTicks = 0);
+    long StartTimeTicks = 0,
+    long LastUpdatedTicks = 0,
+    string? AlbumArtPath = null,
+    string? AppIconPath = null);
 
 public sealed record HoverCardPresentation(
     IslandViewKind Kind,
@@ -179,7 +320,10 @@ public sealed record HoverCardPresentation(
     string SecondaryLyricLine = "",
     long PositionTicks = 0,
     long EndTicks = 0,
-    long LastUpdatedTicks = 0)
+    long StartTimeTicks = 0,
+    long LastUpdatedTicks = 0,
+    string? AlbumArtPath = null,
+    string? AppIconPath = null)
 {
     public static HoverCardPresentation FromCompact(
         IslandViewPresentation compact,
@@ -233,14 +377,20 @@ public sealed record HoverCardPresentation(
             compact.SecondaryLyricLine,
             compact.PositionTicks,
             compact.EndTicks,
-            compact.LastUpdatedTicks);
+            compact.StartTimeTicks,
+            compact.LastUpdatedTicks,
+            compact.AlbumArtPath,
+            compact.AppIconPath);
     }
 
     private static string BuildHoverBody(IslandViewPresentation compact)
     {
         var lines = new List<string>();
-        if (!string.IsNullOrWhiteSpace(compact.Content))
+        if (compact.Kind != IslandViewKind.Media &&
+            !string.IsNullOrWhiteSpace(compact.Content))
+        {
             lines.Add(compact.Content);
+        }
 
         // For media: lyrics appear in the subtitle area, skip them in body
         if (compact.Kind != IslandViewKind.Media)
@@ -271,7 +421,7 @@ public static class IslandPresentationFactory
     public const double MinimumCollapsedWidth = 126;
     public const double MinimumCollapsedHeight = 38;
     public const double MinimumExpandedWidth = 260;
-    public const double MinimumExpandedHeight = 56;
+    public const double MinimumExpandedHeight = 48;
     public const double MaximumExpandedHeight = 96;
     private const int DefaultScrollThreshold = 20;
 
@@ -291,8 +441,9 @@ public static class IslandPresentationFactory
 
         var kind = ResolveKind(evt, iconKind, evt.Content, scrollThreshold);
         var targetWidth = ResolveWidth(kind, evt, collapsedWidth, targetConfiguredWidth);
-        var progressPercent = evt.Payload?.ProgressPercent is int payloadPercent
-            ? Math.Clamp(payloadPercent, 0, 100)
+        var rawProgress = evt.Payload?.ProgressPercent;
+        var progressPercent = rawProgress is int payloadPercent
+            ? (payloadPercent < 0 ? -1 : Math.Clamp(payloadPercent, 0, 100))
             : kind == IslandViewKind.Progress
                 ? ParsePercent(evt.Content)
                 : 0;
@@ -319,7 +470,10 @@ public static class IslandPresentationFactory
             payload?.DetailLines,
             payload?.PositionTicks ?? 0,
             payload?.EndTicks ?? 0,
-            payload?.LastUpdatedTicks ?? 0);
+            payload?.StartTimeTicks ?? 0,
+            payload?.LastUpdatedTicks ?? 0,
+            payload?.AlbumArtPath,
+            payload?.AppIconPath);
     }
 
     public static int ParsePercent(string content)
@@ -381,7 +535,7 @@ public static class IslandPresentationFactory
             IslandViewKind.LockKey => 282,
             IslandViewKind.InputMethod => 214,
             IslandViewKind.Clock => 244,
-            IslandViewKind.Media => 390,
+            IslandViewKind.Media => MinimumExpandedWidth,
             IslandViewKind.Notification => 360,
             IslandViewKind.Agent => 352,
             IslandViewKind.ScrollingText => Math.Min(430, 270 + evt.Content.Length * 1.8),
@@ -410,7 +564,12 @@ public static class IslandPresentationFactory
                 : !string.IsNullOrWhiteSpace(payload.SourceName)
                     ? payload.SourceName!
                     : "就绪";
-            if (!string.IsNullOrWhiteSpace(payload.SourceName) &&
+            var keepBadgeStandalone =
+                payload.Kind == IslandEventKind.Media &&
+                BrowserMediaSitePolicy.IsBrowserSourceName(payload.SourceName) &&
+                BrowserMediaSitePolicy.IsKnownSiteDisplayName(badge);
+            if (!keepBadgeStandalone &&
+                !string.IsNullOrWhiteSpace(payload.SourceName) &&
                 !badge.Contains(payload.SourceName, StringComparison.Ordinal))
             {
                 badge = $"{payload.SourceName} · {badge}";
@@ -513,7 +672,7 @@ public static class IslandStackPolicy
         FluidBarSettings settings)
     {
         if (nextView.Kind == IslandViewKind.Clock || source == "clock")
-            return PruneExpired(currentItems).ToList();
+            return PruneExpiredItems(currentItems, DateTimeOffset.UtcNow).ToList();
 
         if (!CanStack(settings))
         {
@@ -524,7 +683,7 @@ public static class IslandStackPolicy
         }
 
         var now = DateTimeOffset.UtcNow;
-        var next = PruneExpired(currentItems)
+        var next = PruneExpiredItems(currentItems, now)
             .Where(item => item.View.Kind != IslandViewKind.Clock && item.Source != source)
             .ToList();
 
@@ -541,12 +700,108 @@ public static class IslandStackPolicy
         return next;
     }
 
-    private static IEnumerable<IslandStackItem> PruneExpired(IEnumerable<IslandStackItem> items)
+    public static IReadOnlyList<IslandStackItem> PinSourceAsLatest(
+        IEnumerable<IslandStackItem> currentItems,
+        string source)
     {
-        var now = DateTimeOffset.UtcNow;
+        if (string.IsNullOrWhiteSpace(source))
+            return PruneExpiredItems(currentItems, DateTimeOffset.UtcNow).ToList();
+
+        var items = PruneExpiredItems(currentItems, DateTimeOffset.UtcNow).ToList();
+        var index = items.FindIndex(item => item.Source == source);
+        if (index < 0 || index == items.Count - 1)
+            return items;
+
+        var pinned = items[index];
+        items.RemoveAt(index);
+        items.Add(pinned);
+        return items;
+    }
+
+    public static IEnumerable<IslandStackItem> PruneExpiredItems(
+        IEnumerable<IslandStackItem> items,
+        DateTimeOffset now)
+    {
         return items.Where(item =>
             item.ExpiresAt == default || item.ExpiresAt == DateTimeOffset.MaxValue || item.ExpiresAt > now);
     }
+}
+
+public static class HoldToHideKeyPolicy
+{
+    public const string Disabled = "Disabled";
+    public const string LeftAlt = "LeftAlt";
+    public const string RightAlt = "RightAlt";
+    public const string LeftCtrl = "LeftCtrl";
+    public const string RightCtrl = "RightCtrl";
+    public const string LeftShift = "LeftShift";
+    public const string RightShift = "RightShift";
+
+    public static IReadOnlyList<string> Values { get; } =
+    [
+        Disabled,
+        LeftAlt,
+        RightAlt,
+        LeftCtrl,
+        RightCtrl,
+        LeftShift,
+        RightShift
+    ];
+
+    public static string Coerce(string? value)
+    {
+        return Values.Contains(value) ? value! : LeftAlt;
+    }
+
+    public static string DisplayName(string value)
+    {
+        return Coerce(value) switch
+        {
+            Disabled => "不启用",
+            RightAlt => "右 Alt",
+            LeftCtrl => "左 Ctrl",
+            RightCtrl => "右 Ctrl",
+            LeftShift => "左 Shift",
+            RightShift => "右 Shift",
+            _ => "左 Alt"
+        };
+    }
+
+    public static int VirtualKey(string value)
+    {
+        return Coerce(value) switch
+        {
+            RightAlt => 0xA5,
+            LeftCtrl => 0xA2,
+            RightCtrl => 0xA3,
+            LeftShift => 0xA0,
+            RightShift => 0xA1,
+            Disabled => 0,
+            _ => 0xA4
+        };
+    }
+
+    public static bool ShouldHide(
+        string configuredKey,
+        bool configuredKeyDown,
+        bool leftCtrlDown,
+        bool rightCtrlDown,
+        bool leftAltDown,
+        bool rightAltDown)
+    {
+        if (Coerce(configuredKey) == Disabled || !configuredKeyDown)
+            return false;
+
+        return !((leftCtrlDown || rightCtrlDown) && (leftAltDown || rightAltDown));
+    }
+}
+
+public static class SettingsPerformancePolicy
+{
+    public const int SettingsApplyDebounceMs = 120;
+    public const int SettingsSaveDebounceMs = 220;
+    public const int PluginSaveDebounceMs = 280;
+    public const bool UseVirtualizedLists = true;
 }
 
 public static class IslandStackVisibilityPolicy

@@ -233,32 +233,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <ColorAnimationUsingKeyFrames
-                                                Storyboard.TargetName="TabBorder"
-                                                Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                Duration="0:0:0.25">
-                                                <EasingColorKeyFrame KeyTime="0" Value="Transparent"/>
-                                                <EasingColorKeyFrame KeyTime="0:0:0.25" Value="#2C2C2E"/>
-                                            </ColorAnimationUsingKeyFrames>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <ColorAnimationUsingKeyFrames
-                                                Storyboard.TargetName="TabBorder"
-                                                Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                Duration="0:0:0.2">
-                                                <EasingColorKeyFrame KeyTime="0" Value="#2C2C2E"/>
-                                                <EasingColorKeyFrame KeyTime="0:0:0.2" Value="Transparent"/>
-                                            </ColorAnimationUsingKeyFrames>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
+                                <Setter TargetName="TabBorder" Property="Background" Value="#2C2C2E"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -443,12 +419,14 @@
     </Window.Resources>
 
     <!-- 主容器 -->
-    <Border CornerRadius="22"
-            Background="#F50B0B0D"
-            BorderBrush="#28FFFFFF"
-            BorderThickness="1">
+    <Border x:Name="MainBorder"
+            CornerRadius="22"
+            Background="#F30A0A0C"
+            BorderBrush="#3AFFFFFF"
+            BorderThickness="1"
+            SizeChanged="MainBorder_SizeChanged">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="48" Opacity="0.72" ShadowDepth="0" Color="#000000"/>
+            <DropShadowEffect BlurRadius="44" Opacity="0.62" ShadowDepth="0" Color="#000000"/>
         </Border.Effect>
 
         <Grid>
@@ -457,6 +435,44 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
+
+            <Border Grid.RowSpan="3"
+                    CornerRadius="22"
+                    BorderThickness="1.2"
+                    IsHitTestVisible="False"
+                    Opacity="0.74">
+                <Border.BorderBrush>
+                    <LinearGradientBrush x:Name="SettingsRimBrush"
+                                         StartPoint="0,0"
+                                         EndPoint="1,1">
+                        <LinearGradientBrush.RelativeTransform>
+                            <RotateTransform x:Name="SettingsRimRotation"
+                                             CenterX="0.5"
+                                             CenterY="0.5"/>
+                        </LinearGradientBrush.RelativeTransform>
+                        <GradientStop Color="#22FFFFFF" Offset="0"/>
+                        <GradientStop Color="#06000000" Offset="0.24"/>
+                        <GradientStop Color="#880A84FF" Offset="0.5"/>
+                        <GradientStop Color="#0830D158" Offset="0.74"/>
+                        <GradientStop Color="#24FFFFFF" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
+            </Border>
+
+            <Border Grid.RowSpan="3"
+                    Height="96"
+                    CornerRadius="22,22,14,14"
+                    VerticalAlignment="Top"
+                    IsHitTestVisible="False"
+                    Opacity="0.56">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#22FFFFFF" Offset="0"/>
+                        <GradientStop Color="#070A84FF" Offset="0.55"/>
+                        <GradientStop Color="#00000000" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
 
             <!-- 标题栏 -->
             <Grid Grid.Row="0" Margin="20,16,20,0" Height="40">
@@ -475,9 +491,21 @@
                     <Border x:Name="LogoIcon"
                             Width="44" Height="22" CornerRadius="11"
                             Background="#F4000000" Margin="0,0,12,0"
-                            BorderBrush="#22FFFFFF"
+                            BorderBrush="#44FFFFFF"
                             BorderThickness="1">
                         <Grid>
+                            <Border Height="8"
+                                    VerticalAlignment="Top"
+                                    CornerRadius="11,11,4,4"
+                                    Opacity="0.28"
+                                    IsHitTestVisible="False">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Color="#FFFFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
                             <Ellipse Width="5" Height="5"
                                      Fill="#0A84FF"
                                      HorizontalAlignment="Center"
@@ -550,6 +578,7 @@
                              Foreground="#CCCCCC">
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
+                                      CanContentScroll="False"
                                       Padding="4,8,4,0">
                             <StackPanel>
                                 <TextBlock Text="外观" Style="{StaticResource SectionHeader}"/>
@@ -590,6 +619,24 @@
                                                Style="{StaticResource ValueLabel}"/>
                                 </Grid>
 
+                                <Grid Margin="0,0,0,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="44"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="背景透明度"
+                                               Style="{StaticResource SettingLabel}"/>
+                                    <Slider x:Name="BackgroundOpacitySlider" Grid.Column="1"
+                                            Minimum="0.1" Maximum="1.0"
+                                            TickFrequency="0.05"
+                                            IsSnapToTickEnabled="True"
+                                            Margin="8,0"
+                                            ValueChanged="Setting_ValueChanged"/>
+                                    <TextBlock x:Name="BackgroundOpacityValue" Grid.Column="2"
+                                               Style="{StaticResource ValueLabel}"/>
+                                </Grid>
+
                                 <Border Style="{StaticResource Separator}"/>
                                 <TextBlock Text="尺寸" Style="{StaticResource SectionHeader}"/>
 
@@ -620,7 +667,7 @@
                                     <TextBlock Grid.Column="0" Text="灵动岛高度"
                                                Style="{StaticResource SettingLabel}"/>
                                     <Slider x:Name="IslandHeightSlider" Grid.Column="1"
-                                            Minimum="56" Maximum="96"
+                                            Minimum="48" Maximum="96"
                                             TickFrequency="2"
                                             IsSnapToTickEnabled="True"
                                             Margin="8,0"
@@ -869,6 +916,9 @@
                         <Grid Margin="8,8">
                             <ListBox x:Name="MonitorList"
                                      Background="Transparent" BorderThickness="0"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     ScrollViewer.CanContentScroll="True"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      SelectionChanged="MonitorList_SelectionChanged">
                                 <ListBox.ItemContainerStyle>
@@ -885,54 +935,15 @@
                                                             Cursor="Hand"
                                                             RenderTransformOrigin="0.5,0.5">
                                                         <Border.Background>
-                                                            <SolidColorBrush x:Name="ListItemBrush" Color="#00000000"/>
+                                                            <SolidColorBrush Color="#00000000"/>
                                                         </Border.Background>
-                                                        <Border.RenderTransform>
-                                                            <TransformGroup>
-                                                                <ScaleTransform x:Name="ItemScale" ScaleX="1" ScaleY="1"/>
-                                                                <TranslateTransform x:Name="ItemTranslate" X="0"/>
-                                                            </TransformGroup>
-                                                        </Border.RenderTransform>
                                                         <ContentPresenter/>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Trigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
-                                                                                        Storyboard.TargetProperty="Color"
-                                                                                        To="#1EFFFFFF" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                                         To="1.012" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                                         To="1.012" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
-                                                                                         Storyboard.TargetProperty="X"
-                                                                                         To="3" Duration="0:0:0.16"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.EnterActions>
-                                                            <Trigger.ExitActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
-                                                                                        Storyboard.TargetProperty="Color"
-                                                                                        To="#00000000" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                                         To="1" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                                         To="1" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
-                                                                                         Storyboard.TargetProperty="X"
-                                                                                         To="0" Duration="0:0:0.18"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.ExitActions>
+                                                            <Setter TargetName="Bd"
+                                                                    Property="Background"
+                                                                    Value="#1EFFFFFF"/>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
                                                             <Setter TargetName="Bd" Property="Background"
@@ -999,6 +1010,9 @@
                         <Grid Margin="8,8">
                             <ListBox x:Name="PluginList"
                                      Background="Transparent" BorderThickness="0"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     ScrollViewer.CanContentScroll="True"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      SelectionChanged="PluginList_SelectionChanged">
                                 <ListBox.ItemContainerStyle>
@@ -1015,54 +1029,15 @@
                                                             Cursor="Hand"
                                                             RenderTransformOrigin="0.5,0.5">
                                                         <Border.Background>
-                                                            <SolidColorBrush x:Name="ListItemBrush" Color="#00000000"/>
+                                                            <SolidColorBrush Color="#00000000"/>
                                                         </Border.Background>
-                                                        <Border.RenderTransform>
-                                                            <TransformGroup>
-                                                                <ScaleTransform x:Name="ItemScale" ScaleX="1" ScaleY="1"/>
-                                                                <TranslateTransform x:Name="ItemTranslate" X="0"/>
-                                                            </TransformGroup>
-                                                        </Border.RenderTransform>
                                                         <ContentPresenter/>
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Trigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
-                                                                                        Storyboard.TargetProperty="Color"
-                                                                                        To="#1EFFFFFF" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                                         To="1.012" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                                         To="1.012" Duration="0:0:0.16"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
-                                                                                         Storyboard.TargetProperty="X"
-                                                                                         To="3" Duration="0:0:0.16"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.EnterActions>
-                                                            <Trigger.ExitActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard>
-                                                                        <ColorAnimation Storyboard.TargetName="ListItemBrush"
-                                                                                        Storyboard.TargetProperty="Color"
-                                                                                        To="#00000000" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleX"
-                                                                                         To="1" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemScale"
-                                                                                         Storyboard.TargetProperty="ScaleY"
-                                                                                         To="1" Duration="0:0:0.18"/>
-                                                                        <DoubleAnimation Storyboard.TargetName="ItemTranslate"
-                                                                                         Storyboard.TargetProperty="X"
-                                                                                         To="0" Duration="0:0:0.18"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </Trigger.ExitActions>
+                                                            <Setter TargetName="Bd"
+                                                                    Property="Background"
+                                                                    Value="#1EFFFFFF"/>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
                                                             <Setter TargetName="Bd" Property="Background"
@@ -1126,6 +1101,7 @@
                              Foreground="#CCCCCC">
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
+                                      CanContentScroll="False"
                                       Padding="4,8,4,0">
                             <StackPanel>
                                 <TextBlock Text="常规" Style="{StaticResource SectionHeader}"/>
@@ -1169,6 +1145,26 @@
                                                   Style="{StaticResource ToggleSwitchStyle}"
                                                   Checked="HideTrayToggle_Changed"
                                                   Unchecked="HideTrayToggle_Changed"/>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,14" Height="44">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="150"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="按住隐藏" FontSize="13"
+                                                   Foreground="#CCCCCC"
+                                                   FontFamily="Segoe UI, Microsoft YaHei UI"/>
+                                        <TextBlock Text="按住指定按键时临时隐藏灵动岛"
+                                                   FontSize="11" Foreground="#666666"
+                                                   FontFamily="Segoe UI, Microsoft YaHei UI"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="HoldToHideKeyCombo"
+                                              Grid.Column="1"
+                                              Margin="12,0,0,0"
+                                              SelectionChanged="HoldToHideKeyCombo_Changed"/>
                                 </Grid>
 
                                 <Border Style="{StaticResource Separator}"/>
@@ -1240,7 +1236,8 @@
                         <TranslateTransform x:Name="DetailPanelTranslate" X="28"/>
                     </Grid.RenderTransform>
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  CanContentScroll="False">
                         <StackPanel>
                             <Grid Margin="0,0,0,20">
                                 <Grid.ColumnDefinitions>

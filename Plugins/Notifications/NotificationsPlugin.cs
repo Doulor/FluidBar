@@ -10,6 +10,7 @@ public sealed class NotificationsPlugin : IIslandPlugin
     private readonly HashSet<uint> _seenIds = new();
     private bool _isPolling;
     private bool _disposed;
+    private DateTimeOffset _startTime;
 
     public string Id => "notifications";
     public string Name => "Windows 通知";
@@ -31,6 +32,7 @@ public sealed class NotificationsPlugin : IIslandPlugin
     {
         if (_disposed || _timer.IsEnabled)
             return;
+        _startTime = DateTimeOffset.Now;
         _timer.Start();
     }
 
@@ -89,6 +91,10 @@ public sealed class NotificationsPlugin : IIslandPlugin
             foreach (var notification in notifications.OrderBy(item => item.CreationTime))
             {
                 if (!_seenIds.Add(notification.Id))
+                    continue;
+
+                // Ignore notifications from before plugin started
+                if (notification.CreationTime < _startTime)
                     continue;
 
                 var snapshot = TryCreateSnapshot(notification);

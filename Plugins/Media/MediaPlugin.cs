@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Automation;
 using System.Windows.Threading;
 
 namespace FluidBar;
@@ -24,7 +25,31 @@ public sealed class MediaPlugin : IIslandPlugin
     private bool _isPolling;
     private bool _disposed;
     private bool _lastFromGsm;
+    private bool _suppressFallbackUntilGsmPlaying;
     private readonly KugouLyricsProvider _kugouLyrics = new();
+
+    // Wall-clock position estimation for fallback sources (Kugou etc.)
+    private string? _fallbackTrackKey;
+    private DateTime _fallbackLastPollTime = DateTime.UtcNow;
+    private long _fallbackEstimatedTicks;
+    private bool _fallbackIsPaused;
+
+    // Throttle enrichment to avoid repeated HTTP calls
+    private string? _lastEnrichmentKey;
+    private MediaSnapshot? _lastEnrichedSnapshot;
+
+    // Track lyric changes separately (lyrics excluded from main signature to avoid island jump)
+    private string _lastLyricSignature = string.Empty;
+
+    // Track enrichment failures to avoid re-fetching every poll for instrumental tracks
+    private string? _enrichmentFailedKey;
+    private DateTime _enrichmentFailedTime = DateTime.MinValue;
+
+    // Cache known media process list to avoid Process.GetProcesses() every poll
+    private static List<MediaFallbackProcessInfo> _cachedKnownProcesses = [];
+    private static Dictionary<uint, (string ProcName, string FriendlyName)> _cachedKnownProcessIds = new();
+    private static DateTime _processCacheTime = DateTime.MinValue;
+    private static readonly TimeSpan ProcessCacheTtl = TimeSpan.FromSeconds(5);
 
     public IMediaSessionProvider? SessionProvider => _sessionProvider;
 
@@ -32,6 +57,9 @@ public sealed class MediaPlugin : IIslandPlugin
     private static readonly Dictionary<string, string> FallbackPlayers = new(StringComparer.OrdinalIgnoreCase)
     {
         ["kugou"]      = "酷狗音乐",
+        ["KuGou"]      = "酷狗音乐",
+        ["KGMusic"]    = "酷狗音乐",
+        ["KuGouMusic"] = "酷狗音乐",
         ["cloudmusic"] = "网易云音乐",
         ["qqmusic"]    = "QQ 音乐",
         ["kwmusic"]    = "酷我音乐",
@@ -58,7 +86,7 @@ public sealed class MediaPlugin : IIslandPlugin
         _settings = MediaPluginSettings.Load();
         _timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 800, 5000))
+            Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 400, 5000))
         };
         _timer.Tick += (_, _) => _ = SafePollAsync();
     }
@@ -67,7 +95,7 @@ public sealed class MediaPlugin : IIslandPlugin
     {
         _config = new MediaPluginConfig(_settings);
         _lyricsProvider = _settings.ShowLyrics
-            ? new LocalLrcLyricsProvider(_settings.LyricsDirectory)
+            ? _kugouLyrics
             : new NullLyricsProvider();
 
         try
@@ -84,7 +112,7 @@ public sealed class MediaPlugin : IIslandPlugin
     {
         if (_disposed || _timer.IsEnabled)
             return;
-        _timer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 800, 5000));
+        _timer.Interval = TimeSpan.FromMilliseconds(Math.Clamp(_settings.PollIntervalMs, 400, 5000));
         _timer.Start();
     }
 
@@ -130,25 +158,37 @@ public sealed class MediaPlugin : IIslandPlugin
             if (_sessionProvider is not null)
                 gsmSnapshot = await _sessionProvider.ReadAsync(_lyricsProvider, _settings.ShowLyrics);
 
-            fallbackSnapshot = FindPlayingMediaFallback();
+            if (MediaSnapshotSelectionPolicy.ShouldQueryFallback(gsmSnapshot))
+            {
+                var (fb, fbAudio) = FindPlayingMediaFallback();
+                fallbackSnapshot = fb;
 
-            // When GSMTC was the last active provider and now returns null,
-            // suppress the fallback to avoid flashing paused Kugou window.
-            MediaSnapshot? snapshot;
-            if (_lastFromGsm && gsmSnapshot is null && fallbackSnapshot is not null)
-            {
-                // GSMTC was playing but stopped — don't fall back to window title
-                snapshot = null;
+                // Estimate playback position via wall-clock time for fallback sources
+                if (fallbackSnapshot is not null)
+                    fallbackSnapshot = EstimateFallbackPosition(fallbackSnapshot, fbAudio);
             }
-            else
+
+            if (gsmSnapshot?.IsPlaying == true &&
+                MediaSnapshotSelectionPolicy.GetSourcePriority(gsmSnapshot.SourceAppUserModelId) >= 100)
             {
-                snapshot = ChooseBestSnapshot(gsmSnapshot, fallbackSnapshot);
+                _suppressFallbackUntilGsmPlaying = false;
             }
+
+            var suppressFallback = MediaSnapshotSelectionPolicy.ShouldSuppressFallbackAfterGsmLoss(
+                _lastFromGsm,
+                _suppressFallbackUntilGsmPlaying,
+                gsmSnapshot,
+                fallbackSnapshot);
+
+            if (suppressFallback)
+                _suppressFallbackUntilGsmPlaying = true;
+
+            var snapshot = suppressFallback
+                ? gsmSnapshot
+                : MediaSnapshotSelectionPolicy.ChooseBestSnapshot(gsmSnapshot, fallbackSnapshot);
 
             if (snapshot is null)
             {
-                _lastFromGsm = false;
-                // Media stopped
                 if (!string.IsNullOrEmpty(_lastSignature))
                 {
                     _lastSignature = string.Empty;
@@ -158,24 +198,109 @@ public sealed class MediaPlugin : IIslandPlugin
             }
 
             // Track active provider
-            _lastFromGsm = snapshot.PositionTicks > 0;
+            _lastFromGsm = gsmSnapshot is not null || (snapshot.PositionTicks > 0 && fallbackSnapshot is null);
 
             if (!snapshot.IsPlaying && !_settings.ShowWhenPaused)
-                return;
-
-            // For Kugou and other fallback sources, try to fetch lyrics from API
-            if (string.IsNullOrWhiteSpace(snapshot.LyricLine) && !_lastFromGsm)
             {
-                var lyric = _kugouLyrics.TryGetCurrentLine(snapshot, TimeSpan.Zero);
-                if (!string.IsNullOrWhiteSpace(lyric))
-                    snapshot = snapshot with { LyricLine = lyric };
+                if (gsmSnapshot is not null)
+                    _suppressFallbackUntilGsmPlaying = true;
+
+                // Send stopped event so MainWindow restarts collapse timer
+                if (!string.IsNullOrEmpty(_lastSignature))
+                {
+                    _lastSignature = string.Empty;
+                    EventTriggered?.Invoke(MediaIslandEventFactory.CreateStopped());
+                }
+                return;
             }
 
-            var signature = BuildSignature(snapshot);
+            // Enrich music apps with Kugou lyric and artwork metadata.
+            // For new tracks: fire event immediately (no lyrics), then enrich async.
+            // For same tracks: use cached lyrics (no HTTP).
+            if (MediaSnapshotSelectionPolicy.GetSourcePriority(snapshot.SourceAppUserModelId) >= 100)
+            {
+                var enrichKey = $"{snapshot.Title}|{snapshot.Artist}";
+                var needsLyric = string.IsNullOrWhiteSpace(snapshot.LyricLine);
+                var needsArt = string.IsNullOrWhiteSpace(snapshot.AlbumArtPath);
+                var trackChanged = enrichKey != _lastEnrichmentKey;
+
+                if (trackChanged)
+                {
+                    // New track — clear old enrichment, fire event immediately
+                    _lastEnrichmentKey = null;
+                    _lastEnrichedSnapshot = null;
+                    // Clear old lyrics to prevent stale lyrics from previous song
+                    snapshot = snapshot with { LyricLine = null, SecondaryLyricLine = null };
+
+                    // Publish basic snapshot now (island appears immediately)
+                    var signature0 = MediaSnapshotSelectionPolicy.BuildSignature(snapshot);
+                    if (signature0 != _lastSignature)
+                    {
+                        _lastSignature = signature0;
+                        _lastLyricSignature = string.Empty;
+                        EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
+                    }
+
+                    // Enrich in background — lyrics will arrive on next poll
+                    if (needsLyric || needsArt)
+                    {
+                        var snap = snapshot;
+                        var pos = snapshot.PositionTicks > 0
+                            ? TimeSpan.FromTicks(snapshot.PositionTicks)
+                            : TimeSpan.Zero;
+                        _ = Task.Run(() => EnrichInBackground(snap, pos, enrichKey));
+                    }
+                }
+                else if (needsLyric || needsArt)
+                {
+                    // Same track, missing data — throttle for instrumental tracks (skip app-name titles)
+                    var isAppTitle = MediaSnapshotSelectionPolicy.IsAppNameString(snapshot.Title);
+                    var isThrottled = !isAppTitle &&
+                                      enrichKey == _enrichmentFailedKey &&
+                                      (DateTime.UtcNow - _enrichmentFailedTime).TotalMinutes < 5;
+                    if (!isThrottled)
+                    {
+                        var pos = snapshot.PositionTicks > 0
+                            ? TimeSpan.FromTicks(snapshot.PositionTicks)
+                            : TimeSpan.Zero;
+                        var enriched = _kugouLyrics.EnrichSnapshot(snapshot, pos);
+                        if (string.IsNullOrWhiteSpace(enriched.LyricLine) && needsLyric && !isAppTitle)
+                        {
+                            _enrichmentFailedKey = enrichKey;
+                            _enrichmentFailedTime = DateTime.UtcNow;
+                        }
+                        snapshot = enriched;
+                    }
+                }
+                else if (_lastEnrichedSnapshot is not null)
+                {
+                    // Same track with lyrics+art — reuse cached enrichment
+                    snapshot = _lastEnrichedSnapshot with
+                    {
+                        IsPlaying = snapshot.IsPlaying,
+                        ProgressPercent = snapshot.ProgressPercent,
+                        PositionTicks = snapshot.PositionTicks,
+                        LastUpdatedTicks = snapshot.LastUpdatedTicks,
+                    };
+                }
+            }
+
+            var signature = MediaSnapshotSelectionPolicy.BuildSignature(snapshot);
+            var lyricSignature = $"{snapshot.LyricLine ?? ""}|{snapshot.SecondaryLyricLine ?? ""}";
+
             if (signature == _lastSignature)
+            {
+                // Same song/state — only update if lyrics changed
+                if (lyricSignature != _lastLyricSignature)
+                {
+                    _lastLyricSignature = lyricSignature;
+                    EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
+                }
                 return;
+            }
 
             _lastSignature = signature;
+            _lastLyricSignature = string.Empty; // Force lyric re-render on song/state change
             EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
         }
         catch
@@ -187,6 +312,102 @@ public sealed class MediaPlugin : IIslandPlugin
         }
     }
 
+    private MediaSnapshot EstimateFallbackPosition(MediaSnapshot snapshot, ProcessAudioPlaybackState audioState)
+    {
+        var trackKey = $"{snapshot.Title}|{snapshot.Artist}";
+        var now = DateTime.UtcNow;
+        var isPlaying = audioState != ProcessAudioPlaybackState.NotPlaying;
+
+        if (trackKey != _fallbackTrackKey)
+        {
+            // Song changed — reset tracking
+            _fallbackTrackKey = trackKey;
+            _fallbackEstimatedTicks = 0;
+            _fallbackIsPaused = !isPlaying;
+            _fallbackLastPollTime = now;
+        }
+        else if (isPlaying)
+        {
+            // Same song, playing — advance estimated position
+            var delta = (now - _fallbackLastPollTime).TotalSeconds;
+            if (delta > 0 && delta < 30) // guard against clock jumps
+                _fallbackEstimatedTicks += (long)(delta * TimeSpan.TicksPerSecond);
+            _fallbackIsPaused = false;
+            _fallbackLastPollTime = now;
+        }
+        else
+        {
+            // Same song, paused — freeze position
+            _fallbackIsPaused = true;
+            _fallbackLastPollTime = now;
+        }
+
+        return snapshot with
+        {
+            PositionTicks = _fallbackEstimatedTicks,
+            LastUpdatedTicks = Environment.TickCount64
+        };
+    }
+
+    private async void EnrichInBackground(MediaSnapshot snapshot, TimeSpan position, string enrichKey)
+    {
+        try
+        {
+            var enriched = await Task.Run(() => _kugouLyrics.EnrichSnapshot(snapshot, position));
+            // Only publish if the song hasn't changed during the async enrichment
+            if (enrichKey != _fallbackTrackKey)
+                return;
+
+            if (!string.IsNullOrWhiteSpace(enriched.LyricLine) ||
+                !string.IsNullOrWhiteSpace(enriched.AlbumArtPath))
+            {
+                _lastEnrichmentKey = enrichKey;
+                _lastEnrichedSnapshot = enriched;
+                _enrichmentFailedKey = null;
+                // Update signature so the next poll doesn't overwrite with basic snapshot
+                _lastSignature = MediaSnapshotSelectionPolicy.BuildSignature(enriched);
+                EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(enriched));
+            }
+            else
+            {
+                // Mark as failed to avoid re-fetching every poll
+                _enrichmentFailedKey = enrichKey;
+                _enrichmentFailedTime = DateTime.UtcNow;
+            }
+        }
+        catch { }
+    }
+
+    private static bool HasArtistSongPattern(string title, string processName)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return false;
+
+        // Standard pattern: "Artist - Song" (with spaces)
+        if (title.Contains(" - ", StringComparison.Ordinal))
+            return true;
+
+        // Kugou pattern: "Artist-Song" or "Artist1、Artist2-Song" (no spaces around dash)
+        var isKugou = processName.Contains("kugou", StringComparison.OrdinalIgnoreCase);
+        if (isKugou)
+        {
+            var dashIndex = title.IndexOf('-');
+            if (dashIndex > 0 && dashIndex < title.Length - 1)
+            {
+                // Verify both sides look like real text (not UUIDs, not app names)
+                var left = title[..dashIndex].Trim();
+                var right = title[(dashIndex + 1)..].Trim();
+                if (left.Length >= 1 && right.Length >= 1 &&
+                    !left.Contains("酷狗") && !right.Contains("酷狗") &&
+                    !left.Contains("kugou", StringComparison.OrdinalIgnoreCase) &&
+                    !right.Contains("kugou", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
@@ -194,47 +415,78 @@ public sealed class MediaPlugin : IIslandPlugin
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     [ThreadStatic]
-    private static List<(IntPtr Hwnd, string Title, string ProcessName, string SourceName)>? _fallbackWindows;
+    private static List<(IntPtr Hwnd, int ProcessId, string Title, string ProcessName, string SourceName)>? _fallbackWindows;
 
-    private static MediaSnapshot? FindPlayingMediaFallback()
+    private static (MediaSnapshot? Snapshot, ProcessAudioPlaybackState AudioState) FindPlayingMediaFallback()
     {
-        // Build a map of known process IDs → source names
-        var knownProcessIds = new Dictionary<uint, string>();
-        foreach (var process in Process.GetProcesses())
+        // Refresh known media process cache (Process.GetProcesses is expensive)
+        var now = DateTime.UtcNow;
+        if (now - _processCacheTime > ProcessCacheTtl)
         {
-            try
+            _processCacheTime = now;
+            var newIds = new Dictionary<uint, (string ProcName, string FriendlyName)>();
+            var newProcesses = new List<MediaFallbackProcessInfo>();
+            foreach (var process in Process.GetProcesses())
             {
-                if (FallbackPlayers.TryGetValue(process.ProcessName, out var sourceName))
-                    knownProcessIds[(uint)process.Id] = sourceName;
+                try
+                {
+                    if (FallbackPlayers.TryGetValue(process.ProcessName, out var friendlyName))
+                    {
+                        newIds[(uint)process.Id] = (process.ProcessName, friendlyName);
+                        newProcesses.Add(new MediaFallbackProcessInfo(
+                            process.Id,
+                            process.ProcessName,
+                            friendlyName));
+                    }
+                }
+                catch { }
             }
-            catch { }
+            _cachedKnownProcessIds = newIds;
+            _cachedKnownProcesses = newProcesses;
         }
 
+        var knownProcessIds = _cachedKnownProcessIds;
+        var knownProcesses = _cachedKnownProcesses;
+
         if (knownProcessIds.Count == 0)
-            return null;
+            return (null, ProcessAudioPlaybackState.Unknown);
 
         // Enumerate all top-level windows and match by process ID
-        _fallbackWindows = new List<(IntPtr, string, string, string)>();
+        _fallbackWindows = new List<(IntPtr, int, string, string, string)>();
 
         EnumWindows((hWnd, _) =>
         {
-            if (!IsWindowVisible(hWnd))
+            GetWindowThreadProcessId(hWnd, out uint pid);
+            if (!knownProcessIds.TryGetValue(pid, out var info))
                 return true;
 
-            GetWindowThreadProcessId(hWnd, out uint pid);
-            if (!knownProcessIds.TryGetValue(pid, out var sourceName))
+            // For known media processes, accept both visible and hidden windows
+            // (Kugou minimized to tray still has a hidden main window with the song title)
+            if (!IsWindowVisible(hWnd))
+            {
+                // Hidden window — only accept if it has a title (song info)
+                var hiddenTitle = GetWindowTitle(hWnd);
+                if (!string.IsNullOrWhiteSpace(hiddenTitle) &&
+                    !hiddenTitle.Contains("桌面歌词", StringComparison.Ordinal))
+                {
+                    _fallbackWindows!.Add((hWnd, (int)pid, hiddenTitle, info.ProcName, info.FriendlyName));
+                }
                 return true;
+            }
 
             var title = GetWindowTitle(hWnd);
             if (!string.IsNullOrWhiteSpace(title))
             {
-                GetWindowThreadProcessId(hWnd, out uint _);
-                _fallbackWindows!.Add((hWnd, title, "", sourceName));
+                // Skip Kugou desktop lyrics window — it's not a media source
+                if (title.Contains("桌面歌词", StringComparison.Ordinal))
+                    return true;
+
+                _fallbackWindows!.Add((hWnd, (int)pid, title, info.ProcName, info.FriendlyName));
 
                 // Also search child windows recursively for song info
                 if (!title.Contains(" - ", StringComparison.Ordinal))
                 {
-                    SearchChildWindowsRecursive(hWnd, sourceName);
+                    SearchChildWindowsRecursive(hWnd, info.ProcName, info.FriendlyName);
                 }
             }
 
@@ -244,150 +496,190 @@ public sealed class MediaPlugin : IIslandPlugin
         var candidates = _fallbackWindows;
         _fallbackWindows = null;
 
-        // Prefer windows with " - " pattern (Artist - Song)
+        // For Kugou: if no candidate has artist-song pattern, try UI Automation to read song info
+        if (!candidates.Any(c => HasArtistSongPattern(c.Title, c.ProcessName)))
+        {
+            var kugouCandidate = candidates.FirstOrDefault(c =>
+                c.ProcessName.Contains("kugou", StringComparison.OrdinalIgnoreCase));
+            if (kugouCandidate.Hwnd != IntPtr.Zero)
+            {
+                var uiaTitle = TryGetKugouSongViaUIA(kugouCandidate.Hwnd);
+                if (!string.IsNullOrWhiteSpace(uiaTitle) && uiaTitle.Length > 1)
+                {
+                    candidates.Add((kugouCandidate.Hwnd, kugouCandidate.ProcessId, uiaTitle, kugouCandidate.ProcessName, kugouCandidate.SourceName));
+                }
+            }
+        }
+
+        // Prefer windows with artist-song pattern, then longest title
         var best = candidates
-            .OrderByDescending(t => t.Title.Contains(" - ", StringComparison.Ordinal) ? 100 : t.Title.Length)
+            .OrderByDescending(t => HasArtistSongPattern(t.Title, t.ProcessName) ? 100 : t.Title.Length)
             .FirstOrDefault();
 
         if (best.Title is null)
-            return null;
+            return (null, ProcessAudioPlaybackState.Unknown);
 
         var (artist, song) = ParseMediaTitle(best.Title, best.ProcessName);
         if (string.IsNullOrWhiteSpace(song))
-            return null;
+            return (null, ProcessAudioPlaybackState.Unknown);
 
-        // Try to read Kugou desktop lyrics for this song
-        var lyricLine = TryGetKugouLyrics();
+        // Don't create a snapshot when the "song" is just an app name (e.g. "酷狗音乐")
+        // — the app is open but not playing anything identifiable.
+        if (MediaSnapshotSelectionPolicy.IsAppNameString(song))
+            return (null, ProcessAudioPlaybackState.Unknown);
 
-        return new MediaSnapshot(
-            SourceAppUserModelId: best.SourceName,
+        var audioGateProcessIds = MediaFallbackProcessPolicy.AudioGateProcessIds(
+            knownProcesses,
+            best.ProcessName,
+            best.SourceName);
+
+        var audioState = ProcessAudioActivity.GetAnyProcessPlaybackState(audioGateProcessIds);
+        if (!MediaFallbackProcessPolicy.ShouldAcceptFallbackPlayback(
+                best.ProcessName,
+                best.SourceName,
+                song,
+                audioState))
+        {
+            return (null, audioState);
+        }
+
+        var sourceIconPath = MediaSourceVisuals.ExtractAppIconPath(best.ProcessName);
+
+        return (new MediaSnapshot(
+            SourceAppUserModelId: best.ProcessName,
             SourceName: best.SourceName,
             Title: song,
             Artist: artist,
             Album: "",
             IsPlaying: true,
-            ProgressPercent: 0,
-            LyricLine: lyricLine);
+            ProgressPercent: -1, // No progress data for fallback sources
+            LyricLine: null,
+            SourceIconPath: sourceIconPath), audioState);
     }
 
-    [ThreadStatic]
-    private static string? _kugouWindowLyrics;
-
-    private static string? TryGetKugouLyrics()
+    private static void SearchChildWindowsRecursive(IntPtr parent, string processName, string sourceName)
     {
-        try
-        {
-            _kugouWindowLyrics = null;
-            var kugouWindow = IntPtr.Zero;
-
-            // Find Kugou's main window first
-            EnumWindows((hWnd, _) =>
-            {
-                GetWindowThreadProcessId(hWnd, out uint pid);
-                try
-                {
-                    using var proc = Process.GetProcessById((int)pid);
-                    if (proc.ProcessName.Equals("kugou", StringComparison.OrdinalIgnoreCase)
-                        || proc.ProcessName.Equals("KuGou", StringComparison.OrdinalIgnoreCase))
-                    {
-                        kugouWindow = hWnd;
-                        return false; // Stop
-                    }
-                }
-                catch { }
-                return true;
-            }, IntPtr.Zero);
-
-            if (kugouWindow == IntPtr.Zero)
-                return null;
-
-            // Search for lyrics window among Kugou's children
-            // Kugou lyrics window typically has class containing "Lyric" or title containing "歌词"
-            _kugouWindowLyrics = null;
-            SearchLyricsWindow(kugouWindow);
-
-            return _kugouWindowLyrics;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void SearchLyricsWindow(IntPtr parent)
-    {
-        var sb = new StringBuilder(128);
-        GetWindowText(parent, sb, sb.Capacity);
-        var title = sb.ToString();
-        sb.Clear();
-        GetClassName(parent, sb, sb.Capacity);
-        var cls = sb.ToString().ToLowerInvariant();
-
-        // Check if this is a lyrics window
-        if (title.Contains("歌词", StringComparison.Ordinal) ||
-            title.Contains("Lyric", StringComparison.OrdinalIgnoreCase) ||
-            cls.Contains("lyric") || cls.Contains("kugou_desktoplyric"))
-        {
-            // Try to read lyrics text from this window's child controls
-            EnumChildWindows(parent, (child, _) =>
-            {
-                var t = GetWindowTitle(child);
-                if (!string.IsNullOrWhiteSpace(t) && t.Length > 4 && !t.Contains("酷狗"))
-                {
-                    _kugouWindowLyrics = t;
-                    return false;
-                }
-                // Also try WM_GETTEXT for rich edit controls
-                var textSb = new StringBuilder(512);
-                SendMessage(child, WM_GETTEXT, (IntPtr)511, textSb);
-                var rt = textSb.ToString();
-                if (!string.IsNullOrWhiteSpace(rt) && rt.Length > 4 && !rt.Contains("酷狗"))
-                {
-                    _kugouWindowLyrics = rt;
-                    return false;
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            if (!string.IsNullOrWhiteSpace(_kugouWindowLyrics))
-                return;
-        }
-
-        // Recurse into children
-        EnumChildWindows(parent, (child, _) =>
-        {
-            SearchLyricsWindow(child);
-            return _kugouWindowLyrics is null; // Continue if not found
-        }, IntPtr.Zero);
-    }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
-
-    private const uint WM_GETTEXT = 0x000D;
-
-    private static void SearchChildWindowsRecursive(IntPtr parent, string sourceName)
-    {
+        var isKugou = processName.Contains("kugou", StringComparison.OrdinalIgnoreCase)
+            || sourceName.Contains("酷狗", StringComparison.Ordinal);
         EnumChildWindows(parent, (childHwnd, _) =>
         {
             var childTitle = GetWindowTitle(childHwnd);
-            if (!string.IsNullOrWhiteSpace(childTitle) &&
-                childTitle.Contains(" - ", StringComparison.Ordinal))
+            if (!string.IsNullOrWhiteSpace(childTitle))
             {
-                _fallbackWindows!.Add((childHwnd, childTitle, "", sourceName));
-                return false; // Found, stop this branch
+                // Standard pattern: "Artist - Song"
+                if (childTitle.Contains(" - ", StringComparison.Ordinal))
+                {
+                    GetWindowThreadProcessId(childHwnd, out var childPid);
+                    _fallbackWindows!.Add((childHwnd, (int)childPid, childTitle, processName, sourceName));
+                    return false; // Found, stop this branch
+                }
+                // Kugou: also accept non-generic text that looks like a song name
+                if (isKugou && childTitle.Length > 2 && childTitle.Length < 200 &&
+                    !childTitle.Contains("酷狗") && !childTitle.Contains("桌面歌词") &&
+                    !childTitle.Contains("Lyric", StringComparison.OrdinalIgnoreCase) &&
+                    !childTitle.Contains("kugou", StringComparison.OrdinalIgnoreCase))
+                {
+                    GetWindowThreadProcessId(childHwnd, out var childPid);
+                    _fallbackWindows!.Add((childHwnd, (int)childPid, childTitle, processName, sourceName));
+                }
             }
             // Recurse into grandchildren
-            SearchChildWindowsRecursive(childHwnd, sourceName);
+            SearchChildWindowsRecursive(childHwnd, processName, sourceName);
             return true;
         }, IntPtr.Zero);
     }
 
+    /// <summary>Use UI Automation to read song title from Kugou's window accessible tree.</summary>
+    private static string? TryGetKugouSongViaUIA(IntPtr hwnd)
+    {
+        try
+        {
+            var element = AutomationElement.FromHandle(hwnd);
+            if (element is null) return null;
+
+            // Search direct children for text elements that could be the song title
+            var children = element.FindAll(TreeScope.Children, Condition.TrueCondition);
+            foreach (AutomationElement child in children)
+            {
+                try
+                {
+                    var name = child.Current.Name;
+                    if (!string.IsNullOrWhiteSpace(name) &&
+                        name.Length > 1 && name.Length < 100 &&
+                        !name.Contains("酷狗") && !name.Contains("桌面歌词") &&
+                        !name.Contains("kugou", StringComparison.OrdinalIgnoreCase) &&
+                        !name.Contains("Lyric", StringComparison.OrdinalIgnoreCase) &&
+                        !name.Contains("最小化") && !name.Contains("最大化") &&
+                        !name.Contains("关闭") && !name.Contains("Menu"))
+                    {
+                        return name;
+                    }
+                }
+                catch { }
+            }
+
+            // Also try grandchildren (one level deeper)
+            foreach (AutomationElement child in children)
+            {
+                try
+                {
+                    var grandchildren = child.FindAll(TreeScope.Children, Condition.TrueCondition);
+                    foreach (AutomationElement gc in grandchildren)
+                    {
+                        try
+                        {
+                            var name = gc.Current.Name;
+                            if (!string.IsNullOrWhiteSpace(name) &&
+                                name.Length > 1 && name.Length < 100 &&
+                                !name.Contains("酷狗") && !name.Contains("桌面歌词") &&
+                                !name.Contains("kugou", StringComparison.OrdinalIgnoreCase) &&
+                                !name.Contains("Lyric", StringComparison.OrdinalIgnoreCase) &&
+                                !name.Contains("最小化") && !name.Contains("最大化") &&
+                                !name.Contains("关闭") && !name.Contains("Menu"))
+                            {
+                                return name;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return null;
+    }
+
     private static (string Artist, string Song) ParseMediaTitle(string title, string processName)
     {
+        if (processName.Contains("kugou", StringComparison.OrdinalIgnoreCase) ||
+            processName.Contains("kgmusic", StringComparison.OrdinalIgnoreCase))
+        {
+            var cleanTitle = title
+                .Replace(" - 桌面歌词", "", StringComparison.Ordinal)
+                .Replace(" - Kugou Music", "", StringComparison.OrdinalIgnoreCase)
+                .Replace(" - 酷狗音乐", "", StringComparison.Ordinal)
+                .Replace(" - 酷狗", "", StringComparison.Ordinal)
+                .Replace("-酷狗音乐", "", StringComparison.Ordinal)
+                .Replace("-酷狗", "", StringComparison.Ordinal)
+                .Replace("桌面歌词", "", StringComparison.Ordinal)
+                .Trim();
+
+            // Try to split "Artist-Song" or "Artist - Song"
+            var dashIdx = cleanTitle.IndexOf(" - ", StringComparison.Ordinal);
+            if (dashIdx <= 0)
+                dashIdx = cleanTitle.IndexOf('-');
+            if (dashIdx > 0 && dashIdx < cleanTitle.Length - 1)
+            {
+                var artist = cleanTitle[..dashIdx].Trim();
+                var song = cleanTitle[(dashIdx + (cleanTitle[dashIdx] == '-' ? 1 : 3))..].Trim();
+                if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(song))
+                    return (artist, song);
+            }
+
+            return ("", cleanTitle);
+        }
+
         var dashIndex = title.IndexOf(" - ", StringComparison.Ordinal);
         if (dashIndex > 0 && dashIndex < title.Length - 3)
         {
@@ -424,39 +716,4 @@ public sealed class MediaPlugin : IIslandPlugin
         return builder.ToString();
     }
 
-    private static MediaSnapshot? ChooseBestSnapshot(MediaSnapshot? gsm, MediaSnapshot? fallback)
-    {
-        if (gsm is null) return fallback;
-        if (fallback is null) return gsm;
-
-        // Music apps from fallback always beat browser sessions from GSMTC
-        var gsmPriority = GetSourcePriority(gsm.SourceAppUserModelId);
-        var fbPriority = GetSourcePriority(fallback.SourceAppUserModelId);
-        return fbPriority >= gsmPriority ? fallback : gsm;
-    }
-
-    private static int GetSourcePriority(string sourceId)
-    {
-        if (string.IsNullOrWhiteSpace(sourceId))
-            return 0;
-        var lower = sourceId.ToLowerInvariant();
-        if (lower.Contains("kugou") || lower.Contains("cloudmusic") || lower.Contains("netease") ||
-            lower.Contains("qqmusic") || lower.Contains("spotify") || lower.Contains("kwmusic"))
-            return 100;
-        if (lower.Contains("chrome") || lower.Contains("edge") || lower.Contains("firefox"))
-            return 50;
-        return 10;
-    }
-
-    private static string BuildSignature(MediaSnapshot snapshot)
-    {
-        return string.Join("|",
-            snapshot.SourceAppUserModelId,
-            snapshot.Title,
-            snapshot.Artist,
-            snapshot.Album,
-            snapshot.IsPlaying.ToString(),
-            snapshot.ProgressPercent.ToString(),
-            snapshot.LyricLine ?? "");
-    }
 }

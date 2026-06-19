@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Windows.Media.Control;
@@ -13,9 +14,9 @@ internal static class MediaSessionProviderFactory
 public interface IMediaSessionProvider
 {
     Task<MediaSnapshot?> ReadAsync(ILyricsProvider lyricsProvider, bool showLyrics);
-    Task TryTogglePlayPauseAsync();
-    Task TrySkipNextAsync();
-    Task TrySkipPreviousAsync();
+    Task<bool> TryTogglePlayPauseAsync(string? preferredSourceId = null);
+    Task<bool> TrySkipNextAsync(string? preferredSourceId = null);
+    Task<bool> TrySkipPreviousAsync(string? preferredSourceId = null);
 }
 
 internal sealed class MediaSessionProvider : IMediaSessionProvider
@@ -31,7 +32,7 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
         // Priority: music apps > browser > other
         var sessions = manager.GetSessions();
         var orderedSessions = sessions
-            .Select(s => new { Session = s, Priority = GetSourcePriority(s.SourceAppUserModelId) })
+            .Select(s => new { Session = s, Priority = MediaSnapshotSelectionPolicy.GetSourcePriority(s.SourceAppUserModelId) })
             .OrderByDescending(x => x.Priority)
             .Select(x => x.Session)
             .ToList();
@@ -41,13 +42,33 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
         if (current is not null && !orderedSessions.Any(s => s.SourceAppUserModelId == current.SourceAppUserModelId))
             orderedSessions.Insert(0, current);
 
+        var candidates = new List<MediaSnapshot>();
+
         foreach (var session in orderedSessions)
         {
             var playback = session.GetPlaybackInfo();
+            var sourceId = session.SourceAppUserModelId ?? "";
+            var isBrowser = IsBrowserSource(sourceId);
+
+            // For high-priority sources (music apps), also accept Paused/Opened/Changing status
+            // if title is present — some players (e.g. Kugou) don't always report Playing correctly.
+            // For browsers, only accept Playing — stale sessions linger with Paused/Opened after navigation.
+            var isHighPriority = MediaSnapshotSelectionPolicy.GetSourcePriority(sourceId) >= 100;
             if (playback.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
-                continue;
+            {
+                if (!isHighPriority || isBrowser)
+                    continue;
+                var nonStopped = playback.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped &&
+                                 playback.PlaybackStatus != GlobalSystemMediaTransportControlsSessionPlaybackStatus.Closed;
+                if (!nonStopped)
+                    continue;
+            }
 
             var properties = await session.TryGetMediaPropertiesAsync();
+
+            // Skip sessions without meaningful media info
+            if (string.IsNullOrWhiteSpace(properties.Title))
+                continue;
             var timeline = session.GetTimelineProperties();
             var title = properties.Title ?? "";
             var artist = properties.Artist ?? "";
@@ -56,13 +77,24 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             if (string.IsNullOrWhiteSpace(title))
                 continue;
 
+            // Browser sessions: reject if timeline shows no real media progress.
+            // Edge registers a GSMTC session for any media-capable tab; when the user
+            // navigates away the old session lingers as "Playing" with a frozen position.
+            if (isBrowser)
+            {
+                var hasDuration = timeline.EndTime > timeline.StartTime;
+                var hasProgress = timeline.Position > timeline.StartTime;
+                if (!hasDuration && !hasProgress)
+                    continue;
+            }
+
             var progress = CalculateProgressPercent(timeline.Position, timeline.StartTime, timeline.EndTime);
-            var sourceId = session.SourceAppUserModelId ?? "";
             var sourceName = MediaIslandEventFactory.FriendlySourceName(sourceId);
 
             // Read ticks for real-time progress interpolation
             var positionTicks = timeline.Position.Ticks;
             var endTicks = timeline.EndTime.Ticks;
+            var startTimeTicks = timeline.StartTime.Ticks;
 
             // Browser site badge detection
             var sourceBadge = (string?)null;
@@ -71,73 +103,126 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
                 sourceBadge = FindBrowserSiteBadge(sourceId);
             }
 
-            _currentAumid = sourceId;
+            // Extract app icon from the source process
+            var iconPath = MediaSourceVisuals.ExtractAppIconPath(sourceId);
 
-            var baseSnapshot = new MediaSnapshot(
+            // Do not block first paint on slow browser thumbnails; later polls can update artwork.
+            var albumArtPath = await MediaArtworkReadPolicy.ReadWithInitialTimeoutAsync(
+                ExtractAlbumArtAsync(properties));
+
+            candidates.Add(new MediaSnapshot(
                 SourceAppUserModelId: sourceId,
                 SourceName: sourceName,
                 Title: title,
                 Artist: artist,
                 Album: properties.AlbumTitle ?? "",
-                IsPlaying: true,
+                IsPlaying: playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
                 ProgressPercent: progress,
                 SourceBadge: sourceBadge,
+                SourceIconPath: iconPath,
+                AlbumArtPath: albumArtPath,
                 PositionTicks: positionTicks,
                 EndTicks: endTicks,
-                LastUpdatedTicks: Environment.TickCount64);
-
-            var lyric = showLyrics
-                ? lyricsProvider.TryGetCurrentLine(baseSnapshot, timeline.Position)
-                : null;
-
-            return baseSnapshot with { LyricLine = lyric };
+                StartTimeTicks: startTimeTicks,
+                LastUpdatedTicks: Environment.TickCount64));
         }
 
-        return null;
+        var snapshot = candidates.Aggregate<MediaSnapshot?, MediaSnapshot?>(
+            null,
+            (current, next) => MediaSnapshotSelectionPolicy.ChooseBestSnapshot(current, next));
+        if (snapshot is null)
+            return null;
+
+        _currentAumid = snapshot.SourceAppUserModelId;
+
+        var lyric = showLyrics && snapshot.IsPlaying
+            ? lyricsProvider.TryGetCurrentLine(snapshot, TimeSpan.FromTicks(snapshot.PositionTicks))
+            : null;
+
+        return snapshot with { LyricLine = lyric };
     }
 
-    public async Task TryTogglePlayPauseAsync()
+    public async Task<bool> TryTogglePlayPauseAsync(string? preferredSourceId = null)
     {
-        await TryMediaCommandAsync(session => session.TryTogglePlayPauseAsync().AsTask());
+        return await TryMediaCommandAsync(
+            session => session.TryTogglePlayPauseAsync().AsTask(),
+            preferredSourceId,
+            session => session.GetPlaybackInfo().Controls.IsPlayPauseToggleEnabled ||
+                       session.GetPlaybackInfo().Controls.IsPlayEnabled ||
+                       session.GetPlaybackInfo().Controls.IsPauseEnabled);
     }
 
-    public async Task TrySkipNextAsync()
+    public async Task<bool> TrySkipNextAsync(string? preferredSourceId = null)
     {
-        await TryMediaCommandAsync(session => session.TrySkipNextAsync().AsTask());
+        return await TryMediaCommandAsync(
+            session => session.TrySkipNextAsync().AsTask(),
+            preferredSourceId,
+            session => session.GetPlaybackInfo().Controls.IsNextEnabled);
     }
 
-    public async Task TrySkipPreviousAsync()
+    public async Task<bool> TrySkipPreviousAsync(string? preferredSourceId = null)
     {
-        await TryMediaCommandAsync(session => session.TrySkipPreviousAsync().AsTask());
+        return await TryMediaCommandAsync(
+            session => session.TrySkipPreviousAsync().AsTask(),
+            preferredSourceId,
+            session => session.GetPlaybackInfo().Controls.IsPreviousEnabled);
     }
 
-    private async Task TryMediaCommandAsync(Func<GlobalSystemMediaTransportControlsSession, Task> command)
+    private async Task<bool> TryMediaCommandAsync(
+        Func<GlobalSystemMediaTransportControlsSession, Task<bool>> command,
+        string? preferredSourceId,
+        Func<GlobalSystemMediaTransportControlsSession, bool> isCommandEnabled)
     {
         try
         {
             var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
-            var aumid = _currentAumid;
+            var current = manager.GetCurrentSession();
+            var sessions = manager.GetSessions().ToList();
+            if (current is not null && !sessions.Contains(current))
+                sessions.Insert(0, current);
 
-            // Find the matching session by AUMID
-            GlobalSystemMediaTransportControlsSession? target = null;
-            if (!string.IsNullOrEmpty(aumid))
+            var candidates = MediaSessionCommandPolicy.OrderCandidates(
+                sessions,
+                preferredSourceId,
+                _currentAumid,
+                session => session.SourceAppUserModelId,
+                session => ReferenceEquals(session, current) ||
+                           string.Equals(
+                               session.SourceAppUserModelId,
+                               current?.SourceAppUserModelId,
+                               StringComparison.OrdinalIgnoreCase),
+                session => SafeIsCommandEnabled(session, isCommandEnabled));
+
+            foreach (var session in candidates)
             {
-                foreach (var s in manager.GetSessions())
+                try
                 {
-                    if (s.SourceAppUserModelId == aumid)
-                    {
-                        target = s;
-                        break;
-                    }
+                    if (await command(session))
+                        return true;
+                }
+                catch
+                {
                 }
             }
-            target ??= manager.GetCurrentSession();
-
-            if (target is not null)
-                await command(target);
         }
         catch
         {
+        }
+
+        return false;
+    }
+
+    private static bool SafeIsCommandEnabled(
+        GlobalSystemMediaTransportControlsSession session,
+        Func<GlobalSystemMediaTransportControlsSession, bool> isCommandEnabled)
+    {
+        try
+        {
+            return isCommandEnabled(session);
+        }
+        catch
+        {
+            return true;
         }
     }
 
@@ -194,23 +279,11 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
         }
         catch { }
 
-        return "WEB";
+        return "Web";
     }
 
-    private static string SiteBadgeFromTitle(string title)
-    {
-        var lower = title.ToLowerInvariant();
-        if (lower.Contains("youtube")) return "YT";
-        if (lower.Contains("bilibili") || lower.Contains("b站")) return "B";
-        if (lower.Contains("netflix")) return "NF";
-        if (lower.Contains("prime video") || lower.Contains("amazon")) return "PV";
-        if (lower.Contains("disney")) return "D+";
-        if (lower.Contains("spotify")) return "SP";
-        if (lower.Contains("soundcloud")) return "SC";
-        if (lower.Contains("iqiyi") || lower.Contains("爱奇艺")) return "iQ";
-        if (lower.Contains("youku") || lower.Contains("优酷")) return "YK";
-        return "WEB";
-    }
+    private static string SiteBadgeFromTitle(string title) =>
+        BrowserMediaSitePolicy.DisplayNameFromTitle(title);
 
     private static string GetWindowTitle(IntPtr hWnd)
     {
@@ -239,22 +312,6 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    /// <summary>Priority score for sorting — music apps first, then browsers.</summary>
-    private static int GetSourcePriority(string sourceId)
-    {
-        if (string.IsNullOrWhiteSpace(sourceId))
-            return 0;
-
-        var lower = sourceId.ToLowerInvariant();
-        if (lower.Contains("kugou") || lower.Contains("cloudmusic") || lower.Contains("netease") ||
-            lower.Contains("qqmusic") || lower.Contains("spotify") || lower.Contains("applemusic") ||
-            lower.Contains("kwmusic") || lower.Contains("zune"))
-            return 100;
-        if (lower.Contains("chrome") || lower.Contains("edge") || lower.Contains("firefox"))
-            return 50;
-        return 10;
-    }
-
     private static int CalculateProgressPercent(TimeSpan position, TimeSpan start, TimeSpan end)
     {
         var duration = end - start;
@@ -265,5 +322,30 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             (int)Math.Round((position - start).TotalMilliseconds / duration.TotalMilliseconds * 100),
             0,
             100);
+    }
+
+    private static async Task<string?> ExtractAlbumArtAsync(
+        GlobalSystemMediaTransportControlsSessionMediaProperties properties)
+    {
+        try
+        {
+            var thumbnail = properties.Thumbnail;
+            if (thumbnail is null) return null;
+
+            using var stream = await thumbnail.OpenReadAsync();
+            var bytes = new byte[stream.Size];
+            await stream.AsStreamForRead().ReadExactlyAsync(bytes);
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "FluidBar", "art");
+            Directory.CreateDirectory(tempDir);
+            var fileName = $"art_{Math.Abs(HashCode.Combine(
+                properties.Title ?? "", properties.Artist ?? ""))}.jpg";
+            var outPath = Path.Combine(tempDir, fileName);
+            if (File.Exists(outPath)) return outPath;
+
+            await File.WriteAllBytesAsync(outPath, bytes);
+            return outPath;
+        }
+        catch { return null; }
     }
 }

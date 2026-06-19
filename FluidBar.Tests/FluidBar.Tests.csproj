@@ -3,6 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -12,7 +14,16 @@
     <Compile Include="..\IslandPresentation.cs" Link="IslandPresentation.cs" />
     <Compile Include="..\PluginCatalog.cs" Link="PluginCatalog.cs" />
     <Compile Include="..\Plugins\AgentStatus\AgentStatusModels.cs" Link="AgentStatusModels.cs" />
+    <Compile Include="..\Plugins\Media\KugouLyricsProvider.cs" Link="KugouLyricsProvider.cs" />
+    <Compile Include="..\Plugins\Media\LyricsProvider.cs" Link="LyricsProvider.cs" />
+    <Compile Include="..\Plugins\Media\MediaArtworkColorAnalyzer.cs" Link="MediaArtworkColorAnalyzer.cs" />
+    <Compile Include="..\Plugins\Media\MediaAppCommandFallback.cs" Link="MediaAppCommandFallback.cs" />
+    <Compile Include="..\Plugins\Media\MediaFallbackProcessPolicy.cs" Link="MediaFallbackProcessPolicy.cs" />
     <Compile Include="..\Plugins\Media\MediaModels.cs" Link="MediaModels.cs" />
+    <Compile Include="..\Plugins\Media\MediaSnapshotSelectionPolicy.cs" Link="MediaSnapshotSelectionPolicy.cs" />
+    <Compile Include="..\Plugins\Media\MediaSessionCommandPolicy.cs" Link="MediaSessionCommandPolicy.cs" />
+    <Compile Include="..\Plugins\Media\MediaSourceVisuals.cs" Link="MediaSourceVisuals.cs" />
+    <Compile Include="..\Plugins\Media\ProcessAudioActivity.cs" Link="ProcessAudioActivity.cs" />
     <Compile Include="..\Plugins\Notifications\NotificationModels.cs" Link="NotificationModels.cs" />
     <Compile Include="..\Settings.cs" Link="Settings.cs" />
   </ItemGroup>

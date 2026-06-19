@@ -27,6 +27,7 @@ public sealed record IslandEventPayload(
     IReadOnlyList<string>? DetailLines = null,
     long PositionTicks = 0,
     long EndTicks = 0,
+    long StartTimeTicks = 0,
     long LastUpdatedTicks = 0);
 
 /// <summary>

@@ -39,6 +39,7 @@ public sealed class FluidBarSettings
     // === 外观 ===
     public double CornerRadius { get; set; } = 24;
     public double Opacity { get; set; } = 0.96;
+    public double BackgroundOpacity { get; set; } = 0.75;
     public string BackgroundColor { get; set; } = "#F4000000";
     public string AccentColor { get; set; } = "#0A84FF";
 
@@ -63,6 +64,7 @@ public sealed class FluidBarSettings
 
     // === 杂项 ===
     public bool HideTrayIcon { get; set; } = false;
+    public string HoldToHideKey { get; set; } = HoldToHideKeyPolicy.LeftAlt;
 
     public MonitorFeatureSettings GetMonitorFeatureSettings(string id)
     {
@@ -140,6 +142,7 @@ public sealed class FluidBarSettings
         ExpandedHeight = defaults.ExpandedHeight;
         CornerRadius = defaults.CornerRadius;
         Opacity = defaults.Opacity;
+        BackgroundOpacity = defaults.BackgroundOpacity;
         BackgroundColor = defaults.BackgroundColor;
         AccentColor = defaults.AccentColor;
         AlwaysOnTop = defaults.AlwaysOnTop;
@@ -153,6 +156,7 @@ public sealed class FluidBarSettings
         PluginEnabled = new Dictionary<string, bool>();
         MonitorFeatureSettings = new Dictionary<string, MonitorFeatureSettings>();
         HideTrayIcon = defaults.HideTrayIcon;
+        HoldToHideKey = defaults.HoldToHideKey;
     }
 }
 

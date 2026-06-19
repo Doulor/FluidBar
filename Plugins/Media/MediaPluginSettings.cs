@@ -15,9 +15,8 @@ public sealed class MediaPluginSettings
     };
 
     public bool ShowLyrics { get; set; } = true;
-    public int PollIntervalMs { get; set; } = 1200;
-    public bool ShowWhenPaused { get; set; } = true;
-    public string LyricsDirectory { get; set; } = Path.Combine(SettingsDir, "lyrics");
+    public int PollIntervalMs { get; set; } = 500;
+    public bool ShowWhenPaused { get; set; } = false;
 
     public static MediaPluginSettings Load()
     {
@@ -26,8 +25,11 @@ public sealed class MediaPluginSettings
             if (File.Exists(SettingsPath))
             {
                 var json = File.ReadAllText(SettingsPath);
-                return JsonSerializer.Deserialize<MediaPluginSettings>(json, JsonOptions)
-                       ?? new MediaPluginSettings();
+                var settings = JsonSerializer.Deserialize<MediaPluginSettings>(json, JsonOptions)
+                               ?? new MediaPluginSettings();
+                if (settings.PollIntervalMs == 1200)
+                    settings.PollIntervalMs = new MediaPluginSettings().PollIntervalMs;
+                return settings;
             }
         }
         catch
@@ -78,12 +80,6 @@ public sealed class MediaPluginConfig : IPluginConfig
     {
         get => _settings.ShowWhenPaused;
         set => _settings.ShowWhenPaused = value;
-    }
-
-    public string LyricsDirectory
-    {
-        get => _settings.LyricsDirectory;
-        set => _settings.LyricsDirectory = value;
     }
 
     public object CreateSettingsPanel() => _settings;

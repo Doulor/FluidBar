@@ -23,7 +23,10 @@ public partial class SettingsWindow : Window
     private IIslandPlugin? _detailPlugin;
     private ISystemMonitor? _detailMonitor;
     private int _detailTransitionToken;
-    private int _settingsApplyToken;
+    private readonly DispatcherTimer _settingsApplyTimer;
+    private readonly DispatcherTimer _settingsSaveTimer;
+    private readonly DispatcherTimer _pluginSettingsSaveTimer;
+    private IPluginConfig? _pendingPluginConfig;
     private const string StartupRegistryKey =
         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "FluidBar";
@@ -41,17 +44,90 @@ public partial class SettingsWindow : Window
         _pluginManager = pluginManager;
         _monitorManager = monitorManager;
         _onSettingsChanged = onSettingsChanged;
+        _settingsApplyTimer = CreateOneShotTimer(
+            SettingsPerformancePolicy.SettingsApplyDebounceMs,
+            () => _onSettingsChanged?.Invoke());
+        _settingsSaveTimer = CreateOneShotTimer(
+            SettingsPerformancePolicy.SettingsSaveDebounceMs,
+            () =>
+            {
+                _settings.Save();
+                ScheduleSettingsChanged();
+            });
+        _pluginSettingsSaveTimer = CreateOneShotTimer(
+            SettingsPerformancePolicy.PluginSaveDebounceMs,
+            () =>
+            {
+                _pendingPluginConfig?.Save();
+                ScheduleSettingsChanged();
+            });
         InitializeComponent();
+        IsVisibleChanged += SettingsWindow_IsVisibleChanged;
+    }
+
+    private static DispatcherTimer CreateOneShotTimer(int milliseconds, Action tick)
+    {
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(milliseconds)
+        };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            tick();
+        };
+        return timer;
     }
 
     private void ScheduleSettingsChanged()
     {
-        var token = ++_settingsApplyToken;
-        Dispatcher.BeginInvoke((Action)(() =>
+        _settingsApplyTimer.Stop();
+        _settingsApplyTimer.Start();
+    }
+
+    private void ScheduleSettingsSaveAndChanged()
+    {
+        _settingsSaveTimer.Stop();
+        _settingsSaveTimer.Start();
+    }
+
+    private void SchedulePluginSettingsSave(IPluginConfig config)
+    {
+        _pendingPluginConfig = config;
+        _pluginSettingsSaveTimer.Stop();
+        _pluginSettingsSaveTimer.Start();
+    }
+
+    private void FlushPendingSettingsWork()
+    {
+        var needsApply = _settingsApplyTimer.IsEnabled;
+        if (_settingsSaveTimer.IsEnabled)
         {
-            if (token == _settingsApplyToken)
-                _onSettingsChanged?.Invoke();
-        }), DispatcherPriority.Background);
+            _settingsSaveTimer.Stop();
+            _settings.Save();
+            needsApply = true;
+        }
+
+        if (_pluginSettingsSaveTimer.IsEnabled)
+        {
+            _pluginSettingsSaveTimer.Stop();
+            _pendingPluginConfig?.Save();
+            needsApply = true;
+        }
+
+        if (needsApply)
+        {
+            _settingsApplyTimer.Stop();
+            _onSettingsChanged?.Invoke();
+        }
+    }
+
+    private void MainBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        var border = (Border)sender;
+        var rect = new Rect(0, 0, border.ActualWidth, border.ActualHeight);
+        var radius = border.CornerRadius.TopLeft;
+        border.Clip = new RectangleGeometry(rect, radius, radius);
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -77,6 +153,7 @@ public partial class SettingsWindow : Window
         LoadPluginList();
         LoadMonitorList();
         _isLoading = false;
+        StartSettingsRimAnimation();
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -84,12 +161,41 @@ public partial class SettingsWindow : Window
         DragMove();
     }
 
+    private void SettingsWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsVisible)
+            StartSettingsRimAnimation();
+        else
+            StopSettingsRimAnimation();
+    }
+
     private void CloseBtn_Click(object sender, RoutedEventArgs e)
     {
         var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(
             0, TimeSpan.FromMilliseconds(150));
-        fadeOut.Completed += (_, _) => Hide();
+        fadeOut.Completed += (_, _) =>
+        {
+            FlushPendingSettingsWork();
+            StopSettingsRimAnimation();
+            Hide();
+        };
         BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void StartSettingsRimAnimation()
+    {
+        SettingsRimRotation.BeginAnimation(
+            RotateTransform.AngleProperty,
+            new DoubleAnimation(0, 360, TimeSpan.FromSeconds(18))
+            {
+                RepeatBehavior = RepeatBehavior.Forever
+            });
+    }
+
+    private void StopSettingsRimAnimation()
+    {
+        SettingsRimRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        SettingsRimRotation.Angle = 0;
     }
 
     #region 主面板
@@ -104,6 +210,9 @@ public partial class SettingsWindow : Window
 
         OpacitySlider.Value = _settings.Opacity;
         OpacityValue.Text = ((int)(_settings.Opacity * 100)) + "%";
+
+        BackgroundOpacitySlider.Value = _settings.BackgroundOpacity;
+        BackgroundOpacityValue.Text = ((int)(_settings.BackgroundOpacity * 100)) + "%";
 
         IslandWidthSlider.Value = _settings.ExpandedMaxWidth;
         IslandWidthValue.Text = _settings.ExpandedMaxWidth.ToString("F0");
@@ -124,6 +233,7 @@ public partial class SettingsWindow : Window
         AlwaysVisibleToggle.IsChecked = _settings.AlwaysVisible;
         HideTrayToggle.IsChecked = _settings.HideTrayIcon;
         SetDisplayStrategyCombo(_settings.DisplayStrategy);
+        SetHoldToHideKeyCombo(_settings.HoldToHideKey);
 
         // 环绕微光模式
         SetRimModeCombo(_settings.RimMode);
@@ -200,6 +310,11 @@ public partial class SettingsWindow : Window
             _settings.Opacity = Math.Round(e.NewValue, 2);
             OpacityValue.Text = ((int)(_settings.Opacity * 100)) + "%";
         }
+        else if (sender == BackgroundOpacitySlider)
+        {
+            _settings.BackgroundOpacity = Math.Round(e.NewValue, 2);
+            BackgroundOpacityValue.Text = ((int)(_settings.BackgroundOpacity * 100)) + "%";
+        }
         else if (sender == IslandWidthSlider)
         {
             _settings.ExpandedMaxWidth = Math.Max(
@@ -239,8 +354,7 @@ public partial class SettingsWindow : Window
             HideDelayValue.Text = seconds.ToString("F1") + "s";
         }
 
-        _settings.Save();
-        _onSettingsChanged?.Invoke();
+        ScheduleSettingsSaveAndChanged();
     }
 
     private void PositionRadio_Changed(object sender, RoutedEventArgs e)
@@ -349,6 +463,45 @@ public partial class SettingsWindow : Window
         TrayIconVisibilityChanged?.Invoke(hide);
     }
 
+    private void SetHoldToHideKeyCombo(string key)
+    {
+        HoldToHideKeyCombo.Items.Clear();
+        foreach (var value in HoldToHideKeyPolicy.Values)
+        {
+            HoldToHideKeyCombo.Items.Add(new ComboBoxItem
+            {
+                Content = HoldToHideKeyPolicy.DisplayName(value),
+                Tag = value
+            });
+        }
+
+        var coerced = HoldToHideKeyPolicy.Coerce(key);
+        foreach (ComboBoxItem item in HoldToHideKeyCombo.Items)
+        {
+            if (item.Tag?.ToString() == coerced)
+            {
+                HoldToHideKeyCombo.SelectedItem = item;
+                return;
+            }
+        }
+        HoldToHideKeyCombo.SelectedIndex = 1;
+    }
+
+    private void HoldToHideKeyCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoading) return;
+        if (HoldToHideKeyCombo.SelectedItem is not ComboBoxItem item)
+            return;
+
+        var key = HoldToHideKeyPolicy.Coerce(item.Tag?.ToString());
+        if (_settings.HoldToHideKey == key)
+            return;
+
+        _settings.HoldToHideKey = key;
+        _settings.Save();
+        ScheduleSettingsChanged();
+    }
+
     private void StartupToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
@@ -402,7 +555,9 @@ public partial class SettingsWindow : Window
         DetailIcon.Text = plugin.Icon;
         DetailName.Text = plugin.Name;
         DetailDesc.Text = plugin.Description;
+        _isLoading = true;
         DetailEnabledToggle.IsChecked = plugin.Enabled;
+        _isLoading = false;
 
         PluginSettingsContainer.Children.Clear();
 
@@ -475,16 +630,16 @@ public partial class SettingsWindow : Window
 
         PluginSettingsContainer.Children.Add(CreateSliderRow(
             "最小字符", 5, 100, 1, cfg.MinFullDisplayChars,
-            val => { cfg.MinFullDisplayChars = (int)val; cfg.Save(); }));
+            val => { cfg.MinFullDisplayChars = (int)val; SchedulePluginSettingsSave(cfg); }));
 
         PluginSettingsContainer.Children.Add(CreateSliderRow(
             "停留时间", 1, 15, 0.5, cfg.DisplayDurationMs / 1000.0,
-            val => { cfg.DisplayDurationMs = (int)(val * 1000); cfg.Save(); },
+            val => { cfg.DisplayDurationMs = (int)(val * 1000); SchedulePluginSettingsSave(cfg); },
             val => val.ToString("F1") + "s"));
 
         PluginSettingsContainer.Children.Add(CreateSliderRow(
             "滚动速度", 0.5, 5, 0.5, cfg.ScrollSpeed,
-            val => { cfg.ScrollSpeed = val; cfg.Save(); },
+            val => { cfg.ScrollSpeed = val; SchedulePluginSettingsSave(cfg); },
             val => val.ToString("F1") + "px"));
     }
 
@@ -497,23 +652,18 @@ public partial class SettingsWindow : Window
             "歌词显示",
             "有可用歌词时在悬停卡片中显示当前歌词行",
             cfg.ShowLyrics,
-            val => { cfg.ShowLyrics = val; cfg.Save(); }));
+            val => { cfg.ShowLyrics = val; SchedulePluginSettingsSave(cfg); }));
 
         PluginSettingsContainer.Children.Add(CreateToggleRow(
             "暂停显示",
             "媒体暂停时仍然显示当前曲目状态",
             cfg.ShowWhenPaused,
-            val => { cfg.ShowWhenPaused = val; cfg.Save(); }));
+            val => { cfg.ShowWhenPaused = val; SchedulePluginSettingsSave(cfg); }));
 
         PluginSettingsContainer.Children.Add(CreateSliderRow(
             "刷新间隔", 0.4, 5, 0.2, cfg.PollIntervalMs / 1000.0,
-            val => { cfg.PollIntervalMs = (int)(val * 1000); cfg.Save(); },
+            val => { cfg.PollIntervalMs = (int)(val * 1000); SchedulePluginSettingsSave(cfg); },
             val => val.ToString("F1") + "s"));
-
-        PluginSettingsContainer.Children.Add(CreateTextRow(
-            "歌词目录",
-            cfg.LyricsDirectory,
-            val => { cfg.LyricsDirectory = val; cfg.Save(); }));
     }
 
     private void BuildAgentStatusPluginSettings()
@@ -759,38 +909,31 @@ public partial class SettingsWindow : Window
 
     private Border CreateInteractiveSettingRow(UIElement content)
     {
-        var scale = new ScaleTransform(1, 1);
-        var translate = new TranslateTransform(0, 0);
-        var transform = new TransformGroup();
-        transform.Children.Add(scale);
-        transform.Children.Add(translate);
+        var normalBackground = new SolidColorBrush(MediaColor.FromArgb(14, 255, 255, 255));
+        var hoverBackground = new SolidColorBrush(MediaColor.FromArgb(24, 255, 255, 255));
+        var normalBorder = new SolidColorBrush(MediaColor.FromArgb(18, 255, 255, 255));
+        var hoverBorder = new SolidColorBrush(MediaColor.FromArgb(38, 255, 255, 255));
 
         var row = new Border
         {
             Margin = new Thickness(0, 0, 0, 10),
             Padding = new Thickness(10, 8, 10, 8),
             CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(MediaColor.FromArgb(12, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(MediaColor.FromArgb(16, 255, 255, 255)),
+            Background = normalBackground,
+            BorderBrush = normalBorder,
             BorderThickness = new Thickness(1),
-            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
-            RenderTransform = transform,
             Child = content
         };
 
         row.MouseEnter += (_, _) =>
         {
-            row.Background = new SolidColorBrush(MediaColor.FromArgb(24, 255, 255, 255));
-            AnimateTransform(scale, ScaleTransform.ScaleXProperty, 1.01, 140);
-            AnimateTransform(scale, ScaleTransform.ScaleYProperty, 1.01, 140);
-            AnimateTransform(translate, TranslateTransform.XProperty, 2, 140);
+            row.Background = hoverBackground;
+            row.BorderBrush = hoverBorder;
         };
         row.MouseLeave += (_, _) =>
         {
-            row.Background = new SolidColorBrush(MediaColor.FromArgb(12, 255, 255, 255));
-            AnimateTransform(scale, ScaleTransform.ScaleXProperty, 1, 160);
-            AnimateTransform(scale, ScaleTransform.ScaleYProperty, 1, 160);
-            AnimateTransform(translate, TranslateTransform.XProperty, 0, 160);
+            row.Background = normalBackground;
+            row.BorderBrush = normalBorder;
         };
 
         return row;
@@ -909,7 +1052,9 @@ public partial class SettingsWindow : Window
         DetailIcon.Text = monitor.Icon;
         DetailName.Text = monitor.Name;
         DetailDesc.Text = monitor.Description;
+        _isLoading = true;
         DetailEnabledToggle.IsChecked = monitor.Enabled;
+        _isLoading = false;
 
         PluginSettingsContainer.Children.Clear();
         BuildMonitorFeatureSettings(monitor);
@@ -924,14 +1069,14 @@ public partial class SettingsWindow : Window
             "悬停卡片",
             "鼠标移入灵动岛时放大为更明显的卡片状态",
             feature.HoverCardEnabled,
-            val => { feature.HoverCardEnabled = val; _settings.Save(); }));
+            val => { feature.HoverCardEnabled = val; ScheduleSettingsSaveAndChanged(); }));
 
         PluginSettingsContainer.Children.Add(CreateSliderRow(
             "显示时长", 1, 8, 0.5, feature.DisplayDurationMs / 1000.0,
             val =>
             {
                 feature.DisplayDurationMs = (int)(val * 1000);
-                _settings.Save();
+                ScheduleSettingsSaveAndChanged();
             },
             val => val.ToString("F1") + "s"));
 
@@ -939,7 +1084,7 @@ public partial class SettingsWindow : Window
             "强调动画",
             "新状态到来时使用更明显的回弹和环绕微光",
             feature.EmphasizeTransitions,
-            val => { feature.EmphasizeTransitions = val; _settings.Save(); }));
+            val => { feature.EmphasizeTransitions = val; ScheduleSettingsSaveAndChanged(); }));
     }
 
     private void MonitorToggle_Changed(object sender, RoutedEventArgs e)

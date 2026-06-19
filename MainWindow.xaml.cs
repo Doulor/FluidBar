@@ -1,9 +1,12 @@
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MediaColor = System.Windows.Media.Color;
 using MediaColorConverter = System.Windows.Media.ColorConverter;
@@ -17,6 +20,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _collapseTimer;
     private readonly DispatcherTimer _scrollTimer;
     private readonly DispatcherTimer _waveTimer;
+    private readonly DispatcherTimer _holdToHideTimer;
+    private readonly DispatcherTimer _stackCleanupTimer;
     private readonly SpringValue _hoverWidthSpring = new();
     private readonly SpringValue _hoverHeightSpring = new();
     private HoverCardMotionPlan? _hoverMotionPlan;
@@ -27,6 +32,8 @@ public partial class MainWindow : Window
     private TimeSpan _hoverSpringLastRenderTime;
     private double _hoverHostWidth;
     private double _hoverHostHeight;
+    private double _lastAppliedHoverWidth = double.NaN;
+    private double _lastAppliedHoverHeight = double.NaN;
     private bool _isExpanded;
     private bool _settingsPanelOpen;
     private bool _isHoverCard;
@@ -38,16 +45,37 @@ public partial class MainWindow : Window
     private double _activeTargetHeight;
     private double _wavePhase;
     private bool _mediaActive;
+    private bool _hiddenByHoldKey;
     private long _mediaPositionTicks;
     private long _mediaEndTicks;
+    private long _mediaStartTimeTicks;
     private long _mediaLastUpdatedTicks;
     private double _mediaProgressTrackWidth;
+    private MediaColor _currentAccentColor = MediaColor.FromRgb(255, 45, 85);
+    private TranslateTransform? _scrollTextTranslate;
+    private string? _lastScrollText;
+    private double _lastScrollCanvasWidth;
     private const double ShellBleedMargin = 14;
     private const double ShellBleed = ShellBleedMargin * 2;
     private const double HoverHostPadding = 16;
+    private readonly Dictionary<string, MediaColor> _mediaAccentCache = new(StringComparer.OrdinalIgnoreCase);
+    private LoadedMediaIcon? _currentMediaIcon;
+    private string? _activeMediaControlSourceName;
 
     private ClipboardPluginSettings? _clipboardPluginSettings;
     private IMediaSessionProvider? _mediaSessionProvider;
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    private static bool IsKeyDown(int virtualKey) =>
+        virtualKey != 0 && (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+
+    private sealed record LoadedMediaIcon(
+        IslandMediaIconKind Kind,
+        string Path,
+        BitmapImage Image,
+        MediaColor Accent);
 
     // Segoe MDL2 Assets 图标映射
     private static readonly Dictionary<string, string> IconGlyphs = new()
@@ -145,6 +173,12 @@ public partial class MainWindow : Window
         _waveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         _waveTimer.Tick += WaveTimer_Tick;
 
+        _holdToHideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        _holdToHideTimer.Tick += HoldToHideTimer_Tick;
+
+        _stackCleanupTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _stackCleanupTimer.Tick += StackCleanupTimer_Tick;
+
         // 提前绑定事件，避免 StartAll 时 Window_Loaded 尚未触发的竞态
         _bus.EventTriggered += OnEventTriggered;
     }
@@ -177,6 +211,8 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         _scrollTimer.Stop();
         _waveTimer.Stop();
+        _holdToHideTimer.Stop();
+        _stackCleanupTimer.Stop();
         StopHoverRendering();
         StopRimBreathing();
         CloseSnapshotWindows(immediate: true);
@@ -243,6 +279,8 @@ public partial class MainWindow : Window
     {
         CoerceLayoutSettings();
         CoerceMultiIslandSettings();
+        _settings.HoldToHideKey = HoldToHideKeyPolicy.Coerce(_settings.HoldToHideKey);
+        UpdateHoldToHideTimer();
 
         if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple)
         {
@@ -265,6 +303,7 @@ public partial class MainWindow : Window
                 (MediaColor)MediaColorConverter.ConvertFromString(_settings.BackgroundColor);
         }
         catch { PillBackground.Color = MediaColor.FromArgb(0xE6, 0x00, 0x00, 0x00); }
+        PillBackground.Opacity = _settings.BackgroundOpacity;
 
         try
         {
@@ -274,6 +313,7 @@ public partial class MainWindow : Window
             IconBackground.Color = accentColor;
             IconPulseBrush.Color = accentColor;
             UpdateRimColors(accentColor);
+            UpdateOuterBloomColors(accentColor);
         }
         catch
         {
@@ -282,6 +322,7 @@ public partial class MainWindow : Window
             IconBackground.Color = MediaColor.FromRgb(10, 132, 255);
             IconPulseBrush.Color = MediaColor.FromRgb(10, 132, 255);
             UpdateRimColors(MediaColor.FromRgb(10, 132, 255));
+            UpdateOuterBloomColors(MediaColor.FromRgb(10, 132, 255));
         }
 
         PillBorder.MinWidth = _settings.CollapsedWidth;
@@ -464,6 +505,36 @@ public partial class MainWindow : Window
 
     private void ProcessEvent(IslandEvent evt)
     {
+        // Always close any lingering snapshot windows first
+        if (_snapshotWindows.Count > 0)
+            CloseSnapshotWindows(immediate: true);
+
+        // Lyric-only update: same source/title/artist, only lyrics changed — update text directly
+        // without re-rendering the entire island (avoids "jump" and hover card disruption)
+        if (evt.Source == "media" && _currentView is { Kind: IslandViewKind.Media } cur &&
+            evt.Title == cur.Title && evt.Content == cur.Content && cur.SourceName == _currentSource)
+        {
+            var newLyric = evt.Payload?.LyricLine ?? "";
+            var oldLyric = cur.LyricLine ?? "";
+            if (newLyric != oldLyric)
+            {
+                _currentView = cur with { LyricLine = newLyric, SecondaryLyricLine = evt.Payload?.SecondaryLyricLine };
+                if (_isHoverCard)
+                {
+                    var card = HoverCardPresentation.FromCompact(_currentView, _settings);
+                    ApplyHoverCardContent(card);
+                }
+                else
+                {
+                    // Update compact view text directly
+                    var isMusicApp = !IsBrowserSourceId(_currentView.SourceName) && !string.IsNullOrWhiteSpace(_currentView.SourceName);
+                    if (isMusicApp && !string.IsNullOrWhiteSpace(newLyric))
+                        ContentText.Text = newLyric;
+                }
+                return;
+            }
+        }
+
         var view = IslandPresentation.FromEvent(
             evt,
             _settings,
@@ -472,6 +543,33 @@ public partial class MainWindow : Window
         // 时钟监控只在常驻/已展开时更新，避免每 10 秒主动弹出。
         if (view.Kind == IslandViewKind.Clock && !_settings.AlwaysVisible && !_isExpanded)
             return;
+
+        // Stopped/paused media: start collapse timer without overwriting _currentView
+        // (otherwise the hover card would see a zero-progress view).
+        if (evt.Source == "media" && evt.Payload?.IsActive == false)
+        {
+            _mediaActive = false;
+            if (MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(
+                    _isHoverCard,
+                    _currentView?.SourceName))
+            {
+                if (_currentView is { Kind: IslandViewKind.Media } current)
+                {
+                    _currentView = current with { ShowsAudioWave = false };
+                    var card = HoverCardPresentation.FromCompact(_currentView, _settings);
+                    ApplyHoverCardContent(card);
+                }
+
+                _collapseTimer.Stop();
+                _waveTimer.Stop();
+                return;
+            }
+
+            _collapseTimer.Stop();
+            if (!_settings.AlwaysVisible)
+                Collapse();
+            return;
+        }
 
         // 独立追踪媒体播放状态，不依赖 _currentView（会被其他事件覆盖）
         if (evt.Source == "media")
@@ -486,7 +584,7 @@ public partial class MainWindow : Window
             if (_settings.DisplayStrategy == IslandDisplayStrategy.Multiple)
             {
                 ApplyStackPolicy(evt, view);
-                // Sync snapshot windows to reflect expired items
+                PinCurrentStackItemAsLatest();
                 if (IsStackedIslandActive())
                 {
                     if (!TryCalculateStackedMainPosition(
@@ -495,6 +593,7 @@ public partial class MainWindow : Window
                     {
                         layout = null;
                     }
+                    RepositionCurrentIslandForStack(left, top, TimeSpan.FromMilliseconds(220));
                     SyncSnapshotWindows(layout, animated: true);
                 }
                 return;
@@ -601,6 +700,18 @@ public partial class MainWindow : Window
         var next = IslandStackPolicy.Apply(_islandStack, view, evt.Source, _settings);
         _islandStack.Clear();
         _islandStack.AddRange(next);
+        UpdateStackCleanupTimer();
+    }
+
+    private void PinCurrentStackItemAsLatest()
+    {
+        if (string.IsNullOrWhiteSpace(_currentSource))
+            return;
+
+        var pinned = IslandStackPolicy.PinSourceAsLatest(_islandStack, _currentSource);
+        _islandStack.Clear();
+        _islandStack.AddRange(pinned);
+        UpdateStackCleanupTimer();
     }
 
     private bool IsStackedIslandActive()
@@ -615,7 +726,9 @@ public partial class MainWindow : Window
     private void ClearIslandStack(bool animated)
     {
         _islandStack.Clear();
-        CloseSnapshotWindows(immediate: !animated || _settingsPanelOpen);
+        var latestOnly = _settings.DisplayStrategy != IslandDisplayStrategy.Multiple;
+        CloseSnapshotWindows(immediate: latestOnly || !animated || _settingsPanelOpen);
+        UpdateStackCleanupTimer();
     }
 
     private void SeedCurrentStackFromActiveView()
@@ -639,6 +752,50 @@ public partial class MainWindow : Window
         var max = Math.Clamp(_settings.MaxVisibleIslands, 1, 8);
         if (_islandStack.Count > max)
             _islandStack.RemoveRange(0, _islandStack.Count - max);
+        UpdateStackCleanupTimer();
+    }
+
+    private void UpdateStackCleanupTimer()
+    {
+        var shouldRun = _settings.DisplayStrategy == IslandDisplayStrategy.Multiple
+            && !_settingsPanelOpen
+            && _islandStack.Any(item => item.ExpiresAt != default && item.ExpiresAt != DateTimeOffset.MaxValue);
+
+        if (shouldRun)
+            _stackCleanupTimer.Start();
+        else
+            _stackCleanupTimer.Stop();
+    }
+
+    private void StackCleanupTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_settings.DisplayStrategy != IslandDisplayStrategy.Multiple || _settingsPanelOpen)
+        {
+            UpdateStackCleanupTimer();
+            return;
+        }
+
+        var pruned = IslandStackPolicy.PruneExpiredItems(_islandStack, DateTimeOffset.UtcNow).ToList();
+        if (pruned.Count == _islandStack.Count)
+            return;
+
+        _islandStack.Clear();
+        _islandStack.AddRange(pruned);
+        UpdateStackCleanupTimer();
+
+        if (!_isExpanded || _currentView is null)
+        {
+            CloseSnapshotWindows(immediate: false);
+            return;
+        }
+
+        if (_isHoverCard)
+        {
+            RestoreWindowToCurrentView();
+            return;
+        }
+
+        RestoreWindowToCurrentView(animated: true);
     }
 
     private void ExitHoverCardForIncomingStack()
@@ -727,7 +884,7 @@ public partial class MainWindow : Window
     {
         if (!IsStackedIslandActive() || layout == null)
         {
-            CloseSnapshotWindows(immediate: _settingsPanelOpen);
+            CloseSnapshotWindows(immediate: true);
             return;
         }
 
@@ -774,7 +931,10 @@ public partial class MainWindow : Window
             try
             {
                 if (immediate)
+                {
+                    window.Hide();
                     window.Close();
+                }
                 else
                     window.Dismiss();
             }
@@ -869,6 +1029,7 @@ public partial class MainWindow : Window
     {
         if (!_isHoverCard) return;
         _isHoverCard = false;
+        _activeMediaControlSourceName = null;
 
         if (_currentView != null)
         {
@@ -938,6 +1099,14 @@ public partial class MainWindow : Window
         AnimateProperty(TopProperty, top, duration, ease);
     }
 
+    private void RepositionCurrentIslandForStack(double left, double top, TimeSpan duration)
+    {
+        ClearPositionAnimations();
+        var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
+        AnimateProperty(LeftProperty, left, duration, ease);
+        AnimateProperty(TopProperty, top, duration, ease);
+    }
+
     private double CurrentVisualWidth(double fallback)
     {
         if ((_hoverMotionPlan is not null || _isHoverCard) && _hoverWidthSpring.Value >= 10)
@@ -977,6 +1146,8 @@ public partial class MainWindow : Window
         _hoverHeightSpring.Target = plan.ToHeight;
         _hoverMotionPlan = plan;
         _hoverSpringHasRenderTime = false;
+        _lastAppliedHoverWidth = double.NaN;
+        _lastAppliedHoverHeight = double.NaN;
 
         ClearPositionAnimations();
         if (!TryCalculateStackedMainPosition(
@@ -1053,8 +1224,21 @@ public partial class MainWindow : Window
     {
         visualWidth = Math.Max(10, visualWidth);
         visualHeight = Math.Max(10, visualHeight);
+        var threshold = IslandAnimationPerformancePolicy.Default.HoverFrameApplyThreshold;
+        if (!double.IsNaN(_lastAppliedHoverWidth) &&
+            Math.Abs(visualWidth - _lastAppliedHoverWidth) < threshold &&
+            Math.Abs(visualHeight - _lastAppliedHoverHeight) < threshold)
+        {
+            return;
+        }
+
+        _lastAppliedHoverWidth = visualWidth;
+        _lastAppliedHoverHeight = visualHeight;
         IslandRoot.Width = visualWidth;
         IslandRoot.Height = visualHeight;
+        PillBorder.Width = visualWidth;
+        PillBorder.Height = visualHeight;
+        PillBorder.MaxWidth = Math.Max(visualWidth, _settings.CollapsedWidth);
     }
 
     private void ApplyHoverHostAlignment()
@@ -1077,6 +1261,8 @@ public partial class MainWindow : Window
     {
         StopHoverRendering();
         _hoverMotionPlan = null;
+        _lastAppliedHoverWidth = double.NaN;
+        _lastAppliedHoverHeight = double.NaN;
         ClearHoverHostLayout();
     }
 
@@ -1099,7 +1285,7 @@ public partial class MainWindow : Window
         _hoverSpringHasRenderTime = false;
     }
 
-    private void RestoreWindowToCurrentView()
+    private void RestoreWindowToCurrentView(bool animated = false)
     {
         if (_currentView is null)
             return;
@@ -1115,11 +1301,23 @@ public partial class MainWindow : Window
             CalculatePosition(_currentView.TargetWidth, _currentView.TargetHeight, out left, out top);
         }
 
-        SyncSnapshotWindows(layout, animated: true);
-        Left = left;
-        Top = top;
-        Width = ToWindowSize(_currentView.TargetWidth);
-        Height = ToWindowSize(_currentView.TargetHeight);
+        SyncSnapshotWindows(layout, animated: animated);
+        if (animated)
+        {
+            var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
+            ClearPositionAnimations();
+            AnimateProperty(WidthProperty, ToWindowSize(_currentView.TargetWidth), TimeSpan.FromMilliseconds(260), ease);
+            AnimateProperty(HeightProperty, ToWindowSize(_currentView.TargetHeight), TimeSpan.FromMilliseconds(260), ease);
+            AnimateProperty(LeftProperty, left, TimeSpan.FromMilliseconds(260), ease);
+            AnimateProperty(TopProperty, top, TimeSpan.FromMilliseconds(260), ease);
+        }
+        else
+        {
+            Left = left;
+            Top = top;
+            Width = ToWindowSize(_currentView.TargetWidth);
+            Height = ToWindowSize(_currentView.TargetHeight);
+        }
     }
 
     private void ClearHoverHostLayout()
@@ -1131,6 +1329,7 @@ public partial class MainWindow : Window
         IslandRoot.Margin = new Thickness(ShellBleedMargin);
         PillBorder.Width = double.NaN;
         PillBorder.Height = double.NaN;
+        PillBorder.MaxWidth = _settings.ExpandedMaxWidth;
         OuterBloom.Width = double.NaN;
         OuterBloom.Height = double.NaN;
         _hoverHostWidth = 0;
@@ -1150,17 +1349,14 @@ public partial class MainWindow : Window
 
     private void ApplyHoverCardContent(HoverCardPresentation card)
     {
-        HoverIconText.Text = IconGlyphs.TryGetValue(card.IconKind, out var glyph)
-            ? glyph
-            : IconGlyphs["info"];
+        _activeMediaControlSourceName = card.Kind == IslandViewKind.Media ? card.SourceName : null;
+        var hoverAccent = ApplyHoverIcon(card);
         HoverTitleText.Text = card.Title;
         HoverSubtitleText.Text = BuildHoverSubtitle(card);
         HoverBadgeText.Text = string.IsNullOrWhiteSpace(card.StatusBadge)
             ? ModeLabel(card.Kind)
             : card.StatusBadge;
-        SetHoverBadgeColors(IconColors.TryGetValue(card.IconKind, out var c)
-            ? c
-            : IconColors["info"]);
+        SetHoverBadgeColors(hoverAccent);
 
         // Style lyrics in subtitle for media
         if (card.Kind == IslandViewKind.Media && !string.IsNullOrWhiteSpace(card.LyricLine))
@@ -1178,10 +1374,16 @@ public partial class MainWindow : Window
                 MediaColor.FromRgb(143, 143, 150));
         }
 
-        HoverProgressPanel.Visibility = card.Kind is IslandViewKind.Progress or IslandViewKind.Media
+        var hoverHasPosition = card.PositionTicks > 0 || card.EndTicks > card.StartTimeTicks;
+        var hoverIsBrowser = IsBrowserSourceId(card.SourceName);
+        var hoverHasProgress = card.ProgressPercent >= 0;
+        HoverProgressPanel.Visibility = card.Kind is IslandViewKind.Progress
+            || (card.Kind == IslandViewKind.Media && (hoverIsBrowser || hoverHasPosition) && hoverHasProgress)
             ? Visibility.Visible
             : Visibility.Collapsed;
-        MediaControlsPanel.Visibility = (card.Kind == IslandViewKind.Media && card.PositionTicks > 0)
+        if (HoverProgressPanel.Visibility == Visibility.Visible)
+            HoverProgressFill.Background = CreateAccentGradientBrush(hoverAccent);
+        MediaControlsPanel.Visibility = MediaPlaybackUiPolicy.ShouldShowTransportControls(card.Kind)
             ? Visibility.Visible
             : Visibility.Collapsed;
         if (card.Kind == IslandViewKind.Progress)
@@ -1190,15 +1392,18 @@ public partial class MainWindow : Window
                 ? "当前输出已静音"
                 : $"{card.Title} · {card.ProgressPercent}%";
             var trackWidth = Math.Max(220, card.TargetWidth - 40);
-            HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
+            HoverProgressFill.Width = trackWidth * Math.Max(0, card.ProgressPercent) / 100.0;
         }
         else if (card.Kind == IslandViewKind.Media)
         {
             HoverBodyText.Text = card.Content;
-            var trackWidth = Math.Max(220, card.TargetWidth - 40);
-            HoverProgressFill.Width = trackWidth * card.ProgressPercent / 100.0;
+            if (card.ProgressPercent >= 0)
+            {
+                var hoverTrackWidth = Math.Max(220, card.TargetWidth - 40);
+                HoverProgressFill.Width = hoverTrackWidth * card.ProgressPercent / 100.0;
+            }
 
-            MediaPlayPauseIcon.Text = card.ShowsAudioWave ? "\uE769" : "\uE768"; // Pause : Play
+            MediaPlayPauseIcon.Text = MediaPlaybackUiPolicy.PlayPauseGlyph(card.ShowsAudioWave);
         }
         else if (card.Kind == IslandViewKind.Status)
         {
@@ -1272,6 +1477,45 @@ public partial class MainWindow : Window
         return ModeLabel(card.Kind);
     }
 
+    private MediaColor ApplyHoverIcon(HoverCardPresentation card)
+    {
+        var fallbackColor = IconColors.TryGetValue(card.IconKind, out var color)
+            ? color
+            : IconColors["info"];
+
+        if (card.Kind == IslandViewKind.Media)
+        {
+            var loaded = _currentMediaIcon;
+            if (loaded is null ||
+                !MediaIconMatches(loaded, card.AlbumArtPath, card.AppIconPath))
+            {
+                loaded = TryLoadMediaIcon(card.AlbumArtPath, card.AppIconPath);
+            }
+
+            if (loaded is not null)
+            {
+                ApplyImageToIcon(HoverIconImage, loaded.Image, loaded.Kind, hover: true);
+                HoverIconText.Visibility = Visibility.Collapsed;
+                HoverIconImage.Visibility = Visibility.Visible;
+                HoverIconBorder.Background = new SolidColorBrush(
+                    MediaColor.FromArgb(34, loaded.Accent.R, loaded.Accent.G, loaded.Accent.B));
+                AnimateDropShadow(HoverIconGlow, loaded.Accent, 0.52, 180);
+                return loaded.Accent;
+            }
+        }
+
+        HoverIconImage.Source = null;
+        HoverIconImage.Clip = null;
+        HoverIconImage.Visibility = Visibility.Collapsed;
+        HoverIconText.Text = IconGlyphs.TryGetValue(card.IconKind, out var glyph)
+            ? glyph
+            : IconGlyphs["info"];
+        HoverIconText.Visibility = Visibility.Visible;
+        HoverIconBorder.Background = new SolidColorBrush(fallbackColor);
+        AnimateDropShadow(HoverIconGlow, fallbackColor, card.IconKind == "clock" ? 0.2 : 0.46, 180);
+        return fallbackColor;
+    }
+
     private void SetHoverBadgeColors(MediaColor color)
     {
         HoverBadgeBorder.Background = new SolidColorBrush(
@@ -1318,13 +1562,128 @@ public partial class MainWindow : Window
     /// <summary>更新微光颜色（跟随 accent 色）</summary>
     private void UpdateRimColors(MediaColor accent)
     {
-        var glow = MediaColor.FromArgb(0xC0, accent.R, accent.G, accent.B);
-        var dim  = MediaColor.FromArgb(0x0A, 0xFF, 0xFF, 0xFF);
-        RimStop0.Color = dim;
-        RimStop1.Color = dim;
-        RimStop2.Color = glow;
-        RimStop3.Color = dim;
-        RimStop4.Color = dim;
+        RimStop0.Color = MediaColor.FromArgb(0x2A, accent.R, accent.G, accent.B);
+        RimStop1.Color = MediaColor.FromArgb(0x08, accent.R, accent.G, accent.B);
+        RimStop2.Color = MediaColor.FromArgb(0xC8, accent.R, accent.G, accent.B);
+        RimStop3.Color = MediaColor.FromArgb(0x08, accent.R, accent.G, accent.B);
+        RimStop4.Color = MediaColor.FromArgb(0x30, accent.R, accent.G, accent.B);
+    }
+
+    private void UpdateOuterBloomColors(MediaColor accent)
+    {
+        OuterBloomStop0.Color = MediaColor.FromArgb(0x32, accent.R, accent.G, accent.B);
+        OuterBloomStop1.Color = MediaColor.FromArgb(0x14, accent.R, accent.G, accent.B);
+        OuterBloomStop2.Color = MediaColor.FromArgb(0x00, accent.R, accent.G, accent.B);
+    }
+
+    private void ApplyIconAccent(
+        MediaColor accent,
+        bool includeBackground,
+        double glowOpacity,
+        int milliseconds)
+    {
+        _currentAccentColor = accent;
+        if (includeBackground)
+            AnimateBrushColor(IconBackground, accent, milliseconds);
+
+        AnimateBrushColor(IconPulseBrush, accent, milliseconds);
+        ApplyWaveAccent(accent, milliseconds);
+        AnimateDropShadow(IconGlow, accent, glowOpacity, milliseconds);
+        UpdateRimColors(accent);
+        UpdateOuterBloomColors(accent);
+    }
+
+    private void ApplyWaveAccent(MediaColor accent, int milliseconds)
+    {
+        foreach (var bar in new[] { Wave1, Wave2, Wave3, Wave4 })
+        {
+            if (bar.Background is SolidColorBrush brush)
+            {
+                AnimateBrushColor(brush, accent, milliseconds);
+            }
+            else
+            {
+                bar.Background = new SolidColorBrush(accent);
+            }
+        }
+    }
+
+    private void HoldToHideTimer_Tick(object? sender, EventArgs e)
+    {
+        var key = HoldToHideKeyPolicy.Coerce(_settings.HoldToHideKey);
+        if (key == HoldToHideKeyPolicy.Disabled)
+        {
+            RestoreAfterHoldHide();
+            return;
+        }
+
+        var shouldHide = HoldToHideKeyPolicy.ShouldHide(
+            key,
+            configuredKeyDown: IsKeyDown(HoldToHideKeyPolicy.VirtualKey(key)),
+            leftCtrlDown: IsKeyDown(0xA2),
+            rightCtrlDown: IsKeyDown(0xA3),
+            leftAltDown: IsKeyDown(0xA4),
+            rightAltDown: IsKeyDown(0xA5));
+        if (shouldHide)
+            HideForHoldKey();
+        else
+            RestoreAfterHoldHide();
+    }
+
+    private void UpdateHoldToHideTimer()
+    {
+        var enabled = HoldToHideKeyPolicy.Coerce(_settings.HoldToHideKey) != HoldToHideKeyPolicy.Disabled;
+        if (enabled)
+            _holdToHideTimer.Start();
+        else
+        {
+            _holdToHideTimer.Stop();
+            RestoreAfterHoldHide();
+        }
+    }
+
+    private void HideForHoldKey()
+    {
+        if (_hiddenByHoldKey)
+            return;
+
+        _hiddenByHoldKey = true;
+        BeginAnimation(OpacityProperty, null);
+        Opacity = 0;
+        IsHitTestVisible = false;
+        foreach (var window in _snapshotWindows)
+            window.Opacity = 0;
+    }
+
+    private void RestoreAfterHoldHide()
+    {
+        if (!_hiddenByHoldKey)
+            return;
+
+        _hiddenByHoldKey = false;
+        BeginAnimation(OpacityProperty, null);
+        Opacity = 1;
+        IsHitTestVisible = true;
+        foreach (var window in _snapshotWindows)
+            window.Opacity = 0.88;
+    }
+
+    private static void AnimateDropShadow(
+        DropShadowEffect effect,
+        MediaColor color,
+        double opacity,
+        int milliseconds)
+    {
+        effect.BeginAnimation(DropShadowEffect.ColorProperty,
+            new ColorAnimation(color, TimeSpan.FromMilliseconds(milliseconds))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
+        effect.BeginAnimation(DropShadowEffect.OpacityProperty,
+            new DoubleAnimation(opacity, TimeSpan.FromMilliseconds(milliseconds))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            });
     }
 
     /// <summary>根据配置应用环绕微光模式</summary>
@@ -1515,7 +1874,10 @@ public partial class MainWindow : Window
     private void HideAllPanels()
     {
         StopScrolling();
+        TitleText.MaxWidth = double.PositiveInfinity;
+        ContentText.MaxWidth = double.PositiveInfinity;
         ContentText.Visibility = Visibility.Collapsed;
+        ProgressBarPanel.Width = double.NaN;
         ProgressBarPanel.Visibility = Visibility.Collapsed;
         StatusPanel.Visibility = Visibility.Collapsed;
         LockKeyPanel.Visibility = Visibility.Collapsed;
@@ -1636,58 +1998,306 @@ public partial class MainWindow : Window
 
     private void ShowMediaContent(IslandEvent evt, IslandViewPresentation view)
     {
-        // Compact title line: source/artist info
-        var sourceLabel = string.IsNullOrWhiteSpace(view.SourceName) ? "" : view.SourceName;
-        var subtitleLabel = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
-        TitleText.Text = string.IsNullOrWhiteSpace(sourceLabel)
-            ? view.Content
-            : string.IsNullOrWhiteSpace(subtitleLabel)
-                ? sourceLabel
-                : $"{sourceLabel} \u2022 {subtitleLabel}";
+        var isBrowser = IsBrowserSourceId(view.SourceName);
+        var isMusicApp = !isBrowser && !string.IsNullOrWhiteSpace(view.SourceName);
+        var hasLyrics = !string.IsNullOrWhiteSpace(view.LyricLine);
+        var hasPosition = view.PositionTicks > 0 || view.EndTicks > view.StartTimeTicks;
+        var hasProgress = view.ProgressPercent >= 0; // -1 means no progress data available
+        var contentWidth = MediaLayoutPolicy.CompactContentWidth(view.TargetWidth, view.ShowsAudioWave);
+        var progressWidth = MediaLayoutPolicy.CompactProgressWidth(view.TargetWidth, view.ShowsAudioWave);
 
-        ProgressBarPanel.Visibility = Visibility.Visible;
-
-        AccessoryGrid.Visibility = Visibility.Visible;
-        AudioWavePanel.Visibility = Visibility.Visible;
-        AudioWavePanel.Opacity = view.ShowsAudioWave ? 1 : 0.42;
-        if (view.ShowsAudioWave)
-            _waveTimer.Start();
+        // Compact title line: song name·artist for music apps, source name for browsers
+        if (isBrowser)
+        {
+            var sourceLabel = string.IsNullOrWhiteSpace(view.SourceName) ? "" : view.SourceName;
+            var subtitleLabel = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
+            TitleText.Text = string.IsNullOrWhiteSpace(sourceLabel)
+                ? view.Content
+                : string.IsNullOrWhiteSpace(subtitleLabel)
+                    ? sourceLabel
+                    : $"{sourceLabel} \u2022 {subtitleLabel}";
+        }
         else
-            SetWaveHeights(5, 5, 5, 5, TimeSpan.FromMilliseconds(180));
+        {
+            // Music apps: show song name + artist (e.g. "夜曲 · 周杰伦")
+            var songTitle = string.IsNullOrWhiteSpace(view.Content) ? "" : view.Content;
+            var artistName = string.IsNullOrWhiteSpace(view.Subtitle) ? "" : view.Subtitle;
+            TitleText.Text = string.IsNullOrWhiteSpace(songTitle)
+                ? view.Title
+                : string.IsNullOrWhiteSpace(artistName)
+                    ? songTitle
+                    : $"{songTitle} \u2022 {artistName}";
+        }
+        TitleText.FontSize = isBrowser ? 9 : 10.5;
+        TitleText.MaxWidth = contentWidth;
 
-        // Content area: marquee scroll for long titles
-        var displayText = view.Content;
-        if (displayText.Length > 22)
+        // Progress bar: always for browsers, only for music apps with real position data
+        if ((isBrowser || hasPosition) && hasProgress)
+        {
+            ProgressBarPanel.Visibility = Visibility.Visible;
+            ProgressBarPanel.Margin = new Thickness(0, 3, 0, 1);
+            ProgressBarPanel.Width = progressWidth;
+            ProgressBarPanel.MaxWidth = progressWidth;
+            ProgressTrack.Width = progressWidth;
+            _mediaProgressTrackWidth = progressWidth;
+            var targetWidth = Math.Max(0, view.ProgressPercent / 100.0 * progressWidth);
+            ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+            ProgressFill.Width = targetWidth;
+            ProgressFill.Background = isBrowser
+                ? new LinearGradientBrush(MediaColor.FromRgb(10, 132, 255), MediaColor.FromRgb(90, 200, 250), 0)
+                : new LinearGradientBrush(MediaColor.FromRgb(255, 45, 85), MediaColor.FromRgb(255, 149, 0), 0);
+        }
+        else
+        {
+            ProgressBarPanel.Visibility = Visibility.Collapsed;
+        }
+
+        // Audio wave visibility: only when actually playing
+        if (view.ShowsAudioWave)
+        {
+            AccessoryGrid.Visibility = Visibility.Visible;
+            AudioWavePanel.Visibility = Visibility.Visible;
+            AudioWavePanel.Opacity = 1;
+            _waveTimer.Start();
+        }
+        else
+        {
+            AccessoryGrid.Visibility = Visibility.Collapsed;
+            AudioWavePanel.Visibility = Visibility.Collapsed;
+            _waveTimer.Stop();
+        }
+
+        // Content area: lyrics for music apps, title for browsers
+        var displayText = isMusicApp && hasLyrics ? view.LyricLine : view.Content;
+        ContentText.FontSize = isBrowser ? 10.5 : 12;
+
+        // Music apps: always static text (truncated), no marquee
+        // Browsers: marquee for long titles
+        if (!isMusicApp && displayText.Length > 22)
         {
             ScrollCanvas.Visibility = Visibility.Visible;
-            ScrollCanvas.Width = Math.Max(160, view.TargetWidth - 118);
+            ContentText.Visibility = Visibility.Collapsed;
+            ScrollCanvas.Width = contentWidth;
             ScrollText.Text = displayText;
-            Dispatcher.BeginInvoke(() =>
+            ScrollText.FontSize = ContentText.FontSize;
+            if (!_scrollTimer.IsEnabled ||
+                !string.Equals(_lastScrollText, displayText, StringComparison.Ordinal) ||
+                Math.Abs(_lastScrollCanvasWidth - contentWidth) > 0.5)
             {
-                var canvasWidth = ScrollCanvas.ActualWidth > 0
-                    ? ScrollCanvas.ActualWidth : ScrollCanvas.Width;
-                StartScrolling(canvasWidth);
-            }, DispatcherPriority.Loaded);
+                _lastScrollText = displayText;
+                _lastScrollCanvasWidth = contentWidth;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    var canvasWidth = ScrollCanvas.ActualWidth > 0
+                        ? ScrollCanvas.ActualWidth : ScrollCanvas.Width;
+                    StartScrolling(canvasWidth);
+                }, DispatcherPriority.Loaded);
+            }
         }
         else
         {
+            StopScrolling();
+            ScrollCanvas.Visibility = Visibility.Collapsed;
             ContentText.Visibility = Visibility.Visible;
+            ContentText.MaxWidth = contentWidth;
             ContentText.Text = displayText;
         }
+
+        // For music apps, prefer album art but fall back to app icon
+        var mediaAccent = ApplyCompactMediaIcon(view.AlbumArtPath, view.AppIconPath);
+        if (ProgressBarPanel.Visibility == Visibility.Visible)
+            ProgressFill.Background = CreateAccentGradientBrush(mediaAccent);
 
         // Store ticks for real-time progress interpolation
         _mediaPositionTicks = view.PositionTicks;
         _mediaEndTicks = view.EndTicks;
+        _mediaStartTimeTicks = view.StartTimeTicks;
         _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+    }
 
-        var maxBarWidth = Math.Max(150, view.TargetWidth - 154);
-        ProgressTrack.Width = maxBarWidth;
-        _mediaProgressTrackWidth = maxBarWidth;
-        var targetWidth = Math.Max(0, view.ProgressPercent / 100.0 * maxBarWidth);
-        ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
-        ProgressFill.Width = targetWidth;
-        ProgressFill.Background = new LinearGradientBrush(
-            MediaColor.FromRgb(255, 45, 85), MediaColor.FromRgb(255, 149, 0), 0);
+    private MediaColor ApplyCompactMediaIcon(string? albumArtPath, string? appIconPath)
+    {
+        var loaded = TryLoadMediaIcon(albumArtPath, appIconPath);
+
+        if (loaded is null)
+        {
+            // Keep previous icon if available; only show default if we never had an icon
+            if (_currentMediaIcon is not null)
+                loaded = _currentMediaIcon;
+            else
+            {
+                IconImage.Source = null;
+                IconImage.Clip = null;
+                IconImage.Visibility = Visibility.Collapsed;
+                IconText.Visibility = Visibility.Visible;
+                ApplyIconAccent(IconColors["media"], includeBackground: true, glowOpacity: 0.5, milliseconds: 220);
+                return IconColors["media"];
+            }
+        }
+
+        _currentMediaIcon = loaded;
+
+        ApplyImageToIcon(IconImage, loaded.Image, loaded.Kind, hover: false);
+        IconImage.Visibility = Visibility.Visible;
+        IconText.Visibility = Visibility.Collapsed;
+        IconBackground.BeginAnimation(SolidColorBrush.ColorProperty, null);
+        IconBackground.Color = MediaColor.FromArgb(0, 255, 255, 255);
+        ApplyIconAccent(loaded.Accent, includeBackground: false, glowOpacity: 0.62, milliseconds: 220);
+        return loaded.Accent;
+    }
+
+    private LoadedMediaIcon? TryLoadMediaIcon(string? albumArtPath, string? appIconPath)
+    {
+        foreach (var choice in EnumerateMediaIconChoices(albumArtPath, appIconPath))
+        {
+            try
+            {
+                var image = LoadBitmapImage(choice.Path!);
+                if (image is null)
+                    continue;
+
+                return new LoadedMediaIcon(
+                    choice.Kind,
+                    choice.Path!,
+                    image,
+                    ResolveMediaAccent(choice.Path!));
+            }
+            catch
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<IslandMediaIconChoice> EnumerateMediaIconChoices(
+        string? albumArtPath,
+        string? appIconPath)
+    {
+        if (IsUsableImagePath(albumArtPath))
+            yield return new IslandMediaIconChoice(IslandMediaIconKind.Artwork, albumArtPath);
+        if (IsUsableImagePath(appIconPath))
+            yield return new IslandMediaIconChoice(IslandMediaIconKind.AppIcon, appIconPath);
+    }
+
+    private static bool IsUsableImagePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        try
+        {
+            return File.Exists(path) && new FileInfo(path).Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static BitmapImage? LoadBitmapImage(string path)
+    {
+        if (!IsUsableImagePath(path))
+            return null;
+
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+        image.UriSource = new Uri(Path.GetFullPath(path), UriKind.Absolute);
+        image.EndInit();
+        image.Freeze();
+        return image;
+    }
+
+    private MediaColor ResolveMediaAccent(string path)
+    {
+        if (_mediaAccentCache.TryGetValue(path, out var cached))
+            return cached;
+
+        var dominant = MediaArtworkColorAnalyzer.TryExtractDominantColor(path);
+        var color = dominant is null
+            ? IconColors["media"]
+            : NormalizeAccent(MediaColor.FromRgb(
+                dominant.Value.R,
+                dominant.Value.G,
+                dominant.Value.B));
+
+        _mediaAccentCache[path] = color;
+        return color;
+    }
+
+    private static MediaColor NormalizeAccent(MediaColor color)
+    {
+        var max = Math.Max(color.R, Math.Max(color.G, color.B));
+        if (max < 112 && max > 0)
+        {
+            var scale = 112.0 / max;
+            return MediaColor.FromRgb(
+                (byte)Math.Clamp((int)Math.Round(color.R * scale), 0, 255),
+                (byte)Math.Clamp((int)Math.Round(color.G * scale), 0, 255),
+                (byte)Math.Clamp((int)Math.Round(color.B * scale), 0, 255));
+        }
+
+        return MediaColor.FromRgb(color.R, color.G, color.B);
+    }
+
+    private static LinearGradientBrush CreateAccentGradientBrush(MediaColor accent)
+    {
+        return new LinearGradientBrush(accent, LiftColor(accent, 72), 0);
+    }
+
+    private static MediaColor LiftColor(MediaColor color, byte amount)
+    {
+        return MediaColor.FromRgb(
+            (byte)Math.Min(255, color.R + amount),
+            (byte)Math.Min(255, color.G + amount),
+            (byte)Math.Min(255, color.B + amount));
+    }
+
+    private static void ApplyImageToIcon(
+        System.Windows.Controls.Image target,
+        ImageSource source,
+        IslandMediaIconKind kind,
+        bool hover)
+    {
+        var metrics = ResolveMediaImageMetrics(kind, hover);
+        target.Source = source;
+        target.Width = metrics.ImageWidth;
+        target.Height = metrics.ImageHeight;
+        target.Stretch = kind == IslandMediaIconKind.Artwork
+            ? Stretch.UniformToFill
+            : Stretch.Uniform;
+        target.Clip = metrics.CropsToCircle
+            ? new EllipseGeometry(
+                new System.Windows.Point(metrics.ImageWidth / 2, metrics.ImageHeight / 2),
+                metrics.ImageWidth / 2,
+                metrics.ImageHeight / 2)
+            : null;
+    }
+
+    private static IslandMediaImageMetrics ResolveMediaImageMetrics(
+        IslandMediaIconKind kind,
+        bool hover)
+    {
+        if (!hover)
+            return IslandMediaVisualPolicy.ResolveImageMetrics(kind);
+
+        return kind switch
+        {
+            IslandMediaIconKind.Artwork => new IslandMediaImageMetrics(44, 44, true),
+            IslandMediaIconKind.AppIcon => new IslandMediaImageMetrics(38, 38, false),
+            _ => new IslandMediaImageMetrics(24, 24, false)
+        };
+    }
+
+    private static bool MediaIconMatches(
+        LoadedMediaIcon loaded,
+        string? albumArtPath,
+        string? appIconPath)
+    {
+        return EnumerateMediaIconChoices(albumArtPath, appIconPath)
+            .Any(choice => string.Equals(choice.Path, loaded.Path, StringComparison.OrdinalIgnoreCase));
     }
 
     private void ShowRichStatusContent(IslandEvent evt, IslandViewPresentation view)
@@ -1824,17 +2434,20 @@ public partial class MainWindow : Window
         IconText.Text = IconGlyphs.TryGetValue(kind, out var g) ? g : IconGlyphs["info"];
 
         var bgColor = IconColors.TryGetValue(kind, out var c) ? c : IconColors["info"];
-        AnimateBrushColor(IconBackground, bgColor, 220);
-        AnimateBrushColor(IconPulseBrush, bgColor, 220);
+        ApplyIconAccent(
+            bgColor,
+            includeBackground: true,
+            glowOpacity: kind == "clock" ? 0.22 : 0.5,
+            milliseconds: 220);
 
-        var glowColor = GlowColors.TryGetValue(kind, out var gc) ? gc : GlowColors["info"];
-        IconGlow.BeginAnimation(DropShadowEffect.ColorProperty,
-            new ColorAnimation(glowColor, TimeSpan.FromMilliseconds(220))
-            {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            });
-        IconGlow.BeginAnimation(DropShadowEffect.OpacityProperty,
-            new DoubleAnimation(kind == "clock" ? 0.22 : 0.5, TimeSpan.FromMilliseconds(220)));
+        if (kind != "media")
+        {
+            _currentMediaIcon = null;
+            IconImage.Source = null;
+            IconImage.Clip = null;
+            IconImage.Visibility = Visibility.Collapsed;
+            IconText.Visibility = Visibility.Visible;
+        }
 
         // 图标没变时跳过弹跳动画（避免 AlwaysVisible 时钟每隔几秒跳一下）
         if (kind == _currentIconKind) return;
@@ -1950,27 +2563,19 @@ public partial class MainWindow : Window
     {
         ClearPositionAnimations();
 
-        var duration = opening
-            ? TimeSpan.FromMilliseconds(620)
-            : TimeSpan.FromMilliseconds(380);
+        var policy = IslandAnimationPerformancePolicy.Default;
+        var duration = TimeSpan.FromMilliseconds(opening
+            ? policy.OpenMilliseconds
+            : policy.ResizeMilliseconds);
         var sizeEase = opening
-            ? (IEasingFunction)new ElasticEase
-            {
-                EasingMode = EasingMode.EaseOut,
-                Oscillations = 1,
-                Springiness = 4
-            }
-            : new BackEase
-            {
-                EasingMode = EasingMode.EaseOut,
-                Amplitude = 0.22
-            };
+            ? (IEasingFunction)new QuarticEase { EasingMode = EasingMode.EaseOut }
+            : new CubicEase { EasingMode = EasingMode.EaseOut };
         var positionEase = new QuarticEase { EasingMode = EasingMode.EaseOut };
 
         AnimateProperty(WidthProperty, ToWindowSize(tw), duration, sizeEase);
         AnimateProperty(HeightProperty, ToWindowSize(th), duration, sizeEase);
-        AnimateProperty(LeftProperty, tl, TimeSpan.FromMilliseconds(420), positionEase);
-        AnimateProperty(TopProperty, tt, TimeSpan.FromMilliseconds(420), positionEase);
+        AnimateProperty(LeftProperty, tl, TimeSpan.FromMilliseconds(policy.PositionMilliseconds), positionEase);
+        AnimateProperty(TopProperty, tt, TimeSpan.FromMilliseconds(policy.PositionMilliseconds), positionEase);
 
         PillBorder.BeginAnimation(OpacityProperty,
             new DoubleAnimation(_settings.Opacity, TimeSpan.FromMilliseconds(160))
@@ -1987,29 +2592,27 @@ public partial class MainWindow : Window
         PillScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
         PillSkew.BeginAnimation(SkewTransform.AngleXProperty, null);
 
-        PillScale.ScaleX = opening ? 0.78 : 1.035;
-        PillScale.ScaleY = opening ? 1.12 : 0.985;
-        PillSkew.AngleX = opening ? -1.8 : 0.7;
+        PillScale.ScaleX = opening ? 0.92 : 1.015;
+        PillScale.ScaleY = opening ? 1.04 : 0.995;
+        PillSkew.AngleX = opening ? -0.8 : 0.35;
 
-        var spring = new ElasticEase
-        {
-            EasingMode = EasingMode.EaseOut,
-            Oscillations = opening ? 2 : 1,
-            Springiness = opening ? 4 : 5
-        };
+        var scaleDuration = TimeSpan.FromMilliseconds(opening
+            ? policy.OpenScaleMilliseconds
+            : policy.ResizeScaleMilliseconds);
+        var scaleEase = new CubicEase { EasingMode = EasingMode.EaseOut };
 
         PillScale.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(opening ? 680 : 420))
+            new DoubleAnimation(1, scaleDuration)
             {
-                EasingFunction = spring
+                EasingFunction = scaleEase
             });
         PillScale.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(1, TimeSpan.FromMilliseconds(opening ? 680 : 420))
+            new DoubleAnimation(1, scaleDuration)
             {
-                EasingFunction = spring
+                EasingFunction = scaleEase
             });
         PillSkew.BeginAnimation(SkewTransform.AngleXProperty,
-            new DoubleAnimation(0, TimeSpan.FromMilliseconds(360))
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(policy.ResizeScaleMilliseconds))
             {
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             });
@@ -2023,14 +2626,19 @@ public partial class MainWindow : Window
         ContentPanel.Opacity = opening ? 0 : 0.52;
         ContentTranslate.Y = opening ? 8 : 3;
 
-        var fade = new DoubleAnimation(1, TimeSpan.FromMilliseconds(opening ? 300 : 210))
+        var policy = IslandAnimationPerformancePolicy.Default;
+        var fade = new DoubleAnimation(1, TimeSpan.FromMilliseconds(opening
+            ? policy.ContentOpenMilliseconds
+            : policy.ContentResizeMilliseconds))
         {
-            BeginTime = TimeSpan.FromMilliseconds(opening ? 90 : 30),
+            BeginTime = TimeSpan.FromMilliseconds(opening ? 45 : 20),
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
-        var slide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(opening ? 360 : 230))
+        var slide = new DoubleAnimation(0, TimeSpan.FromMilliseconds(opening
+            ? policy.ContentOpenMilliseconds
+            : policy.ContentResizeMilliseconds))
         {
-            BeginTime = TimeSpan.FromMilliseconds(opening ? 70 : 20),
+            BeginTime = TimeSpan.FromMilliseconds(opening ? 35 : 15),
             EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
         };
 
@@ -2113,7 +2721,10 @@ public partial class MainWindow : Window
         var plan = ScrollingTextMotionPlan.CreateInitial();
         _scrollOffset = plan.InitialOffset;
         _scrollHoldUntil = DateTime.UtcNow.AddMilliseconds(plan.HoldMilliseconds);
-        ScrollText.RenderTransform = new TranslateTransform(_scrollOffset, 0);
+        _scrollTextTranslate ??= new TranslateTransform();
+        _scrollTextTranslate.X = _scrollOffset;
+        _scrollTextTranslate.Y = 0;
+        ScrollText.RenderTransform = _scrollTextTranslate;
         _scrollTimer.Start();
     }
 
@@ -2124,13 +2735,15 @@ public partial class MainWindow : Window
         if (ScrollText.ActualWidth <= 0) return;
         if (DateTime.UtcNow < _scrollHoldUntil) return;
 
-        var speed = _clipboardPluginSettings?.ScrollSpeed ?? 2.0;
+        var speed = _clipboardPluginSettings?.ScrollSpeed ?? 0.5;
         _scrollOffset -= speed;
 
         if (_scrollOffset < -ScrollText.ActualWidth)
             _scrollOffset = ScrollCanvas.ActualWidth > 0 ? ScrollCanvas.ActualWidth : 240;
 
-        ScrollText.RenderTransform = new TranslateTransform(_scrollOffset, 0);
+        _scrollTextTranslate ??= new TranslateTransform();
+        _scrollTextTranslate.X = _scrollOffset;
+        ScrollText.RenderTransform = _scrollTextTranslate;
     }
 
     private void WaveTimer_Tick(object? sender, EventArgs e)
@@ -2140,10 +2753,22 @@ public partial class MainWindow : Window
         var h2 = 12 + Math.Sin(_wavePhase + 1.4) * 7;
         var h3 = 8 + Math.Sin(_wavePhase + 2.6) * 5;
         var h4 = 11 + Math.Sin(_wavePhase + 3.5) * 6;
-        SetWaveHeights(h1, h2, h3, h4, TimeSpan.FromMilliseconds(90));
+        SetWaveHeights(h1, h2, h3, h4, TimeSpan.Zero);
 
-        // Progress bar updates when a new media event arrives.
-        // No tick-based interpolation — GSMTC ProgressPercent is already accurate.
+        // Interpolate progress bar between SMTC poll updates
+        if (_mediaActive && _mediaEndTicks > _mediaStartTimeTicks)
+        {
+            var elapsed = Environment.TickCount64 - _mediaLastUpdatedTicks;
+            if (elapsed < 0) elapsed = 0;
+            var durationTicks = _mediaEndTicks - _mediaStartTimeTicks;
+            var currentPosTicks = _mediaPositionTicks + elapsed * 10_000; // ms → .NET ticks
+            var fraction = Math.Clamp((double)(currentPosTicks - _mediaStartTimeTicks) / durationTicks, 0.0, 1.0);
+            var trackWidth = ProgressBarPanel.ActualWidth > 10
+                ? ProgressBarPanel.ActualWidth : _mediaProgressTrackWidth;
+            var targetWidth = fraction * trackWidth;
+            ProgressFill.BeginAnimation(Border.WidthProperty, null);
+            ProgressFill.Width = targetWidth;
+        }
     }
 
     private void SetWaveHeights(double h1, double h2, double h3, double h4, TimeSpan duration)
@@ -2156,8 +2781,25 @@ public partial class MainWindow : Window
 
     private static void AnimateWaveBar(Border bar, double height, TimeSpan duration)
     {
-        bar.BeginAnimation(HeightProperty,
-            new DoubleAnimation(Math.Clamp(height, 4, 22), duration)
+        var clamped = Math.Clamp(height, 4, 22);
+        if (bar.RenderTransform is not ScaleTransform scale)
+        {
+            scale = new ScaleTransform(1, clamped / 22);
+            bar.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+            bar.RenderTransform = scale;
+            bar.BeginAnimation(HeightProperty, null);
+            bar.Height = 22;
+        }
+
+        if (duration <= TimeSpan.Zero)
+        {
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            scale.ScaleY = clamped / 22;
+            return;
+        }
+
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(clamped / 22, duration)
             {
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
             });
@@ -2173,24 +2815,112 @@ public partial class MainWindow : Window
     private async void MediaPlayPauseBtn_Click(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        if (_mediaSessionProvider is null) return;
-        try { await _mediaSessionProvider.TryTogglePlayPauseAsync(); }
+        try
+        {
+            var wasPlaying = _currentView?.ShowsAudioWave == true;
+            var sourceName = MediaControlDispatchPolicy.ResolveControlSource(
+                _currentView?.SourceName,
+                _activeMediaControlSourceName);
+            var handled = await TryDispatchMediaControlAsync(sourceName, MediaAppCommand.TogglePlayPause);
+            if (handled && MediaControlDispatchPolicy.AllowsOptimisticPlaybackStateUpdate(sourceName))
+                SetLocalMediaPlaybackState(!wasPlaying);
+        }
         catch { }
     }
 
     private async void MediaNextBtn_Click(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        if (_mediaSessionProvider is null) return;
-        try { await _mediaSessionProvider.TrySkipNextAsync(); }
+        try
+        {
+            var sourceName = MediaControlDispatchPolicy.ResolveControlSource(
+                _currentView?.SourceName,
+                _activeMediaControlSourceName);
+            await TryDispatchMediaControlAsync(sourceName, MediaAppCommand.NextTrack);
+        }
         catch { }
     }
 
     private async void MediaPrevBtn_Click(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        if (_mediaSessionProvider is null) return;
-        try { await _mediaSessionProvider.TrySkipPreviousAsync(); }
+        try
+        {
+            var sourceName = MediaControlDispatchPolicy.ResolveControlSource(
+                _currentView?.SourceName,
+                _activeMediaControlSourceName);
+            await TryDispatchMediaControlAsync(sourceName, MediaAppCommand.PreviousTrack);
+        }
         catch { }
+    }
+
+    private async Task<bool> TryDispatchMediaControlAsync(string? sourceName, MediaAppCommand command)
+    {
+        foreach (var attempt in MediaControlDispatchPolicy.DispatchAttemptsForSource(sourceName))
+        {
+            if (attempt == MediaControlDispatchAttempt.AppCommand)
+            {
+                if (MediaAppCommandFallback.TrySend(sourceName, command))
+                    return true;
+                continue;
+            }
+
+            if (_mediaSessionProvider is null)
+                continue;
+
+            var handled = command switch
+            {
+                MediaAppCommand.NextTrack => await _mediaSessionProvider.TrySkipNextAsync(sourceName),
+                MediaAppCommand.PreviousTrack => await _mediaSessionProvider.TrySkipPreviousAsync(sourceName),
+                _ => await _mediaSessionProvider.TryTogglePlayPauseAsync(sourceName)
+            };
+            if (handled)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void SetLocalMediaPlaybackState(bool isPlaying)
+    {
+        if (_currentView is not { Kind: IslandViewKind.Media } current)
+            return;
+
+        _mediaActive = isPlaying;
+        _currentView = current with { ShowsAudioWave = isPlaying };
+        MediaPlayPauseIcon.Text = MediaPlaybackUiPolicy.PlayPauseGlyph(isPlaying);
+        if (isPlaying)
+        {
+            AudioWavePanel.Visibility = Visibility.Visible;
+            AccessoryGrid.Visibility = Visibility.Visible;
+            _waveTimer.Start();
+        }
+        else
+        {
+            _waveTimer.Stop();
+            AudioWavePanel.Visibility = Visibility.Collapsed;
+            AccessoryGrid.Visibility = Visibility.Collapsed;
+            _collapseTimer.Stop();
+            if (!_settings.AlwaysVisible &&
+                !MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(_isHoverCard, current.SourceName))
+            {
+                Collapse();
+                return;
+            }
+        }
+
+        if (_isHoverCard)
+        {
+            var card = HoverCardPresentation.FromCompact(_currentView, _settings);
+            ApplyHoverCardContent(card);
+        }
+    }
+
+    private static bool IsBrowserSourceId(string sourceId)
+    {
+        if (string.IsNullOrWhiteSpace(sourceId)) return false;
+        var lower = sourceId.ToLowerInvariant();
+        return lower.Contains("chrome") || lower.Contains("edge") ||
+               lower.Contains("msedge") || lower.Contains("firefox");
     }
 }
