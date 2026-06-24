@@ -77,6 +77,10 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             if (string.IsNullOrWhiteSpace(title))
                 continue;
 
+            // Skip sessions where title is just the AUMID (happens when NetEase is minimized)
+            if (title.StartsWith('{') && title.EndsWith('}') && title.Length > 30)
+                continue;
+
             // Browser sessions: reject if timeline shows no real media progress.
             // Edge registers a GSMTC session for any media-capable tab; when the user
             // navigates away the old session lingers as "Playing" with a frozen position.

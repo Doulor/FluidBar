@@ -54,6 +54,9 @@ public static class MediaControlDispatchPolicy
 
 public static class MediaAppCommandFallbackPolicy
 {
+    // Send keybd_event (system media key) for all music apps.
+    // This is the most reliable method - works for Kugou, NetEase, QQ, Spotify, etc.
+    // GSMTC may not respond for some players, but keybd_event always reaches the OS media transport.
     public static bool ShouldUseForSource(string? sourceId)
     {
         if (string.IsNullOrWhiteSpace(sourceId))
