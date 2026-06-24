@@ -159,10 +159,14 @@ public partial class MainWindow : Window
             _collapseTimer.Stop();
             if (!_settingsPanelOpen)
             {
-                // 媒体播放中不切换到时钟，保持当前显示
-                if (_settings.AlwaysVisible && !IsMediaPlaying())
+                // 媒体播放或暂停中不自动隐藏，保持当前显示
+                if (_mediaActive || (_currentView?.Kind == IslandViewKind.Media))
+                {
+                    // Media is active or displayed — don't collapse
+                }
+                else if (_settings.AlwaysVisible)
                     ShowIdleClock();
-                else if (!_settings.AlwaysVisible && !IsMediaPlaying())
+                else
                     Collapse();
             }
         };
@@ -2042,8 +2046,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 媒体播放中不自动隐藏
-        if (_currentView?.Kind == IslandViewKind.Media && _currentView.ShowsAudioWave)
+        // 媒体播放中不自动隐藏；暂停时也不自动隐藏（卡片应保持打开直到鼠标移走）
+        if (_currentView?.Kind == IslandViewKind.Media && (_currentView.ShowsAudioWave || _isHoverCard))
         {
             _collapseTimer.Stop();
             return;
