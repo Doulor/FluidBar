@@ -186,35 +186,42 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
     {
         try
         {
-            var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask();
-            var current = manager.GetCurrentSession();
-            var sessions = manager.GetSessions().ToList();
-            if (current is not null && !sessions.Contains(current))
-                sessions.Insert(0, current);
-
-            var candidates = MediaSessionCommandPolicy.OrderCandidates(
-                sessions,
-                preferredSourceId,
-                _currentAumid,
-                session => session.SourceAppUserModelId,
-                session => ReferenceEquals(session, current) ||
-                           string.Equals(
-                               session.SourceAppUserModelId,
-                               current?.SourceAppUserModelId,
-                               StringComparison.OrdinalIgnoreCase),
-                session => SafeIsCommandEnabled(session, isCommandEnabled));
-
-            foreach (var session in candidates)
+            // Run entire GSMTC operation on thread pool to avoid blocking UI thread.
+            // RequestAsync + session enumeration can be slow and freeze the UI.
+            return await Task.Run(async () =>
             {
-                try
+                var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+                var current = manager.GetCurrentSession();
+                var sessions = manager.GetSessions().ToList();
+                if (current is not null && !sessions.Contains(current))
+                    sessions.Insert(0, current);
+
+                var candidates = MediaSessionCommandPolicy.OrderCandidates(
+                    sessions,
+                    preferredSourceId,
+                    _currentAumid,
+                    session => session.SourceAppUserModelId,
+                    session => ReferenceEquals(session, current) ||
+                               string.Equals(
+                                   session.SourceAppUserModelId,
+                                   current?.SourceAppUserModelId,
+                                   StringComparison.OrdinalIgnoreCase),
+                    session => SafeIsCommandEnabled(session, isCommandEnabled));
+
+                foreach (var session in candidates)
                 {
-                    if (await WithTimeout(command(session)))
-                        return true;
+                    try
+                    {
+                        if (await command(session))
+                            return true;
+                    }
+                    catch
+                    {
+                    }
                 }
-                catch
-                {
-                }
-            }
+
+                return false;
+            });
         }
         catch
         {
