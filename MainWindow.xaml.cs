@@ -2788,6 +2788,19 @@ public partial class MainWindow : Window
         _isExpanded = true;
         MorphToView(view, opening: true);
 
+        // Ensure media content is visible after re-expansion
+        // (collapse animation may have hidden these elements)
+        if (view.Kind == IslandViewKind.Media)
+        {
+            ContentPanel.Opacity = 1;
+            if (ContentText.Visibility != Visibility.Visible)
+                ContentText.Visibility = Visibility.Visible;
+            if (TitleText.Visibility != Visibility.Visible)
+                TitleText.Visibility = Visibility.Visible;
+            if (AccessoryGrid.Visibility != Visibility.Visible)
+                AccessoryGrid.Visibility = Visibility.Visible;
+        }
+
         ResetCollapseTimer();
     }
 
