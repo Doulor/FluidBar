@@ -27,6 +27,7 @@ public sealed class MediaPlugin : IIslandPlugin
     private bool _lastFromGsm;
     private bool _suppressFallbackUntilGsmPlaying;
     private readonly KugouLyricsProvider _kugouLyrics = new();
+    private readonly NeteaseLyricsProvider _neteaseLyrics = new();
 
     // Wall-clock position estimation for fallback sources (Kugou etc.)
     private string? _fallbackTrackKey;
@@ -241,6 +242,8 @@ public sealed class MediaPlugin : IIslandPlugin
                 var needsArt = string.IsNullOrWhiteSpace(snapshot.AlbumArtPath);
                 var trackChanged = enrichKey != _lastEnrichmentKey;
 
+                try { System.IO.File.AppendAllText(@"D:\build\GitLocal\FluidBar\enrichment_debug.log", $"{DateTime.Now:HH:mm:ss} Enrich: key={enrichKey} changed={trackChanged} bg={_bgEnrichmentPending} last={_lastEnrichmentKey}\n"); } catch { }
+
                 if (trackChanged)
                 {
                     // New track — clear old enrichment, fire event immediately
@@ -300,6 +303,9 @@ public sealed class MediaPlugin : IIslandPlugin
                             ? TimeSpan.FromTicks(snapshot.PositionTicks)
                             : TimeSpan.Zero;
                         var enriched = _kugouLyrics.EnrichSnapshot(snapshot, pos);
+                        // If Kugou found no lyrics, try NetEase API
+                        if (string.IsNullOrWhiteSpace(enriched.LyricLine) && !string.IsNullOrWhiteSpace(enriched.Title))
+                            enriched = _neteaseLyrics.EnrichSnapshot(enriched, pos);
                         if (string.IsNullOrWhiteSpace(enriched.LyricLine) && needsLyric && !isAppTitle)
                         {
                             _enrichmentFailedKey = enrichKey;
@@ -386,12 +392,23 @@ public sealed class MediaPlugin : IIslandPlugin
         try
         {
             var enriched = await Task.Run(() => _kugouLyrics.EnrichSnapshot(snapshot, position));
+
+            // If Kugou found no lyrics, try NetEase API
+            if (string.IsNullOrWhiteSpace(enriched.LyricLine) && !string.IsNullOrWhiteSpace(enriched.Title))
+            {
+                var neteaseResult = await Task.Run(() => _neteaseLyrics.EnrichSnapshot(enriched, position));
+                if (!string.IsNullOrWhiteSpace(neteaseResult.LyricLine))
+                    enriched = neteaseResult;
+            }
+
             // Only store if the song hasn't changed during the async enrichment
             if (enrichKey != _currentTrackKey)
             {
                 _bgEnrichmentPending = false;
                 return;
             }
+
+            try { System.IO.File.AppendAllText(@"D:\build\GitLocal\FluidBar\enrichment_debug.log", $"{DateTime.Now:HH:mm:ss} Result: lyric='{enriched.LyricLine?.Substring(0, Math.Min(20, enriched.LyricLine?.Length ?? 0))}' art='{enriched.AlbumArtPath}'\n"); } catch { }
 
             if (!string.IsNullOrWhiteSpace(enriched.LyricLine) ||
                 !string.IsNullOrWhiteSpace(enriched.AlbumArtPath))
