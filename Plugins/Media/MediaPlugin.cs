@@ -221,13 +221,15 @@ public sealed class MediaPlugin : IIslandPlugin
             // For same tracks: use cached lyrics (no HTTP).
             if (MediaSnapshotSelectionPolicy.GetSourcePriority(snapshot.SourceAppUserModelId) >= 100)
             {
-                // When title is empty (e.g. NetEase minimized), use artist as search keyword
-                var searchTitle = string.IsNullOrWhiteSpace(snapshot.Title) ? snapshot.Artist : snapshot.Title;
-                var searchArtist = string.IsNullOrWhiteSpace(snapshot.Title) ? "" : snapshot.Artist;
-                var enrichKey = $"{searchTitle}|{searchArtist}";
+                // Build stable enrichment key BEFORE modifying snapshot.
+                // When title is empty (AUMID cleared), always use |artist
+                // to prevent key changes between polls when fallback scan finds real title.
+                var enrichKey = string.IsNullOrWhiteSpace(snapshot.Title)
+                    ? $"|{snapshot.Artist}"
+                    : $"{snapshot.Title}|{snapshot.Artist}";
                 _currentTrackKey = enrichKey;
 
-                // Ensure snapshot has searchable title/artist for Kugou API
+                // When title is empty (e.g. NetEase minimized), use artist for Kugou API search
                 if (string.IsNullOrWhiteSpace(snapshot.Title) && !string.IsNullOrWhiteSpace(snapshot.Artist))
                     snapshot = snapshot with { Title = snapshot.Artist, Artist = "" };
 
