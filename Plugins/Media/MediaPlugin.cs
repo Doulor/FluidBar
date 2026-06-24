@@ -221,24 +221,21 @@ public sealed class MediaPlugin : IIslandPlugin
             // For same tracks: use cached lyrics (no HTTP).
             if (MediaSnapshotSelectionPolicy.GetSourcePriority(snapshot.SourceAppUserModelId) >= 100)
             {
-                // Build enrichment key and prepare searchable snapshot.
-                // When title is an AUMID ({GUID-...}) or empty, use artist for Kugou API search.
+                // Build STABLE enrichment key to prevent re-enrichment across polls.
+                // When title is AUMID/empty, always use "|artist" format — consistent
+                // regardless of whether fallback scan finds a real title later.
                 var isAumidTitle = !string.IsNullOrWhiteSpace(snapshot.Title) &&
                     snapshot.Title.Length > 30 && snapshot.Title.StartsWith('{') &&
                     snapshot.Title.EndsWith('}') && snapshot.Title.Contains('-');
-                var searchTitle = (isAumidTitle || string.IsNullOrWhiteSpace(snapshot.Title))
-                    ? snapshot.Artist : snapshot.Title;
-                var searchArtist = (isAumidTitle || string.IsNullOrWhiteSpace(snapshot.Title))
-                    ? "" : snapshot.Artist;
-                var enrichKey = $"{searchTitle}|{searchArtist}";
+                var titleIsMissing = isAumidTitle || string.IsNullOrWhiteSpace(snapshot.Title);
+                var enrichKey = titleIsMissing
+                    ? $"|{snapshot.Artist}"
+                    : $"{snapshot.Title}|{snapshot.Artist}";
                 _currentTrackKey = enrichKey;
 
                 // Replace AUMID/empty title with artist for display and Kugou API search
-                if (isAumidTitle || string.IsNullOrWhiteSpace(snapshot.Title))
-                {
-                    if (!string.IsNullOrWhiteSpace(snapshot.Artist))
-                        snapshot = snapshot with { Title = snapshot.Artist, Artist = "" };
-                }
+                if (titleIsMissing && !string.IsNullOrWhiteSpace(snapshot.Artist))
+                    snapshot = snapshot with { Title = snapshot.Artist, Artist = "" };
 
                 var needsLyric = string.IsNullOrWhiteSpace(snapshot.LyricLine);
                 var needsArt = string.IsNullOrWhiteSpace(snapshot.AlbumArtPath);
