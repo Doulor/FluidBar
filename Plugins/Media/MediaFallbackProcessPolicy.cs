@@ -43,36 +43,38 @@ public static class MediaFallbackProcessPolicy
         string sourceName,
         string songTitle)
     {
+        // Check known sources FIRST — even with empty titles, these are trusted
+        if (IsKugouSource(processName, sourceName))
+        {
+            if (!string.IsNullOrWhiteSpace(songTitle))
+            {
+                if (songTitle.Contains("桌面歌词", StringComparison.Ordinal) ||
+                    songTitle.Contains("酷狗音乐", StringComparison.Ordinal) ||
+                    songTitle.Contains("KuGou", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
+        if (IsNeteaseSource(processName, sourceName))
+        {
+            if (!string.IsNullOrWhiteSpace(songTitle))
+            {
+                if (songTitle.Contains("网易云音乐", StringComparison.Ordinal) ||
+                    songTitle.Equals("DesktopLyric", StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
+        // Unknown sources: require non-empty, non-app-name title
         if (string.IsNullOrWhiteSpace(songTitle) ||
             MediaSnapshotSelectionPolicy.IsAppNameString(songTitle))
         {
             return false;
         }
 
-        // Trust Kugou with known exclusion patterns
-        if (IsKugouSource(processName, sourceName))
-        {
-            if (songTitle.Contains("桌面歌词", StringComparison.Ordinal) ||
-                songTitle.Contains("酷狗音乐", StringComparison.Ordinal) ||
-                songTitle.Contains("KuGou", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        // Trust NetEase (cloudmusic) when window title looks like a real song
-        if (IsNeteaseSource(processName, sourceName))
-        {
-            if (songTitle.Contains("网易云音乐", StringComparison.Ordinal) ||
-                songTitle.Equals("DesktopLyric", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
     private static bool IsNeteaseSource(string processName, string sourceName)
