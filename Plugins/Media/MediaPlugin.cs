@@ -454,6 +454,18 @@ public sealed class MediaPlugin : IIslandPlugin
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    private static bool IsNeteaseWindowClass(IntPtr hWnd)
+    {
+        var className = new StringBuilder(256);
+        GetClassName(hWnd, className, className.Capacity);
+        var name = className.ToString();
+        return name.Contains("Orpheus", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("CloudMusic", StringComparison.OrdinalIgnoreCase);
+    }
+
     [ThreadStatic]
     private static List<(IntPtr Hwnd, int ProcessId, string Title, string ProcessName, string SourceName)>? _fallbackWindows;
 
@@ -504,12 +516,18 @@ public sealed class MediaPlugin : IIslandPlugin
             // (Kugou minimized to tray still has a hidden main window with the song title)
             if (!IsWindowVisible(hWnd))
             {
-                // Hidden window — only accept if it has a title (song info)
+                // Hidden window — accept if it has a title (song info)
                 var hiddenTitle = GetWindowTitle(hWnd);
                 if (!string.IsNullOrWhiteSpace(hiddenTitle) &&
                     !hiddenTitle.Contains("桌面歌词", StringComparison.Ordinal))
                 {
                     _fallbackWindows!.Add((hWnd, (int)pid, hiddenTitle, info.ProcName, info.FriendlyName));
+                }
+                // For NetEase: also check window class name (Orpheus/CloudMusic)
+                // even if title is empty — the class name confirms it's a media window
+                else if (IsNeteaseWindowClass(hWnd))
+                {
+                    _fallbackWindows!.Add((hWnd, (int)pid, "", info.ProcName, info.FriendlyName));
                 }
                 return true;
             }
