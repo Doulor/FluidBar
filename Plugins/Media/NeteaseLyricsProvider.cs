@@ -75,10 +75,16 @@ public sealed class NeteaseLyricsProvider : ILyricsProvider
         try
         {
             var keyword = string.IsNullOrWhiteSpace(artist) ? title : $"{title} {artist}";
-            var encoded = WebUtility.UrlEncode(keyword);
-            var url = $"https://music.163.com/api/search/get/web?s={encoded}&type=1&limit=5";
+            var url = "https://music.163.com/api/search/get/web";
+            var formData = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("s", keyword),
+                new KeyValuePair<string, string>("type", "1"),
+                new KeyValuePair<string, string>("limit", "5"),
+                new KeyValuePair<string, string>("offset", "0")
+            });
 
-            var json = HttpGet(url);
+            var json = HttpPost(url, formData);
             if (json is null) return null;
 
             using var doc = JsonDocument.Parse(json);
@@ -194,6 +200,19 @@ public sealed class NeteaseLyricsProvider : ILyricsProvider
         try
         {
             return Http.GetStringAsync(url).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? HttpPost(string url, FormUrlEncodedContent formData)
+    {
+        try
+        {
+            var response = Http.PostAsync(url, formData).GetAwaiter().GetResult();
+            return response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         }
         catch
         {
