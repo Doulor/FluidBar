@@ -242,7 +242,6 @@ public sealed class MediaPlugin : IIslandPlugin
                 var needsArt = string.IsNullOrWhiteSpace(snapshot.AlbumArtPath);
                 var trackChanged = enrichKey != _lastEnrichmentKey;
 
-                try { System.IO.File.AppendAllText(@"D:\build\GitLocal\FluidBar\enrichment_debug.log", $"{DateTime.Now:HH:mm:ss} Enrich: key={enrichKey} changed={trackChanged} bg={_bgEnrichmentPending} last={_lastEnrichmentKey}\n"); } catch { }
 
                 if (trackChanged)
                 {
@@ -408,7 +407,6 @@ public sealed class MediaPlugin : IIslandPlugin
                 return;
             }
 
-            try { System.IO.File.AppendAllText(@"D:\build\GitLocal\FluidBar\enrichment_debug.log", $"{DateTime.Now:HH:mm:ss} Result: lyric='{enriched.LyricLine?.Substring(0, Math.Min(20, enriched.LyricLine?.Length ?? 0))}' art='{enriched.AlbumArtPath}'\n"); } catch { }
 
             if (!string.IsNullOrWhiteSpace(enriched.LyricLine) ||
                 !string.IsNullOrWhiteSpace(enriched.AlbumArtPath))
