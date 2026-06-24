@@ -556,19 +556,21 @@ public partial class MainWindow : Window
                         ContentText.Text = newLyric;
                 }
 
-                // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
-                // This must run regardless of whether lyrics changed
-                if (_currentView is { ShowsAudioWave: true })
-                {
-                    if (ContentText.Visibility != Visibility.Visible)
-                        ContentText.Visibility = Visibility.Visible;
-                    if (TitleText.Visibility != Visibility.Visible)
-                        TitleText.Visibility = Visibility.Visible;
-                    if (AccessoryGrid.Visibility != Visibility.Visible)
-                        AccessoryGrid.Visibility = Visibility.Visible;
-                }
                 return;
             }
+
+            // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
+            // This runs in the fast path even when lyrics haven't changed
+            if (_currentView is { ShowsAudioWave: true })
+            {
+                if (ContentText.Visibility != Visibility.Visible)
+                    ContentText.Visibility = Visibility.Visible;
+                if (TitleText.Visibility != Visibility.Visible)
+                    TitleText.Visibility = Visibility.Visible;
+                if (AccessoryGrid.Visibility != Visibility.Visible)
+                    AccessoryGrid.Visibility = Visibility.Visible;
+            }
+            return;
         }
 
         var view = IslandPresentation.FromEvent(
