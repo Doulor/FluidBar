@@ -88,17 +88,18 @@ internal static class MediaAppCommandFallback
         if (!MediaAppCommandFallbackPolicy.ShouldUseForSource(sourceId))
             return false;
 
-        // Use keybd_event (same API as NetSpeed-Dynamic, proven to work with Kugou)
         var vk = command switch
         {
             MediaAppCommand.NextTrack => VK_MEDIA_NEXT_TRACK,
             MediaAppCommand.PreviousTrack => VK_MEDIA_PREV_TRACK,
             _ => VK_MEDIA_PLAY_PAUSE
         };
+
+        // Always send keybd_event (best-effort, works for many players)
         keybd_event(vk, 0, 0, IntPtr.Zero);
         keybd_event(vk, 0, 2, IntPtr.Zero); // KEYEVENTF_KEYUP = 2
 
-        // Also send WM_APPCOMMAND to target windows as additional fallback
+        // Also send WM_APPCOMMAND to target windows (Kugou needs this)
         var targets = FindTargetWindows(sourceId);
         var appCmd = command switch
         {
@@ -110,7 +111,8 @@ internal static class MediaAppCommandFallback
         foreach (var hWnd in targets)
             SendMessage(hWnd, WM_APPCOMMAND, hWnd, lParam);
 
-        return true;
+        // Return false to let GSMTC also try — keybd_event/WM_APPCOMMAND may not reach all players
+        return false;
     }
 
     private static IReadOnlyList<IntPtr> FindTargetWindows(string? sourceId)

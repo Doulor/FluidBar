@@ -519,8 +519,10 @@ public partial class MainWindow : Window
 
         // Lyric-only update: same source/title/artist, only lyrics changed — update text directly
         // without re-rendering the entire island (avoids "jump" and hover card disruption)
+        // Skip fast path when play state changed (pause→play) to restore full media UI
         if (evt.Source == "media" && _currentView is { Kind: IslandViewKind.Media } cur &&
-            evt.Title == cur.Title && evt.Content == cur.Content && evt.Source == _currentSource)
+            evt.Title == cur.Title && evt.Content == cur.Content && evt.Source == _currentSource &&
+            cur.ShowsAudioWave == (evt.Payload?.IsActive == true))
         {
             var newLyric = evt.Payload?.LyricLine ?? "";
             var oldLyric = cur.LyricLine ?? "";

@@ -78,7 +78,8 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
                 continue;
 
             // Skip sessions where title is just the AUMID (happens when NetEase is minimized)
-            if (title.StartsWith('{') && title.EndsWith('}') && title.Length > 30)
+            // AUMID format: {4FF7DEC0-EDE4-46DA-835F-6B8C8D2E3F1A}
+            if (title.Length > 30 && title.StartsWith('{') && title.EndsWith('}') && title.Contains('-'))
                 continue;
 
             // Browser sessions: reject if timeline shows no real media progress.
