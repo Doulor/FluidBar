@@ -285,7 +285,11 @@ public sealed class MediaPlugin : IIslandPlugin
                     var pos = snapshot.PositionTicks > 0
                         ? TimeSpan.FromTicks(snapshot.PositionTicks)
                         : TimeSpan.Zero;
-                    var reselected = _kugouLyrics.ReSelectLyrics(snapshot, pos);
+                    var isNeteaseSrc = snapshot.SourceAppUserModelId?.Contains("cloudmusic", StringComparison.OrdinalIgnoreCase) == true ||
+                                        snapshot.SourceAppUserModelId?.Contains("netease", StringComparison.OrdinalIgnoreCase) == true;
+                    var reselected = isNeteaseSrc
+                        ? _neteaseLyrics.ReSelectLyrics(snapshot, pos)
+                        : _kugouLyrics.ReSelectLyrics(snapshot, pos);
                     if (reselected is not null)
                         snapshot = reselected;
                 }

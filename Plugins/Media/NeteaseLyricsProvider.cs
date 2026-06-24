@@ -144,6 +144,18 @@ public sealed class NeteaseLyricsProvider : ILyricsProvider
         }
     }
 
+    public MediaSnapshot? ReSelectLyrics(MediaSnapshot snapshot, TimeSpan position)
+    {
+        var cacheKey = $"{snapshot.Title}|{snapshot.Artist}";
+        if (_lyricsCache.TryGetValue(cacheKey, out var lines) && lines.Count > 0)
+        {
+            var current = SelectLine(lines, position);
+            var next = SelectNextLine(lines, position);
+            return snapshot with { LyricLine = current, SecondaryLyricLine = next };
+        }
+        return null;
+    }
+
     private static List<LrcLine> ParseLrc(string lrcText)
     {
         var lines = new List<LrcLine>();
