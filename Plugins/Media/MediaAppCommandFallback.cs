@@ -54,15 +54,16 @@ public static class MediaControlDispatchPolicy
 
 public static class MediaAppCommandFallbackPolicy
 {
-    // Only Kugou needs keybd_event + WM_APPCOMMAND (GSMTC doesn't work for it).
-    // All other music apps (NetEase, QQ, Spotify, etc.) respond to GSMTC directly.
+    // keybd_event (system media key) for music apps that may not respond to GSMTC.
+    // TrySend returns true to prevent double-toggle from GSMTC fallback.
     public static bool ShouldUseForSource(string? sourceId)
     {
         if (string.IsNullOrWhiteSpace(sourceId))
             return false;
 
         var lower = sourceId.ToLowerInvariant();
-        return lower.Contains("kugou") || lower.Contains("酷狗") || lower.Contains("kgmusic");
+        return lower.Contains("kugou") || lower.Contains("酷狗") || lower.Contains("kgmusic") ||
+               lower.Contains("cloudmusic") || lower.Contains("netease") || lower.Contains("网易云");
     }
 }
 
@@ -90,11 +91,11 @@ internal static class MediaAppCommandFallback
             _ => VK_MEDIA_PLAY_PAUSE
         };
 
-        // Always send keybd_event (best-effort, works for many players)
+        // Send keybd_event (system media key) — works for Kugou
         keybd_event(vk, 0, 0, IntPtr.Zero);
         keybd_event(vk, 0, 2, IntPtr.Zero); // KEYEVENTF_KEYUP = 2
 
-        // Also send WM_APPCOMMAND to target windows (Kugou needs this)
+        // Also send WM_APPCOMMAND to target windows as additional method
         var targets = FindTargetWindows(sourceId);
         var appCmd = command switch
         {
@@ -106,7 +107,6 @@ internal static class MediaAppCommandFallback
         foreach (var hWnd in targets)
             SendMessage(hWnd, WM_APPCOMMAND, hWnd, lParam);
 
-        // Return true — keybd_event+WM_APPCOMMAND works for Kugou (the only app using this path)
         return true;
     }
 

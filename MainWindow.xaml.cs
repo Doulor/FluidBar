@@ -554,6 +554,17 @@ public partial class MainWindow : Window
                     var isMusicApp = !IsBrowserSourceId(_currentView.SourceName) && !string.IsNullOrWhiteSpace(_currentView.SourceName);
                     if (isMusicApp && !string.IsNullOrWhiteSpace(newLyric))
                         ContentText.Text = newLyric;
+
+                    // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
+                    if (_currentView is { ShowsAudioWave: true })
+                    {
+                        if (ContentText.Visibility != Visibility.Visible)
+                            ContentText.Visibility = Visibility.Visible;
+                        if (TitleText.Visibility != Visibility.Visible)
+                            TitleText.Visibility = Visibility.Visible;
+                        if (AccessoryGrid.Visibility != Visibility.Visible)
+                            AccessoryGrid.Visibility = Visibility.Visible;
+                    }
                 }
                 return;
             }
