@@ -39,7 +39,8 @@ public static class MediaControlDispatchPolicy
         MediaSnapshotSelectionPolicy.GetSourcePriority(sourceId) < 100;
 
     public static bool AllowsOptimisticPlaybackStateUpdate(string? sourceId) =>
-        !MediaAppCommandFallbackPolicy.ShouldUseForSource(sourceId);
+        !(sourceId?.Contains("kugou", StringComparison.OrdinalIgnoreCase) == true ||
+          sourceId?.Contains("酷狗", StringComparison.Ordinal) == true);
 
     public static string? ResolveControlSource(
         string? currentViewSource,
@@ -59,9 +60,11 @@ public static class MediaAppCommandFallbackPolicy
             return false;
 
         var lower = sourceId.ToLowerInvariant();
-        return lower.Contains("kugou") ||
-               lower.Contains("酷狗") ||
-               lower.Contains("kgmusic");
+        return lower.Contains("kugou") || lower.Contains("酷狗") || lower.Contains("kgmusic") ||
+               lower.Contains("cloudmusic") || lower.Contains("netease") || lower.Contains("网易云") ||
+               lower.Contains("qqmusic") || lower.Contains("qq音乐") ||
+               lower.Contains("spotify") ||
+               lower.Contains("kwmusic") || lower.Contains("酷我");
     }
 }
 
@@ -72,19 +75,27 @@ internal static class MediaAppCommandFallback
     private const int APPCOMMAND_MEDIA_NEXTTRACK = 11;
     private const int APPCOMMAND_MEDIA_PREVIOUSTRACK = 12;
 
-    // SendInput media key codes
-    private const ushort VK_MEDIA_NEXT_TRACK = 0xB0;
-    private const ushort VK_MEDIA_PREV_TRACK = 0xB1;
-    private const ushort VK_MEDIA_PLAY_PAUSE = 0xB3;
-    private const uint INPUT_KEYBOARD = 1;
-    private const uint KEYEVENTF_KEYUP = 0x0002;
+    // keybd_event media key codes
+    private const byte VK_MEDIA_NEXT_TRACK = 0xB0;
+    private const byte VK_MEDIA_PREV_TRACK = 0xB1;
+    private const byte VK_MEDIA_PLAY_PAUSE = 0xB3;
 
     public static bool TrySend(string? sourceId, MediaAppCommand command)
     {
         if (!MediaAppCommandFallbackPolicy.ShouldUseForSource(sourceId))
             return false;
 
-        // Method 1: WM_APPCOMMAND to target windows
+        // Use keybd_event (same API as NetSpeed-Dynamic, proven to work with Kugou)
+        var vk = command switch
+        {
+            MediaAppCommand.NextTrack => VK_MEDIA_NEXT_TRACK,
+            MediaAppCommand.PreviousTrack => VK_MEDIA_PREV_TRACK,
+            _ => VK_MEDIA_PLAY_PAUSE
+        };
+        keybd_event(vk, 0, 0, IntPtr.Zero);
+        keybd_event(vk, 0, 2, IntPtr.Zero); // KEYEVENTF_KEYUP = 2
+
+        // Also send WM_APPCOMMAND to target windows as additional fallback
         var targets = FindTargetWindows(sourceId);
         var appCmd = command switch
         {
@@ -96,28 +107,7 @@ internal static class MediaAppCommandFallback
         foreach (var hWnd in targets)
             SendMessage(hWnd, WM_APPCOMMAND, hWnd, lParam);
 
-        // Method 2: SendInput with system media key (works even when window is hidden)
-        var vk = command switch
-        {
-            MediaAppCommand.NextTrack => VK_MEDIA_NEXT_TRACK,
-            MediaAppCommand.PreviousTrack => VK_MEDIA_PREV_TRACK,
-            _ => VK_MEDIA_PLAY_PAUSE
-        };
-        SendMediaKey(vk);
-
         return true;
-    }
-
-    private static void SendMediaKey(ushort vk)
-    {
-        var inputs = new INPUT[2];
-        inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].union.keyboard.wVk = vk;
-        inputs[0].union.keyboard.dwFlags = 0;
-        inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].union.keyboard.wVk = vk;
-        inputs[1].union.keyboard.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, inputs, Marshal.SizeOf<INPUT>());
     }
 
     private static IReadOnlyList<IntPtr> FindTargetWindows(string? sourceId)
@@ -153,29 +143,6 @@ internal static class MediaAppCommandFallback
         return windows;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct INPUT
-    {
-        public uint type;
-        public INPUTUNION union;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct INPUTUNION
-    {
-        [FieldOffset(0)] public KEYBDINPUT keyboard;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KEYBDINPUT
-    {
-        public ushort wVk;
-        public ushort wScan;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -185,8 +152,8 @@ internal static class MediaAppCommandFallback
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint nInputs, [In] INPUT[] pInputs, int cbSize);
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }
