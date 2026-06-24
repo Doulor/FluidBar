@@ -139,6 +139,25 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             ? lyricsProvider.TryGetCurrentLine(snapshot, TimeSpan.FromTicks(snapshot.PositionTicks))
             : null;
 
+        // When title is AUMID and lyrics are empty, try searching by artist name
+        if (string.IsNullOrWhiteSpace(lyric) && showLyrics && snapshot.IsPlaying)
+        {
+            var isAumidTitle = !string.IsNullOrWhiteSpace(snapshot.Title) &&
+                snapshot.Title.Length > 30 && snapshot.Title.StartsWith('{') &&
+                snapshot.Title.EndsWith('}') && snapshot.Title.Contains('-');
+            if (isAumidTitle && !string.IsNullOrWhiteSpace(snapshot.Artist))
+            {
+                // Create a modified snapshot with artist as title for Kugou API search
+                var searchSnapshot = snapshot with { Title = snapshot.Artist, Artist = "" };
+                var searchLyric = lyricsProvider.TryGetCurrentLine(searchSnapshot, TimeSpan.FromTicks(snapshot.PositionTicks));
+                if (!string.IsNullOrWhiteSpace(searchLyric))
+                {
+                    lyric = searchLyric;
+                    snapshot = snapshot with { Title = snapshot.Artist, Artist = "", LyricLine = lyric };
+                }
+            }
+        }
+
         return snapshot with { LyricLine = lyric };
     }
 
