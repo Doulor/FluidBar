@@ -24,7 +24,8 @@ public static class MediaSnapshotSelectionPolicy
 
         if (IsSamePlayerApp(gsm.SourceAppUserModelId, fallback.SourceAppUserModelId))
         {
-            var title = IsAppNameString(gsm.Title) && !IsAppNameString(fallback.Title)
+            // Prefer fallback title when GSM title is an app name or AUMID
+            var title = (IsAppNameString(gsm.Title) || IsAumidTitle(gsm.Title)) && !IsAppNameString(fallback.Title)
                 ? fallback.Title
                 : string.IsNullOrWhiteSpace(gsm.Title) ? fallback.Title : gsm.Title;
             var artist = string.IsNullOrWhiteSpace(gsm.Artist) ? fallback.Artist : gsm.Artist;
@@ -99,10 +100,6 @@ public static class MediaSnapshotSelectionPolicy
         if (string.IsNullOrWhiteSpace(text))
             return false;
 
-        // AUMID format: {4FF7DEC0-EDE4-46DA-835F-...} (happens when NetEase is minimized)
-        if (text.Length > 30 && text.StartsWith('{') && text.EndsWith('}') && text.Contains('-'))
-            return true;
-
         ReadOnlySpan<string> appNames = [
             "酷狗音乐", "网易云音乐", "QQ音乐", "QQ 音乐",
             "酷我音乐", "Spotify", "Media Player", "KuGou",
@@ -113,6 +110,17 @@ public static class MediaSnapshotSelectionPolicy
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Check if a title is an AUMID (Application User Model ID).
+    /// AUMIDs look like {GUID-...} and appear when apps are minimized.
+    /// </summary>
+    public static bool IsAumidTitle(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+        return text.Length > 30 && text.StartsWith('{') && text.EndsWith('}') && text.Contains('-');
     }
 
     public static bool IsSamePlayerApp(string? gsmId, string? fallbackId)

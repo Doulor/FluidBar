@@ -708,23 +708,28 @@ public sealed class MediaPlugin : IIslandPlugin
         var dashIndex = title.IndexOf(" - ", StringComparison.Ordinal);
         if (dashIndex > 0 && dashIndex < title.Length - 3)
         {
-            var artist = title[..dashIndex].Trim();
-            var song = title[(dashIndex + 3)..].Trim();
+            var part1 = title[..dashIndex].Trim();
+            var part2 = title[(dashIndex + 3)..].Trim();
 
-            var extraDash = song.LastIndexOf(" - ", StringComparison.Ordinal);
+            var extraDash = part2.LastIndexOf(" - ", StringComparison.Ordinal);
             if (extraDash > 0)
             {
-                var suffix = song[(extraDash + 3)..].Trim();
+                var suffix = part2[(extraDash + 3)..].Trim();
                 if (suffix.Contains("云音乐", StringComparison.Ordinal) ||
                     suffix.Contains("Music", StringComparison.Ordinal) ||
                     suffix.Contains("音乐", StringComparison.Ordinal) ||
                     suffix.Contains("酷狗", StringComparison.Ordinal))
                 {
-                    song = song[..extraDash].Trim();
+                    part2 = part2[..extraDash].Trim();
                 }
             }
 
-            return (artist, song);
+            // NetEase uses "Song - Artist" format (opposite of Kugou's "Artist - Song")
+            if (processName.Contains("cloudmusic", StringComparison.OrdinalIgnoreCase) ||
+                processName.Contains("netease", StringComparison.OrdinalIgnoreCase))
+                return (part2, part1);  // Song first, artist second
+
+            return (part1, part2);  // Default: artist first, song second
         }
 
         return ("", title.Trim());
