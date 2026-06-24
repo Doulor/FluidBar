@@ -2961,7 +2961,9 @@ public partial class MainWindow : Window
             PillScale.ScaleX = 1;
             PillScale.ScaleY = 1;
             PillSkew.AngleX = 0;
-            HideAllPanels();
+            // Only hide panels if island wasn't re-expanded during collapse animation
+            if (!_isExpanded)
+                HideAllPanels();
         };
         PillBorder.BeginAnimation(OpacityProperty, fade);
     }
