@@ -327,6 +327,10 @@ public sealed class MediaPlugin : IIslandPlugin
                 }
             }
 
+            // Don't publish while enrichment is in flight — wait for enriched result
+            if (_bgEnrichmentPending)
+                return;
+
             var signature = MediaSnapshotSelectionPolicy.BuildSignature(snapshot);
             var lyricSig = $"{snapshot.LyricLine ?? ""}|{snapshot.SecondaryLyricLine ?? ""}";
 
