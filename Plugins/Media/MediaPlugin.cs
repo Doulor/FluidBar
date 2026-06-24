@@ -233,7 +233,7 @@ public sealed class MediaPlugin : IIslandPlugin
                 var enrichKey = $"{searchTitle}|{searchArtist}";
                 _currentTrackKey = enrichKey;
 
-                // Replace AUMID/empty title with artist for Kugou API search
+                // Replace AUMID/empty title with artist for display and Kugou API search
                 if (isAumidTitle || string.IsNullOrWhiteSpace(snapshot.Title))
                 {
                     if (!string.IsNullOrWhiteSpace(snapshot.Artist))
