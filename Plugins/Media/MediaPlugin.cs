@@ -534,9 +534,12 @@ public sealed class MediaPlugin : IIslandPlugin
             }
         }
 
+        // Filter out AUMID-like titles (e.g. {4FF7DEC0-EDE4-46DA-835F-...})
+        candidates = candidates
+            .Where(t => !MediaSnapshotSelectionPolicy.IsAumidTitle(t.Title))
+            .ToList();
+
         // Prefer windows with artist-song pattern, then longest title
-        // AUMID-like titles (e.g. {4FF7DEC0-EDE4-46DA-835F-...}) will have short length
-        // and no artist-song pattern, so they naturally rank lower
         var best = candidates
             .OrderByDescending(t => HasArtistSongPattern(t.Title, t.ProcessName) ? 100 : t.Title.Length)
             .FirstOrDefault();
@@ -677,6 +680,10 @@ public sealed class MediaPlugin : IIslandPlugin
 
     private static (string Artist, string Song) ParseMediaTitle(string title, string processName)
     {
+        // Reject AUMID titles (e.g. {4FF7DEC0-EDE4-46DA-835F-...})
+        if (MediaSnapshotSelectionPolicy.IsAumidTitle(title))
+            return ("", "");
+
         if (processName.Contains("kugou", StringComparison.OrdinalIgnoreCase) ||
             processName.Contains("kgmusic", StringComparison.OrdinalIgnoreCase))
         {
