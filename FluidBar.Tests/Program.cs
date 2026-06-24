@@ -506,7 +506,8 @@ Test("inactive media keeps hover card open while pointer remains over it", () =>
 {
     AssertEqual(true, MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(isHoverCard: true));
     AssertEqual(false, MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(isHoverCard: false));
-    AssertEqual(false, MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(
+    // All music apps now keep hover card open when paused (card closes on mouse leave)
+    AssertEqual(true, MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(
         isHoverCard: true,
         sourceName: "酷狗音乐"));
     AssertEqual(true, MediaPlaybackUiPolicy.ShouldKeepHoverCardForInactiveMedia(

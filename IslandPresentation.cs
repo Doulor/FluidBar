@@ -153,7 +153,9 @@ public static class MediaPlaybackUiPolicy
         if (!isHoverCard)
             return false;
 
-        return MediaSnapshotSelectionPolicy.GetSourcePriority(sourceName) < 100;
+        // Keep hover card open when media pauses — don't collapse immediately.
+        // The card closes naturally when the mouse moves away.
+        return true;
     }
 
     public static bool ShouldShowTransportControls(IslandViewKind kind) =>
