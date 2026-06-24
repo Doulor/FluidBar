@@ -301,10 +301,11 @@ public sealed class MediaPlugin : IIslandPlugin
                         var pos = snapshot.PositionTicks > 0
                             ? TimeSpan.FromTicks(snapshot.PositionTicks)
                             : TimeSpan.Zero;
-                        var enriched = _kugouLyrics.EnrichSnapshot(snapshot, pos);
-                        // If Kugou found no lyrics, try NetEase API
-                        if (string.IsNullOrWhiteSpace(enriched.LyricLine) && !string.IsNullOrWhiteSpace(enriched.Title))
-                            enriched = _neteaseLyrics.EnrichSnapshot(enriched, pos);
+                        var isNeteaseSrc = snapshot.SourceAppUserModelId?.Contains("cloudmusic", StringComparison.OrdinalIgnoreCase) == true ||
+                                           snapshot.SourceAppUserModelId?.Contains("netease", StringComparison.OrdinalIgnoreCase) == true;
+                        var enriched = isNeteaseSrc
+                            ? _neteaseLyrics.EnrichSnapshot(snapshot, pos)
+                            : _kugouLyrics.EnrichSnapshot(snapshot, pos);
                         if (string.IsNullOrWhiteSpace(enriched.LyricLine) && needsLyric && !isAppTitle)
                         {
                             _enrichmentFailedKey = enrichKey;
@@ -390,15 +391,12 @@ public sealed class MediaPlugin : IIslandPlugin
     {
         try
         {
-            var enriched = await Task.Run(() => _kugouLyrics.EnrichSnapshot(snapshot, position));
-
-            // If Kugou found no lyrics, try NetEase API
-            if (string.IsNullOrWhiteSpace(enriched.LyricLine) && !string.IsNullOrWhiteSpace(enriched.Title))
-            {
-                var neteaseResult = await Task.Run(() => _neteaseLyrics.EnrichSnapshot(enriched, position));
-                if (!string.IsNullOrWhiteSpace(neteaseResult.LyricLine))
-                    enriched = neteaseResult;
-            }
+            // Choose lyrics provider based on source
+            var isNetease = snapshot.SourceAppUserModelId?.Contains("cloudmusic", StringComparison.OrdinalIgnoreCase) == true ||
+                            snapshot.SourceAppUserModelId?.Contains("netease", StringComparison.OrdinalIgnoreCase) == true;
+            var enriched = await Task.Run(() => isNetease
+                ? _neteaseLyrics.EnrichSnapshot(snapshot, position)
+                : _kugouLyrics.EnrichSnapshot(snapshot, position));
 
             // Only store if the song hasn't changed during the async enrichment
             if (enrichKey != _currentTrackKey)
