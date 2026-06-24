@@ -43,23 +43,43 @@ public static class MediaFallbackProcessPolicy
         string sourceName,
         string songTitle)
     {
-        if (!IsKugouSource(processName, sourceName))
-            return false;
-
         if (string.IsNullOrWhiteSpace(songTitle) ||
             MediaSnapshotSelectionPolicy.IsAppNameString(songTitle))
         {
             return false;
         }
 
-        if (songTitle.Contains("桌面歌词", StringComparison.Ordinal) ||
-            songTitle.Contains("酷狗音乐", StringComparison.Ordinal) ||
-            songTitle.Contains("KuGou", StringComparison.OrdinalIgnoreCase))
+        // Trust Kugou with known exclusion patterns
+        if (IsKugouSource(processName, sourceName))
         {
-            return false;
+            if (songTitle.Contains("桌面歌词", StringComparison.Ordinal) ||
+                songTitle.Contains("酷狗音乐", StringComparison.Ordinal) ||
+                songTitle.Contains("KuGou", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            return true;
         }
 
-        return true;
+        // Trust NetEase (cloudmusic) when window title looks like a real song
+        if (IsNeteaseSource(processName, sourceName))
+        {
+            if (songTitle.Contains("网易云音乐", StringComparison.Ordinal) ||
+                songTitle.Equals("DesktopLyric", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsNeteaseSource(string processName, string sourceName)
+    {
+        return processName.Contains("cloudmusic", StringComparison.OrdinalIgnoreCase) ||
+               processName.Contains("netease", StringComparison.OrdinalIgnoreCase) ||
+               sourceName.Contains("网易云", StringComparison.Ordinal);
     }
 
     private static bool IsKugouSource(string processName, string sourceName)
