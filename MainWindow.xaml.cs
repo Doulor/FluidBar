@@ -2880,8 +2880,21 @@ public partial class MainWindow : Window
         ContentPanel.BeginAnimation(OpacityProperty, null);
         ContentTranslate.BeginAnimation(TranslateTransform.YProperty, null);
 
+        // When re-expanding, ensure content is visible immediately
+        // (collapse animation may have set Opacity to 0)
         ContentPanel.Opacity = opening ? 0 : 0.52;
         ContentTranslate.Y = opening ? 8 : 3;
+
+        // For re-expansion, also ensure key elements are visible
+        if (opening && _currentView is { Kind: IslandViewKind.Media })
+        {
+            if (ContentText.Visibility != Visibility.Visible)
+                ContentText.Visibility = Visibility.Visible;
+            if (TitleText.Visibility != Visibility.Visible)
+                TitleText.Visibility = Visibility.Visible;
+            if (AccessoryGrid.Visibility != Visibility.Visible)
+                AccessoryGrid.Visibility = Visibility.Visible;
+        }
 
         var policy = IslandAnimationPerformancePolicy.Default;
         var fade = new DoubleAnimation(1, TimeSpan.FromMilliseconds(opening
