@@ -54,20 +54,15 @@ public static class MediaControlDispatchPolicy
 
 public static class MediaAppCommandFallbackPolicy
 {
-    // Send keybd_event (system media key) for all music apps.
-    // This is the most reliable method - works for Kugou, NetEase, QQ, Spotify, etc.
-    // GSMTC may not respond for some players, but keybd_event always reaches the OS media transport.
+    // Only Kugou needs keybd_event + WM_APPCOMMAND (GSMTC doesn't work for it).
+    // All other music apps (NetEase, QQ, Spotify, etc.) respond to GSMTC directly.
     public static bool ShouldUseForSource(string? sourceId)
     {
         if (string.IsNullOrWhiteSpace(sourceId))
             return false;
 
         var lower = sourceId.ToLowerInvariant();
-        return lower.Contains("kugou") || lower.Contains("酷狗") || lower.Contains("kgmusic") ||
-               lower.Contains("cloudmusic") || lower.Contains("netease") || lower.Contains("网易云") ||
-               lower.Contains("qqmusic") || lower.Contains("qq音乐") ||
-               lower.Contains("spotify") ||
-               lower.Contains("kwmusic") || lower.Contains("酷我");
+        return lower.Contains("kugou") || lower.Contains("酷狗") || lower.Contains("kgmusic");
     }
 }
 
@@ -111,8 +106,8 @@ internal static class MediaAppCommandFallback
         foreach (var hWnd in targets)
             SendMessage(hWnd, WM_APPCOMMAND, hWnd, lParam);
 
-        // Return false to let GSMTC also try — keybd_event/WM_APPCOMMAND may not reach all players
-        return false;
+        // Return true — keybd_event+WM_APPCOMMAND works for Kugou (the only app using this path)
+        return true;
     }
 
     private static IReadOnlyList<IntPtr> FindTargetWindows(string? sourceId)

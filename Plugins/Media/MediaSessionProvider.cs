@@ -173,6 +173,12 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             session => session.GetPlaybackInfo().Controls.IsPreviousEnabled);
     }
 
+    private static async Task<bool> WithTimeout(Task<bool> task, int milliseconds = 3000)
+    {
+        var delay = Task.Delay(milliseconds);
+        return await Task.WhenAny(task, delay) == task && task.IsCompletedSuccessfully && task.Result;
+    }
+
     private async Task<bool> TryMediaCommandAsync(
         Func<GlobalSystemMediaTransportControlsSession, Task<bool>> command,
         string? preferredSourceId,
@@ -180,7 +186,7 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
     {
         try
         {
-            var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            var manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask();
             var current = manager.GetCurrentSession();
             var sessions = manager.GetSessions().ToList();
             if (current is not null && !sessions.Contains(current))
@@ -202,7 +208,7 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             {
                 try
                 {
-                    if (await command(session))
+                    if (await WithTimeout(command(session)))
                         return true;
                 }
                 catch
