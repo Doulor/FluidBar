@@ -24,8 +24,8 @@ public static class MediaSnapshotSelectionPolicy
 
         if (IsSamePlayerApp(gsm.SourceAppUserModelId, fallback.SourceAppUserModelId))
         {
-            // Prefer fallback title when GSM title is an app name or AUMID
-            var title = (IsAppNameString(gsm.Title) || IsAumidTitle(gsm.Title)) && !IsAppNameString(fallback.Title)
+            // Prefer fallback title when GSM title is an app name
+            var title = IsAppNameString(gsm.Title) && !IsAppNameString(fallback.Title)
                 ? fallback.Title
                 : string.IsNullOrWhiteSpace(gsm.Title) ? fallback.Title : gsm.Title;
             var artist = string.IsNullOrWhiteSpace(gsm.Artist) ? fallback.Artist : gsm.Artist;

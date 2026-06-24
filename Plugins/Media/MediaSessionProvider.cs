@@ -77,11 +77,6 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
             if (string.IsNullOrWhiteSpace(title))
                 continue;
 
-            // When title is an AUMID (NetEase minimized), clear it but keep the session
-            // for album art and enrichment. Artist is used for Kugou API search.
-            if (title.Length > 30 && title.StartsWith('{') && title.EndsWith('}') && title.Contains('-'))
-                title = "";
-
             // Browser sessions: reject if timeline shows no real media progress.
             // Edge registers a GSMTC session for any media-capable tab; when the user
             // navigates away the old session lingers as "Playing" with a frozen position.
