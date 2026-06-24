@@ -519,10 +519,10 @@ public partial class MainWindow : Window
 
         // Lyric-only update: same source/title/artist, only lyrics changed — update text directly
         // without re-rendering the entire island (avoids "jump" and hover card disruption)
-        // Skip fast path when play state changed (pause→play) to restore full media UI
+        // Skip fast path when play state changed or island was collapsed → force full re-render
         if (evt.Source == "media" && _currentView is { Kind: IslandViewKind.Media } cur &&
             evt.Title == cur.Title && evt.Content == cur.Content && evt.Source == _currentSource &&
-            cur.ShowsAudioWave == (evt.Payload?.IsActive == true))
+            cur.ShowsAudioWave == (evt.Payload?.IsActive == true) && _isExpanded)
         {
             var newLyric = evt.Payload?.LyricLine ?? "";
             var oldLyric = cur.LyricLine ?? "";
@@ -554,17 +554,18 @@ public partial class MainWindow : Window
                     var isMusicApp = !IsBrowserSourceId(_currentView.SourceName) && !string.IsNullOrWhiteSpace(_currentView.SourceName);
                     if (isMusicApp && !string.IsNullOrWhiteSpace(newLyric))
                         ContentText.Text = newLyric;
+                }
 
-                    // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
-                    if (_currentView is { ShowsAudioWave: true })
-                    {
-                        if (ContentText.Visibility != Visibility.Visible)
-                            ContentText.Visibility = Visibility.Visible;
-                        if (TitleText.Visibility != Visibility.Visible)
-                            TitleText.Visibility = Visibility.Visible;
-                        if (AccessoryGrid.Visibility != Visibility.Visible)
-                            AccessoryGrid.Visibility = Visibility.Visible;
-                    }
+                // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
+                // This must run regardless of whether lyrics changed
+                if (_currentView is { ShowsAudioWave: true })
+                {
+                    if (ContentText.Visibility != Visibility.Visible)
+                        ContentText.Visibility = Visibility.Visible;
+                    if (TitleText.Visibility != Visibility.Visible)
+                        TitleText.Visibility = Visibility.Visible;
+                    if (AccessoryGrid.Visibility != Visibility.Visible)
+                        AccessoryGrid.Visibility = Visibility.Visible;
                 }
                 return;
             }
