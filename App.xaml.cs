@@ -216,7 +216,14 @@ public partial class App : Application
 
     private void OnSettingsChanged()
     {
-        _mainWindow?.ApplySettings();
+        try
+        {
+            _mainWindow?.ApplySettings();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FluidBar] ApplySettings failed: {ex}");
+        }
     }
 
     private void OnTrayIconVisibilityChanged(bool hide)

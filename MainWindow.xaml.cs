@@ -346,7 +346,8 @@ public partial class MainWindow : Window
         // 应用环绕微光模式
         ApplyRimMode();
 
-        if (_isExpanded && _lastEvent != null)
+        // 设置面板打开时跳过视图重建 — 仅应用外观设置（颜色、微光等）
+        if (_isExpanded && _lastEvent != null && !_settingsPanelOpen)
         {
             _currentView = IslandPresentation.FromEvent(
                 _lastEvent,
@@ -532,21 +533,37 @@ public partial class MainWindow : Window
             var oldLyric = cur.LyricLine ?? "";
             var newArt = evt.Payload?.AlbumArtPath;
             var artChanged = !string.IsNullOrWhiteSpace(newArt) && newArt != cur.AlbumArtPath;
+
+            // Always update progress data so hover card shows correct position when opened
+            _currentView = cur with
+            {
+                ProgressPercent = evt.Payload?.ProgressPercent ?? cur.ProgressPercent,
+                PositionTicks = evt.Payload?.PositionTicks ?? cur.PositionTicks,
+                EndTicks = evt.Payload?.EndTicks ?? cur.EndTicks,
+                StartTimeTicks = evt.Payload?.StartTimeTicks ?? cur.StartTimeTicks,
+                LastUpdatedTicks = evt.Payload?.LastUpdatedTicks ?? cur.LastUpdatedTicks,
+                LyricLine = newLyric != oldLyric ? newLyric : cur.LyricLine,
+                SecondaryLyricLine = evt.Payload?.SecondaryLyricLine ?? cur.SecondaryLyricLine,
+                AlbumArtPath = string.IsNullOrWhiteSpace(newArt) ? cur.AlbumArtPath : newArt,
+            };
+            // Sync wave timer fields for real-time compact progress interpolation
+            _mediaPositionTicks = _currentView.PositionTicks;
+            _mediaEndTicks = _currentView.EndTicks;
+            _mediaStartTimeTicks = _currentView.StartTimeTicks;
+            _mediaLastUpdatedTicks = _currentView.LastUpdatedTicks;
+
+            // If album art arrived from BG enrichment, re-apply icon and update progress bar color
+            if (artChanged)
+            {
+                _lastTriedIconPath = null;
+                _lastTriedIconResult = null;
+                var accent = ApplyCompactMediaIcon(_currentView.AlbumArtPath, _currentView.AppIconPath);
+                if (ProgressBarPanel.Visibility == Visibility.Visible)
+                    ProgressFill.Background = CreateAccentGradientBrush(accent);
+            }
+
             if (newLyric != oldLyric || artChanged)
             {
-                _currentView = cur with
-                {
-                    LyricLine = newLyric,
-                    SecondaryLyricLine = evt.Payload?.SecondaryLyricLine,
-                    AlbumArtPath = string.IsNullOrWhiteSpace(newArt) ? cur.AlbumArtPath : newArt,
-                };
-                // If album art arrived from BG enrichment, re-apply icon
-                if (artChanged)
-                {
-                    _lastTriedIconPath = null;
-                    _lastTriedIconResult = null;
-                    ApplyCompactMediaIcon(_currentView.AlbumArtPath, _currentView.AppIconPath);
-                }
                 if (_isHoverCard && HoverLyricsCanvas.Visibility == Visibility.Visible)
                 {
                     // Only update lyrics canvas — do NOT call ApplyHoverCardContent (it would re-render the card)
@@ -559,21 +576,8 @@ public partial class MainWindow : Window
                     if (isMusicApp && !string.IsNullOrWhiteSpace(newLyric))
                         ContentText.Text = newLyric;
                 }
-
-                return;
             }
 
-            // Restore media UI elements if they were hidden (e.g. by SetLocalMediaPlaybackState)
-            // This runs in the fast path even when lyrics haven't changed
-            if (_currentView is { ShowsAudioWave: true })
-            {
-                if (ContentText.Visibility != Visibility.Visible)
-                    ContentText.Visibility = Visibility.Visible;
-                if (TitleText.Visibility != Visibility.Visible)
-                    TitleText.Visibility = Visibility.Visible;
-                if (AccessoryGrid.Visibility != Visibility.Visible)
-                    AccessoryGrid.Visibility = Visibility.Visible;
-            }
             return;
         }
 
@@ -1400,7 +1404,7 @@ public partial class MainWindow : Window
 
         if (card.Kind == IslandViewKind.Media && IsBrowserSourceId(card.SourceName))
         {
-            // Browser: keep original layout (title = browser name, subtitle = video title)
+            // Browser: title = browser name, subtitle = video title, body = video title
             HoverTitleText.Text = card.Title;
             HoverSubtitleText.Text = BuildHoverSubtitle(card);
             HoverSubtitleText.FontSize = 11.5;
@@ -2199,6 +2203,30 @@ public partial class MainWindow : Window
         var contentWidth = MediaLayoutPolicy.CompactContentWidth(view.TargetWidth, view.ShowsAudioWave);
         var progressWidth = MediaLayoutPolicy.CompactProgressWidth(view.TargetWidth, view.ShowsAudioWave);
 
+        // Store ticks for WaveTimer interpolation.
+        // On re-render of the same song (e.g. album art arrival), preserve the WaveTimer's
+        // current interpolated position to avoid a visual "jump back" to the snapshot position.
+        // But respect real user seeks: a large backward jump (>2s) means the user dragged
+        // the progress bar — accept the new position unconditionally.
+        var songChanged = _mediaEndTicks <= 0 || view.EndTicks != _mediaEndTicks;
+        var seeked = !songChanged && view.PositionTicks < _mediaPositionTicks
+            && (_mediaPositionTicks - view.PositionTicks) > TimeSpan.FromSeconds(2).Ticks;
+        if (songChanged || seeked)
+        {
+            _mediaPositionTicks = view.PositionTicks;
+            _mediaEndTicks = view.EndTicks;
+            _mediaStartTimeTicks = view.StartTimeTicks;
+            _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+        }
+        else if (!songChanged)
+        {
+            // Same song re-render — advance ticks forward only (never backward)
+            if (view.PositionTicks > _mediaPositionTicks)
+                _mediaPositionTicks = view.PositionTicks;
+            if (view.LastUpdatedTicks > _mediaLastUpdatedTicks)
+                _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+        }
+
         // Compact title line: song name·artist for music apps, source name for browsers
         if (isBrowser)
         {
@@ -2233,12 +2261,26 @@ public partial class MainWindow : Window
             ProgressBarPanel.MaxWidth = progressWidth;
             ProgressTrack.Width = progressWidth;
             _mediaProgressTrackWidth = progressWidth;
-            var targetWidth = Math.Max(0, view.ProgressPercent / 100.0 * progressWidth);
-            ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
-            ProgressFill.Width = targetWidth;
-            ProgressFill.Background = isBrowser
-                ? new LinearGradientBrush(MediaColor.FromRgb(10, 132, 255), MediaColor.FromRgb(90, 200, 250), 0)
-                : new LinearGradientBrush(MediaColor.FromRgb(255, 45, 85), MediaColor.FromRgb(255, 149, 0), 0);
+            // Set initial width. When WaveTimer is running and we have valid tick data,
+            // skip this — the timer will interpolate smoothly from its current position.
+            // Only set width on first render (WaveTimer hasn't started yet) or when paused.
+            var waveTimerActive = view.ShowsAudioWave && _waveTimer.IsEnabled;
+            if (!waveTimerActive)
+            {
+                ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+                if (view.EndTicks > view.StartTimeTicks)
+                {
+                    var frac = Math.Clamp(
+                        (double)(view.PositionTicks - view.StartTimeTicks) / (view.EndTicks - view.StartTimeTicks),
+                        0.0, 1.0);
+                    ProgressFill.Width = frac * progressWidth;
+                }
+                else
+                {
+                    ProgressFill.Width = Math.Max(0, view.ProgressPercent / 100.0 * progressWidth);
+                }
+            }
+            // Color set later by ApplyCompactMediaIcon (accent from album art / app icon)
         }
         else
         {
@@ -2270,6 +2312,7 @@ public partial class MainWindow : Window
         {
             ScrollCanvas.Visibility = Visibility.Visible;
             ContentText.Visibility = Visibility.Collapsed;
+            ContentText.Text = "";  // Clear stale text (e.g. clock date) to prevent ghosting
             ScrollCanvas.Width = contentWidth;
             ScrollText.Text = displayText;
             ScrollText.FontSize = ContentText.FontSize;
@@ -2797,7 +2840,9 @@ public partial class MainWindow : Window
         if (view.Kind == IslandViewKind.Media)
         {
             ContentPanel.Opacity = 1;
-            if (ContentText.Visibility != Visibility.Visible)
+            // Don't restore ContentText when ScrollCanvas is active (browser long-title marquee)
+            if (ScrollCanvas.Visibility != Visibility.Visible &&
+                ContentText.Visibility != Visibility.Visible)
                 ContentText.Visibility = Visibility.Visible;
             if (TitleText.Visibility != Visibility.Visible)
                 TitleText.Visibility = Visibility.Visible;
@@ -2903,9 +2948,11 @@ public partial class MainWindow : Window
         ContentTranslate.Y = opening ? 8 : 3;
 
         // For re-expansion, also ensure key elements are visible
+        // Skip ContentText when ScrollCanvas is active (browser long-title marquee)
         if (opening && _currentView is { Kind: IslandViewKind.Media })
         {
-            if (ContentText.Visibility != Visibility.Visible)
+            if (ScrollCanvas.Visibility != Visibility.Visible &&
+                ContentText.Visibility != Visibility.Visible)
                 ContentText.Visibility = Visibility.Visible;
             if (TitleText.Visibility != Visibility.Visible)
                 TitleText.Visibility = Visibility.Visible;
@@ -3052,11 +3099,20 @@ public partial class MainWindow : Window
             var durationTicks = _mediaEndTicks - _mediaStartTimeTicks;
             var currentPosTicks = _mediaPositionTicks + elapsed * 10_000; // ms → .NET ticks
             var fraction = Math.Clamp((double)(currentPosTicks - _mediaStartTimeTicks) / durationTicks, 0.0, 1.0);
+
+            // Update compact progress bar
             var trackWidth = ProgressBarPanel.ActualWidth > 10
                 ? ProgressBarPanel.ActualWidth : _mediaProgressTrackWidth;
             var targetWidth = fraction * trackWidth;
             ProgressFill.BeginAnimation(Border.WidthProperty, null);
             ProgressFill.Width = targetWidth;
+
+            // Update hover card progress bar in real-time
+            if (_isHoverCard && HoverProgressPanel.Visibility == Visibility.Visible)
+            {
+                var hoverTrackWidth = Math.Max(220, (_currentView?.TargetWidth ?? 360) - 40);
+                HoverProgressFill.Width = fraction * hoverTrackWidth;
+            }
         }
     }
 

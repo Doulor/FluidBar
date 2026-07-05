@@ -268,7 +268,7 @@
                             <ContentPresenter IsHitTestVisible="False"
                                               VerticalAlignment="Center"
                                               Margin="10,0,28,0"
-                                              Content="{Binding SelectedItem, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                              Content="{TemplateBinding SelectionBoxItem}"/>
                             <!-- 下拉箭头 -->
                             <Path Data="M0,0 L4,4 L8,0"
                                   Stroke="#888888" StrokeThickness="1.5"

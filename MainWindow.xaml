@@ -478,14 +478,20 @@
                     </Grid>
 
                     <Grid Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <!-- Lyrics scroll area for media -->
                         <Canvas x:Name="HoverLyricsCanvas"
+                                Grid.Row="0"
                                 ClipToBounds="True"
                                 Visibility="Collapsed"
                                 Height="60"
                                 Margin="0,8,0,4"/>
                         <!-- Fallback body text for non-media -->
                         <TextBlock x:Name="HoverBodyText"
+                                   Grid.Row="0"
                                    FontSize="13"
                                    FontWeight="SemiBold"
                                    LineHeight="18"
@@ -495,9 +501,9 @@
                                    TextTrimming="CharacterEllipsis"/>
 
                         <Grid x:Name="HoverProgressPanel"
+                              Grid.Row="1"
                               Visibility="Collapsed"
-                              VerticalAlignment="Bottom"
-                              Margin="0,0,0,0">
+                              Margin="0,8,0,0">
                             <Border Height="8"
                                     CornerRadius="4"
                                     Background="#24FFFFFF"/>

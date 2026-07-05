@@ -201,14 +201,16 @@ public static class MediaSnapshotSelectionPolicy
     {
         // LyricLine/SecondaryLyricLine intentionally excluded — lyric changes
         // should not trigger a full island re-render (causes visual "jump").
-        // AlbumArtPath included — cover art arriving should update the display.
+        // ProgressPercent excluded — progress is handled by the fast path in
+        // ProcessEvent and WaveTimer interpolation; including it causes full
+        // re-renders that reset the progress bar width (visual "jump" backward)
+        // and overwrite the accent-colored ProgressFill.Background with hardcoded blue.
         return string.Join("|",
             snapshot.SourceAppUserModelId,
             snapshot.Title,
             snapshot.Artist,
             snapshot.Album,
             snapshot.IsPlaying.ToString(),
-            snapshot.ProgressPercent.ToString(),
             snapshot.AlbumArtPath ?? "",
             snapshot.SourceIconPath ?? "");
     }
