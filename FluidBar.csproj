@@ -12,6 +12,9 @@
     <AssemblyName>FluidBar</AssemblyName>
     <RootNamespace>FluidBar</RootNamespace>
     <PublishSingleFile>true</PublishSingleFile>
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

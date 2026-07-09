@@ -237,6 +237,25 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             RequestOpenSettings?.Invoke();
+            return;
+        }
+
+        // 点击已下载完成的更新通知 → 启动安装并退出
+        if (_currentSource == "update" && !string.IsNullOrEmpty(App.PendingUpdateInstallerPath))
+        {
+            e.Handled = true;
+            try
+            {
+                var installerPath = App.PendingUpdateInstallerPath;
+                App.PendingUpdateInstallerPath = null;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = installerPath,
+                    UseShellExecute = true
+                });
+                System.Windows.Application.Current.Shutdown();
+            }
+            catch { }
         }
     }
 

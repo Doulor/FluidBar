@@ -11,7 +11,8 @@ public sealed record AgentHookEvent(
     string? Branch = null,
     long? DurationMs = null,
     string? SessionId = null,
-    string? Error = null)
+    string? Error = null,
+    string? ToolName = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,11 +33,18 @@ public static class AgentStatusIslandEventFactory
     {
         var toolName = FriendlyToolName(hook.Tool);
         var status = FriendlyStatus(hook.Status);
-        var title = $"{toolName} {status}";
+        var isRunning = hook.Status.Equals("running", StringComparison.OrdinalIgnoreCase) ||
+                        hook.Status.Equals("waiting", StringComparison.OrdinalIgnoreCase);
+        var title = isRunning && !string.IsNullOrWhiteSpace(hook.ToolName)
+            ? $"{toolName} - {hook.ToolName}"
+            : $"{toolName} {status}";
         var summary = string.IsNullOrWhiteSpace(hook.Summary)
             ? status
             : hook.Summary;
         var details = BuildDetailLines(hook).ToArray();
+        var badge = isRunning && !string.IsNullOrWhiteSpace(hook.ToolName)
+            ? hook.ToolName
+            : status;
 
         return new IslandEvent(
             Source: "agent-status",
@@ -46,9 +54,10 @@ public static class AgentStatusIslandEventFactory
             Payload: new IslandEventPayload(
                 Kind: IslandEventKind.Agent,
                 Subtitle: hook.Project,
-                Badge: status,
+                Badge: badge,
                 SourceName: toolName,
-                IsActive: hook.Status.Equals("running", StringComparison.OrdinalIgnoreCase),
+                ShowsAudioWave: isRunning,
+                IsActive: isRunning,
                 DetailLines: details));
     }
 
@@ -71,6 +80,7 @@ public static class AgentStatusIslandEventFactory
             "failed" or "error" => "失败",
             "cancelled" or "canceled" => "已取消",
             "running" => "运行中",
+            "waiting" => "等待确认",
             _ => string.IsNullOrWhiteSpace(status) ? "状态更新" : status
         };
     }

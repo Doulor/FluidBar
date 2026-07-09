@@ -66,6 +66,22 @@ public sealed class FluidBarSettings
     public bool HideTrayIcon { get; set; } = false;
     public string HoldToHideKey { get; set; } = HoldToHideKeyPolicy.LeftAlt;
 
+    // === 主题 ===
+    // "Light" 或 "Dark"，默认 Light
+    public string SettingsTheme { get; set; } = "Light";
+
+    // === 更新 ===
+    // 启动时自动检查更新并灵动岛提示，默认开启
+    public bool AutoUpdateCheck { get; set; } = true;
+
+    // === Agent hooks 守护 ===
+    public bool AgentHooksGuardEnabled { get; set; } = true;
+    public int AgentHooksGuardIntervalMs { get; set; } = 30_000;
+
+    // === Agent hooks 守护 ===
+    public bool HooksGuardEnabled { get; set; } = true;
+    public int HooksGuardIntervalMs { get; set; } = 30_000;
+
     public MonitorFeatureSettings GetMonitorFeatureSettings(string id)
     {
         if (!MonitorFeatureSettings.TryGetValue(id, out var settings))
@@ -157,6 +173,8 @@ public sealed class FluidBarSettings
         MonitorFeatureSettings = new Dictionary<string, MonitorFeatureSettings>();
         HideTrayIcon = defaults.HideTrayIcon;
         HoldToHideKey = defaults.HoldToHideKey;
+        AgentHooksGuardEnabled = defaults.AgentHooksGuardEnabled;
+        AgentHooksGuardIntervalMs = defaults.AgentHooksGuardIntervalMs;
     }
 }
 

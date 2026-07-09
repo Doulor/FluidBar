@@ -28,6 +28,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // 全局异常捕获（诊断崩溃根因）
+        DispatcherUnhandledException += (_, args) =>
+            WriteCrashLog("Dispatcher", args.Exception);
+        System.AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            WriteCrashLog("AppDomain", args.ExceptionObject as Exception);
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, args) =>
+            WriteCrashLog("TaskScheduler", args.Exception);
+
         _settings = FluidBarSettings.Load();
         _bus = new EventBus();
 
@@ -39,6 +47,7 @@ public partial class App : Application
         _mainWindow.RequestOpenSettings += OpenSettings;
         _mainWindow.Show();
 
+
         // 初始化插件系统
         _pluginManager = new PluginManager(_bus, _settings);
         _clipboardPlugin = new ClipboardPlugin();
@@ -47,6 +56,8 @@ public partial class App : Application
         _mediaPlugin = new MediaPlugin();
         _pluginManager.Register(_mediaPlugin);
         _agentStatusPlugin = new AgentStatusPlugin();
+        _agentStatusPlugin.HooksGuardEnabled = _settings.AgentHooksGuardEnabled;
+        _agentStatusPlugin.HooksGuardIntervalMs = _settings.AgentHooksGuardIntervalMs;
         _pluginManager.Register(_agentStatusPlugin);
         _pluginManager.StartAll();
 
@@ -79,6 +90,18 @@ public partial class App : Application
         System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Background,
             new Action(() => _monitorManager.StartAll()));
+
+        // 启动时自动检查更新（静默，检测到新版本以灵动岛提示一次）
+        if (_settings.AutoUpdateCheck)
+        {
+            System.Windows.Threading.DispatcherTimer updateTimer = new() { Interval = TimeSpan.FromSeconds(4) };
+            updateTimer.Tick += async (_, _) =>
+            {
+                updateTimer.Stop();
+                await CheckUpdateOnStartupAsync();
+            };
+            updateTimer.Start();
+        }
 
         // 启动时根据配置隐藏托盘图标
         if (_settings.HideTrayIcon && _trayIcon != null)
@@ -255,5 +278,135 @@ public partial class App : Application
         _monitorManager?.Dispose();
         _pluginManager?.Dispose();
         base.OnExit(e);
+    }
+
+    private static void WriteCrashLog(string source, Exception? ex)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "FluidBar_Crash.log");
+            var content = $"[{System.DateTime.Now:HH:mm:ss.fff}] {source}\r\n{ex}\r\n\r\n";
+            System.IO.File.AppendAllText(path, content);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 启动时静默检查更新，发现新版本自动下载安装包并提示安装。
+    /// </summary>
+    internal static string? PendingUpdateInstallerPath;
+
+    private async Task CheckUpdateOnStartupAsync()
+    {
+        try
+        {
+            var current = GetCurrentVersion();
+            using var http = new System.Net.Http.HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(8);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("FluidBar-Settings");
+            var resp = await http.GetStringAsync("https://api.github.com/repos/Doulor/FluidBar/releases/latest");
+            using var json = System.Text.Json.JsonDocument.Parse(resp);
+            if (!json.RootElement.TryGetProperty("tag_name", out var tag)) return;
+            var latestStr = tag.GetString()?.TrimStart('v') ?? "";
+            if (!System.Version.TryParse(latestStr, out var latest) ||
+                !System.Version.TryParse(current, out var cur)) return;
+            if (latest <= cur) return;
+
+            // 扫描 assets 找安装包
+            string? assetUrl = null;
+            string? assetName = null;
+            if (json.RootElement.TryGetProperty("assets", out var assets) && assets.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    if (name != null && (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                         name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        assetUrl = asset.TryGetProperty("browser_download_url", out var d) ? d.GetString() : null;
+                        assetName = name;
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(assetUrl))
+            {
+                // 没有安装包，提示手动下载
+                var htmlUrl = json.RootElement.TryGetProperty("html_url", out var u)
+                    ? u.GetString() ?? "https://github.com/Doulor/FluidBar/releases"
+                    : "https://github.com/Doulor/FluidBar/releases";
+                _bus?.Publish(new IslandEvent(
+                    "update",
+                    $"发现新版本 v{latestStr}",
+                    "点击前往 GitHub 下载",
+                    "info"));
+                return;
+            }
+
+            // 提示正在下载
+            _bus?.Publish(new IslandEvent(
+                "update",
+                $"发现新版本 v{latestStr}",
+                "正在后台下载安装包…",
+                "info"));
+
+            // 后台下载安装包（带进度）
+            var fileName = string.IsNullOrEmpty(assetName) ? "FluidBar-update.exe" : assetName;
+            var tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), fileName);
+            using var dlHttp = new System.Net.Http.HttpClient();
+            dlHttp.Timeout = TimeSpan.FromMinutes(10);
+            dlHttp.DefaultRequestHeaders.UserAgent.ParseAdd("FluidBar-Settings");
+            using var dlResp = await dlHttp.GetAsync(assetUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+            dlResp.EnsureSuccessStatusCode();
+            var totalBytes = dlResp.Content.Headers.ContentLength ?? 0;
+            await using var contentStream = await dlResp.Content.ReadAsStreamAsync();
+            await using var fs = System.IO.File.Create(tempPath);
+            var buffer = new byte[81920];
+            long downloaded = 0;
+            int bytesRead;
+            var lastPublishTick = System.Environment.TickCount64;
+            while ((bytesRead = await contentStream.ReadAsync(buffer)) > 0)
+            {
+                await fs.WriteAsync(buffer.AsMemory(0, bytesRead));
+                downloaded += bytesRead;
+                var now = System.Environment.TickCount64;
+                if (now - lastPublishTick >= 500 && totalBytes > 0)
+                {
+                    lastPublishTick = now;
+                    var percent = (int)Math.Clamp(downloaded * 100 / totalBytes, 0, 100);
+                    _bus?.Publish(new IslandEvent(
+                        "update",
+                        $"下载新版本 v{latestStr}",
+                        $"{percent}%",
+                        "info",
+                        new IslandEventPayload(Kind: IslandEventKind.Progress, ProgressPercent: percent)));
+                }
+            }
+            await fs.FlushAsync();
+
+            PendingUpdateInstallerPath = tempPath;
+
+            // 下载完成，提示点击安装
+            _bus?.Publish(new IslandEvent(
+                "update",
+                $"新版本 v{latestStr} 已就绪",
+                "点击安装并重启",
+                "info"));
+        }
+        catch
+        {
+            // 静默失败：启动时检查不弹错误提示
+        }
+    }
+
+    private static string GetCurrentVersion()
+    {
+        try
+        {
+            var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            return ver != null ? $"{ver.Major}.{ver.Minor}.{ver.Build}" : "2.0.0";
+        }
+        catch { return "2.0.0"; }
     }
 }
