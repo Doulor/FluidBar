@@ -805,7 +805,7 @@
                     <ControlTemplate TargetType="ScrollBar">
                         <Grid>
                             <!-- 轨道背景（极淡） -->
-                            <Border CornerRadius="3" Background="{DynamicResource ThemeBorder}" Opacity="0.3"/>
+                            <Border CornerRadius="3" Background="{DynamicResource ThemeBorder}" Opacity="0.1"/>
                             <Track x:Name="PART_Track" IsDirectionReversed="True" Margin="1">
                                 <Track.Thumb>
                                     <Thumb>
@@ -1538,7 +1538,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       CanContentScroll="False"
-                                      Padding="32,24,38,24">
+                                      Padding="32,24,56,24">
                             <StackPanel>
 
                                 <!-- ===== Title Card: 产品首屏大标题 ===== -->
@@ -1822,7 +1822,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       CanContentScroll="False"
-                                      Padding="28,20,34,20">
+                                      Padding="28,20,56,20">
                             <StackPanel>
                                 <TextBlock Text="外观" Style="{StaticResource SectionHeader}"/>
 
@@ -2151,7 +2151,7 @@
 
                     <!-- ===== Page 2: 功能 ===== -->
                     <TabItem>
-                        <Grid Margin="28,20,28,20">
+                        <Grid Margin="28,20,61,20">
                             <ListBox x:Name="MonitorList"
                                      Background="Transparent" BorderThickness="0"
                                      VirtualizingPanel.IsVirtualizing="True"
@@ -2290,7 +2290,7 @@
 
                     <!-- ===== Page 3: 插件 ===== -->
                     <TabItem>
-                        <Grid Margin="28,20,28,20">
+                        <Grid Margin="28,20,61,20">
                             <ListBox x:Name="PluginList"
                                      Background="Transparent" BorderThickness="0"
                                      VirtualizingPanel.IsVirtualizing="True"
@@ -2430,7 +2430,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       CanContentScroll="False"
-                                      Padding="28,20,34,20">
+                                      Padding="28,20,56,20">
                             <StackPanel>
                                 <TextBlock Text="常规" Style="{StaticResource SectionHeader}"/>
 

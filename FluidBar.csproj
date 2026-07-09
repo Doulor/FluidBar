@@ -26,5 +26,14 @@
     <None Remove="FluidBar.Tests\**\*" />
   </ItemGroup>
 
+  <!-- Copy AgentStatus hook scripts to output directory -->
+  <Target Name="CopyAgentStatusHooks" AfterTargets="Build">
+    <ItemGroup>
+      <AgentStatusHooks Include="Plugins\AgentStatus\hooks\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AgentStatusHooks)"
+          DestinationFolder="$(OutputPath)\Plugins\AgentStatus\hooks\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

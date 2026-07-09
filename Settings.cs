@@ -78,6 +78,9 @@ public sealed class FluidBarSettings
     public bool AgentHooksGuardEnabled { get; set; } = true;
     public int AgentHooksGuardIntervalMs { get; set; } = 30_000;
 
+    // === Agent 运行时保持灵动岛显示 ===
+    public bool AgentKeepIslandVisible { get; set; } = true;
+
     // === Agent hooks 守护 ===
     public bool HooksGuardEnabled { get; set; } = true;
     public int HooksGuardIntervalMs { get; set; } = 30_000;
@@ -175,6 +178,7 @@ public sealed class FluidBarSettings
         HoldToHideKey = defaults.HoldToHideKey;
         AgentHooksGuardEnabled = defaults.AgentHooksGuardEnabled;
         AgentHooksGuardIntervalMs = defaults.AgentHooksGuardIntervalMs;
+        AgentKeepIslandVisible = defaults.AgentKeepIslandVisible;
     }
 }
 

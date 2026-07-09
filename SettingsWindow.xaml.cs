@@ -1340,6 +1340,16 @@ public partial class SettingsWindow : Window
                     agentPlugin.StartGuard();
                 }));
 
+            PluginSettingsContainer.Children.Add(CreateToggleRow(
+                "Agent 运行时保持显示",
+                "Agent 任务运行期间灵动岛始终显示，不会自动隐藏",
+                _settings.AgentKeepIslandVisible,
+                val =>
+                {
+                    _settings.AgentKeepIslandVisible = val;
+                    _settings.Save();
+                }));
+
             PluginSettingsContainer.Children.Add(CreateSliderRow(
                 "守护间隔", 5, 60, 5, _settings.AgentHooksGuardIntervalMs / 1000.0,
                 val =>

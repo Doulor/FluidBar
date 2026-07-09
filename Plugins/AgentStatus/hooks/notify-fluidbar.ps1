@@ -1,4 +1,4 @@
-# FluidBar Agent Status hook script
+﻿# FluidBar Agent Status hook script
 # Invoke from Claude Code Stop hook or Codex wrapper.
 # Writes a completion JSON to the FluidBar agent-events inbox.
 param(

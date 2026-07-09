@@ -1,4 +1,4 @@
-# Codex hook wrapper for FluidBar
+﻿# Codex hook wrapper for FluidBar
 # Use this with Codex custom hooks or as a post-task wrapper.
 #
 # Usage:

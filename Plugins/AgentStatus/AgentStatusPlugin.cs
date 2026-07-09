@@ -132,7 +132,7 @@ public sealed class AgentStatusPlugin : IIslandPlugin
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".claude", "settings.json");
 
-    private static string HookCommand => $"powershell -ExecutionPolicy Bypass -File \"{HookScriptPath}\"";
+    private static string HookCommand => $"powershell -NoProfile -ExecutionPolicy Bypass -File \"{HookScriptPath}\"";
 
     private void RunHooksGuard()
     {

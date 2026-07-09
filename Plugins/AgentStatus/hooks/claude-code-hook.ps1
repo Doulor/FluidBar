@@ -1,4 +1,4 @@
-# Claude Code hook for FluidBar (supports all 6 hook events)
+﻿# Claude Code hook for FluidBar (supports all 6 hook events)
 # Add this to .claude/settings.json or %APPDATA%\Claude Code\settings.json:
 #
 # "hooks": {

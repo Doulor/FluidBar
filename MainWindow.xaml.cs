@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private double _activeTargetHeight;
     private double _wavePhase;
     private bool _mediaActive;
+    private bool _agentActive;
     private bool _hiddenByHoldKey;
     private long _mediaPositionTicks;
     private long _mediaEndTicks;
@@ -163,6 +164,10 @@ public partial class MainWindow : Window
                 if (_mediaActive || (_currentView?.Kind == IslandViewKind.Media))
                 {
                     // Media is active or displayed — don't collapse
+                }
+                else if (_agentActive && _settings.AgentKeepIslandVisible)
+                {
+                    // Agent 运行中 — 不自动隐藏
                 }
                 else if (_settings.AlwaysVisible)
                     ShowIdleClock();
@@ -667,6 +672,12 @@ public partial class MainWindow : Window
         }
 
         ApplyStackPolicy(evt, view);
+
+        // Agent 运行状态追踪
+        if (evt.Source == "agent-status")
+        {
+            _agentActive = evt.Payload?.IsActive == true;
+        }
 
         _currentView = view;
         _currentSource = evt.Source;
@@ -2071,6 +2082,13 @@ public partial class MainWindow : Window
 
         // 媒体播放中不自动隐藏；暂停时也不自动隐藏（卡片应保持打开直到鼠标移走）
         if (_currentView?.Kind == IslandViewKind.Media && (_currentView.ShowsAudioWave || _isHoverCard))
+        {
+            _collapseTimer.Stop();
+            return;
+        }
+
+        // Agent 运行中不自动隐藏
+        if (_agentActive && _settings.AgentKeepIslandVisible)
         {
             _collapseTimer.Stop();
             return;
