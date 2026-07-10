@@ -1880,6 +1880,21 @@
                                                Style="{StaticResource ValueLabel}"/>
                                 </Grid>
 
+                                <Grid Margin="0,0,0,12" Height="34">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="96"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="背景样式"
+                                               Style="{StaticResource SettingLabel}"/>
+                                    <ComboBox x:Name="BackgroundStyleCombo"
+                                              Grid.Column="1" Margin="12,0"
+                                              SelectionChanged="BackgroundStyleCombo_Changed">
+                                        <ComboBoxItem Content="透明" Tag="Transparent"/>
+                                        <ComboBoxItem Content="亚克力" Tag="Acrylic"/>
+                                    </ComboBox>
+                                </Grid>
+
                                 <Border Style="{StaticResource Separator}"/>
                                 <TextBlock Text="尺寸" Style="{StaticResource SectionHeader}"/>
 
