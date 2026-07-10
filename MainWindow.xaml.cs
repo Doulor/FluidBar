@@ -570,11 +570,50 @@ public partial class MainWindow : Window
                 SecondaryLyricLine = evt.Payload?.SecondaryLyricLine ?? cur.SecondaryLyricLine,
                 AlbumArtPath = string.IsNullOrWhiteSpace(newArt) ? cur.AlbumArtPath : newArt,
             };
-            // Sync wave timer fields for real-time compact progress interpolation
-            _mediaPositionTicks = _currentView.PositionTicks;
-            _mediaEndTicks = _currentView.EndTicks;
-            _mediaStartTimeTicks = _currentView.StartTimeTicks;
-            _mediaLastUpdatedTicks = _currentView.LastUpdatedTicks;
+            // Sync wave timer fields for real-time compact progress interpolation.
+            // Advance ticks forward only (never backward) to avoid visual jumps when
+            // GSMTC reports a slightly stale position — EXCEPT on user seeks, where a
+            // large gap vs the interpolated position means the user dragged the bar
+            // and the jump must be honored (both directions).
+            var fastSongChanged = _mediaEndTicks <= 0 || _currentView.EndTicks != _mediaEndTicks;
+            if (fastSongChanged && _mediaEndTicks > 0
+                && IsBrowserSourceId(_currentView.SourceName))
+            {
+                fastSongChanged = false;
+            }
+            var fastSeeked = !fastSongChanged && IsSeekFromInterpolated(_currentView.PositionTicks);
+            if (fastSongChanged || fastSeeked)
+            {
+                _mediaPositionTicks = _currentView.PositionTicks;
+                if (fastSongChanged || _currentView.EndTicks > 0)
+                    _mediaEndTicks = _currentView.EndTicks;
+                _mediaStartTimeTicks = _currentView.StartTimeTicks;
+                _mediaLastUpdatedTicks = _currentView.LastUpdatedTicks;
+
+                // Repaint the bar immediately — while paused the WaveTimer is stopped
+                // and would otherwise leave the bar at the pre-seek position.
+                if (fastSeeked && ProgressBarPanel.Visibility == Visibility.Visible
+                    && _mediaEndTicks > _mediaStartTimeTicks)
+                {
+                    var frac = Math.Clamp(
+                        (double)(_mediaPositionTicks - _mediaStartTimeTicks) / (_mediaEndTicks - _mediaStartTimeTicks),
+                        0.0, 1.0);
+                    var trackW = ProgressBarPanel.ActualWidth > 10
+                        ? ProgressBarPanel.ActualWidth : _mediaProgressTrackWidth;
+                    ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
+                    ProgressFill.Width = frac * trackW;
+                }
+            }
+            else
+            {
+                if (_currentView.PositionTicks > _mediaPositionTicks)
+                    _mediaPositionTicks = _currentView.PositionTicks;
+                if (_currentView.LastUpdatedTicks > _mediaLastUpdatedTicks)
+                    _mediaLastUpdatedTicks = _currentView.LastUpdatedTicks;
+                if (IsBrowserSourceId(_currentView.SourceName)
+                    && _currentView.EndTicks != _mediaEndTicks && _currentView.EndTicks > 0)
+                    _mediaEndTicks = _currentView.EndTicks;
+            }
 
             // If album art arrived from BG enrichment, re-apply icon and update progress bar color
             if (artChanged)
@@ -2243,15 +2282,21 @@ public partial class MainWindow : Window
         // Store ticks for WaveTimer interpolation.
         // On re-render of the same song (e.g. album art arrival), preserve the WaveTimer's
         // current interpolated position to avoid a visual "jump back" to the snapshot position.
-        // But respect real user seeks: a large backward jump (>2s) means the user dragged
-        // the progress bar — accept the new position unconditionally.
+        // But respect real user seeks: compare against the wall-clock-interpolated position
+        // (not the raw stored baseline) — a large gap in EITHER direction means the user
+        // dragged the progress bar, so accept the new position unconditionally.
         var songChanged = _mediaEndTicks <= 0 || view.EndTicks != _mediaEndTicks;
-        var seeked = !songChanged && view.PositionTicks < _mediaPositionTicks
-            && (_mediaPositionTicks - view.PositionTicks) > TimeSpan.FromSeconds(2).Ticks;
+        // For browsers, GSMTC timeline is unreliable (EndTime fluctuates); never treat as
+        // song change based on EndTicks alone — the plugin now extrapolates stale positions,
+        // so a real title change is detected via signature (full re-render), not here.
+        if (songChanged && isBrowser && _mediaEndTicks > 0)
+            songChanged = false;
+        var seeked = !songChanged && IsSeekFromInterpolated(view.PositionTicks);
         if (songChanged || seeked)
         {
             _mediaPositionTicks = view.PositionTicks;
-            _mediaEndTicks = view.EndTicks;
+            if (songChanged || view.EndTicks > 0)
+                _mediaEndTicks = view.EndTicks;
             _mediaStartTimeTicks = view.StartTimeTicks;
             _mediaLastUpdatedTicks = view.LastUpdatedTicks;
         }
@@ -2301,8 +2346,9 @@ public partial class MainWindow : Window
             // Set initial width. When WaveTimer is running and we have valid tick data,
             // skip this — the timer will interpolate smoothly from its current position.
             // Only set width on first render (WaveTimer hasn't started yet) or when paused.
+            // Exception: on a user seek the jump IS the point — always set the width.
             var waveTimerActive = view.ShowsAudioWave && _waveTimer.IsEnabled;
-            if (!waveTimerActive)
+            if (seeked || !waveTimerActive)
             {
                 ProgressFill.BeginAnimation(System.Windows.Controls.Border.WidthProperty, null);
                 if (view.EndTicks > view.StartTimeTicks)
@@ -2388,11 +2434,49 @@ public partial class MainWindow : Window
         else
             StopArtRetry();
 
-        // Store ticks for real-time progress interpolation
-        _mediaPositionTicks = view.PositionTicks;
-        _mediaEndTicks = view.EndTicks;
-        _mediaStartTimeTicks = view.StartTimeTicks;
-        _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+        // Store ticks for real-time progress interpolation.
+        // On same-song re-renders (e.g. album art arrival), don't overwrite the WaveTimer's
+        // interpolated position — only advance forward. This prevents backward jumps when
+        // a snapshot carries a slightly stale position from background enrichment.
+        if (songChanged || seeked)
+        {
+            _mediaPositionTicks = view.PositionTicks;
+            if (songChanged || view.EndTicks > 0)
+                _mediaEndTicks = view.EndTicks;
+            _mediaStartTimeTicks = view.StartTimeTicks;
+            _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+        }
+        else
+        {
+            if (view.PositionTicks > _mediaPositionTicks)
+                _mediaPositionTicks = view.PositionTicks;
+            if (view.LastUpdatedTicks > _mediaLastUpdatedTicks)
+                _mediaLastUpdatedTicks = view.LastUpdatedTicks;
+        }
+    }
+
+    /// <summary>
+    /// Detect a user seek: compare the incoming position with the current
+    /// wall-clock-interpolated position (the same math WaveTimer_Tick uses to
+    /// paint the bar). A gap over the threshold in EITHER direction is a seek.
+    /// Comparing against the interpolated position (instead of the raw stored
+    /// baseline) means normal stale-but-behind GSMTC reports stay under the
+    /// threshold and are NOT misread as backward seeks.
+    /// </summary>
+    private bool IsSeekFromInterpolated(long newPositionTicks)
+    {
+        if (newPositionTicks <= 0 || _mediaPositionTicks <= 0)
+            return false;
+
+        var elapsed = Environment.TickCount64 - _mediaLastUpdatedTicks;
+        if (elapsed < 0) elapsed = 0;
+        var interpolated = _mediaActive
+            ? _mediaPositionTicks + elapsed * TimeSpan.TicksPerMillisecond
+            : _mediaPositionTicks;
+        if (_mediaEndTicks > _mediaStartTimeTicks && interpolated > _mediaEndTicks)
+            interpolated = _mediaEndTicks;
+
+        return Math.Abs(newPositionTicks - interpolated) > TimeSpan.FromSeconds(3).Ticks;
     }
 
     private string? _lastTriedIconPath;

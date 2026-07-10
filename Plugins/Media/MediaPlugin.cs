@@ -44,6 +44,12 @@ public sealed class MediaPlugin : IIslandPlugin
     // Track lyric changes separately (lyrics excluded from main signature to avoid island jump)
     private string _lastLyricSignature = string.Empty;
 
+    // Track last published playback position to detect user seeks.
+    // Signature excludes position, so without this a drag on the video progress
+    // bar never reaches the UI (the poll result is swallowed as "same song").
+    private long _lastPublishedPositionTicks;
+    private long _lastPublishedAtTickCount;
+
     // Track enrichment failures to avoid re-fetching every poll for instrumental tracks
     private string? _enrichmentFailedKey;
     private DateTime _enrichmentFailedTime = DateTime.MinValue;
@@ -257,6 +263,7 @@ public sealed class MediaPlugin : IIslandPlugin
                     {
                         _lastSignature = signature0;
                         _lastLyricSignature = string.Empty;
+                        RecordPublishedPosition(snapshot);
                         EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
                     }
 
@@ -340,13 +347,34 @@ public sealed class MediaPlugin : IIslandPlugin
                 if (lyricSig != _lastLyricSignature)
                 {
                     _lastLyricSignature = lyricSig;
+                    RecordPublishedPosition(snapshot);
                     EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
+                    return;
+                }
+
+                // Seek detection: signature deliberately excludes position, so a user
+                // drag on the progress bar (esp. browser video) changes nothing above
+                // and would be silently swallowed. Compare the reported position with
+                // the wall-clock-extrapolated expected position; a large gap either
+                // way means the user seeked — publish so the UI can jump.
+                if (snapshot.PositionTicks > 0 && _lastPublishedAtTickCount > 0)
+                {
+                    var elapsedTicks = snapshot.IsPlaying
+                        ? (Environment.TickCount64 - _lastPublishedAtTickCount) * TimeSpan.TicksPerMillisecond
+                        : 0;
+                    var expected = _lastPublishedPositionTicks + elapsedTicks;
+                    if (Math.Abs(snapshot.PositionTicks - expected) > SeekDetectionThresholdTicks)
+                    {
+                        RecordPublishedPosition(snapshot);
+                        EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
+                    }
                 }
                 return;
             }
 
             _lastSignature = signature;
             _lastLyricSignature = lyricSig;
+            RecordPublishedPosition(snapshot);
             EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(snapshot));
         }
         catch
@@ -356,6 +384,17 @@ public sealed class MediaPlugin : IIslandPlugin
         {
             _isPolling = false;
         }
+    }
+
+    // Gap between reported and wall-clock-expected position that counts as a seek.
+    // Must absorb poll jitter + GSMTC staleness (~1-2s for browsers) without
+    // missing intentional drags (usually ≥5s).
+    private static readonly long SeekDetectionThresholdTicks = TimeSpan.FromSeconds(3).Ticks;
+
+    private void RecordPublishedPosition(MediaSnapshot snapshot)
+    {
+        _lastPublishedPositionTicks = snapshot.PositionTicks;
+        _lastPublishedAtTickCount = Environment.TickCount64;
     }
 
     private MediaSnapshot EstimateFallbackPosition(MediaSnapshot snapshot, ProcessAudioPlaybackState audioState)
@@ -423,6 +462,7 @@ public sealed class MediaPlugin : IIslandPlugin
                 _bgEnrichmentPending = false;
                 // Update signature so the next poll doesn't overwrite with basic snapshot
                 _lastSignature = MediaSnapshotSelectionPolicy.BuildSignature(enriched);
+                RecordPublishedPosition(enriched);
                 _timer.Dispatcher.BeginInvoke(() =>
                     EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(enriched)));
             }

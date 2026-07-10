@@ -88,11 +88,30 @@ internal sealed class MediaSessionProvider : IMediaSessionProvider
                     continue;
             }
 
-            var progress = CalculateProgressPercent(timeline.Position, timeline.StartTime, timeline.EndTime);
+            // Extrapolate stale timeline positions. Browsers (Chromium) only push
+            // timeline updates every few seconds; LastUpdatedTime tells us how old
+            // the reported Position is. Without this, a stale position is
+            // indistinguishable from a user seek, forcing the UI to clamp all
+            // backward jumps — which then swallows real backward seeks.
+            var position = timeline.Position;
+            var isPlayingNow = playback.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            if (isPlayingNow && timeline.LastUpdatedTime.Year > 2000)
+            {
+                var age = DateTimeOffset.UtcNow - timeline.LastUpdatedTime;
+                if (age > TimeSpan.Zero && age < TimeSpan.FromMinutes(30))
+                {
+                    var rate = playback.PlaybackRate ?? 1.0;
+                    position += TimeSpan.FromTicks((long)(age.Ticks * rate));
+                    if (timeline.EndTime > timeline.StartTime && position > timeline.EndTime)
+                        position = timeline.EndTime;
+                }
+            }
+
+            var progress = CalculateProgressPercent(position, timeline.StartTime, timeline.EndTime);
             var sourceName = MediaIslandEventFactory.FriendlySourceName(sourceId);
 
             // Read ticks for real-time progress interpolation
-            var positionTicks = timeline.Position.Ticks;
+            var positionTicks = position.Ticks;
             var endTicks = timeline.EndTime.Ticks;
             var startTimeTicks = timeline.StartTime.Ticks;
 
