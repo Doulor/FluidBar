@@ -464,23 +464,35 @@ public partial class MainWindow : Window
     {
         if (_acrylicSyncTimer is not null)
             return;
-        // 用 60fps 的 DispatcherTimer 而不是 CompositionTarget.Rendering：
-        // Rendering 只在 WPF 主动渲染时触发，灵动岛静止后就停摆，导致模糊层
-        // 停在旧位置无法跟随；而且每渲染帧调 SetWindowPos 会堵塞消息泵造成卡顿。
-        _acrylicSyncTimer = new DispatcherTimer(DispatcherPriority.Render)
+
+        // 事件驱动为主：灵动岛展开/折叠动画会持续触发 LocationChanged / SizeChanged，
+        // 覆盖绝大多数位置变化，无需每帧轮询。
+        LocationChanged += AcrylicSync_Handler;
+        SizeChanged += AcrylicSync_Handler;
+        PillBorder.SizeChanged += AcrylicSync_Handler;
+
+        // 低频兜底计时器：用 Background 优先级（低于 Input），绝不抢占用户交互，
+        // 这是之前 Render 优先级 16ms 计时器导致「0% CPU 但界面冻结」的根因。
+        _acrylicSyncTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(16)
+            Interval = TimeSpan.FromMilliseconds(100)
         };
-        _acrylicSyncTimer.Tick += (_, _) => SyncAcrylicBackdrop();
+        _acrylicSyncTimer.Tick += AcrylicSync_Handler;
         _acrylicSyncTimer.Start();
     }
+
+    private void AcrylicSync_Handler(object? sender, EventArgs e) => SyncAcrylicBackdrop();
 
     private void DetachAcrylicBackdrop()
     {
         if (_acrylicSyncTimer is not null)
         {
             _acrylicSyncTimer.Stop();
+            _acrylicSyncTimer.Tick -= AcrylicSync_Handler;
             _acrylicSyncTimer = null;
+            LocationChanged -= AcrylicSync_Handler;
+            SizeChanged -= AcrylicSync_Handler;
+            PillBorder.SizeChanged -= AcrylicSync_Handler;
         }
         if (_acrylicBackdrop is not null)
         {
