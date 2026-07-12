@@ -231,6 +231,17 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true
 
 ---
 
+## Star History
+
+<a href="https://www.star-history.com/#Doulor/FluidBar&type=Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Doulor/FluidBar&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Doulor/FluidBar&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Doulor/FluidBar&type=Date" />
+  </picture>
+</a>
+
+
 <p align="center">
   <sub>Built with WPF & .NET 10 &middot; Designed for Windows</sub>
 </p>
