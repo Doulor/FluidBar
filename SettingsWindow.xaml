@@ -1835,7 +1835,7 @@
                                     <TextBlock Grid.Column="0" Text="圆角"
                                                Style="{StaticResource SettingLabel}"/>
                                     <Slider x:Name="CornerRadiusSlider" Grid.Column="1"
-                                            Minimum="18" Maximum="34"
+                                            Minimum="0" Maximum="60"
                                             TickFrequency="1"
                                             IsSnapToTickEnabled="True"
                                             Margin="12,0"
@@ -1878,21 +1878,6 @@
                                             ValueChanged="Setting_ValueChanged"/>
                                     <TextBlock x:Name="BackgroundOpacityValue" Grid.Column="2"
                                                Style="{StaticResource ValueLabel}"/>
-                                </Grid>
-
-                                <Grid Margin="0,0,0,12" Height="34">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="96"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="背景样式"
-                                               Style="{StaticResource SettingLabel}"/>
-                                    <ComboBox x:Name="BackgroundStyleCombo"
-                                              Grid.Column="1" Margin="12,0"
-                                              SelectionChanged="BackgroundStyleCombo_Changed">
-                                        <ComboBoxItem Content="透明" Tag="Transparent"/>
-                                        <ComboBoxItem Content="亚克力" Tag="Acrylic"/>
-                                    </ComboBox>
                                 </Grid>
 
                                 <Border Style="{StaticResource Separator}"/>

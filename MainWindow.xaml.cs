@@ -62,8 +62,6 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, MediaColor> _mediaAccentCache = new(StringComparer.OrdinalIgnoreCase);
     private LoadedMediaIcon? _currentMediaIcon;
     private string? _activeMediaControlSourceName;
-    private AcrylicBackdropWindow? _acrylicBackdrop;
-    private DispatcherTimer? _acrylicSyncTimer;
 
     private ClipboardPluginSettings? _clipboardPluginSettings;
     private IMediaSessionProvider? _mediaSessionProvider;
@@ -235,7 +233,6 @@ public partial class MainWindow : Window
         StopHoverRendering();
         StopRimBreathing();
         CloseSnapshotWindows(immediate: true);
-        DetachAcrylicBackdrop();
     }
 
     private void Window_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -342,7 +339,7 @@ public partial class MainWindow : Window
                 (MediaColor)MediaColorConverter.ConvertFromString(_settings.BackgroundColor);
         }
         catch { PillBackground.Color = MediaColor.FromArgb(0xE6, 0x00, 0x00, 0x00); }
-        ApplyBackgroundStyle();
+        PillBackground.Opacity = _settings.BackgroundOpacity;
 
         try
         {
@@ -418,120 +415,6 @@ public partial class MainWindow : Window
         {
             _collapseTimer.Stop();
             _collapseTimer.Start();
-        }
-    }
-
-    /// <summary>
-    /// 应用背景样式：透明（纯色底）或亚克力（系统模糊 + 着色底）。
-    /// 亚克力由独立的 backdrop 窗口承载（主窗口是分层窗口无法直接模糊），
-    /// PillBackground 在亚克力模式下压到极淡，让模糊透出来。
-    /// </summary>
-    private void ApplyBackgroundStyle()
-    {
-        var useAcrylic = string.Equals(_settings.BackgroundStyle, "Acrylic", StringComparison.OrdinalIgnoreCase)
-            && AcrylicBackdropWindow.IsSupported;
-
-        if (useAcrylic)
-        {
-            if (_acrylicBackdrop is null)
-            {
-                _acrylicBackdrop = new AcrylicBackdropWindow();
-                _acrylicBackdrop.Show();
-            }
-
-            _acrylicBackdrop.ApplyTint(PillBackground.Color, _settings.BackgroundOpacity);
-            if (_acrylicBackdrop.AcrylicApplied)
-            {
-                // 胶囊本体的纯色底压到极淡，主视觉来自系统模糊
-                PillBackground.Opacity = Math.Min(0.12, _settings.BackgroundOpacity);
-                AttachAcrylicSync();
-                SyncAcrylicBackdrop();
-                return;
-            }
-
-            // 系统调用失败（如精简版系统）→ 回退普通透明
-            DetachAcrylicBackdrop();
-        }
-        else
-        {
-            DetachAcrylicBackdrop();
-        }
-
-        PillBackground.Opacity = _settings.BackgroundOpacity;
-    }
-
-    private void AttachAcrylicSync()
-    {
-        if (_acrylicSyncTimer is not null)
-            return;
-
-        // 事件驱动为主：灵动岛展开/折叠动画会持续触发 LocationChanged / SizeChanged，
-        // 覆盖绝大多数位置变化，无需每帧轮询。
-        LocationChanged += AcrylicSync_Handler;
-        SizeChanged += AcrylicSync_Handler;
-        PillBorder.SizeChanged += AcrylicSync_Handler;
-
-        // 低频兜底计时器：用 Background 优先级（低于 Input），绝不抢占用户交互，
-        // 这是之前 Render 优先级 16ms 计时器导致「0% CPU 但界面冻结」的根因。
-        _acrylicSyncTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(100)
-        };
-        _acrylicSyncTimer.Tick += AcrylicSync_Handler;
-        _acrylicSyncTimer.Start();
-    }
-
-    private void AcrylicSync_Handler(object? sender, EventArgs e) => SyncAcrylicBackdrop();
-
-    private void DetachAcrylicBackdrop()
-    {
-        if (_acrylicSyncTimer is not null)
-        {
-            _acrylicSyncTimer.Stop();
-            _acrylicSyncTimer.Tick -= AcrylicSync_Handler;
-            _acrylicSyncTimer = null;
-            LocationChanged -= AcrylicSync_Handler;
-            SizeChanged -= AcrylicSync_Handler;
-            PillBorder.SizeChanged -= AcrylicSync_Handler;
-        }
-        if (_acrylicBackdrop is not null)
-        {
-            _acrylicBackdrop.Close();
-            _acrylicBackdrop = null;
-        }
-    }
-
-    /// <summary>把 backdrop 窗口对齐到 PillBorder 的屏幕矩形（物理像素）。</summary>
-    private void SyncAcrylicBackdrop()
-    {
-        if (_acrylicBackdrop is null)
-            return;
-
-        // 胶囊隐藏（折叠且非常驻）时同步隐藏模糊层
-        if (PillBorder.Opacity < 0.05 || Visibility != Visibility.Visible)
-        {
-            _acrylicBackdrop.HideBackdrop();
-            return;
-        }
-
-        try
-        {
-            var source = PresentationSource.FromVisual(this);
-            if (source?.CompositionTarget is null || !PillBorder.IsLoaded)
-                return;
-
-            var topLeft = PillBorder.PointToScreen(new System.Windows.Point(0, 0));
-            var m = source.CompositionTarget.TransformToDevice;
-            var w = (int)Math.Round(PillBorder.ActualWidth * m.M11);
-            var h = (int)Math.Round(PillBorder.ActualHeight * m.M22);
-            var radius = (int)Math.Round(PillBorder.CornerRadius.TopLeft * m.M11);
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-
-            _acrylicBackdrop.UpdateBounds(hwnd, (int)topLeft.X, (int)topLeft.Y, w, h, radius);
-        }
-        catch
-        {
-            // PointToScreen 在窗口尚未渲染时可能抛异常 — 下一帧重试
         }
     }
 

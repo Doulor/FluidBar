@@ -867,9 +867,6 @@ public partial class SettingsWindow : Window
         // 环绕微光模式
         SetRimModeCombo(_settings.RimMode);
 
-        // 背景样式
-        SetBackgroundStyleCombo(_settings.BackgroundStyle);
-
         SetPositionRadio(_settings.Position);
         UpdatePositionPreview(_settings.Position);
 
@@ -1065,33 +1062,6 @@ public partial class SettingsWindow : Window
                 return;
 
             _settings.RimMode = mode;
-            _settings.Save();
-            ScheduleSettingsChanged();
-        }
-    }
-
-    private void SetBackgroundStyleCombo(string style)
-    {
-        foreach (ComboBoxItem item in BackgroundStyleCombo.Items)
-        {
-            if (item.Tag?.ToString() == style)
-            {
-                BackgroundStyleCombo.SelectedItem = item;
-                return;
-            }
-        }
-        BackgroundStyleCombo.SelectedIndex = 0; // 默认 "Transparent"
-    }
-
-    private void BackgroundStyleCombo_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoading) return;
-        if (BackgroundStyleCombo.SelectedItem is ComboBoxItem item && item.Tag is string style)
-        {
-            if (_settings.BackgroundStyle == style)
-                return;
-
-            _settings.BackgroundStyle = style;
             _settings.Save();
             ScheduleSettingsChanged();
         }

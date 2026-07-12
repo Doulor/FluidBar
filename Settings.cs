@@ -41,8 +41,6 @@ public sealed class FluidBarSettings
     public double Opacity { get; set; } = 0.96;
     public double BackgroundOpacity { get; set; } = 0.75;
     public string BackgroundColor { get; set; } = "#F4000000";
-    // "Transparent" = 普通透明纯色底, "Acrylic" = 系统亚克力模糊
-    public string BackgroundStyle { get; set; } = "Transparent";
     public string AccentColor { get; set; } = "#0A84FF";
 
     // === 行为 ===
@@ -165,7 +163,6 @@ public sealed class FluidBarSettings
         Opacity = defaults.Opacity;
         BackgroundOpacity = defaults.BackgroundOpacity;
         BackgroundColor = defaults.BackgroundColor;
-        BackgroundStyle = defaults.BackgroundStyle;
         AccentColor = defaults.AccentColor;
         AlwaysOnTop = defaults.AlwaysOnTop;
         AlwaysVisible = defaults.AlwaysVisible;
