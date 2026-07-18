@@ -463,7 +463,7 @@ public sealed class MediaPlugin : IIslandPlugin
                 // Update signature so the next poll doesn't overwrite with basic snapshot
                 _lastSignature = MediaSnapshotSelectionPolicy.BuildSignature(enriched);
                 RecordPublishedPosition(enriched);
-                _timer.Dispatcher.BeginInvoke(() =>
+                _ = _timer.Dispatcher.BeginInvoke(() =>
                     EventTriggered?.Invoke(MediaIslandEventFactory.FromSnapshot(enriched)));
             }
             else

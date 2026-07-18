@@ -460,11 +460,107 @@ public partial class SettingsWindow : Window
         _currentTheme = theme;
         _settings.SettingsTheme = theme;
         _settings.Save();
-        // 主题画刷瞬间切换（按钮的滑动/星星/云朵动画由 XAML Storyboard 处理）
-        UpdateThemeVisuals();
+        AnimateThemeVisuals();
     }
 
-    // 主题画刷瞬间切换的核心逻辑（UpdateThemeVisuals 和 AnimateThemeColors 共用）
+    private static readonly string[] ThemeBrushKeys =
+    {
+        "ThemeBg", "ThemeSurface", "ThemeCardBg", "ThemeSidebar",
+        "ThemeFg", "ThemeFgSecondary", "ThemeFgTertiary",
+        "ThemeBorder", "ThemeBorderStrong", "ThemeAccent",
+        "ThemeAccentBg", "ThemeHover", "ThemeTagBg", "ThemeIconTile"
+    };
+
+    private static readonly TimeSpan ThemeTransitionDuration = TimeSpan.FromMilliseconds(350);
+
+    private void AnimateThemeVisuals()
+    {
+        // Initial load uses UpdateThemeVisuals (instant), never animate.
+        if (_isLoading) return;
+
+        var palette = _isDark ? DarkPalette : LightPalette;
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        for (var i = 0; i < ThemeBrushKeys.Length && i < palette.Length; i++)
+        {
+            // Capture current color from the (possibly frozen) brush in resources.
+            var currentColor = Resources[ThemeBrushKeys[i]] is SolidColorBrush old
+                ? old.Color
+                : palette[i];
+
+            // Always create a brand-new unfrozen brush and animate it.
+            var brush = new SolidColorBrush(currentColor);
+            brush.BeginAnimation(SolidColorBrush.ColorProperty,
+                new ColorAnimation(palette[i], ThemeTransitionDuration)
+                {
+                    EasingFunction = easing
+                });
+
+            // Publish into resources so DynamicResource bindings pick up the change.
+            Resources[ThemeBrushKeys[i]] = brush;
+        }
+
+        AnimateGradientResource("BgGradient",
+            _isDark ? CreateDarkBgGradient() : CreateLightBgGradient(),
+            ThemeTransitionDuration, easing);
+        AnimateGradientResource("SidebarGradient",
+            _isDark ? CreateDarkSidebarGradient() : CreateLightSidebarGradient(),
+            ThemeTransitionDuration, easing);
+        AnimateGradientResource("TitleCardBg",
+            _isDark ? CreateDarkTitleGradient() : CreateLightTitleGradient(),
+            ThemeTransitionDuration, easing);
+    }
+
+    private void AnimateGradientResource(
+        string key,
+        GradientBrush target,
+        TimeSpan duration,
+        IEasingFunction easing)
+    {
+        // Read current stop colors from the (possibly frozen) existing brush.
+        var currentColors = Resources[key] is GradientBrush oldBrush
+            ? oldBrush.GradientStops.Select(s => s.Color).ToArray()
+            : target.GradientStops.Select(s => s.Color).ToArray();
+
+        // Create a new unfrozen brush initialized with the current colors,
+        // then animate each stop toward the target color.
+        var animated = target switch
+        {
+            RadialGradientBrush => new RadialGradientBrush
+            {
+                GradientOrigin = ((RadialGradientBrush)target).GradientOrigin,
+                Center = ((RadialGradientBrush)target).Center,
+                RadiusX = ((RadialGradientBrush)target).RadiusX,
+                RadiusY = ((RadialGradientBrush)target).RadiusY,
+                GradientStops = new GradientStopCollection(
+                    target.GradientStops.Select((s, i) =>
+                        new GradientStop(currentColors.Length > i ? currentColors[i] : s.Color, s.Offset)))
+            },
+            LinearGradientBrush lgb => new LinearGradientBrush
+            {
+                StartPoint = lgb.StartPoint,
+                EndPoint = lgb.EndPoint,
+                GradientStops = new GradientStopCollection(
+                    target.GradientStops.Select((s, i) =>
+                        new GradientStop(currentColors.Length > i ? currentColors[i] : s.Color, s.Offset)))
+            },
+            _ => target
+        };
+
+        // Animate before publishing to resources (avoids frozen-brush issues).
+        for (var i = 0; i < animated.GradientStops.Count; i++)
+        {
+            animated.GradientStops[i].BeginAnimation(GradientStop.ColorProperty,
+                new ColorAnimation(target.GradientStops[i].Color, duration)
+                {
+                    EasingFunction = easing
+                });
+        }
+
+        Resources[key] = animated;
+    }
+
+    // 主题画刷即时应用，用于初始化和重新创建渐变资源。
     private void UpdateThemeVisualsCore()
     {
         var pal = _isDark ? DarkPalette : LightPalette;
@@ -1747,6 +1843,16 @@ public partial class SettingsWindow : Window
             "新状态到来时使用更明显的回弹和环绕微光",
             feature.EmphasizeTransitions,
             val => { feature.EmphasizeTransitions = val; ScheduleSettingsSaveAndChanged(); }));
+
+        // 验证码检测：仅通知功能
+        if (monitor.Id == "notifications")
+        {
+            PluginSettingsContainer.Children.Add(CreateToggleRow(
+                "验证码检测",
+                "检测通知中的 6 位数验证码，胶囊态大字显示，卡片态显示复制按钮",
+                feature.VerificationCodeDetection,
+                val => { feature.VerificationCodeDetection = val; ScheduleSettingsSaveAndChanged(); }));
+        }
 
         // Notification-specific: permission request
         if (monitor is NotificationMonitor notifications)

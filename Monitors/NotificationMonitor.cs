@@ -94,12 +94,19 @@ public sealed class NotificationMonitor : ISystemMonitor
                 ? string.Join(Environment.NewLine, texts.Skip(1))
                 : "新的通知";
 
+            // 检测 6 位数验证码
+            string? verificationCode = null;
+            var match = System.Text.RegularExpressions.Regex.Match(body, @"\b\d{6}\b");
+            if (match.Success)
+                verificationCode = match.Value;
+
             return new NotificationSnapshot(
                 notification.Id,
                 appName,
                 title,
                 body,
-                notification.CreationTime);
+                notification.CreationTime,
+                VerificationCode: verificationCode);
         }
         catch
         {

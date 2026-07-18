@@ -187,4 +187,5 @@ public sealed class MonitorFeatureSettings
     public bool HoverCardEnabled { get; set; } = true;
     public int DisplayDurationMs { get; set; } = 3000;
     public bool EmphasizeTransitions { get; set; } = true;
+    public bool VerificationCodeDetection { get; set; } = true;
 }

@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, MediaColor> _mediaAccentCache = new(StringComparer.OrdinalIgnoreCase);
     private LoadedMediaIcon? _currentMediaIcon;
     private string? _activeMediaControlSourceName;
+    private string? _pendingVerificationCode;
 
     private ClipboardPluginSettings? _clipboardPluginSettings;
     private IMediaSessionProvider? _mediaSessionProvider;
@@ -165,9 +166,10 @@ public partial class MainWindow : Window
                 {
                     // Media is active or displayed — don't collapse
                 }
-                else if (_agentActive && _settings.AgentKeepIslandVisible)
+                else if (_agentActive && _settings.AgentKeepIslandVisible
+                    && _currentView?.Kind == IslandViewKind.Agent)
                 {
-                    // Agent 运行中 — 不自动隐藏
+                    // 仅 Agent 岛在任务运行期间保持显示；后续普通事件仍需正常自动隐藏。
                 }
                 else if (_settings.AlwaysVisible)
                     ShowIdleClock();
@@ -566,7 +568,7 @@ public partial class MainWindow : Window
                 EndTicks = evt.Payload?.EndTicks ?? cur.EndTicks,
                 StartTimeTicks = evt.Payload?.StartTimeTicks ?? cur.StartTimeTicks,
                 LastUpdatedTicks = evt.Payload?.LastUpdatedTicks ?? cur.LastUpdatedTicks,
-                LyricLine = newLyric != oldLyric ? newLyric : cur.LyricLine,
+                LyricLine = newLyric != oldLyric ? newLyric : cur.LyricLine ?? "",
                 SecondaryLyricLine = evt.Payload?.SecondaryLyricLine ?? cur.SecondaryLyricLine,
                 AlbumArtPath = string.IsNullOrWhiteSpace(newArt) ? cur.AlbumArtPath : newArt,
             };
@@ -649,8 +651,8 @@ public partial class MainWindow : Window
             _settings,
             _clipboardPluginSettings?.MinFullDisplayChars ?? 20);
 
-        // 时钟监控只在常驻/已展开时更新，避免每 10 秒主动弹出。
-        if (view.Kind == IslandViewKind.Clock && !_settings.AlwaysVisible && !_isExpanded)
+        // 时钟监控只在常驻模式下更新，避免每 10 秒重置折叠定时器导致岛屿永不隐藏。
+        if (view.Kind == IslandViewKind.Clock && !_settings.AlwaysVisible)
             return;
 
         // Stopped/paused media: start collapse timer without overwriting _currentView
@@ -1525,6 +1527,21 @@ public partial class MainWindow : Window
             }
         }
 
+        // 验证码复制按钮：卡片模式下，通知携带验证码时显示
+        var code = card.Kind == IslandViewKind.Notification ? _pendingVerificationCode : null;
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            // 限制长通知正文，保证下方复制按钮始终处于卡片边界内。
+            HoverBodyText.MaxHeight = 54;
+            HoverVerificationCodeText.Text = $"复制验证码 {code}";
+            HoverVerificationCodePanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            HoverBodyText.MaxHeight = double.PositiveInfinity;
+            HoverVerificationCodePanel.Visibility = Visibility.Collapsed;
+        }
+
         var hoverHasPosition = card.PositionTicks > 0 || card.EndTicks > card.StartTimeTicks;
         var hoverIsBrowser = IsBrowserSourceId(card.SourceName);
         var hoverHasProgress = card.ProgressPercent >= 0;
@@ -2127,7 +2144,8 @@ public partial class MainWindow : Window
         }
 
         // Agent 运行中不自动隐藏
-        if (_agentActive && _settings.AgentKeepIslandVisible)
+        if (_agentActive && _settings.AgentKeepIslandVisible
+            && _currentView?.Kind == IslandViewKind.Agent)
         {
             _collapseTimer.Stop();
             return;
@@ -2148,6 +2166,7 @@ public partial class MainWindow : Window
     {
         StopScrolling();
         TitleText.MaxWidth = double.PositiveInfinity;
+        TitleText.Visibility = Visibility.Visible;
         ContentText.MaxWidth = double.PositiveInfinity;
         ContentText.Visibility = Visibility.Collapsed;
         ProgressBarPanel.Width = double.NaN;
@@ -2158,6 +2177,9 @@ public partial class MainWindow : Window
         ScrollCanvas.Visibility = Visibility.Collapsed;
         AccessoryGrid.Visibility = Visibility.Collapsed;
         AudioWavePanel.Visibility = Visibility.Collapsed;
+        VerificationCodeText.Visibility = Visibility.Collapsed;
+        HoverVerificationCodePanel.Visibility = Visibility.Collapsed;
+        _pendingVerificationCode = null;
         _waveTimer.Stop();
     }
 
@@ -2728,6 +2750,23 @@ public partial class MainWindow : Window
     private void ShowRichStatusContent(IslandEvent evt, IslandViewPresentation view)
     {
         TitleText.Text = evt.Title;
+
+        // 验证码检测：通知中包含 6 位数验证码时，胶囊态直接用大字显示验证码
+        var code = evt.Payload?.VerificationCode;
+        var settings = _settings.GetMonitorFeatureSettings("notifications");
+        if (view.Kind == IslandViewKind.Notification
+            && !string.IsNullOrWhiteSpace(code)
+            && settings.VerificationCodeDetection)
+        {
+            _pendingVerificationCode = code;
+            TitleText.Visibility = Visibility.Collapsed;
+            StatusPanel.Visibility = Visibility.Collapsed;
+            ContentText.Visibility = Visibility.Collapsed;
+            VerificationCodeText.Text = $"验证码: {code}";
+            VerificationCodeText.Visibility = Visibility.Visible;
+            return;
+        }
+
         StatusPanel.Visibility = Visibility.Visible;
         StatusText.Text = view.StatusText;
         StatusBadgeText.Text = view.StatusBadge;
@@ -3388,5 +3427,40 @@ public partial class MainWindow : Window
         var lower = sourceId.ToLowerInvariant();
         return lower.Contains("chrome") || lower.Contains("edge") ||
                lower.Contains("msedge") || lower.Contains("firefox");
+    }
+
+    private void VerificationCodeBtn_Click(object sender, MouseButtonEventArgs e)
+    {
+        CopyVerificationCode();
+    }
+
+    private void HoverVerificationCodeBtn_Click(object sender, MouseButtonEventArgs e)
+    {
+        CopyVerificationCode();
+    }
+
+    private void CopyVerificationCode()
+    {
+        if (string.IsNullOrWhiteSpace(_pendingVerificationCode))
+            return;
+
+        try
+        {
+            System.Windows.Clipboard.SetText(_pendingVerificationCode);
+            // 反馈：闪烁验证码按钮
+            var originalBg = HoverVerificationCodePanel.Background;
+            HoverVerificationCodePanel.Background = new SolidColorBrush(MediaColor.FromArgb(0x40, 0x30, 0xD1, 0x58));
+            HoverVerificationCodeText.Text = "已复制 ✓";
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                HoverVerificationCodePanel.Background = originalBg;
+                if (!string.IsNullOrWhiteSpace(_pendingVerificationCode))
+                    HoverVerificationCodeText.Text = $"复制验证码 {_pendingVerificationCode}";
+            };
+            timer.Start();
+        }
+        catch { }
     }
 }

@@ -6,7 +6,8 @@ public sealed record NotificationSnapshot(
     string Title,
     string Body,
     DateTimeOffset Timestamp,
-    string? AppIconPath = null);
+    string? AppIconPath = null,
+    string? VerificationCode = null);
 
 public static class NotificationIslandEventFactory
 {
@@ -37,7 +38,8 @@ public static class NotificationIslandEventFactory
                 {
                     body,
                     snapshot.Timestamp.LocalDateTime.ToString("HH:mm")
-                }));
+                },
+                VerificationCode: snapshot.VerificationCode));
     }
 }
 

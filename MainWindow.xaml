@@ -205,6 +205,16 @@
                                        Margin="0,0,0,3"
                                        TextTrimming="CharacterEllipsis"/>
 
+                            <!-- 验证码大字显示（胶囊模式） -->
+                            <TextBlock x:Name="VerificationCodeText"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI"
+                                       Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center"
+                                       Visibility="Collapsed"
+                                       TextTrimming="CharacterEllipsis"/>
+
                             <TextBlock x:Name="ContentText"
                                        FontSize="12"
                                        FontWeight="SemiBold"
@@ -404,6 +414,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0,0,0,12">
@@ -523,9 +534,28 @@
 
                     </Grid>
 
+                    <!-- 验证码复制按钮（卡片模式） -->
+                    <Border x:Name="HoverVerificationCodePanel"
+                            Grid.Row="2"
+                            Height="36"
+                            CornerRadius="10"
+                            Background="#18FFFFFF"
+                            Cursor="Hand"
+                            Visibility="Collapsed"
+                            Margin="0,8,0,0"
+                            MouseLeftButtonDown="HoverVerificationCodeBtn_Click">
+                        <TextBlock x:Name="HoverVerificationCodeText"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"
+                                   Foreground="#FFFFFF"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
                     <!-- Media controls: prev / play-pause / next -->
                     <StackPanel x:Name="MediaControlsPanel"
-                                Grid.Row="2"
+                                Grid.Row="3"
                                 Orientation="Horizontal"
                                 HorizontalAlignment="Center"
                                 Margin="0,4,0,4"
@@ -574,7 +604,7 @@
                         </Border>
                     </StackPanel>
 
-                    <Grid Grid.Row="3" Margin="0,12,0,0">
+                    <Grid Grid.Row="4" Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>

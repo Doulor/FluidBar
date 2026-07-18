@@ -341,7 +341,7 @@ public sealed record HoverCardPresentation(
         {
             IslandViewKind.ScrollingText or IslandViewKind.Text => 210,
             IslandViewKind.Media => string.IsNullOrWhiteSpace(compact.LyricLine) ? 206 : 232,
-            IslandViewKind.Notification => 218,
+            IslandViewKind.Notification => 272,
             IslandViewKind.Agent => 198,
             IslandViewKind.Progress => 176,
             IslandViewKind.Status => 184,

@@ -28,7 +28,8 @@ public sealed record IslandEventPayload(
     long PositionTicks = 0,
     long EndTicks = 0,
     long StartTimeTicks = 0,
-    long LastUpdatedTicks = 0);
+    long LastUpdatedTicks = 0,
+    string? VerificationCode = null);
 
 /// <summary>
 /// 灵动岛事件数据
