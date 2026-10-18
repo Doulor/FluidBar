@@ -537,6 +537,18 @@ PixelRect ToPhysical(in VisualRect r, in MonitorInfo m) => new(
 | S5 | 4 插件浸泡 30 min | 工作集 < 120 MB 且趋势平坦 |
 | S6 | `.NET 10` + Avalonia 12 构建 | 干净构建 + 单文件发布可启动 |
 
+**M0 结果（2026-10-18，本机）：GO** — 证据见 [`research/05-avalonia-spike.md`](../research/05-avalonia-spike.md)：
+
+| 检查 | 结果 | 实测 |
+|---|---|---|
+| S1 透明圆角 | ✅ GO | `ActualTransparencyLevel=Transparent`；截图角部=桌面像素 `#D3D3D3`、中心=`#08080A`；488×332 DIP @150% 渲染为 732×498 px |
+| S2 Acrylic | ✅ 可用 | `AcrylicBlur` 生效且可见模糊；模糊为整窗矩形，圆角需 `UpdateWindowRegionOnSettle` 或降级 Tier0 |
+| S3 120fps 形变 | ✅ GO | 固定 HWND 不 resize；3.003 s / 489 paints：p50 6.05ms（165.2fps）、p99 8.11ms（< 8.33ms 预算），收敛后 0 渲染 |
+| S4 命中/穿透/焦点 | ✅ GO | WM_NCHITTEST：内→HTCLIENT、外/圆角外→HTTRANSPARENT；WS_EX_NOACTIVATE+TOOLWINDOW 验证；有效点击时前台未变 |
+| S5 内存浸泡 | ⏳ M6 | Debug 冷启动 157 MB / 156 线程；Release + 4 插件 30 min 浸泡待 M6 复测 |
+| S6 构建 | ✅ GO | .NET 10 + Avalonia 12.1.4：0 warning / 0 error，增量构建 ~1 s |
+| 多显示器 | ⏳ 环境未覆盖 | 本机 Avalonia 仅暴露 1 屏（虚拟显示适配器不可见），真机双屏复测，不阻塞 M4 |
+
 **回退路径（触发即切换，设计不变）**
 1. S1/S3 失败 → **WPF 固定尺寸分层窗口**：同一套 `FrameClock`/`SpringEngine`/`Layout`/`HitTester`，`FrameworkElement.OnRender` 自绘壳体；上限 60 fps，`DropShadowEffect` 全部替换为 9-slice 烘焙阴影；定位为"能发布但不达标"的兜底。
 2. S5 失败或需要跨进程插件表面 → **自绘 D2D**（Win32 + Composition + D2D/DWrite，仅壳体与面板控件集，声明式插件 UI 保持）；预算 3–4 个月。

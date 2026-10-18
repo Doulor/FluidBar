@@ -47,8 +47,23 @@
 
 | # | 问题 | Owner | 截止 | 状态 |
 |---|---|---|---|---|
-| Q1 | 渲染 spike GO/NO-GO（透明/acrylic/120fps/命中/内存） | Lead | M0 结束 | 进行中 |
-| Q2 | Acrylic 不可用时的材质降级等级 | Lead + UI owner | M0 结束 | 进行中 |
+| Q1 | 渲染 spike GO/NO-GO（透明/acrylic/120fps/命中/内存） | Lead | M0 结束 | ✅ **GO**（2026-10-18，见下方 R1） |
+| Q2 | Acrylic 不可用时的材质降级等级 | Lead + UI owner | M0 结束 | ✅ Tier0 始终可用；Tier1 AcrylicBlur + 圆角 region 裁剪；失败降级 Tier0 |
+
+### Rendering spike 结果（Q1/Q2 结案，2026-10-18）
+
+报告：[`research/05-avalonia-spike.md`](research/05-avalonia-spike.md)。Avalonia 12.1.4 + .NET 10，固定 488×332 DIP 窗口：
+
+| 检查 | 结果 | 证据 |
+|---|---|---|
+| 逐像素透明 | ✅ GO | ActualTransparencyLevel=Transparent；截图四角为桌面像素 `#D3D3D3`、中心 `#08080A` |
+| 120fps 帧预算 | ✅ GO | 3.003s / 489 paints：p50 6.05ms（165.2fps）、p99 8.11ms（预算 8.33ms，余量 37%），Debug 冷启动 |
+| 命中/点击穿透 | ✅ GO | WM_NCHITTEST：内→HTCLIENT，外/圆角外→HTTRANSPARENT（SetWindowLongPtrW subclass） |
+| 不抢焦点 | ✅ GO（需真机复测） | WS_EX_NOACTIVATE\|TOOLWINDOW 验证；有效点击时前台仍为 Chrome。`Window.IsActive` 不可靠，按 HWND pid 判定 |
+| 空闲开销 | ✅ GO | 收敛后 0 次渲染；CPU ≤0.52% 单核；Debug WS 157MB/156 线程（Release 复测后写预算） |
+| Acrylic | ✅ 可用（矩形） | AcrylicBlur 生效；圆角需 `UpdateWindowRegionOnSettle` 或降级 Tier0 |
+| 多显示器 | ⏳ 环境未覆盖 | 本机 Avalonia 仅暴露 1 屏（虚拟显示适配器不可见），需真机双屏复测；不阻塞 M4 |
+| 结论 | **GO** | 不需要 WPF 回退；采用 Avalonia 12 + Win32/Composition 宿主 |
 | Q3 | 生产签名密钥生成与保管（ECDSA P-256） | Doulor | M5 前 | 未开始 |
 | Q4 | 市场索引托管的最终 URL（GitHub Pages / raw / 国内镜像） | Doulor | M5 前 | 未开始 |
 | Q5 | 是否在本仓库发布插件市场索引（gh-pages 分支），还是独立仓库 | Doulor | M5 前 | 未开始 |
