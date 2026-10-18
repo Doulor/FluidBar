@@ -19,6 +19,7 @@
 | [`contracts/layered-host.md`](contracts/layered-host.md) | Win32 分层宿主 API/尺寸/帧成本/输入 |
 | [`contracts/skia-island.md`](contracts/skia-island.md) | Skia 岛渲染器架构/缓存/输入/文本 |
 | [`contracts/skia-host-acceptance.md`](contracts/skia-host-acceptance.md) | 分层宿主验收清单（自动 smoke + 手工 QA） |
+| [`contracts/skia-host.md`](contracts/skia-host.md) | App 内 Skia 宿主集成（生命周期/输入/帧循环/已知偏差） |
 | [`contracts/host-transparency.md`](contracts/host-transparency.md) | 透明问题调查与结论 |
 | [`contracts/integration.md`](contracts/integration.md) | 跨项目集成测试与 SDK↔Core 映射 |
 | [`research/`](research/) | v1 审计、参考设计、技术栈、插件生态、渲染 spike |
@@ -31,4 +32,5 @@
 - 设计变更追加修订（A1/A2…），不删除旧结论。
 - 测试数、尺寸、帧耗时必须来自实测。
 - 任何公共 API/契约变化同步更新对应 `contracts/*.md`。
+
 

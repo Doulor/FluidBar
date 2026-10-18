@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FluidBar.Core\FluidBar.Core.csproj" />
+    <ProjectReference Include="..\FluidBar.Island\FluidBar.Island.csproj" />
     <ProjectReference Include="..\FluidBar.Platform.Windows\FluidBar.Platform.Windows.csproj" />
     <ProjectReference Include="..\FluidBar.Sdk\FluidBar.Sdk.csproj" />
     <ProjectReference Include="..\FluidBar.PluginHost\FluidBar.PluginHost.csproj" />

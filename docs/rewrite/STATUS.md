@@ -1,6 +1,6 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-18 23:36（Asia/Shanghai）
+> 最后更新：2026-10-19 00:12（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
@@ -16,7 +16,7 @@
 | M2 插件 SDK/宿主/市场 | ✅ | 188 tests；离线 E2E |
 | M3 Windows 平台 | ✅ | 371 tests；M3+P3 |
 | M5 内置插件/市场 CI/文档 | ✅ | 23 builtin + 31 integration；`docs/plugin/` |
-| M4 Avalonia UI（旧宿主） | 🚧 | 90 tests；岛将迁移到 Skia 宿主 |
+| M4 UI / Skia 宿主 | ✅（MVP） | 新分层宿主 + Skia 渲染已接入，默认 `FLUIDBAR_HOST=skia`；108 UI tests；旧 Avalonia 宿主保留 fallback |
 | M6 硬化/发布 | ⏳ | soak/性能预算已就绪；Release 浸泡待做 |
 
 ## 测试（当前）
@@ -44,7 +44,7 @@
 
 1. **Skia 渲染器：134 tests + 20 张 golden**（紧凑 8 态、展开 home/media/notifications/clipboard/agent/widgets、dock/flush/light/transition、transient strip）；壳体描边正在改中性 hairline。
 2. **prototype2：设置面板/插件市场/3 小岛/远处页小点/切换动效已完成**（14+ 截图）；等待用户验收。
-3. **App 集成（进行中）**：`src/FluidBar.App/Hosting/Skia/` 已写入 controller、Core→渲染状态映射、pager、archipelago、主题映射、hit-test、`SkiaIslandHost`；正在修编译并接 `FLUIDBAR_HOST=skia` 开关；之后做真机验收。
+3. **App 集成（已交付 MVP）**：`src/FluidBar.App/Hosting/Skia/`（host/controller/motion/pager/archipelago/state/theme/hit-test）默认启用；smoke 386 commits 0 失败、surface 732×576、展开/媒体页截图已出；待补 tray/hotkey、未映射控件、UIA、多显示器热插拔。
 
 ## 可用版本预估（基于当前进度）
 
@@ -69,4 +69,5 @@
 2. 接入分层宿主到 App，跑真机桌面验收（透明/点击穿透/DPI/60-120fps）。
 3. 补全通知/剪贴板/Agent/小组件页面与 UIA。
 4. Release 浸泡、单文件发布、市场发布链路。
+
 

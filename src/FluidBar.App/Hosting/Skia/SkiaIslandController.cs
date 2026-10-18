@@ -1,0 +1,1144 @@
+using FluidBar.App.Localization;
+using FluidBar.App.Settings;
+using FluidBar.App.State;
+using FluidBar.Core;
+using FluidBar.Core.Activities;
+using FluidBar.Core.Diagnostics;
+using FluidBar.Core.Events;
+using FluidBar.Core.Layout;
+using FluidBar.Core.Motion;
+using FluidBar.Core.Presentation;
+using FluidBar.Island;
+using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+
+namespace FluidBar.App.Hosting.Skia;
+
+/// <summary>One frame invalidation produced by the controller.</summary>
+/// <param name="FullFrame">Whether the whole surface must be repainted/uploaded.</param>
+/// <param name="DamageDip">Damage rectangle in host-local DIP (dirty frames only).</param>
+public readonly record struct SkiaIslandRenderChange(bool FullFrame, VisualRect DamageDip)
+{
+    /// <summary>Full-surface repaint.</summary>
+    public static SkiaIslandRenderChange Full { get; } = new(true, VisualRect.Empty);
+}
+
+/// <summary>
+/// Window-free island pipeline for the Skia host: Core event hub → activity scheduler → island state
+/// controller, deadline timers, shell/pager/archipelago springs, content mapping and input routing.
+/// <para>
+/// It owns no HWND and no Skia surface, so it is fully testable headless. The host creates one
+/// instance and drives it with <see cref="PumpTimers"/>/<see cref="Advance"/>, then renders the
+/// <see cref="RenderState"/> into every monitor's layered surface.
+/// </para>
+/// </summary>
+public sealed class SkiaIslandController : IDisposable
+{
+    private readonly SkiaIslandHostOptions _options;
+    private readonly IAppLogger _logger;
+    private readonly ILocalizer _localizer;
+    private readonly SettingsController _settings;
+    private readonly IIslandDataSource _data;
+    private readonly TimeProvider _time;
+    private readonly SkiaHostDispatcher _dispatcher;
+    private readonly EventHub _hub;
+    private readonly ActivityScheduler _scheduler = new();
+    private readonly SkiaIslandMotion _motion;
+    private readonly SkiaPager _pager;
+    private readonly SkiaArchipelago _archipelago;
+
+    private ActivitySchedulerState _schedulerState = ActivitySchedulerState.Empty;
+    private IslandStateController _controller;
+
+    private CompactActivity _compact = new(ActivityKind.Idle, new CompactModel());
+    private ExpandedPageContent _pages = ExpandedPageContent.Empty;
+    private IslandTheme _theme = IslandTheme.Dark;
+    private string _structuralSignature = string.Empty;
+    private string _dynamicSignature = string.Empty;
+    private IslandRenderState _renderState;
+    private bool _hasRenderState;
+
+    private bool _pendingFull = true;
+    private bool _pendingDirty;
+    private VisualRect _pendingDamage;
+
+    private double _motionPhase;
+    private double _waveAccumulator;
+    private double _pointerX;
+    private double _pointerY;
+    private bool _pointerInside;
+    private bool _pointerInHotZone;
+    private bool _pointerOnStrip;
+    private DateTimeOffset? _hotZoneEnteredAt;
+    private bool _syncingPage;
+    private bool _started;
+    private bool _disposed;
+
+    /// <summary>Creates the controller (call <see cref="Start"/> to begin producing content).</summary>
+    /// <param name="options">Composition options.</param>
+    /// <param name="dispatcher">Optional dispatcher (defaults to a UI-thread synchronization-context dispatcher).</param>
+    public SkiaIslandController(SkiaIslandHostOptions options, SkiaHostDispatcher? dispatcher = null)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _localizer = options.Localizer;
+        _settings = options.Settings;
+        _data = options.Data;
+        _time = options.TimeProvider ?? TimeProvider.System;
+        _logger = options.Logger ?? new Diagnostics.TraceAppLogger();
+        _dispatcher = dispatcher ?? new SkiaHostDispatcher();
+
+        _hub = new EventHub(logger: _logger, dispatcher: _dispatcher);
+        _controller = CreateController(_settings.Current);
+        _controller.Transitioned += OnTransition;
+        _hub.Subscribe(OnIslandEvent);
+
+        var profile = _settings.Current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(_settings.Current));
+        _motion = new SkiaIslandMotion(profile);
+        _pager = new SkiaPager((int)State.Page);
+        _pager.PageChanged += OnPagerPageChanged;
+        _archipelago = new SkiaArchipelago(profile);
+
+        _settings.Changed += OnSettingsChanged;
+        _data.Changed += OnDataChanged;
+    }
+
+    /// <summary>Raised when the settings window should open (quick action / hotkey).</summary>
+    public event Action? SettingsRequested;
+
+    /// <summary>Raised when the marketplace should open.</summary>
+    public event Action? MarketRequested;
+
+    /// <summary>Raised when the user asks to execute a media transport command.</summary>
+    public event Action<MediaTransportCommand>? MediaCommandRequested;
+
+    /// <summary>Raised after a state/content change so the host can refresh placement and the hit region.</summary>
+    public event Action? StateChanged;
+
+    /// <summary>Raised when the host must re-place windows (mode/anchor/display change).</summary>
+    public event Action? PlacementRequested;
+
+    /// <summary>Raised when animation starts so the host can start its frame clock immediately.</summary>
+    public event Action? FrameRequested;
+
+    /// <summary>Current island state snapshot.</summary>
+    public IslandState State => _controller.Current;
+
+    /// <summary>Current activity scheduler snapshot.</summary>
+    public ActivitySchedulerState SchedulerState => _schedulerState;
+
+    /// <summary>Shell spring driver.</summary>
+    public SkiaIslandMotion Motion => _motion;
+
+    /// <summary>Horizontal page pager.</summary>
+    public SkiaPager Pager => _pager;
+
+    /// <summary>Detached Page Archipelago strip.</summary>
+    public SkiaArchipelago Archipelago => _archipelago;
+
+    /// <summary>Last built render state.</summary>
+    public IslandRenderState RenderState => _renderState;
+
+    /// <summary>Whether a render state has been built at least once.</summary>
+    public bool HasRenderState => _hasRenderState;
+
+    /// <summary>Whether the host started the pipeline.</summary>
+    public bool IsStarted => _started;
+
+    /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
+    public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating || IsWaveActive();
+
+    /// <summary>Whether the island is only animating the media waveform (lower frame rate is enough).</summary>
+    public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive();
+
+    /// <summary>Frame interval the host should use for the current activity.</summary>
+    public TimeSpan PreferredFrameInterval => IsWaveOnly
+        ? TimeSpan.FromMilliseconds(33)
+        : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+
+    /// <summary>Whether a deadline timer is needed (hover/auto-collapse/scheduler/strip auto-hide).</summary>
+    public bool HasPendingDeadline
+    {
+        get
+        {
+            var state = State;
+            return state.HoverIntentDeadline is not null
+                || state.LeaveDeadline is not null
+                || state.PeekDwellDeadline is not null
+                || state.AutoCollapseDeadline is not null
+                || state.AutoHideDeadline is not null
+                || _schedulerState.HasActivities
+                || _archipelago.IsVisible;
+        }
+    }
+
+    /// <summary>Starts the data source, reveals the island and snaps the springs to their targets.</summary>
+    public void Start()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_started)
+        {
+            return;
+        }
+
+        _started = true;
+        _logger.Information(LogCategories.Lifecycle, "island.skia.start", "Starting Skia island controller.");
+        _data.Start();
+
+        SyncContent(full: true);
+        var settings = _settings.Current;
+        if (_options.StartVisible && !settings.Advanced.SafeMode)
+        {
+            ApplyInput(IslandInput.ShowHotkey());
+        }
+        else
+        {
+            ApplyInput(IslandInput.HideHotkey());
+        }
+
+        _motion.SnapToTarget();
+        _pager.JumpToPage((int)State.Page);
+        InvalidateFull();
+        BuildRenderState();
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Pumps the deadline timers and the scheduler tick (host timer / tests).</summary>
+    public void PumpTimers()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var now = _time.GetLocalNow();
+        var state = State;
+
+        if (state.HoverIntentDeadline is { } hover && now >= hover)
+        {
+            ApplyInput(IslandInput.HoverIntentElapsed());
+        }
+
+        if (state.LeaveDeadline is { } leave && now >= leave)
+        {
+            ApplyInput(IslandInput.LeaveDebounceElapsed());
+        }
+
+        if (state.PeekDwellDeadline is { } dwell && now >= dwell)
+        {
+            ApplyInput(IslandInput.PeekDwellElapsed());
+        }
+
+        if (state.AutoCollapseDeadline is { } collapse && now >= collapse)
+        {
+            ApplyInput(IslandInput.AutoCollapseElapsed());
+        }
+
+        if (state.AutoHideDeadline is { } hide && now >= hide)
+        {
+            ApplyInput(IslandInput.AutoHideElapsed());
+        }
+
+        if (_schedulerState.HasActivities)
+        {
+            var update = _scheduler.Tick(_schedulerState, now);
+            if (update.Kind != ActivityUpdateKind.None)
+            {
+                _schedulerState = update.State;
+                ApplyInput(IslandInput.ForActivityUpdate(update));
+            }
+        }
+
+        UpdatePointerZones();
+        UpdateArchipelago(now);
+    }
+
+    /// <summary>Steps motion/pager/strip and accumulates render invalidation for one frame.</summary>
+    /// <param name="delta">Frame delta.</param>
+    public void Advance(TimeSpan delta)
+    {
+        if (_disposed || !_started)
+        {
+            return;
+        }
+
+        var dt = delta.TotalSeconds;
+        if (dt <= 0)
+        {
+            return;
+        }
+
+        var now = _time.GetLocalNow();
+        var motionWasRunning = !_motion.IsAtRest;
+        _motion.Step(dt);
+
+        if (State.Kind == IslandStateKind.Closing && _motion.IsAtRest)
+        {
+            ApplyInput(IslandInput.CloseSettled());
+        }
+
+        var pagerWasRunning = _pager.IsAnimating;
+        if (pagerWasRunning)
+        {
+            _pager.Step(dt);
+        }
+
+        var archWasRunning = _archipelago.IsAnimating;
+        if (archWasRunning)
+        {
+            _archipelago.Step(dt);
+        }
+
+        UpdatePointerZones();
+        UpdateArchipelago(now);
+        BuildRenderState();
+
+        if (motionWasRunning)
+        {
+            // A shell morph damages the union of the old and new shell: full frame.
+            InvalidateFull();
+        }
+        else if (pagerWasRunning)
+        {
+            InvalidateDirty(ContentDamage());
+        }
+        else if (archWasRunning)
+        {
+            InvalidateDirty(StripDamage());
+        }
+
+        if (IsWaveActive())
+        {
+            _waveAccumulator += dt;
+            if (_waveAccumulator >= 1.0 / 30.0)
+            {
+                _waveAccumulator = 0;
+                _motionPhase += 1.0 / 30.0;
+                InvalidateDirty(WaveDamage());
+            }
+        }
+    }
+
+    /// <summary>Takes the accumulated invalidation (full wins over dirty).</summary>
+    /// <param name="change">The pending change.</param>
+    /// <returns>Whether a frame should be rendered.</returns>
+    public bool TakeInvalidation(out SkiaIslandRenderChange change)
+    {
+        if (_pendingFull)
+        {
+            _pendingFull = false;
+            _pendingDirty = false;
+            _pendingDamage = VisualRect.Empty;
+            change = SkiaIslandRenderChange.Full;
+            return true;
+        }
+
+        if (_pendingDirty)
+        {
+            _pendingDirty = false;
+            change = new SkiaIslandRenderChange(false, _pendingDamage);
+            _pendingDamage = VisualRect.Empty;
+            return true;
+        }
+
+        change = default;
+        return false;
+    }
+
+    /// <summary>Requests a full-surface repaint on the next frame.</summary>
+    public void InvalidateFull()
+    {
+        _pendingFull = true;
+        _pendingDirty = false;
+        _pendingDamage = VisualRect.Empty;
+    }
+
+    /// <summary>Applies one Core reducer input and executes the emitted effects.</summary>
+    /// <param name="input">Reducer input.</param>
+    public IslandTransition ApplyInput(in IslandInput input) => _controller.Apply(input, _time.GetLocalNow());
+
+    /// <summary>Publishes an activity event from any thread.</summary>
+    /// <param name="islandEvent">Event to publish.</param>
+    public bool Publish(in IslandEvent islandEvent) => _hub.TryPublish(islandEvent);
+
+    /// <summary>Publishes a demo activity (developer runs/tests without platform producers).</summary>
+    /// <param name="kind">Activity kind.</param>
+    /// <param name="payload">Activity payload.</param>
+    /// <param name="sequence">Per-key sequence.</param>
+    /// <param name="source">Producer identity.</param>
+    public bool PublishActivity(ActivityKind kind, ActivityPayload payload, long sequence, string source = "demo")
+        => Publish(IslandEvent.New(new ActivityKey(kind, source), payload, sequence, TimeSpan.Zero));
+
+    /// <summary>Retracts a demo activity.</summary>
+    /// <param name="kind">Activity kind.</param>
+    /// <param name="sequence">Per-key sequence.</param>
+    /// <param name="source">Producer identity.</param>
+    public bool RetractActivity(ActivityKind kind, long sequence, string source = "demo")
+        => Publish(IslandEvent.Retract(new ActivityKey(kind, source), sequence, TimeSpan.Zero));
+
+    /// <summary>Applies Escape (collapse).</summary>
+    public void HandleEscape() => ApplyInput(IslandInput.Escape());
+
+    /// <summary>Applies the toggle hotkey (expand/collapse).</summary>
+    public void HandleToggleHotkey() => ApplyInput(IslandInput.ToggleHotkey());
+
+    /// <summary>Applies the show hotkey.</summary>
+    public void HandleShowHotkey() => ApplyInput(IslandInput.ShowHotkey());
+
+    /// <summary>Applies the hide hotkey.</summary>
+    public void HandleHideHotkey() => ApplyInput(IslandInput.HideHotkey());
+
+    /// <summary>Raises <see cref="SettingsRequested"/> (tray/hotkey seam).</summary>
+    public void RequestSettings() => SettingsRequested?.Invoke();
+
+    /// <summary>Raises <see cref="MarketRequested"/> (tray/hotkey seam).</summary>
+    public void RequestMarket() => MarketRequested?.Invoke();
+
+    /// <summary>Requests a page (keyboard/archipelago); the pager animates and the state follows.</summary>
+    /// <param name="page">Target page.</param>
+    public void HandlePageRequest(CoreIslandPage page)
+    {
+        if ((int)page == _pager.SelectedIndex)
+        {
+            return;
+        }
+
+        _pager.SelectPage((int)page);
+    }
+
+    /// <summary>Moves one page left/right (keyboard arrows).</summary>
+    /// <param name="delta">Signed page delta.</param>
+    public void HandlePageMove(int delta) => _pager.MoveBy(delta);
+
+    /// <summary>Pointer moved over the island (host-local DIP).</summary>
+    /// <param name="xDip">Client X in DIP.</param>
+    /// <param name="yDip">Client Y in DIP.</param>
+    public void HandlePointerMoved(double xDip, double yDip)
+    {
+        _pointerX = xDip;
+        _pointerY = yDip;
+        var now = _time.GetLocalNow();
+        if (!_pointerInside)
+        {
+            _pointerInside = true;
+            if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+            {
+                ApplyInput(IslandInput.PointerEntered());
+            }
+        }
+
+        UpdatePointerZones();
+        if (_pointerInHotZone)
+        {
+            _hotZoneEnteredAt ??= now;
+        }
+        else
+        {
+            _hotZoneEnteredAt = null;
+        }
+
+        if (_pager.IsDragging)
+        {
+            _pager.DragTo(xDip, NowMs());
+            _archipelago.NoteActivity(now);
+            InvalidateDirty(ContentDamage());
+        }
+
+        UpdateArchipelago(now);
+    }
+
+    /// <summary>Pointer left the window.</summary>
+    public void HandlePointerLeft()
+    {
+        _pointerInside = false;
+        _pointerInHotZone = false;
+        _pointerOnStrip = false;
+        _hotZoneEnteredAt = null;
+        var now = _time.GetLocalNow();
+
+        if (_pager.IsDragging)
+        {
+            _pager.EndDrag(NowMs());
+            InvalidateFull();
+        }
+
+        _pager.Reset();
+        _motion.SetPressed(false);
+
+        if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+        {
+            ApplyInput(IslandInput.PointerLeft());
+        }
+
+        UpdateArchipelago(now);
+    }
+
+    /// <summary>Primary button pressed at a host-local DIP point; returns whether the island handled it.</summary>
+    /// <param name="xDip">Client X in DIP.</param>
+    /// <param name="yDip">Client Y in DIP.</param>
+    public bool HandlePointerPressed(double xDip, double yDip)
+    {
+        _pointerX = xDip;
+        _pointerY = yDip;
+        _pointerInside = true;
+        _motion.SetPressed(true);
+        if (!_hasRenderState)
+        {
+            return false;
+        }
+
+        var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
+        switch (hit.Kind)
+        {
+            case IslandHitKind.Compact:
+                if (hit.Control == IslandPageControl.PlayPause)
+                {
+                    MediaCommandRequested?.Invoke(MediaTransportCommand.TogglePlay);
+                    return true;
+                }
+
+                ApplyInput(IslandInput.PrimaryClick());
+                return true;
+
+            case IslandHitKind.Collapse:
+                ApplyInput(IslandInput.Escape());
+                return true;
+
+            case IslandHitKind.PageControl:
+                HandlePageControl(hit);
+                return true;
+
+            case IslandHitKind.RailSlot:
+            case IslandHitKind.DotLeft:
+            case IslandHitKind.DotRight:
+                _archipelago.NoteActivity(_time.GetLocalNow());
+                if (hit.PageIndex >= 0)
+                {
+                    HandlePageRequest((CoreIslandPage)hit.PageIndex);
+                }
+
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Primary button released.</summary>
+    /// <param name="xDip">Client X in DIP.</param>
+    /// <param name="yDip">Client Y in DIP.</param>
+    public void HandlePointerReleased(double xDip, double yDip)
+    {
+        _pointerX = xDip;
+        _pointerY = yDip;
+        _motion.SetPressed(false);
+        if (_pager.IsDragging)
+        {
+            _pager.EndDrag(NowMs());
+            InvalidateFull();
+        }
+    }
+
+    /// <summary>Drag gesture started (host capture acquired).</summary>
+    /// <param name="xDip">Pointer client X in DIP.</param>
+    /// <param name="yDip">Pointer client Y in DIP.</param>
+    /// <param name="timestampMs">Monotonic timestamp in milliseconds.</param>
+    public void HandleDragStarted(double xDip, double yDip, long timestampMs)
+    {
+        if (!_hasRenderState)
+        {
+            return;
+        }
+
+        var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
+        if (_renderState.Form == ShellForm.Expanded && hit.Kind is IslandHitKind.Page or IslandHitKind.Shell)
+        {
+            _pager.BeginDrag(xDip, timestampMs);
+            var now = _time.GetLocalNow();
+            _archipelago.Reveal(now);
+            UpdateArchipelago(now);
+            InvalidateFull();
+        }
+    }
+
+    /// <summary>Drag gesture moved.</summary>
+    /// <param name="xDip">Pointer client X in DIP.</param>
+    /// <param name="yDip">Pointer client Y in DIP.</param>
+    /// <param name="timestampMs">Monotonic timestamp in milliseconds.</param>
+    public void HandleDragMoved(double xDip, double yDip, long timestampMs)
+    {
+        _pointerX = xDip;
+        _pointerY = yDip;
+        if (!_pager.IsDragging)
+        {
+            return;
+        }
+
+        _pager.DragTo(xDip, timestampMs);
+        var now = _time.GetLocalNow();
+        _archipelago.NoteActivity(now);
+        UpdateArchipelago(now);
+        InvalidateDirty(ContentDamage());
+    }
+
+    /// <summary>Drag gesture ended or was cancelled.</summary>
+    /// <param name="xDip">Pointer client X in DIP.</param>
+    /// <param name="yDip">Pointer client Y in DIP.</param>
+    /// <param name="timestampMs">Monotonic timestamp in milliseconds.</param>
+    public void HandleDragEnded(double xDip, double yDip, long timestampMs)
+    {
+        _pointerX = xDip;
+        _pointerY = yDip;
+        if (!_pager.IsDragging)
+        {
+            return;
+        }
+
+        _pager.EndDrag(timestampMs);
+        InvalidateFull();
+    }
+
+    /// <summary>Wheel/trackpad input; returns what the pager did.</summary>
+    /// <param name="deltaDip">Wheel delta in DIP (positive = towards the next page).</param>
+    /// <param name="horizontal">Whether the event came from the horizontal axis.</param>
+    /// <param name="shift">Whether Shift was held.</param>
+    public SkiaWheelOutcome HandleWheel(double deltaDip, bool horizontal, bool shift)
+    {
+        if (!_hasRenderState)
+        {
+            return SkiaWheelOutcome.None;
+        }
+
+        var now = _time.GetLocalNow();
+        var outcome = _pager.Wheel(deltaDip, horizontal, shift, now, contentScrollable: false);
+        if (outcome.Paged || outcome.Consumed)
+        {
+            _archipelago.Reveal(now);
+            UpdateArchipelago(now);
+            InvalidateFull();
+        }
+
+        return outcome;
+    }
+
+    /// <summary>Display/DPI change: snap springs and repaint everything.</summary>
+    public void NotifyDisplayChanged()
+    {
+        _motion.SetTarget(BuildTarget(ActivityPresenter.PresentIsland(_schedulerState, State)));
+        _motion.SnapToTarget();
+        _pager.JumpToPage((int)State.Page);
+        BuildRenderState();
+        InvalidateFull();
+        PlacementRequested?.Invoke();
+    }
+
+    /// <summary>Human-readable diagnostics (smoke runs, bug reports).</summary>
+    public string Describe()
+    {
+        var arch = _renderState.Archipelago;
+        return $"state={State} page={_pager.SelectedIndex} pos={_pager.PagePosition:0.00} " +
+               $"shell={_motion.Width:0.0}x{_motion.Height:0.0} opacity={_motion.Opacity:0.00} " +
+               $"strip={arch.Visible}/{arch.Opacity:0.00} dots={arch.ResolvedFarLeftDots}+{arch.ResolvedFarRightDots} " +
+               $"motion={(_motion.IsAtRest ? "rest" : "running")} pager={(_pager.IsAnimating ? "running" : "rest")} " +
+               $"activities={_schedulerState.ActivityCount}";
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _settings.Changed -= OnSettingsChanged;
+        _data.Changed -= OnDataChanged;
+        _data.Stop();
+        _pager.PageChanged -= OnPagerPageChanged;
+        _controller.Transitioned -= OnTransition;
+        _controller.Dispose();
+        _hub.Dispose();
+        _motion.Dispose();
+        _archipelago.Dispose();
+    }
+
+    // ------------------------------------------------------------------ pipeline
+
+    private IslandStateController CreateController(AppSettings settings)
+        => new(BuildBehaviorOptions(settings), _controller?.Current ?? IslandState.Hidden, _dispatcher);
+
+    private static IslandBehaviorOptions BuildBehaviorOptions(AppSettings settings) => new()
+    {
+        Enabled = true,
+        HoverPeek = settings.HoverPeek,
+        HoverReveal = true,
+        AutoCollapseMs = settings.AutoCollapseMs,
+        AutoHideMs = settings.AutoHideMs,
+        HoverIntentMs = Theme.UiDurations.HoverIntent,
+        LeaveDebounceMs = Theme.UiDurations.LeaveDebounce,
+        PeekDwellMs = 2400,
+    };
+
+    private void OnIslandEvent(IslandEvent islandEvent)
+    {
+        if (!islandEvent.Key.IsValid)
+        {
+            return;
+        }
+
+        var update = _scheduler.Update(_schedulerState, islandEvent, _time.GetLocalNow());
+        _schedulerState = update.State;
+        if (update.Kind == ActivityUpdateKind.None)
+        {
+            return;
+        }
+
+        ApplyInput(IslandInput.ForActivityUpdate(update));
+    }
+
+    private void OnTransition(IslandTransition transition)
+    {
+        if (transition.Reason == IslandTransitionReason.NoChange && transition.Effects.Length == 0)
+        {
+            return;
+        }
+
+        _logger.Debug(LogCategories.Activity, "island.skia.transition",
+            $"{transition.Previous.Kind} -> {transition.State.Kind} ({transition.Reason}).");
+        ExecuteEffects(transition.Effects);
+        SyncContent(full: false);
+        SyncPagerFromState();
+        StateChanged?.Invoke();
+    }
+
+    private void ExecuteEffects(System.Collections.Immutable.ImmutableArray<IslandEffect> effects)
+    {
+        foreach (var effect in effects)
+        {
+            switch (effect.Kind)
+            {
+                case IslandEffectKind.ShowWindow:
+                case IslandEffectKind.HideWindow:
+                    break;
+                case IslandEffectKind.StartFrameLoop:
+                    FrameRequested?.Invoke();
+                    break;
+                case IslandEffectKind.StopFrameLoop:
+                    break;
+                case IslandEffectKind.SnapSprings:
+                    _motion.SnapToTarget();
+                    InvalidateFull();
+                    break;
+                case IslandEffectKind.Relayout:
+                case IslandEffectKind.UpdateContent:
+                    SyncContent(full: false);
+                    break;
+                case IslandEffectKind.Retarget:
+                    break;
+                case IslandEffectKind.PlayNudge:
+                    _motion.PlayNudge();
+                    InvalidateFull();
+                    FrameRequested?.Invoke();
+                    break;
+                case IslandEffectKind.SyncClickThrough:
+                    StateChanged?.Invoke();
+                    break;
+                case IslandEffectKind.FocusRail:
+                    // TODO(skia-mvp): no keyboard focus/UIA in the Skia path yet.
+                    break;
+                case IslandEffectKind.UpdateTray:
+                    break;
+                case IslandEffectKind.PersistPlacement:
+                    // TODO(skia-mvp): persist the dragged anchor through Core settings.
+                    break;
+                case IslandEffectKind.PauseProducers:
+                    _data.Stop();
+                    break;
+                case IslandEffectKind.ResumeProducers:
+                    _data.Start();
+                    break;
+            }
+        }
+    }
+
+    private void SyncContent(bool full)
+    {
+        var content = _data.Snapshot();
+        var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
+        var settings = _settings.Current;
+
+        var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
+        var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
+        var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
+        var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
+        _structuralSignature = structural;
+        _dynamicSignature = dynamicSignature;
+
+        var peeked = State.Kind == IslandStateKind.Peek;
+        _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked);
+        _pages = SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer);
+        _theme = SkiaIslandThemeMapper.Map(settings);
+        _motion.SetTarget(BuildTarget(viewModel));
+        BuildRenderState();
+
+        if (full || !_hasRenderState || structuralChanged)
+        {
+            InvalidateFull();
+        }
+        else if (dynamicChanged)
+        {
+            InvalidateDynamic();
+        }
+    }
+
+    private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
+    {
+        var settings = _settings.Current;
+        var mode = settings.IslandMode;
+        var compactKind = State.ContentKind ?? viewModel.Primary?.Kind;
+        var compactSize = LayoutTokens.CompactSize(compactKind, mode);
+        var ghosts = settings.Stacking == StackingStrategySetting.Stacked
+            ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
+            : 0;
+        var form = State.Kind switch
+        {
+            IslandStateKind.Compact => ShellForm.Compact,
+            IslandStateKind.Peek => ShellForm.Peek,
+            IslandStateKind.Expanded => ShellForm.Expanded,
+            IslandStateKind.Closing => ShellForm.Closing,
+            _ => ShellForm.Hidden,
+        };
+        return new SkiaMotionTarget(form, mode, settings.IslandAnchor, compactSize, ghosts, State.Kind == IslandStateKind.Hidden);
+    }
+
+    private void SyncPagerFromState()
+    {
+        var page = (int)State.Page;
+        if (page == _pager.SelectedIndex)
+        {
+            return;
+        }
+
+        _syncingPage = true;
+        try
+        {
+            _pager.SelectPage(page);
+        }
+        finally
+        {
+            _syncingPage = false;
+        }
+
+        InvalidateFull();
+    }
+
+    private void OnPagerPageChanged(int page)
+    {
+        if (_syncingPage)
+        {
+            return;
+        }
+
+        ApplyInput(IslandInput.PageRequested((CoreIslandPage)page));
+        InvalidateFull();
+        FrameRequested?.Invoke();
+    }
+
+    private void OnDataChanged(object? sender, EventArgs e)
+    {
+        if (_dispatcher.IsOnDispatcherThread)
+        {
+            SyncContent(full: false);
+            StateChanged?.Invoke();
+            return;
+        }
+
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            SyncContent(full: false);
+            StateChanged?.Invoke();
+        });
+    }
+
+    private void OnSettingsChanged(AppSettings previous, AppSettings current)
+    {
+        if (!string.Equals(previous.Language, current.Language, StringComparison.OrdinalIgnoreCase)
+            && _localizer is LocalizationService service)
+        {
+            service.SetCulture(current.Language);
+        }
+
+        var previousProfile = previous.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(previous));
+        var currentProfile = current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(current));
+        if (previousProfile != currentProfile)
+        {
+            _motion.UpdateProfile(currentProfile);
+        }
+
+        if (previous.HoverPeek != current.HoverPeek
+            || previous.AutoCollapseMs != current.AutoCollapseMs
+            || previous.AutoHideMs != current.AutoHideMs)
+        {
+            RecreateController(current);
+            ApplyInput(IslandInput.SettingsChanged());
+        }
+
+        var modeOrAnchorChanged = previous.IslandMode != current.IslandMode
+            || previous.IslandAnchor != current.IslandAnchor
+            || previous.DisplayOn != current.DisplayOn;
+        if (previous.IslandMode != current.IslandMode)
+        {
+            ApplyInput(IslandInput.ModeChanged());
+        }
+        else if (previous.IslandAnchor != current.IslandAnchor)
+        {
+            ApplyInput(IslandInput.DisplayChanged());
+        }
+
+        SyncContent(full: false);
+        if (modeOrAnchorChanged)
+        {
+            _motion.SnapToTarget();
+            InvalidateFull();
+            PlacementRequested?.Invoke();
+        }
+
+        StateChanged?.Invoke();
+    }
+
+    private void RecreateController(AppSettings settings)
+    {
+        var current = _controller.Current;
+        _controller.Transitioned -= OnTransition;
+        _controller.Dispose();
+        _controller = new IslandStateController(BuildBehaviorOptions(settings), current, _dispatcher);
+        _controller.Transitioned += OnTransition;
+    }
+
+    private void HandlePageControl(in IslandHitTarget hit)
+    {
+        switch (hit.Control)
+        {
+            case IslandPageControl.PlayPause:
+                MediaCommandRequested?.Invoke(MediaTransportCommand.TogglePlay);
+                break;
+            case IslandPageControl.Previous:
+                MediaCommandRequested?.Invoke(MediaTransportCommand.Previous);
+                break;
+            case IslandPageControl.Next:
+                MediaCommandRequested?.Invoke(MediaTransportCommand.Next);
+                break;
+            case IslandPageControl.MediaCard:
+                HandlePageRequest(CoreIslandPage.Media);
+                break;
+            case IslandPageControl.QuickToggle:
+            case IslandPageControl.Seek:
+            case IslandPageControl.VolumeSlider:
+            case IslandPageControl.BrightnessSlider:
+            case IslandPageControl.Output:
+            case IslandPageControl.Queue:
+                // TODO(skia-mvp): needs platform seams (audio/brightness/focus toggles, seek command)
+                // that do not exist yet; the hit target is correct so wiring them is additive.
+                _logger.Debug(LogCategories.Activity, "island.skia.control-unmapped",
+                    $"Page control {hit.Control} has no platform seam yet.",
+                    data: new Dictionary<string, object?> { ["page"] = hit.PageIndex, ["index"] = hit.Index });
+                break;
+        }
+    }
+
+    // ------------------------------------------------------------------ render state
+
+    private void BuildRenderState()
+    {
+        var mode = _settings.Current.IslandMode;
+        var form = ResolveVisualForm();
+        var expanded = form == ShellForm.Expanded;
+        _renderState = new IslandRenderState
+        {
+            Mode = mode,
+            Form = form,
+            ShellWidth = _motion.Width,
+            ShellHeight = _motion.Height,
+            ShellRadii = _motion.ShellRadii,
+            ShellOrigin = _motion.ShellOrigin,
+            Opacity = _motion.Opacity,
+            ContentOpacity = expanded ? _motion.ExpandedContentOpacity : _motion.CompactContentOpacity,
+            NudgeOffsetY = _motion.NudgeOffsetY,
+            PressScale = _motion.PressScale,
+            GhostCount = expanded ? 0 : _motion.Target.GhostCount,
+            Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),
+            Compact = _compact,
+            Pages = _pages,
+            Theme = _theme,
+            Archipelago = _options.EnableArchipelago
+                ? _archipelago.ToState(_pager.PagePosition)
+                : ArchipelagoState.HiddenState,
+            ReducedMotion = _motion.ReducedMotion,
+            MotionPhase = _motionPhase,
+        };
+        _hasRenderState = true;
+    }
+
+    private ShellForm ResolveVisualForm()
+    {
+        var kind = State.Kind;
+        return kind switch
+        {
+            IslandStateKind.Hidden => ShellForm.Hidden,
+            IslandStateKind.Expanded => _motion.ExpandedContentOpacity >= 0.5 ? ShellForm.Expanded : ShellForm.Compact,
+            IslandStateKind.Closing => _motion.ExpandedContentOpacity >= 0.5 ? ShellForm.Expanded : ShellForm.Compact,
+            IslandStateKind.Peek => ShellForm.Peek,
+            _ => ShellForm.Compact,
+        };
+    }
+
+    private bool IsWaveActive()
+    {
+        if (!_hasRenderState || _motion.ReducedMotion || _renderState.Form == ShellForm.Expanded)
+        {
+            return false;
+        }
+
+        return _compact.Kind == ActivityKind.Media && _compact.Model.IsActive;
+    }
+
+    private void InvalidateDirty(VisualRect damage)
+    {
+        if (_pendingFull || damage.IsEmpty)
+        {
+            return;
+        }
+
+        _pendingDamage = _pendingDirty ? Union(_pendingDamage, damage) : damage;
+        _pendingDirty = true;
+    }
+
+    private void InvalidateDynamic()
+    {
+        if (!_hasRenderState)
+        {
+            InvalidateFull();
+            return;
+        }
+
+        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 1)
+        {
+            var page = IslandMetrics.PageRect(_renderState, 1);
+            var lyric = PageLayout.MediaLyricCard(page);
+            var seek = PageLayout.MediaSeekRow(page);
+            var damage = Union(
+                new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height),
+                new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height)).Inflate(2);
+            InvalidateDirty(damage);
+            return;
+        }
+
+        if (_renderState.Form != ShellForm.Expanded && _compact.Kind == ActivityKind.Media)
+        {
+            InvalidateDirty(WaveDamage());
+            return;
+        }
+
+        InvalidateFull();
+    }
+
+    private VisualRect ContentDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState));
+        return new VisualRect(content.Left, content.Top, content.Width, content.Height).Inflate(2);
+    }
+
+    private VisualRect StripDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        var shell = IslandMetrics.ShellRect(_renderState);
+        var host = HostSurface.ForMode(_renderState.Mode);
+        var top = shell.Bottom + IslandMetrics.StripGap;
+        var height = Math.Max(0, host.Height - top);
+        return new VisualRect(0, top, host.Width, height).Inflate(2);
+    }
+
+    private VisualRect WaveDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        var shell = IslandMetrics.ShellRect(_renderState);
+        return new VisualRect(shell.Right - 62, shell.Top + 11, 26, 18);
+    }
+
+    // ------------------------------------------------------------------ pointer zones
+
+    private void UpdatePointerZones()
+    {
+        if (!_hasRenderState)
+        {
+            _pointerInHotZone = false;
+            _pointerOnStrip = false;
+            return;
+        }
+
+        var shell = IslandMetrics.ShellRect(_renderState);
+        var hotZone = new VisualRect(
+            shell.Left,
+            shell.Bottom - ArchipelagoLayout.HotZoneHeight,
+            shell.Width,
+            ArchipelagoLayout.HotZoneHeight);
+        _pointerInHotZone = _pointerInside
+            && State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing
+            && hotZone.Contains(_pointerX, _pointerY);
+
+        var stripTop = shell.Bottom + IslandMetrics.StripGap;
+        var strip = new VisualRect(shell.MidX - 200, stripTop, 400, IslandMetrics.StripHeight);
+        _pointerOnStrip = _archipelago.IsVisible && _pointerInside && strip.Contains(_pointerX, _pointerY);
+    }
+
+    private void UpdateArchipelago(DateTimeOffset now)
+    {
+        if (!_options.EnableArchipelago)
+        {
+            _archipelago.Hide();
+            return;
+        }
+
+        var expanded = State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing;
+        var dwell = _hotZoneEnteredAt is { } start ? now - start : TimeSpan.Zero;
+        _archipelago.Update(now, expanded, _pointerInHotZone, _pointerOnStrip, dwell, _pager.IsDragging);
+    }
+
+    private long NowMs() => (long)(_time.GetTimestamp() * 1000.0 / _time.TimestampFrequency);
+
+    private static VisualRect Union(in VisualRect a, in VisualRect b)
+    {
+        if (a.IsEmpty)
+        {
+            return b;
+        }
+
+        if (b.IsEmpty)
+        {
+            return a;
+        }
+
+        var left = Math.Min(a.X, b.X);
+        var top = Math.Min(a.Y, b.Y);
+        var right = Math.Max(a.Right, b.Right);
+        var bottom = Math.Max(a.Bottom, b.Bottom);
+        return new VisualRect(left, top, right - left, bottom - top);
+    }
+}
