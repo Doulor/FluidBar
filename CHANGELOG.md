@@ -88,3 +88,8 @@
 - 快捷开关：`RadioToggleService`（Wi-Fi/Bluetooth，Windows.Devices.Radios）+ `FocusAssistService`（FocusSessionManager，LAF 受限时显式 unsupported）；`SkiaPlatformActions` 接线；平台测试 +13。
 - 构建：`WindowsSdkPackageVersion=10.0.26100.57`（FocusSessionManager 投影；OS floor 仍 19041）。
 - 全量：**1475 passed / 0 failed**（Core 491, Platform 409, UI 184, Island 135, SDK 152, PluginHost 39, Builtin 23, Integration 31, Architecture 11）。
+
+### 2026-10-19 03:02 — v2.0.0-mvp 发布
+- 发布说明：`docs/rewrite/RELEASE-v2-mvp.md`；Release 产物 `build/release/win-x64/FluidBar.exe`（55.2 MB，SHA256 65324EE8…CB44），发布 smoke 通过（238 帧/0 失败/上传 ~153µs）。
+- 全量测试 **1475 passed / 0 failed**；UIA/Wi-Fi/BT/Focus/插件运行时/FollowMouse/锚点拖拽均已接入。
+- 已知限制：Focus LAF、output/queue、IME/MSAA、真机多显示器/200%、Narrator 手工验收、市场签名密钥、双 message host、托盘图标。

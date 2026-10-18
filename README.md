@@ -25,6 +25,7 @@ FluidBar 2.0 是一次完全重写（v1 代码已从本分支移除，历史保�
 | M4 Avalonia 外壳（岛/设置/插件市场/i18n，70 tests） | 🚧 桌面验收中 |
 
 - 交互与视觉原型：[docs/rewrite/prototype2/index.html](docs/rewrite/prototype2/index.html)（浏览器打开即可；旧 prototype 已归档）
+- **MVP 发布说明**：[docs/rewrite/RELEASE-v2-mvp.md](docs/rewrite/RELEASE-v2-mvp.md)
 - **当前状态 / 文档索引 / 变更记录**：[STATUS](docs/rewrite/STATUS.md) · [docs/rewrite/README.md](docs/rewrite/README.md) · [CHANGELOG.md](CHANGELOG.md)
 - 设计规范 / 实施计划 / 决策记录：[docs/rewrite](docs/rewrite/)
 - **项目方向与注意事项（后续 AI 必读）**：[PROJECT-NOTES.md](PROJECT-NOTES.md)
@@ -85,3 +86,4 @@ dotnet publish src/FluidBar.App/FluidBar.App.csproj -c Release -r win-x64 --self
 ## 许可证
 
 MIT，详见 [LICENSE](LICENSE)。
+
