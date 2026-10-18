@@ -18,16 +18,16 @@ public static class PagerConstants
     public const double PagePitchDip = 400;
 
     /// <summary>Pointer translation factor: the content follows the pointer at 80 % (pager v2).</summary>
-    public const double PointerDamping = 0.80;
+    public const double PointerDamping = 0.85;
 
     /// <summary>Edge rubber-band factor: overscroll beyond the first/last page reacts at 35 %.</summary>
     public const double EdgeResistance = 0.35;
 
     /// <summary>Minimum drag distance (DIP) before a release may change page.</summary>
-    public const double PageThresholdDip = 24;
+    public const double PageThresholdDip = 26;
 
     /// <summary>Velocity (DIP/ms) above which a short drag is treated as a flick.</summary>
-    public const double FlickVelocityDipPerMs = 0.6;
+    public const double FlickVelocityDipPerMs = 0.55;
 
     /// <summary>Drag distance (in pages) that switches from "one page max" to distance-based paging.</summary>
     public const double LongDragPageFraction = 0.5;
@@ -39,10 +39,10 @@ public static class PagerConstants
     public const int WheelCooldownMs = 180;
 
     /// <summary>Snap spring period T in seconds for the pager (pager v2, stronger damping).</summary>
-    public const double SnapSpringPeriodSeconds = 0.44;
+    public const double SnapSpringPeriodSeconds = 0.38;
 
     /// <summary>Snap spring damping ratio ζ for the pager (pager v2, stronger damping).</summary>
-    public const double SnapSpringDampingRatio = 0.97;
+    public const double SnapSpringDampingRatio = 0.94;
 
     /// <summary>Default retarget frame delta used by <see cref="PagerSnapMotion"/> for velocity clamping.</summary>
     public const double RetargetFrameSeconds = 1.0 / 120.0;
@@ -62,3 +62,4 @@ public static class PagerConstants
     /// <summary>Default vertical content inset for the no-rail panel.</summary>
     public const double ContentVerticalInsetDip = 16;
 }
+

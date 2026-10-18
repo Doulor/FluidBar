@@ -717,9 +717,9 @@ Plugin source identity should be stable (`plugin:<id>`), and plugin activities s
    `[Obsolete]` (values retained for source compatibility, unused by layout). Content is
    400×252 at a (20,16) inset — the old "rail 48 + content 392/usable 360" math is gone.
 8. **Pager constants are UI-contract numbers (pager v2)**: page count 6, pitch 400 DIP, pointer
-   damping **0.80**, snap spring **T 0.44 s / ζ 0.97**, wheel notch **140 DIP** / **180 ms**
-   cooldown, scroll-chain **40 DIP / 120 ms**, edge resistance 0.35, drag threshold 24 DIP, flick
-   velocity 0.6 DIP/ms. UI code must call `PagePagerPolicy` / `PagerWheelPolicy` /
+   damping **0.85**, snap spring **T 0.38 s / ζ 0.94**, wheel notch **140 DIP** / **180 ms**
+   cooldown, scroll-chain **40 DIP / 120 ms**, edge resistance 0.35, drag threshold 26 DIP, flick
+   velocity 0.55 DIP/ms. UI code must call `PagePagerPolicy` / `PagerWheelPolicy` /
    `PagerScrollChainPolicy` / `PagerSnapMotion` instead of re-deriving these rules.
 9. **Host surface growth + bottom/dock anchor semantics** (2026-10-18 quality-first migration):
    the fixed host is 488×384 (float/flush) / 488×444 (dock) so the detached Page Archipelago strip
@@ -750,12 +750,12 @@ and renders the returned offset — it must not re-derive any of the math below.
 |---|---|---|
 | `PageCount` | 6 | home / media / notifications / clipboard / agent / widgets |
 | `PagePitchDip` | 400 | one page step in DIP |
-| `PointerDamping` | **0.80** | content follows the pointer at 80 % (pager v2) |
+| `PointerDamping` | **0.85** | content follows the pointer at 85 % (pager v2 final) |
 | `EdgeResistance` | 0.35 | rubber-band factor beyond first/last page |
 | `PageThresholdDip` | 24 | minimum drag before a release may change page |
 | `FlickVelocityDipPerMs` | 0.6 | velocity that classifies a short drag as a flick |
 | `LongDragPageFraction` | 0.5 | drag ≥ 0.5 page switches to distance-based paging |
-| `SnapSpringPeriodSeconds` / `SnapSpringDampingRatio` | **0.44 / 0.97** | dedicated page-snap spring (pager v2; not `motion.tab`) |
+| `SnapSpringPeriodSeconds` / `SnapSpringDampingRatio` | **0.38 / 0.94** | dedicated page-snap spring (pager v2 final; not `motion.tab`) |
 | `WheelNotchDip` | **140** | accumulated wheel DIP per page step (pager v2) |
 | `WheelCooldownMs` | **180** | minimum interval between wheel page steps (pager v2) |
 | `ScrollChainOverscrollDip` | **40** | boundary overscroll DIP before a wheel page step |
@@ -777,7 +777,7 @@ PagerDragState drag = PagePagerPolicy.Drag(startPage, accumulatedRawDragDip);
 // drag.DisplayOffsetDip is what the shell/page strip renders while the pointer is down
 ```
 
-* pointer damping: `damped = rawDrag × 0.80`;
+* pointer damping: `damped = rawDrag × 0.85`;
 * raw offset: `startPage × pitch + damped`;
 * rubber band: past `[0, (pageCount−1) × pitch]`, only the overshoot is scaled by `0.35`
   (`display = max + overshoot × 0.35`); `AtStartEdge`/`AtEndEdge` flag the band;
@@ -824,7 +824,7 @@ page = PagerWheelPolicy.ApplyPageDelta(page, result.PageDelta);
 
 ### 11.5 Snap motion (`PagerSnapMotion`)
 
-The snap uses its own dedicated spring (pager v2): **T = 0.44 s, ζ = 0.97** (exposed via
+The snap uses its own dedicated spring (pager v2): **T = 0.38 s, ζ = 0.94** (exposed via
 `PagerSnapMotion.SpringParameters`; it intentionally no longer reuses `motion.tab` 0.34/0.92 so
 page snaps are calmer). Fixed 1/300 s substeps, `dt` clamp and settle detection are the rest of Core.
 It is **interruptible**: on pointer-down call `Interrupt()`, which freezes the spring at
@@ -913,7 +913,7 @@ obsolete/empty, `HasRail` is false, and `LayoutTokens.RailWidth`/`Rail*` item to
 
 ### 11.8 Tests
 
-`PagerPolicyTests` (44 cases): pager v2 constants (damping 0.80, snap spring 0.44/0.97, wheel
+`PagerPolicyTests` (44 cases): pager v2 constants (damping 0.85, snap spring 0.38/0.94, wheel
 140/180, scroll-chain 40/120), damping, rubber band at both ends, all release rules
 (small drag, 5-velocity flick cap incl. huge velocity, ±1 negative flick, 2.7-page multi-page drag
 both directions, half-page rounding, bounds clamping), custom pitch/pageCount/NaN handling,
@@ -931,3 +931,4 @@ geometry for every mode × anchor × DPI × stacking combination. A 54-case arch
 (3 modes × 6 anchors × 3 DPIs) asserts the strip stays inside the work area, the slot widths,
 the continuous active indicator and hit-test exclusion. Full Core suite:
 **472 passed / 0 failed** (409 before the host-surface/archipelago increment).
+

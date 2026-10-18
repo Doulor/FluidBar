@@ -7,7 +7,7 @@ namespace FluidBar.Core.Tests;
 /// <summary>
 /// Pager navigation policy (task-10): horizontal drag pager replacing the rejected left rail.
 /// Covers the exact release rules (threshold, flick cap, multi-page distance, bounds), wheel
-/// accumulation/cooldown/owner suppression, and the interruptible pager v2 snap spring (T 0.44 / ζ 0.97).
+/// accumulation/cooldown/owner suppression, and the interruptible pager v2 snap spring (T 0.38 / ζ 0.94).
 /// </summary>
 public class PagerPolicyTests
 {
@@ -19,15 +19,15 @@ public class PagerPolicyTests
     {
         Assert.Equal(6, PagerConstants.PageCount);
         Assert.Equal(400, PagerConstants.PagePitchDip, Eps);
-        Assert.Equal(0.80, PagerConstants.PointerDamping, Eps);
+        Assert.Equal(0.85, PagerConstants.PointerDamping, Eps);
         Assert.Equal(0.35, PagerConstants.EdgeResistance, Eps);
-        Assert.Equal(24, PagerConstants.PageThresholdDip, Eps);
-        Assert.Equal(0.6, PagerConstants.FlickVelocityDipPerMs, Eps);
+        Assert.Equal(26, PagerConstants.PageThresholdDip, Eps);
+        Assert.Equal(0.55, PagerConstants.FlickVelocityDipPerMs, Eps);
         Assert.Equal(0.5, PagerConstants.LongDragPageFraction, Eps);
         Assert.Equal(140, PagerConstants.WheelNotchDip, Eps);
         Assert.Equal(180, PagerConstants.WheelCooldownMs);
-        Assert.Equal(0.44, PagerConstants.SnapSpringPeriodSeconds, Eps);
-        Assert.Equal(0.97, PagerConstants.SnapSpringDampingRatio, Eps);
+        Assert.Equal(0.38, PagerConstants.SnapSpringPeriodSeconds, Eps);
+        Assert.Equal(0.94, PagerConstants.SnapSpringDampingRatio, Eps);
         Assert.Equal(40, PagerConstants.ScrollChainOverscrollDip, Eps);
         Assert.Equal(120, PagerConstants.ScrollChainDwellMs);
         Assert.Equal(400, PagerConstants.ContentWidthDip, Eps);
@@ -40,9 +40,9 @@ public class PagerPolicyTests
     {
         var state = PagePagerPolicy.Drag(startPage: 0, accumulatedDragDip: 100);
 
-        Assert.Equal(80, state.DampedDragDip, Eps);
-        Assert.Equal(80, state.DisplayOffsetDip, Eps);
-        Assert.Equal(0.20, state.PagePosition, Eps);
+        Assert.Equal(85, state.DampedDragDip, Eps);
+        Assert.Equal(85, state.DisplayOffsetDip, Eps);
+        Assert.Equal(0.2125, state.PagePosition, Eps);
         Assert.False(state.AtStartEdge);
         Assert.False(state.AtEndEdge);
     }
@@ -53,8 +53,8 @@ public class PagerPolicyTests
         var state = PagePagerPolicy.Drag(startPage: 5, accumulatedDragDip: 100);
 
         // max offset = 2000; damped 90 → raw 2090 → display 2000 + 90*0.35.
-        Assert.Equal(2080, state.RawOffsetDip, Eps);
-        Assert.Equal(2000 + (80 * 0.35), state.DisplayOffsetDip, Eps);
+        Assert.Equal(2085, state.RawOffsetDip, Eps);
+        Assert.Equal(2000 + (85 * 0.35), state.DisplayOffsetDip, Eps);
         Assert.True(state.AtEndEdge);
         Assert.False(state.AtStartEdge);
     }
@@ -64,8 +64,8 @@ public class PagerPolicyTests
     {
         var state = PagePagerPolicy.Drag(startPage: 0, accumulatedDragDip: -100);
 
-        Assert.Equal(-80, state.RawOffsetDip, Eps);
-        Assert.Equal(-80 * 0.35, state.DisplayOffsetDip, Eps);
+        Assert.Equal(-85, state.RawOffsetDip, Eps);
+        Assert.Equal(-85 * 0.35, state.DisplayOffsetDip, Eps);
         Assert.True(state.AtStartEdge);
         Assert.False(state.AtEndEdge);
     }
@@ -88,8 +88,8 @@ public class PagerPolicyTests
 
     [Theory]
     [InlineData(0.0, PagerSnapKind.Distance)]
-    [InlineData(0.59, PagerSnapKind.Distance)]
-    [InlineData(0.6, PagerSnapKind.Flick)]
+    [InlineData(0.54, PagerSnapKind.Distance)]
+    [InlineData(0.56, PagerSnapKind.Flick)]
     [InlineData(1.5, PagerSnapKind.Flick)]
     [InlineData(1000.0, PagerSnapKind.Flick)]
     public void Release_ShortDragOrFlick_IsCappedAtOnePage(double velocity, PagerSnapKind expectedKind)
@@ -392,10 +392,10 @@ public class PagerPolicyTests
     public void SnapMotion_UsesMotionTabSpring()
     {
         var parameters = PagerSnapMotion.SpringParameters;
-        Assert.Equal(0.44, parameters.PeriodSeconds, Eps);
-        Assert.Equal(0.97, parameters.DampingRatio, Eps);
+        Assert.Equal(0.38, parameters.PeriodSeconds, Eps);
+        Assert.Equal(0.94, parameters.DampingRatio, Eps);
         Assert.NotEqual(MotionTokens.Tab.Spring, parameters);
-        Assert.Equal(203.9, parameters.Stiffness, 0.5);
+        Assert.Equal(273.3, parameters.Stiffness, 0.5);
     }
 
     [Fact]
@@ -512,3 +512,5 @@ public class PagerPolicyTests
         _ = policy;
     }
 }
+
+
