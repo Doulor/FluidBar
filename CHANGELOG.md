@@ -71,3 +71,7 @@
 - 新增 `tools/release/publish.ps1`：win-x64/win-arm64、单文件、可选 self-contained、复制 README/PROJECT-NOTES/CHANGELOG/插件文档、生成 SHA256 + publish.json + zip。
 - 新增 `src/FluidBar.App/Assets/fluidbar.ico` 并设置 `ApplicationIcon`。
 - 首次 Release 发布验证：`build/release/win-x64/FluidBar.exe` 53.5 MB（framework-dependent single-file），SHA256 7DC72D16…D1730。
+
+### 2026-10-19 00:58 — Release build smoke
+- `build/release/win-x64/FluidBar.exe`（framework-dependent single-file，53.5 MB）以 `FLUIDBAR_HOST=skia FLUIDBAR_SMOKE=1` 运行通过：241 帧、0 提交失败、surface 732×576 @150%、上传 164–182µs、空闲无帧。
+- 说明发布产物可正常启动分层宿主；下一步补 UIA/IME、插件运行时、Wi-Fi/BT/Focus 服务与完整验收。
