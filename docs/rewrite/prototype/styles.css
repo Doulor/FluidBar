@@ -2141,56 +2141,32 @@ body[data-theme="light"] .pager-page[aria-hidden="true"] {
   height: 15px;
 }
 
-/* --- Page Archipelago: transient mini-island strip, floating over the bottom
-   of the expanded panel. 34px tall, 352px wide (six 48×26 slots + 8px gaps),
-   horizontally centred; the active pill springs to 72×30 and shows its name.
-   The scrim is a pseudo-element so the strip can sit above page content
-   without covering the rest of the panel. */
+/* --- Page Archipelago: detached mini-island strip, OUTSIDE the shell ------
+   The strip is absolutely positioned 10px below the 440×284 panel and floats
+   over the desktop. It is a sibling of .island, so it can never cover panel
+   content and needs no scrim. Reveal, hide, active-size morph and neighbour
+   shifts are spring-driven in app.js: transform/opacity only, never layout. */
 .arch {
   position: absolute;
   left: 50%;
-  bottom: 4px;
-  z-index: 4;
+  top: calc(100% + 10px);
+  z-index: 2;
   width: 352px;
   height: 34px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   transform: translate3d(-50%, 8px, 0) scale(0.96);
-  transform-origin: 50% 100%;
+  transform-origin: 50% 0;
   will-change: transform, opacity;
 }
 
-.arch::before {
-  content: "";
-  position: absolute;
-  left: -24px;
-  right: -24px;
-  top: -16px;
-  bottom: -8px;
-  z-index: 0;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(8, 8, 10, 0) 0%, rgba(8, 8, 10, 0.55) 16%, rgba(8, 8, 10, 0.93) 44%, rgba(8, 8, 10, 0.97) 100%),
-    radial-gradient(72% 130% at 50% 82%, rgba(8, 8, 10, 0.5) 0%, rgba(8, 8, 10, 0) 74%);
-  -webkit-backdrop-filter: blur(7px);
-  backdrop-filter: blur(7px);
-  pointer-events: none;
-}
+.arch.on { visibility: visible; }
 
-body[data-theme="light"] .arch::before {
-  background:
-    linear-gradient(180deg, rgba(244, 247, 250, 0) 0%, rgba(244, 247, 250, 0.62) 16%, rgba(244, 247, 250, 0.95) 44%, rgba(244, 247, 250, 0.98) 100%),
-    radial-gradient(72% 130% at 50% 82%, rgba(244, 247, 250, 0.5) 0%, rgba(244, 247, 250, 0) 74%);
-}
-
-.arch.on {
-  visibility: visible;
-}
-
-/* The strip overlays the panel bottom in every mode, including dock. */
+/* Dock panel sits 74px above the bottom edge: keep the strip clear of the dock. */
 body[data-mode="dock"] .arch {
-  bottom: 4px;
+  top: auto;
+  bottom: calc(100% + 10px);
   transform-origin: 50% 100%;
 }
 
@@ -6668,7 +6644,7 @@ body[data-mode="dock"] .spec-card {
 .spec-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px;
+  gap: 1px 14px;
   border-top: 1px solid var(--ui-line);
   border-bottom: 1px solid var(--ui-line);
   padding: 7px 0;

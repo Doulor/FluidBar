@@ -43,7 +43,10 @@ public sealed class ArchipelagoStrip : Control
     /// <summary>Auto-hide delay after the last interaction (ms).</summary>
     public const int AutoHideMs = 1200;
 
-    /// <summary>Total strip width including the active-island growth (DIP).</summary>
+    /// <summary>
+    /// Total strip width including the active-island growth (DIP). The flow layout keeps this constant:
+    /// the active island's 24 DIP growth is taken out of its neighbours' widths, never out of the gaps.
+    /// </summary>
     public const double TotalWidth = (6 * MiniWidth) + (5 * Gap) + (ActiveWidth - MiniWidth);
 
     /// <summary>Strip height (DIP) — detached islands, no internal scrim.</summary>
@@ -90,7 +93,7 @@ public sealed class ArchipelagoStrip : Control
     public bool Contains(Point point)
         => (_motion?.Opacity ?? 0) > 0.01 && StripRect.Inflate(new Thickness(10, 6)).Contains(point);
 
-    /// <summary>Hit-tests the mini-islands; returns the page index or -1.</summary>
+    /// <summary>Hit-tests the mini-islands; returns the page index or -1 (uses the same flow rects as drawing).</summary>
     public int HitTest(Point point)
     {
         if (_motion is null)
@@ -109,27 +112,68 @@ public sealed class ArchipelagoStrip : Control
         return -1;
     }
 
-    /// <summary>Island rectangle for page <paramref name="index"/> at the smoothed active position.</summary>
+    /// <summary>
+    /// Island rectangle for page <paramref name="index"/> at the smoothed active position. Widths follow
+    /// the spike's flow layout: <c>48 + 24 * clamp(1 - |i - p|, 0, 1)</c>, so the active island grows into
+    /// its neighbours' widths instead of overlapping them. Neighbouring rects never overlap and the
+    /// track width stays <see cref="TotalWidth"/> (352 DIP).
+    /// </summary>
     public Rect IslandRect(int index, double activePosition)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, 6);
         var strip = StripRect;
-        var active = Math.Clamp((int)Math.Round(activePosition, MidpointRounding.AwayFromZero), 0, 5);
-        var interpolatedX = strip.X + (activePosition * (MiniWidth + Gap));
-        if (index == active)
+        var position = NormalizePosition(activePosition);
+        var x = strip.X;
+        for (var i = 0; i < index; i++)
         {
-            return new Rect(
-                Math.Clamp(interpolatedX, strip.X, strip.Right - ActiveWidth),
-                strip.Y + ((StripHeight - ActiveHeight) / 2),
-                ActiveWidth,
-                ActiveHeight);
+            x += WidthFor(i, position) + Gap;
         }
 
-        return new Rect(
-            strip.X + (index * (MiniWidth + Gap)),
-            strip.Y + ((StripHeight - MiniHeight) / 2),
-            MiniWidth,
-            MiniHeight);
+        var width = WidthFor(index, position);
+        var active = ActiveIndex(position);
+        var height = index == active ? ActiveHeight : MiniHeight;
+        return new Rect(x, strip.Y + ((StripHeight - height) / 2), width, height);
     }
+
+    /// <summary>Flow width of island <paramref name="index"/> at active position <paramref name="activePosition"/>.</summary>
+    public static double WidthFor(int index, double activePosition)
+        => MiniWidth + ((ActiveWidth - MiniWidth) * Influence(index, activePosition));
+
+    /// <summary>Active-island influence in [0,1] (1 at the active page, 0 at a full slot away).</summary>
+    public static double Influence(int index, double activePosition)
+    {
+        var position = NormalizePosition(activePosition);
+        return Math.Clamp(1 - Math.Abs(index - position), 0, 1);
+    }
+
+    /// <summary>Rounded committed active island for a smoothed position.</summary>
+    public static int ActiveIndex(double activePosition)
+        => Math.Clamp((int)Math.Round(NormalizePosition(activePosition), MidpointRounding.AwayFromZero), 0, 5);
+
+    /// <summary>
+    /// Z-order for the six islands: inactive islands first, active island last (topmost). Kept as a
+    /// separate helper so the draw-order regression is testable without a render pass.
+    /// </summary>
+    public static IReadOnlyList<int> DrawOrder(double activePosition)
+    {
+        var active = ActiveIndex(activePosition);
+        var order = new int[6];
+        var cursor = 0;
+        for (var i = 0; i < 6; i++)
+        {
+            if (i != active)
+            {
+                order[cursor++] = i;
+            }
+        }
+
+        order[cursor] = active;
+        return order;
+    }
+
+    private static double NormalizePosition(double activePosition)
+        => double.IsFinite(activePosition) ? Math.Clamp(activePosition, 0, 5) : 0;
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize) => new(ExpandedPanel.PanelWidth, ExpandedPanel.TotalHeight);
@@ -154,12 +198,19 @@ public sealed class ArchipelagoStrip : Control
             * Matrix.CreateScale(motion.Scale, motion.Scale)
             * Matrix.CreateTranslation(center.X, center.Y));
 
-        var active = Math.Clamp((int)Math.Round(motion.ActivePosition, MidpointRounding.AwayFromZero), 0, 5);
+        var active = ActiveIndex(motion.ActivePosition);
+
+        // Inactive islands first, active island last: the grown active pill is never covered by a
+        // neighbour's preview (the old loop painted later neighbours over it).
         for (var i = 0; i < 6; i++)
         {
-            var rect = IslandRect(i, motion.ActivePosition);
-            DrawFloatingIsland(context, rect, palette, i == active, i);
+            if (i != active)
+            {
+                DrawFloatingIsland(context, IslandRect(i, motion.ActivePosition), palette, false, i);
+            }
         }
+
+        DrawFloatingIsland(context, IslandRect(active, motion.ActivePosition), palette, true, active);
     }
 
     private void DrawFloatingIsland(DrawingContext context, Rect rect, IslandColors palette, bool active, int index)

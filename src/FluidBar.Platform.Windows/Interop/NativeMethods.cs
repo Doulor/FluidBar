@@ -625,6 +625,9 @@ internal static partial class NativeMethods
             uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 
         [DllImport(Lib)]
+        internal static extern IntPtr SendMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport(Lib)]
         internal static extern IntPtr GetForegroundWindow();
 
         [DllImport(Lib)]

@@ -194,34 +194,63 @@ public sealed class HudCompactSurface : CompactSurface
 /// <summary>Notification summary pill: bell + title/body + code chip (248×36).</summary>
 public sealed class NotificationCompactSurface : CompactSurface
 {
+    /// <summary>Pill width token (DIP).</summary>
+    public const double PillWidth = 248;
+
+    /// <summary>Pill height token (DIP).</summary>
+    public const double PillHeight = 36;
+
+    /// <summary>Trailing verification/badge chip width (DIP).</summary>
+    public const double ChipWidth = 46;
+
+    /// <summary>Fixed bell slot.</summary>
+    public static Rect IconRect => CompactPillLayout.IconRect(PillHeight);
+
+    /// <summary>Text column (zero-width safe) for a pill with or without the trailing chip.</summary>
+    public static Rect TextColumn(bool hasChip)
+        => CompactPillLayout.TextColumn(PillWidth, PillHeight, hasChip ? ChipWidth : 0);
+
+    /// <summary>Title line inside the text column.</summary>
+    public static Rect TitleRect(bool hasChip)
+    {
+        var column = TextColumn(hasChip);
+        return new Rect(column.X, 4, column.Width, 16);
+    }
+
+    /// <summary>Body line inside the text column.</summary>
+    public static Rect BodyRect(bool hasChip)
+    {
+        var column = TextColumn(hasChip);
+        return new Rect(column.X, 20, column.Width, 12);
+    }
+
+    /// <summary>Trailing chip rectangle.</summary>
+    public static Rect ChipRect => CompactPillLayout.ChipRect(PillWidth, PillHeight, ChipWidth);
+
     /// <inheritdoc />
     public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        const double width = 248;
-        const double height = 36;
-        const double inset = 12;
-        var iconArea = new Rect(inset, (height - 16) / 2, 16, 16);
-        Icons.Draw(context, IconKind.Bell, iconArea, AccentBrush());
-
         var hasChip = !string.IsNullOrEmpty(Model.VerificationCode) || !string.IsNullOrEmpty(Model.Badge);
-        var chipWidth = hasChip ? 46.0 : 0;
-        var textX = iconArea.Right + 8;
-        var textWidth = width - textX - inset - chipWidth - (hasChip ? 8 : 0);
-        var titleArea = new Rect(textX, 4, textWidth, 16);
+
+        // Overflow hidden: every glyph/stroke is clipped to the pill, so an overlong string can never
+        // paint above the text or outside the surface.
+        using var clip = context.PushClip(new RoundedRect(
+            CompactPillLayout.Bounds(PillWidth, PillHeight), PillHeight / 2));
+        Icons.Draw(context, IconKind.Bell, IconRect, AccentBrush());
+
+        var titleArea = TitleRect(hasChip);
         DrawLine(context, Model.Title, titleArea, Fonts.SemiBold, Typography.TitleSize, IslandBrushes.Foreground);
 
-        var bodyArea = new Rect(textX, 20, textWidth, 12);
         var body = Model.Body ?? Model.Subtitle;
-        DrawLine(context, body, bodyArea, Fonts.Regular, Typography.CaptionSize, IslandBrushes.Secondary);
+        DrawLine(context, body, BodyRect(hasChip), Fonts.Regular, Typography.CaptionSize, IslandBrushes.Secondary);
 
         if (hasChip)
         {
             var text = Model.VerificationCode ?? Model.Badge!;
-            var chip = new Rect(width - inset - chipWidth + 2, (height - 20) / 2, chipWidth - 2, 20);
-            DrawChip(context, text, chip, new SolidColorBrush(Accents.Info, 0.20), IslandBrushes.Foreground);
+            DrawChip(context, text, ChipRect, new SolidColorBrush(Accents.Info, 0.20), IslandBrushes.Foreground);
         }
     }
 }
@@ -229,27 +258,39 @@ public sealed class NotificationCompactSurface : CompactSurface
 /// <summary>Clipboard preview pill: icon + preview + state chip (264×36).</summary>
 public sealed class ClipboardCompactSurface : CompactSurface
 {
+    /// <summary>Pill width token (DIP).</summary>
+    public const double PillWidth = 264;
+
+    /// <summary>Pill height token (DIP).</summary>
+    public const double PillHeight = 36;
+
+    /// <summary>Trailing state chip width (DIP).</summary>
+    public const double ChipWidth = 52;
+
+    /// <summary>Fixed clipboard slot.</summary>
+    public static Rect IconRect => CompactPillLayout.IconRect(PillHeight);
+
+    /// <summary>Single-line text column (zero-width safe).</summary>
+    public static Rect TextRect => CompactPillLayout.TextColumn(PillWidth, PillHeight, ChipWidth);
+
+    /// <summary>Trailing state chip rectangle.</summary>
+    public static Rect ChipRect => CompactPillLayout.ChipRect(PillWidth, PillHeight, ChipWidth);
+
     /// <inheritdoc />
     public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        const double width = 264;
-        const double height = 36;
-        const double inset = 12;
-        var iconArea = new Rect(inset, (height - 16) / 2, 16, 16);
-        Icons.Draw(context, IconKind.Clipboard, iconArea, AccentBrush());
+        using var clip = context.PushClip(new RoundedRect(
+            CompactPillLayout.Bounds(PillWidth, PillHeight), PillHeight / 2));
+        Icons.Draw(context, IconKind.Clipboard, IconRect, AccentBrush());
 
-        var chipWidth = 52.0;
-        var textX = iconArea.Right + 8;
-        var textArea = new Rect(textX, 0, width - textX - inset - chipWidth - 8, height);
-        DrawLine(context, Model.Body ?? Model.Title, textArea, Fonts.Regular, Typography.TitleSize,
+        DrawLine(context, Model.Body ?? Model.Title, TextRect, Fonts.Regular, Typography.TitleSize,
             IslandBrushes.Foreground);
 
         var label = string.IsNullOrEmpty(Model.Badge) ? Localizer.Get(LocKeys.Common.Copied) : Model.Badge!;
-        var chip = new Rect(width - inset - chipWidth + 2, (height - 20) / 2, chipWidth - 2, 20);
-        DrawChip(context, label, chip, new SolidColorBrush(Accents.Success, 0.18), IslandBrushes.Success);
+        DrawChip(context, label, ChipRect, new SolidColorBrush(Accents.Success, 0.18), IslandBrushes.Success);
     }
 }
 

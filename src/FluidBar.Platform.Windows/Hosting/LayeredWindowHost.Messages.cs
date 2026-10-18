@@ -123,7 +123,7 @@ public sealed partial class LayeredWindowHost
                 return IntPtr.Zero;
 
             case NativeMethods.WM_LBUTTONDBLCLK:
-                OnLeftButtonDoubleClick(wParam, lParam);
+                OnLeftButtonDown(wParam, lParam, isDoubleClick: true);
                 return IntPtr.Zero;
 
             case NativeMethods.WM_LBUTTONUP:
@@ -222,13 +222,30 @@ public sealed partial class LayeredWindowHost
         PointerLeft?.Invoke();
     }
 
-    private void OnLeftButtonDown(IntPtr wParam, IntPtr lParam)
+    private void OnLeftButtonDown(IntPtr wParam, IntPtr lParam, bool isDoubleClick = false)
     {
         var pointer = BuildPointerFromClient(wParam, ClientX(lParam), ClientY(lParam));
         PointerPressed?.Invoke(pointer);
 
-        if (!_options.EnableDrag || NativeMethods.User32.SetCapture(_hwnd) == IntPtr.Zero)
+        if (isDoubleClick)
         {
+            // A double click is also a press: without this, the second click of a double click
+            // would silently skip press/drag handling (CS_DBLCLKS replaces WM_LBUTTONDOWN).
+            PointerDoubleClicked?.Invoke(pointer);
+        }
+
+        if (!_options.EnableDrag)
+        {
+            return;
+        }
+
+        // SetCapture returns the *previous* capture window (usually NULL), so success is checked
+        // with GetCapture, not with the return value.
+        NativeMethods.User32.SetCapture(_hwnd);
+        if (NativeMethods.User32.GetCapture() != _hwnd)
+        {
+            _logger.LogDebug(PlatformLogCategory.Platform, "layered-host.capture-failed",
+                "SetCapture failed; drag disabled for this press.");
             return;
         }
 
@@ -238,11 +255,6 @@ public sealed partial class LayeredWindowHost
         _lastDragScreenX = pointer.ScreenX;
         _lastDragScreenY = pointer.ScreenY;
         Dragged?.Invoke(new LayeredDragEvent(LayeredDragPhase.Started, pointer, 0, 0, 0, 0));
-    }
-
-    private void OnLeftButtonDoubleClick(IntPtr wParam, IntPtr lParam)
-    {
-        PointerDoubleClicked?.Invoke(BuildPointerFromClient(wParam, ClientX(lParam), ClientY(lParam)));
     }
 
     private void OnLeftButtonUp(IntPtr wParam, IntPtr lParam)
@@ -272,6 +284,13 @@ public sealed partial class LayeredWindowHost
     private void OnCaptureChanged()
     {
         if (!_dragging)
+        {
+            return;
+        }
+
+        // Re-capturing to ourselves (SetCapture on a window that already has capture) still sends
+        // WM_CAPTURECHANGED; only a change to a *different* window cancels the drag.
+        if (NativeMethods.User32.GetCapture() == _hwnd)
         {
             return;
         }
@@ -341,8 +360,15 @@ public sealed partial class LayeredWindowHost
 
     private LayeredPointerEvent BuildPointerFromClient(IntPtr wParam, int clientX, int clientY)
     {
-        var screen = new NativeMethods.POINT(clientX, clientY);
-        NativeMethods.User32.ClientToScreen(_hwnd, ref screen);
+        // Screen coordinates come from the cursor, not from ClientToScreen(client): a drag moves the
+        // window while the message is being handled, so a client-to-screen conversion would feed the
+        // window's own movement back into the drag delta (classic drag jitter/drift).
+        if (!NativeMethods.User32.GetCursorPos(out var screen))
+        {
+            screen = new NativeMethods.POINT(clientX, clientY);
+            NativeMethods.User32.ClientToScreen(_hwnd, ref screen);
+        }
+
         return CreatePointer(wParam, clientX, clientY, screen.X, screen.Y);
     }
 

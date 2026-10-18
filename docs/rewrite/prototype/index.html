@@ -9,27 +9,31 @@
   <title>FluidBar 2.0 · 交互原型</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* The archipelago is deliberately detached from the shell. These ID-level
-       rules keep it 10px below the 440×284 panel (and above it in dock mode)
-       even if the generic .arch block is regenerated: no in-panel scrim, and
-       no fixed left slots — app.js owns baseX + spring shifts. */
-    #arch {
-      position: absolute;
-      left: 50%;
-      top: calc(100% + 10px);
-      bottom: auto;
-      z-index: 2;
-      width: 352px;
-      height: 34px;
-      transform-origin: 50% 0;
+    /* The archipelago is deliberately detached from the shell. These rules
+       out-rank any regenerated in-panel guard so the strip always stays 10px
+       BELOW the 440×284 panel (above it in dock mode). app.js owns baseX and
+       the spring shifts; no fixed left slots and no in-panel scrim. */
+    html body #arch {
+      position: absolute !important;
+      left: 50% !important;
+      top: calc(100% + 10px) !important;
+      bottom: auto !important;
+      z-index: 2 !important;
+      width: 352px !important;
+      height: 34px !important;
+      transform-origin: 50% 0 !important;
     }
-    #arch::before { content: none !important; display: none !important; }
-    body[data-mode="dock"] #arch {
-      top: auto;
-      bottom: calc(100% + 10px);
-      transform-origin: 50% 100%;
+    html body #arch::before { content: none !important; display: none !important; }
+    html body #arch .arch-scrim { display: none !important; }
+    html body[data-mode="dock"] #arch {
+      top: auto !important;
+      bottom: calc(100% + 10px) !important;
+      transform-origin: 50% 100% !important;
     }
     #arch .arch-island { left: 50% !important; }
+    /* Keep the denser strip metrics legible in the spec card. */
+    #specCard .spec-grid { column-gap: 14px; }
+    #specCard .spec-row b { text-align: right; }
   </style>
 </head>
 <body data-mode="float" data-material="obsidian" data-theme="dark" data-motion="normal" data-lang="zh">
@@ -83,8 +87,9 @@
           </div>
         </div>
       </div>
-      <!-- Page Archipelago: detached mini-island strip, floating below the shell.
-           Deliberately outside .island / .shell-clip so it never covers panel content. -->
+      <!-- Page Archipelago: detached mini-island strip, floating BELOW the
+           expanded shell over the desktop. It is a sibling of .island, never a
+           child, so it can never cover panel content and needs no scrim. -->
       <div class="arch" id="arch" aria-hidden="true" inert>
         <div class="arch-viewport" id="archViewport">
           <div class="arch-track" id="archTrack" role="tablist"></div>

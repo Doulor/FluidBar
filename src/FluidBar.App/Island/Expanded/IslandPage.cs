@@ -82,11 +82,17 @@ public abstract class IslandPageView : Control, ILocalizable
     /// <summary>Usable content width (360).</summary>
     public const double UsableWidth = PageWidth - (2 * Inset);
 
-    /// <summary>Page title baseline row.</summary>
+    /// <summary>Page title baseline row (drawn by the pager overlay, above the page body).</summary>
     public const double TitleTop = 0;
 
-    /// <summary>Page body start Y.</summary>
-    public const double BodyTop = 24;
+    /// <summary>Page body start Y (below the title row).</summary>
+    public const double BodyTop = 26;
+
+    /// <summary>Page body bottom Y (8 DIP above the viewport edge; the body fills the remaining height).</summary>
+    public const double BodyBottom = 244;
+
+    /// <summary>Height of the page body band (218 DIP).</summary>
+    public const double BodyHeight = BodyBottom - BodyTop;
 
     private ILocalizer? _localizer;
 
@@ -148,17 +154,24 @@ public abstract class IslandPageView : Control, ILocalizable
         }
     }
 
+    /// <summary>Empty-state icon rectangle (centred in the page body band).</summary>
+    public static Rect EmptyIconRect => new((PageWidth / 2) - 14, 96, 28, 28);
+
+    /// <summary>Empty-state title rectangle.</summary>
+    public static Rect EmptyTitleRect => new(Inset, 132, UsableWidth, 20);
+
+    /// <summary>Empty-state hint rectangle.</summary>
+    public static Rect EmptyHintRect => new(Inset, 154, UsableWidth, 18);
+
     /// <summary>Draws a centered empty state.</summary>
     protected void DrawEmpty(DrawingContext context, AppControls.IconKind icon, string title, string hint)
     {
         var palette = Context.Settings.Colors;
-        var centerX = PageWidth / 2;
-        var iconRect = new Rect(centerX - 14, 104, 28, 28);
-        AppControls.Icons.Draw(context, icon, iconRect, new SolidColorBrush(palette.ForegroundTertiary));
-        IslandDraw.Text(context, title, new Rect(Inset, 142, UsableWidth, 20), FluidBar.App.Theme.Fonts.SemiBold,
+        AppControls.Icons.Draw(context, icon, EmptyIconRect, new SolidColorBrush(palette.ForegroundTertiary));
+        IslandDraw.Text(context, title, EmptyTitleRect, FluidBar.App.Theme.Fonts.SemiBold,
             FluidBar.App.Theme.Typography.TitleSize, new SolidColorBrush(palette.ForegroundSecondary),
             TextAlignment.Center);
-        IslandDraw.Text(context, hint, new Rect(Inset, 164, UsableWidth, 18), FluidBar.App.Theme.Fonts.Regular,
+        IslandDraw.Text(context, hint, EmptyHintRect, FluidBar.App.Theme.Fonts.Regular,
             FluidBar.App.Theme.Typography.CaptionSize, new SolidColorBrush(palette.ForegroundTertiary),
             TextAlignment.Center);
     }

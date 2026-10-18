@@ -129,6 +129,16 @@ Pure policies (`FluidBar.Platform.Windows.Policies`): `TopmostPolicy.Evaluate(To
 `HitTestPolicy.Evaluate(HitTestGeometry)` → `Client/Transparent/Nowhere`,
 `IsPointInsideShell`, `ShouldWindowBeClickThrough`, `ToNativeHitTest`.
 
+**Layered fallback host (spike, not wired into the App yet)** — contract:
+[`layered-host.md`](layered-host.md). `Hosting.LayeredWindowHost` is a framework-free Win32
+per-pixel-alpha host: one `WS_EX_LAYERED` HWND per monitor (float 488×384 DIP, dock 488×444 DIP),
+a persistent 32 bpp premultiplied DIB (`LayeredSurface`), full-frame and dirty-rect
+`UpdateLayeredWindow` (`CommitFrame()` / `CommitFrame(ReadOnlySpan<LayeredRect>)`), client-pixel
+input callbacks, the squircle + detached-pill `HTTRANSPARENT` policy (`LayeredHitRegion`) and
+`DwmFlush`/deadline pacing (`LayeredFramePacer`). It exists because Avalonia/DirectComposition
+flattens to opaque grey in this environment while canonical layered windows stay transparent
+(§10 of [`host-transparency.md`](host-transparency.md)).
+
 ### 3.3 Shell services (`FluidBar.Platform.Windows.Shell`)
 
 | Type | Contract |

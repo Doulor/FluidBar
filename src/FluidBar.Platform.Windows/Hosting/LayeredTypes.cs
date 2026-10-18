@@ -55,10 +55,10 @@ public readonly record struct LayeredPixelSize(int Width, int Height)
 
 /// <summary>
 /// The two fixed per-mode host surfaces (DIP). Both are 488 DIP wide (440 shell + 2x24 bleed) and
-/// reserve a 76 DIP "detached island lane" plus the 24 DIP bleed on the far side of the anchor:
+/// reserve a detached-island lane plus the 24 DIP bleed on the far side of the anchor:
 /// <list type="bullet">
-/// <item>Float 488x384 = 24 bleed + 284 panel + 76 lane (mini-islands below the panel).</item>
-/// <item>Dock 488x444 = 24 bleed + 52 lane (mini-islands above the panel) + 284 panel + 8 gap + 52 strip + 24 bleed.</item>
+/// <item>Float 488x384 = 24 bleed + 284 panel + 76 lane (two rows of mini-islands below the panel).</item>
+/// <item>Dock 488x444 = 24 bleed + 52 lane (one row of small islands above the panel) + 284 panel + 8 gap + 52 strip + 24 bleed.</item>
 /// </list>
 /// The lane is what makes the "extra bottom strip is click-through except the pills" contract
 /// possible: the lane belongs to the same HWND but has no hit region unless a pill rect is set.
@@ -68,10 +68,10 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Host surface width for both modes (DIP).</summary>
     public const double Width = 488;
 
-    /// <summary>Float surface height (DIP): 24 + 284 + 76.</summary>
+    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 76 lane.</summary>
     public const double FloatHeight = 384;
 
-    /// <summary>Dock surface height (DIP): 24 + 52 + 284 + 8 + 52 + 24.</summary>
+    /// <summary>Dock surface height (DIP): 24 bleed + 52 lane + 284 panel + 8 gap + 52 strip + 24 bleed.</summary>
     public const double DockHeight = 444;
 
     /// <summary>Bleed around the shell for the soft shadow/antialiasing (DIP).</summary>
@@ -89,8 +89,11 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Gap between the dock strip and the panel above it (DIP).</summary>
     public const double DockGap = 8;
 
-    /// <summary>Detached mini-island lane size on the far side of the anchor (DIP).</summary>
+    /// <summary>Detached mini-island lane height in float mode (DIP): two 26 DIP rows + 8 DIP gap + 16 DIP margins.</summary>
     public const double DetachedLaneHeight = 76;
+
+    /// <summary>Detached mini-island lane height in dock mode (DIP): one 26 DIP row plus margins.</summary>
+    public const double DockLaneHeight = 52;
 
     /// <summary>Float surface size (488x384 DIP).</summary>
     public static LayeredSurfaceSize Float { get; } = new(Width, FloatHeight);
@@ -107,7 +110,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <see cref="LayeredHostMode.Float"/>, the dock strip for <see cref="LayeredHostMode.Dock"/>.
     /// </summary>
     public static VisualPoint ShellLocalOffset(LayeredHostMode mode) => mode == LayeredHostMode.Dock
-        ? new VisualPoint(Padding, Padding + DetachedLaneHeight + PanelHeight + DockGap)
+        ? new VisualPoint(Padding, Padding + DockLaneHeight + PanelHeight + DockGap)
         : new VisualPoint(Padding, Padding);
 
     /// <summary>Converts to physical pixels with the ceiling size rule (never clips a DIP).</summary>

@@ -249,6 +249,88 @@ public sealed class PlatformIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public void LayeredWindowHost_CreatesPlacesAndUploadsOnARealDesktop()
+    {
+        if (!Environment.UserInteractive)
+        {
+            return;
+        }
+
+        var monitor = new MonitorInfo("layered-test", 0, new PixelRect(0, 0, 1920, 1080),
+            new PixelRect(0, 0, 1920, 1040), 144, 144, true);
+        using var host = new LayeredWindowHost(new LayeredHostOptions
+        {
+            Pacing = LayeredPacingMode.None,
+            ReassertTopmost = false,
+        }, logger: new CapturingLogger(), counters: new PlatformCounters());
+
+        host.Create(monitor, LayeredHostMode.Float);
+        try
+        {
+            Assert.NotEqual(IntPtr.Zero, host.Handle);
+            Assert.Equal(732, host.SurfaceSizePx.Width);   // 488 DIP * 1.5
+            Assert.Equal(576, host.SurfaceSizePx.Height);  // 384 DIP * 1.5
+
+            var exStyle = NativeMethods.User32.GetWindowLongPtr(host.Handle, NativeMethods.GWL_EXSTYLE).ToInt64();
+            Assert.NotEqual(0, exStyle & NativeMethods.WS_EX_LAYERED);
+            Assert.NotEqual(0, exStyle & NativeMethods.WS_EX_TOOLWINDOW);
+            Assert.NotEqual(0, exStyle & NativeMethods.WS_EX_NOACTIVATE);
+
+            // One SetWindowPos: the panel top-left lands 24 DIP inside the window.
+            var shell = new FluidBar.Core.Layout.VisualRect(100, 40, 440, 284);
+            var placement = host.Place(monitor, shell, LayeredHostMode.Float);
+            Assert.Equal((int)Math.Round((100 - 24) * 1.5), placement.WindowPixel.X);
+            Assert.Equal((int)Math.Round((40 - 24) * 1.5), placement.WindowPixel.Y);
+            NativeMethods.User32.GetWindowRect(host.Handle, out var windowRect);
+            Assert.Equal(placement.WindowPixel.X, windowRect.Left);
+            Assert.Equal(placement.WindowPixel.Y, windowRect.Top);
+            Assert.Equal(732, windowRect.Width);
+            Assert.Equal(576, windowRect.Height);
+
+            // A full frame and a dirty frame must both be accepted by UpdateLayeredWindow.
+            var frame = host.BeginFrame();
+            frame.Pixels.Clear();
+            frame.Pixels32[0] = 0x80FF0000; // premultiplied BGRA: half-alpha red
+            var full = host.CommitFrame();
+            Assert.True(full.Updated, $"full frame failed: {full.Win32Error}");
+            Assert.True(full.WasFullFrame);
+
+            var dirtyFrame = host.BeginFrame();
+            dirtyFrame.Surface.SetPixel(10, 10, 0xFF00FF00);
+            var dirty = host.CommitFrame(new LayeredRect(10, 10, 1, 1));
+            Assert.True(dirty.Updated, $"dirty frame failed: {dirty.Win32Error}");
+            Assert.False(dirty.WasFullFrame);
+            Assert.Equal(1, dirty.UploadedRectCount);
+
+            // Hit-testing: a hidden host is fully click-through, a shown host is HTCLIENT inside
+            // the shell squircle and HTTRANSPARENT in the bleed/corners.
+            host.HitRegion.SetShell(new FluidBar.Core.Layout.VisualRect(24, 24, 440, 284),
+                FluidBar.Core.Layout.CornerRadii.Uniform(28));
+            var panelPoint = PackScreenPoint(placement.WindowPixel.X + 366, placement.WindowPixel.Y + 249);
+            var hidden = NativeMethods.User32.SendMessageW(host.Handle, NativeMethods.WM_NCHITTEST, IntPtr.Zero,
+                panelPoint);
+            Assert.Equal(NativeMethods.HTTRANSPARENT, hidden.ToInt32());
+
+            host.Show();
+            Assert.True(host.IsVisible);
+            var hit = NativeMethods.User32.SendMessageW(host.Handle, NativeMethods.WM_NCHITTEST, IntPtr.Zero,
+                panelPoint);
+            Assert.Equal(NativeMethods.HTCLIENT, hit.ToInt32());
+
+            var miss = NativeMethods.User32.SendMessageW(host.Handle, NativeMethods.WM_NCHITTEST, IntPtr.Zero,
+                PackScreenPoint(placement.WindowPixel.X + 6, placement.WindowPixel.Y + 6));
+            Assert.Equal(NativeMethods.HTTRANSPARENT, miss.ToInt32());
+            host.Hide();
+            Assert.False(host.IsVisible);
+        }
+        finally
+        {
+            host.Dispose();
+        }
+    }
+
+    private static IntPtr PackScreenPoint(int x, int y) => new((y << 16) | (x & 0xFFFF));
     /// <summary>Factory helper keeps the volume test readable.</summary>
     private sealed class VolatilityVolumeMonitorFactory : IAsyncDisposable
     {

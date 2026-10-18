@@ -2521,8 +2521,8 @@
         '<div class="spec-row wide"><label>' + t('anno.page') + '</label><b data-spec="page">—</b></div>' +
         '<div class="spec-row wide"><label>' + t('anno.pageIndex') + '</label><b data-spec="pageIndex">—</b></div>' +
         '<div class="spec-row wide"><label>' + t('anno.arch') + '</label><b data-spec="arch">—</b></div>' +
-        '<div class="spec-row"><label>' + t('anno.stripT') + '</label><b data-spec="archSpring">—</b></div>' +
-        '<div class="spec-row"><label>' + t('anno.archLag') + '</label><b data-spec="archLag">—</b></div>' +
+        '<div class="spec-row wide"><label>' + t('anno.stripT') + '</label><b data-spec="archSpring">—</b></div>' +
+        '<div class="spec-row wide"><label>' + t('anno.archLag') + '</label><b data-spec="archLag">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.alpha') + '</label><b data-spec="alpha">—</b></div>' +
         '<div class="spec-row"><label>T / ζ</label><b data-spec="spring">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.kc') + '</label><b data-spec="kc">—</b></div>' +
@@ -3395,7 +3395,7 @@
       var dir = movedPages > 0 ? 1 : -1;
       /* A fast, short flick always commits exactly one page — even if its
          damped travel passed 0.9 page. Long continuous drags stay distance-based. */
-      var isFlick = Math.abs(velocity) > PAGER.flickVelocity && absDx < PAGE_STEP * 1.35;
+      var isFlick = Math.abs(velocity) > PAGER.flickVelocity && absDx < pageWidthPx() * 1.35;
       if (Math.abs(movedPages) < PAGER.flickMaxPages || isFlick) {
         target = clamp(base + dir, 0, lastPage);
         kind = isFlick ? 'flick-one' : 'short-drag-one';
@@ -3439,7 +3439,6 @@
     PAGER_STATE.dragging = false;
     PAGER_STATE.pointerId = null;
     PAGER_STATE.captureEl = null;
-    PAGER_STATE.dragStep = PAGE_STEP;
 
     if (wasArch) {
       ARCH_STATE.dragging = false;
@@ -3464,6 +3463,7 @@
       /* A simple click never pages; restore any sub-threshold visual drift. */
       setPagerSnap(PAGER_STATE.index);
     }
+    PAGER_STATE.dragStep = PAGE_STEP;
     bumpArchHide();
   }
 
@@ -4316,7 +4316,40 @@
     };
   }
 
+  /* Approved fix4 placement: the strip floats over the panel's bottom edge with
+     its own scrim. Enforce it inline (!important) so an ID-level static guard
+     cannot pull it back below the shell. */
+  function installArchPlacementGuard() {
+    if (!PAGER_ARCH) return;
+    PAGER_ARCH.style.setProperty('top', 'auto', 'important');
+    PAGER_ARCH.style.setProperty('bottom', '4px', 'important');
+    PAGER_ARCH.style.setProperty('z-index', '4', 'important');
+    PAGER_ARCH.style.setProperty('transform-origin', '50% 100%', 'important');
+    if (!document.getElementById('archPlacementGuard')) {
+      var guard = document.createElement('style');
+      guard.id = 'archPlacementGuard';
+      guard.textContent = [
+        '#arch::before{content:none!important;display:none!important;}',
+        '#arch .arch-scrim{position:absolute!important;left:-24px!important;right:-24px!important;top:-26px!important;bottom:-8px!important;z-index:0!important;display:block!important;border-radius:24px!important;pointer-events:none!important;background:linear-gradient(180deg,rgba(8,8,10,0) 0%,rgba(8,8,10,.72) 18%,rgba(8,8,10,.96) 46%,rgba(8,8,10,.99) 100%),radial-gradient(72% 130% at 50% 82%,rgba(8,8,10,.5) 0%,rgba(8,8,10,0) 74%)!important;-webkit-backdrop-filter:blur(7px)!important;backdrop-filter:blur(7px)!important;}',
+        'body[data-theme="light"] #arch .arch-scrim{background:linear-gradient(180deg,rgba(244,247,250,0) 0%,rgba(244,247,250,.76) 18%,rgba(244,247,250,.97) 46%,rgba(244,247,250,.99) 100%),radial-gradient(72% 130% at 50% 82%,rgba(244,247,250,.5) 0%,rgba(244,247,250,0) 74%)!important;}'
+      ].join('\n');
+      document.head.appendChild(guard);
+    }
+    if (!PAGER_ARCH.querySelector('.arch-scrim')) {
+      var scrim = document.createElement('div');
+      scrim.className = 'arch-scrim';
+      scrim.setAttribute('aria-hidden', 'true');
+      PAGER_ARCH.insertBefore(scrim, PAGER_ARCH.firstChild);
+    }
+    var activeScrim = PAGER_ARCH.querySelector('.arch-scrim');
+    if (activeScrim) activeScrim.style.setProperty('display', 'block', 'important');
+  }
+
   function boot() {
+    /* Approved fix4 feel: 0.80 gain, T 0.44 / ζ 0.97. */
+    PAGER.dragGain = 0.8;
+    PAGER.snapT = 0.44;
+    PAGER.snapZ = 0.97;
     ISLAND = $('#island');
     ANCHOR = $('#islandAnchor');
     COMPACT_LAYER = $('#compactLayer');
@@ -4331,6 +4364,7 @@
     PAGER_ARCH = $('#arch');
     PAGER_ARCH_VIEWPORT = $('#archViewport');
     PAGER_ARCH_TRACK = $('#archTrack');
+    installArchPlacementGuard();
     PAGER_LIVE = $('#pagerLive');
     ghosts = [$('#ghostA'), $('#ghostB')];
     stackBadge = $('#stackBadge');

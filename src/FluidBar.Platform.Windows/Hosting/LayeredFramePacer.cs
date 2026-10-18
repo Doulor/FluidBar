@@ -121,6 +121,8 @@ public sealed class LayeredFramePacer : IDisposable
                     Thread.Yield();
                 }
 
+                _frameIndex++;
+                RecordInterval(Stopwatch.GetTimestamp());
                 return;
 
             case LayeredPacingMode.TargetFrameRate:

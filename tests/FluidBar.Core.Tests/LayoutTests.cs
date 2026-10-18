@@ -929,6 +929,81 @@ public class LayoutTests
     }
 
     [Fact]
+    public void Squircle_OutlineIsClockwiseClosedAndDirectlyConnectable()
+    {
+        var shell = new VisualRect(24, 24, 440, 284);
+        var radii = CornerRadii.Uniform(28);
+        var geometry = ShellGeometry.Create(shell, radii);
+        const int steps = 15;
+        var outline = geometry.SampleOutline(steps);
+
+        Assert.Equal(steps * 4, outline.Length);
+
+        // Corner traversal order: TL (left->top), TR (top->right), BR (right->bottom),
+        // BL (bottom->left). The previous implementation emitted TL top->left and TR right->top,
+        // so joining consecutive samples cut across the top of the shell.
+        Assert.Equal(shell.X, outline[0].X, Eps);
+        Assert.InRange(outline[steps - 1].Y, shell.Y, shell.Y + 0.5);
+        Assert.Equal(shell.Y, outline[steps].Y, Eps);
+        Assert.InRange(outline[(2 * steps) - 1].X, shell.Right - 0.5, shell.Right + Eps);
+        Assert.Equal(shell.Right, outline[2 * steps].X, Eps);
+        Assert.InRange(outline[(3 * steps) - 1].Y, shell.Bottom - 0.5, shell.Bottom + Eps);
+        Assert.Equal(shell.Bottom, outline[3 * steps].Y, Eps);
+        Assert.InRange(outline[(4 * steps) - 1].X, shell.X - Eps, shell.X + 0.5);
+
+        // A clockwise traversal has a strictly increasing unwrapped polar angle around the centre,
+        // with no step larger than a half turn (a reversed/crossed corner produces a >pi jump).
+        var centre = new VisualPoint(shell.CenterX, shell.CenterY);
+        var previous = Angle(outline[0], centre);
+        var swept = 0.0;
+        for (var i = 1; i < outline.Length; i++)
+        {
+            var angle = Angle(outline[i], centre);
+            var delta = PositiveDelta(previous, angle);
+            Assert.InRange(delta, 0, Math.PI - Eps);
+            swept += delta;
+            previous = angle;
+        }
+
+        var closing = PositiveDelta(previous, Angle(outline[0], centre));
+        Assert.InRange(closing, 0, Math.PI - Eps);
+        swept += closing;
+        Assert.Equal(2 * Math.PI, swept, 2);
+
+        // Every chord (including the closing segment) stays inside the convex shell; a crossed
+        // outline would have at least one chord outside the shape.
+        for (var i = 0; i < outline.Length; i++)
+        {
+            var next = outline[(i + 1) % outline.Length];
+            var midX = (outline[i].X + next.X) / 2;
+            var midY = (outline[i].Y + next.Y) / 2;
+            // Pull the boundary-edge midpoints one DIP inward (Contains is half-open on edges).
+            var x = midX + ((centre.X - midX) * 0.02);
+            var y = midY + ((centre.Y - midY) * 0.02);
+            Assert.True(geometry.Contains(x, y), $"chord {i}->{(i + 1) % outline.Length} leaves the shell");
+        }
+    }
+
+    private static double Angle(VisualPoint point, VisualPoint centre)
+        => Math.Atan2(point.Y - centre.Y, point.X - centre.X);
+
+    private static double PositiveDelta(double from, double to)
+    {
+        var delta = to - from;
+        while (delta < 0)
+        {
+            delta += 2 * Math.PI;
+        }
+
+        while (delta >= 2 * Math.PI)
+        {
+            delta -= 2 * Math.PI;
+        }
+
+        return delta;
+    }
+
+    [Fact]
     public void FlushTopCorners_AreSquareForHitTesting()
     {
         var monitor = Monitor(96);

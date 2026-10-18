@@ -43,6 +43,18 @@ public sealed class HomePage : IslandPageView
         return default;
     }
 
+    /// <summary>Dashboard clock rectangle.</summary>
+    public static Rect ClockRect => new(Inset, BodyTop, 172, 48);
+
+    /// <summary>Dashboard date rectangle.</summary>
+    public static Rect DateRect => new(Inset, BodyTop + 50, 176, 20);
+
+    /// <summary>Dashboard greeting rectangle.</summary>
+    public static Rect GreetingRect => new(Inset, BodyTop + 70, 176, 18);
+
+    /// <summary>Status card rectangle for <paramref name="index"/>.</summary>
+    public static Rect StatusCardRect(int index) => new(200, BodyTop + 4 + (index * 40), 184, 34);
+
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
@@ -58,11 +70,11 @@ public sealed class HomePage : IslandPageView
 
         var now = Context.Content.Now;
         var culture = Localizer.CurrentCulture;
-        IslandDraw.Text(context, now.ToString("HH:mm", culture), new Rect(Inset, 22, 172, 46),
+        IslandDraw.Text(context, now.ToString("HH:mm", culture), ClockRect,
             Fonts.DisplayBold, Typography.DashboardClockSize, fg);
-        IslandDraw.Text(context, now.ToString("dddd, MMMM d", culture), new Rect(Inset, 68, 176, 20),
+        IslandDraw.Text(context, now.ToString("dddd, MMMM d", culture), DateRect,
             Fonts.DisplaySemiBold, Typography.DashboardDateSize, secondary);
-        IslandDraw.Text(context, Greeting(now.Hour), new Rect(Inset, 88, 176, 18), Fonts.Regular,
+        IslandDraw.Text(context, Greeting(now.Hour), GreetingRect, Fonts.Regular,
             Typography.CaptionSize, tertiary);
 
         DrawStatusCards(context, palette, secondary);
@@ -94,7 +106,7 @@ public sealed class HomePage : IslandPageView
 
         for (var i = 0; i < cards.Length; i++)
         {
-            var rect = new Rect(200, 26 + (i * 40), 184, 32);
+            var rect = StatusCardRect(i);
             IslandDraw.Card(context, rect, palette);
             Icons.Draw(context, cards[i].Icon, new Rect(rect.X + 8, rect.Y + 8, 16, 16),
                 new SolidColorBrush(cards[i].Accent));
@@ -119,17 +131,18 @@ public sealed class HomePage : IslandPageView
         {
             var rect = QuickActionRect(i);
             IslandDraw.Card(context, rect, palette);
-            Icons.Draw(context, icons[i], new Rect(rect.Center.X - 10, rect.Y + 12, 20, 20), fg);
-            IslandDraw.Text(context, labels[i], new Rect(rect.X + 4, rect.Y + 42, rect.Width - 8, 22),
+            Icons.Draw(context, icons[i], new Rect(rect.Center.X - 10, rect.Y + 14, 20, 20), fg);
+            IslandDraw.Text(context, labels[i], new Rect(rect.X + 4, rect.Y + 48, rect.Width - 8, 22),
                 Fonts.SemiBold, Typography.CaptionSize, secondary, TextAlignment.Center);
         }
     }
 
-    private static Rect QuickActionRect(int index)
+    /// <summary>Quick-action card rectangle for <paramref name="index"/> (fills the body down to y=244).</summary>
+    public static Rect QuickActionRect(int index)
     {
         const double gap = 8;
         var width = (UsableWidth - (2 * gap)) / 3;
-        return new Rect(Inset + (index * (width + gap)), 136, width, 82);
+        return new Rect(Inset + (index * (width + gap)), BodyTop + 126, width, 92);
     }
 
     private string Greeting(int hour) => hour switch
@@ -143,10 +156,41 @@ public sealed class HomePage : IslandPageView
 /// <summary>Media page: artwork, track metadata, seek bar, transport and lyrics.</summary>
 public sealed class MediaPage : IslandPageView
 {
-    private static readonly Rect ArtRect = new(Inset, BodyTop, 64, 64);
-    private static readonly Rect PreviousRect = new(136, 112, 36, 36);
-    private static readonly Rect PlayRect = new(176, 108, 40, 40);
-    private static readonly Rect NextRect = new(220, 112, 36, 36);
+    /// <summary>Artwork rectangle (64×64).</summary>
+    public static Rect ArtRect => new(Inset, BodyTop, 64, 64);
+
+    /// <summary>Track title rectangle.</summary>
+    public static Rect TitleRect => new(96, BodyTop, 280, 22);
+
+    /// <summary>Artist rectangle.</summary>
+    public static Rect ArtistRect => new(96, BodyTop + 22, 280, 20);
+
+    /// <summary>Album rectangle.</summary>
+    public static Rect AlbumRect => new(96, BodyTop + 44, 280, 18);
+
+    /// <summary>Seek track rectangle.</summary>
+    public static Rect TrackRect => new(Inset, BodyTop + 76, UsableWidth, 4);
+
+    /// <summary>Elapsed-time rectangle.</summary>
+    public static Rect PositionRect => new(Inset, BodyTop + 84, 80, 16);
+
+    /// <summary>Duration rectangle.</summary>
+    public static Rect DurationRect => new(PageWidth - Inset - 80, BodyTop + 84, 80, 16);
+
+    /// <summary>Previous-track hit rectangle.</summary>
+    public static Rect PreviousRect => new(136, BodyTop + 92, 36, 36);
+
+    /// <summary>Play/pause hit rectangle.</summary>
+    public static Rect PlayRect => new(176, BodyTop + 88, 40, 40);
+
+    /// <summary>Next-track hit rectangle.</summary>
+    public static Rect NextRect => new(220, BodyTop + 92, 36, 36);
+
+    /// <summary>Current lyric line rectangle.</summary>
+    public static Rect LyricsRect => new(Inset, BodyTop + 162, UsableWidth, 26);
+
+    /// <summary>Next lyric line rectangle.</summary>
+    public static Rect NextLyricsRect => new(Inset, BodyTop + 188, UsableWidth, 22);
 
     /// <summary>Creates the media page.</summary>
     public MediaPage()
@@ -201,37 +245,34 @@ public sealed class MediaPage : IslandPageView
 
         var accent = Accents.ParseOrDefault(media.AccentHex, Accents.Fallback);
         IslandDraw.Artwork(context, ArtRect, accent);
-        IslandDraw.Text(context, media.Title, new Rect(96, 22, 280, 20), Fonts.DisplaySemiBold,
+        IslandDraw.Text(context, media.Title, TitleRect, Fonts.DisplaySemiBold,
             Typography.PageTitleSize, fg);
-        IslandDraw.Text(context, media.Artist, new Rect(96, 44, 280, 18), Fonts.Regular,
+        IslandDraw.Text(context, media.Artist, ArtistRect, Fonts.Regular,
             Typography.SettingsBodySize, secondary);
-        IslandDraw.Text(context, media.Album, new Rect(96, 64, 280, 16), Fonts.Regular,
+        IslandDraw.Text(context, media.Album, AlbumRect, Fonts.Regular,
             Typography.CaptionSize, tertiary);
 
-        var trackRect = new Rect(Inset, 96, UsableWidth, 4);
-        IslandDraw.Track(context, trackRect, media.ProgressPercent / 100.0, new SolidColorBrush(accent), palette);
-        IslandDraw.Text(context, media.PositionText, new Rect(Inset, 102, 80, 16), Fonts.MonoRegular,
+        IslandDraw.Track(context, TrackRect, media.ProgressPercent / 100.0, new SolidColorBrush(accent), palette);
+        IslandDraw.Text(context, media.PositionText, PositionRect, Fonts.MonoRegular,
             Typography.CaptionSize, secondary);
-        IslandDraw.Text(context, media.DurationText, new Rect(PageWidth - Inset - 80, 102, 80, 16),
+        IslandDraw.Text(context, media.DurationText, DurationRect,
             Fonts.MonoRegular, Typography.CaptionSize, secondary, TextAlignment.Right);
 
         IslandDraw.IconButton(context, PreviousRect, 34, IconKind.Previous, fg, palette);
         IslandDraw.IconButton(context, PlayRect, 40, media.IsPlaying ? IconKind.Pause : IconKind.Play, fg, palette, elevated: true);
         IslandDraw.IconButton(context, NextRect, 34, IconKind.Next, fg, palette);
 
-        var lyricsY = 164.0;
         if (!string.IsNullOrEmpty(media.LyricLine))
         {
-            IslandDraw.Text(context, media.LyricLine, new Rect(Inset, lyricsY, UsableWidth, 20),
+            IslandDraw.Text(context, media.LyricLine, LyricsRect,
                 Fonts.SemiBold, Typography.SettingsBodySize, secondary, TextAlignment.Center);
-            IslandDraw.Text(context, media.NextLyricLine, new Rect(Inset, lyricsY + 20, UsableWidth, 18),
+            IslandDraw.Text(context, media.NextLyricLine, NextLyricsRect,
                 Fonts.Regular, Typography.CaptionSize, tertiary, TextAlignment.Center);
         }
         else if (!string.IsNullOrEmpty(media.Source))
         {
             IslandDraw.Text(context, Localizer.Format(LocKeys.Media.From, ("app", media.Source)),
-                new Rect(Inset, lyricsY + 2, UsableWidth, 20), Fonts.Regular, Typography.CaptionSize,
-                tertiary, TextAlignment.Center);
+                LyricsRect, Fonts.Regular, Typography.CaptionSize, tertiary, TextAlignment.Center);
         }
     }
 }
@@ -259,8 +300,7 @@ public sealed class NotificationsPage : IslandPageView
             return default;
         }
 
-        var clearRect = new Rect(PageWidth - Inset - 76, TitleTop, 76, 24);
-        if (clearRect.Contains(point) && !Context.Content.Notifications.IsDefaultOrEmpty)
+        if (ClearRect.Contains(point) && !Context.Content.Notifications.IsDefaultOrEmpty)
         {
             return new IslandPageActionRequest(IslandPageAction.ClearNotifications, -1);
         }
@@ -319,14 +359,18 @@ public sealed class NotificationsPage : IslandPageView
         }
     }
 
-    private static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
+    /// <summary>"Clear" action rectangle in the title row.</summary>
+    public static Rect ClearRect => new(PageWidth - Inset - 76, TitleTop, 76, 24);
+
+    /// <summary>Notification row rectangle for <paramref name="index"/>.</summary>
+    public static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
 }
 
 /// <summary>Clipboard history page.</summary>
 public sealed class ClipboardPage : IslandPageView
 {
-    private const double RowHeight = 44;
-    private const double RowGap = 4;
+    private const double RowHeight = 50;
+    private const double RowGap = 6;
 
     /// <summary>Creates the clipboard page.</summary>
     public ClipboardPage()
@@ -349,8 +393,7 @@ public sealed class ClipboardPage : IslandPageView
         for (var i = 0; i < count; i++)
         {
             var rect = RowRect(i);
-            var pinRect = new Rect(rect.Right - 36, rect.Y, 32, rect.Height);
-            if (pinRect.Contains(point))
+            if (PinRect(i).Contains(point))
             {
                 return new IslandPageActionRequest(IslandPageAction.ToggleClipboardPin, i);
             }
@@ -392,25 +435,33 @@ public sealed class ClipboardPage : IslandPageView
             var rect = RowRect(i);
             IslandDraw.Card(context, rect, palette);
             Icons.Draw(context, item.IsImage ? IconKind.Media : IconKind.Document,
-                new Rect(rect.X + 10, rect.Y + 14, 16, 16),
+                new Rect(rect.X + 10, rect.Y + 17, 16, 16),
                 new SolidColorBrush(item.Pinned ? Accents.Info : palette.ForegroundSecondary));
-            IslandDraw.Text(context, item.Preview, new Rect(rect.X + 34, rect.Y + 6, rect.Width - 110, 18),
+            IslandDraw.Text(context, item.Preview, new Rect(rect.X + 34, rect.Y + 8, rect.Width - 110, 20),
                 Fonts.Regular, Typography.TitleSize, fg);
-            IslandDraw.Text(context, item.Meta, new Rect(rect.X + 34, rect.Y + 24, 120, 14),
+            IslandDraw.Text(context, item.Meta, new Rect(rect.X + 34, rect.Y + 29, 120, 14),
                 Fonts.Regular, 10, tertiary);
-            Icons.Draw(context, IconKind.Pin, new Rect(rect.Right - 30, rect.Y + 14, 16, 16),
+            Icons.Draw(context, IconKind.Pin, new Rect(rect.Right - 30, rect.Y + 17, 16, 16),
                 new SolidColorBrush(item.Pinned ? Accents.Info : palette.ForegroundTertiary));
         }
     }
 
-    private static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
+    /// <summary>Clipboard row rectangle for <paramref name="index"/> (four rows fill the body band).</summary>
+    public static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
+
+    /// <summary>Pin hit rectangle for <paramref name="index"/>.</summary>
+    public static Rect PinRect(int index)
+    {
+        var rect = RowRect(index);
+        return new Rect(rect.Right - 36, rect.Y, 32, rect.Height);
+    }
 }
 
 /// <summary>Agent sessions page.</summary>
 public sealed class AgentPage : IslandPageView
 {
-    private const double RowHeight = 44;
-    private const double RowGap = 4;
+    private const double RowHeight = 50;
+    private const double RowGap = 6;
 
     /// <summary>Creates the agent page.</summary>
     public AgentPage()
@@ -476,17 +527,21 @@ public sealed class AgentPage : IslandPageView
                 _ => Accents.Fallback,
             };
             context.DrawEllipse(new SolidColorBrush(tone), null, new Point(rect.X + 16, rect.Center.Y), 4, 4);
-            IslandDraw.Text(context, item.Name, new Rect(rect.X + 28, rect.Y + 6, 180, 18),
+            IslandDraw.Text(context, item.Name, new Rect(rect.X + 28, rect.Y + 8, 180, 18),
                 Fonts.SemiBold, Typography.TitleSize, fg);
-            IslandDraw.Text(context, item.Detail, new Rect(rect.X + 28, rect.Y + 25, 190, 14),
+            IslandDraw.Text(context, item.Detail, new Rect(rect.X + 28, rect.Y + 29, 190, 14),
                 Fonts.Regular, Typography.CaptionSize, secondary);
-            IslandDraw.Text(context, item.TimeText, new Rect(rect.Right - 56, rect.Y + 6, 46, 14),
+            IslandDraw.Text(context, item.TimeText, new Rect(rect.Right - 56, rect.Y + 8, 46, 14),
                 Fonts.Regular, 10, new SolidColorBrush(palette.ForegroundTertiary), TextAlignment.Right);
-            IslandDraw.Chip(context, item.StatusText, new Rect(rect.Right - 92, rect.Y + 24, 82, 16), tone, fg, 10);
+            IslandDraw.Chip(context, item.StatusText, StatusChipRect(rect), tone, fg, 10);
         }
     }
 
-    private static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
+    /// <summary>Agent row rectangle for <paramref name="index"/> (four rows fill the body band).</summary>
+    public static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
+
+    /// <summary>Status chip rectangle inside an agent row.</summary>
+    public static Rect StatusChipRect(Rect row) => new(row.Right - 92, row.Y + 29, 82, 16);
 }
 
 /// <summary>Widgets page: mini calendar and task list.</summary>
@@ -548,16 +603,16 @@ public sealed class WidgetsPage : IslandPageView
         var secondary = new SolidColorBrush(palette.ForegroundSecondary);
         var tertiary = new SolidColorBrush(palette.ForegroundTertiary);
 
-        var calendar = new Rect(Inset, BodyTop, CalendarWidth, 192);
+        var calendar = CalendarRect;
         IslandDraw.Card(context, calendar, palette);
-        IslandDraw.Text(context, Context.Content.CalendarMonthTitle, new Rect(calendar.X + 28, calendar.Y + 8, calendar.Width - 56, 18),
+        IslandDraw.Text(context, Context.Content.CalendarMonthTitle, new Rect(calendar.X + 28, calendar.Y + 10, calendar.Width - 56, 18),
             Fonts.DisplaySemiBold, Typography.SettingsBodySize, fg, TextAlignment.Center);
         DrawCalendarNav(context, palette, previous: true);
         DrawCalendarNav(context, palette, previous: false);
 
         var days = Context.Content.CalendarDays;
         var headers = Context.Content.WeekdayHeaders;
-        var gridTop = calendar.Y + 32;
+        var gridTop = calendar.Y + 36;
         var cellWidth = (calendar.Width - 16) / 7;
         for (var i = 0; i < headers.Length; i++)
         {
@@ -587,9 +642,9 @@ public sealed class WidgetsPage : IslandPageView
                 day.InMonth ? fg : tertiary, TextAlignment.Center);
         }
 
-        var tasksCard = new Rect(TaskX, BodyTop, TaskWidth, 192);
+        var tasksCard = TasksRect;
         IslandDraw.Card(context, tasksCard, palette);
-        IslandDraw.Text(context, Localizer.Get(LocKeys.Page.Widgets.Tasks), new Rect(tasksCard.X + 12, tasksCard.Y + 8, tasksCard.Width - 24, 16),
+        IslandDraw.Text(context, Localizer.Get(LocKeys.Page.Widgets.Tasks), new Rect(tasksCard.X + 12, tasksCard.Y + 10, tasksCard.Width - 24, 16),
             Fonts.SemiBold, Typography.CaptionSize, new SolidColorBrush(palette.ForegroundSecondary));
         var tasks = Context.Content.Tasks;
         for (var i = 0; i < Math.Min(tasks.Length, 4); i++)
@@ -632,9 +687,17 @@ public sealed class WidgetsPage : IslandPageView
             new SolidColorBrush(palette.ForegroundSecondary));
     }
 
-    private static Rect CalendarNavRect(bool previous)
-        => new(previous ? Inset + 6 : Inset + CalendarWidth - 26, BodyTop + 6, 20, 20);
+    /// <summary>Calendar card rectangle (fills the body band).</summary>
+    public static Rect CalendarRect => new(Inset, BodyTop, CalendarWidth, BodyHeight);
 
-    private static Rect TaskRect(int index)
-        => new(TaskX, BodyTop + 28 + (index * 38), TaskWidth, 36);
+    /// <summary>Tasks card rectangle (fills the body band).</summary>
+    public static Rect TasksRect => new(TaskX, BodyTop, TaskWidth, BodyHeight);
+
+    /// <summary>Calendar month navigation rectangle.</summary>
+    public static Rect CalendarNavRect(bool previous)
+        => new(previous ? Inset + 6 : Inset + CalendarWidth - 26, BodyTop + 8, 20, 20);
+
+    /// <summary>Task row rectangle for <paramref name="index"/>.</summary>
+    public static Rect TaskRect(int index)
+        => new(TaskX, BodyTop + 34 + (index * 44), TaskWidth, 40);
 }

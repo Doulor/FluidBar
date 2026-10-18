@@ -75,8 +75,11 @@ public sealed record ShellGeometry
     public bool Contains(VisualPoint point) => Contains(point.X, point.Y);
 
     /// <summary>
-    /// Samples the outline, clockwise from the top edge, <paramref name="samplesPerQuadrant"/>
-    /// points per corner quadrant (spec 3.2 recommends 15).
+    /// Samples the outline clockwise, <paramref name="samplesPerQuadrant"/> points per corner
+    /// quadrant (spec 3.2 recommends 15). Consecutive samples are directly connectable with straight
+    /// segments (including the closing segment from the last sample back to the first), so callers can
+    /// build a closed path from the result without reordering. The traversal starts on the left edge
+    /// at the top-left corner and runs clockwise: top-left → top-right → bottom-right → bottom-left.
     /// </summary>
     public ImmutableArray<VisualPoint> SampleOutline(int samplesPerQuadrant = 15)
     {
@@ -87,18 +90,15 @@ public sealed record ShellGeometry
         }
 
         var radii = Radii;
-        var k = ExponentK;
-        var exponent = 2.0 / k;
+        var exponent = 2.0 / ExponentK;
         var builder = ImmutableArray.CreateBuilder<VisualPoint>(samplesPerQuadrant * 4);
-        var steps = samplesPerQuadrant;
 
-        // Top edge: left -> right (top-left corner then top-right corner).
-        AddCorner(builder, steps, Bounds.X + radii.TopLeft, Bounds.Y + radii.TopLeft, radii.TopLeft, exponent, -1, -1, reverse: true);
-        AddCorner(builder, steps, Bounds.Right - radii.TopRight, Bounds.Y + radii.TopRight, radii.TopRight, exponent, 1, -1, reverse: false);
-
-        // Right edge -> bottom edge.
-        AddCorner(builder, steps, Bounds.Right - radii.BottomRight, Bounds.Bottom - radii.BottomRight, radii.BottomRight, exponent, 1, 1, reverse: false);
-        AddCorner(builder, steps, Bounds.X + radii.BottomLeft, Bounds.Bottom - radii.BottomLeft, radii.BottomLeft, exponent, -1, 1, reverse: false);
+        // Clockwise visual order. Each corner starts on the edge the previous corner ended on:
+        // left edge -> top edge -> right edge -> bottom edge -> left edge (close).
+        AddCorner(builder, samplesPerQuadrant, Bounds.X + radii.TopLeft, Bounds.Y + radii.TopLeft, radii.TopLeft, exponent, OutlineCorner.TopLeft);
+        AddCorner(builder, samplesPerQuadrant, Bounds.Right - radii.TopRight, Bounds.Y + radii.TopRight, radii.TopRight, exponent, OutlineCorner.TopRight);
+        AddCorner(builder, samplesPerQuadrant, Bounds.Right - radii.BottomRight, Bounds.Bottom - radii.BottomRight, radii.BottomRight, exponent, OutlineCorner.BottomRight);
+        AddCorner(builder, samplesPerQuadrant, Bounds.X + radii.BottomLeft, Bounds.Bottom - radii.BottomLeft, radii.BottomLeft, exponent, OutlineCorner.BottomLeft);
 
         return builder.ToImmutable();
     }
@@ -110,19 +110,34 @@ public sealed record ShellGeometry
         double centerY,
         double radius,
         double exponent,
-        int signX,
-        int signY,
-        bool reverse)
+        OutlineCorner corner)
     {
         for (var i = 0; i < steps; i++)
         {
-            var t = reverse
-                ? (Math.PI / 2) * (1.0 - (i / (double)steps))
-                : (Math.PI / 2) * (i / (double)steps);
-            var x = centerX + (signX * radius * Math.Pow(Math.Abs(Math.Cos(t)), exponent));
-            var y = centerY + (signY * radius * Math.Pow(Math.Abs(Math.Sin(t)), exponent));
+            var t = (Math.PI / 2) * (i / (double)steps);
+            var cos = Math.Pow(Math.Abs(Math.Cos(t)), exponent);
+            var sin = Math.Pow(Math.Abs(Math.Sin(t)), exponent);
+            var (x, y) = corner switch
+            {
+                // Left edge -> top edge.
+                OutlineCorner.TopLeft => (centerX - (radius * cos), centerY - (radius * sin)),
+                // Top edge -> right edge.
+                OutlineCorner.TopRight => (centerX + (radius * sin), centerY - (radius * cos)),
+                // Right edge -> bottom edge.
+                OutlineCorner.BottomRight => (centerX + (radius * cos), centerY + (radius * sin)),
+                // Bottom edge -> left edge.
+                _ => (centerX - (radius * sin), centerY + (radius * cos)),
+            };
             builder.Add(new VisualPoint(x, y));
         }
+    }
+
+    private enum OutlineCorner
+    {
+        TopLeft,
+        TopRight,
+        BottomRight,
+        BottomLeft,
     }
 
     private static bool CornerContains(double offsetX, double offsetY, double radius, double k)

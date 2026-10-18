@@ -51,6 +51,84 @@ public sealed class ArchipelagoTests
     }
 
     [Fact]
+    public async Task Archipelago_FlowLayout_DoesNotOverlapAndKeepsThe352Track()
+    {
+        await AvaloniaTest.Run(() =>
+        {
+            var strip = new ArchipelagoStrip();
+            foreach (var position in new[] { 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.25, 4.5, 5.0 })
+            {
+                var rects = Enumerable.Range(0, 6).Select(i => strip.IslandRect(i, position)).ToArray();
+                Assert.Equal(strip.StripRect.X, rects[0].X, 1e-9);
+                Assert.Equal(strip.StripRect.Right, rects[^1].Right, 1e-9);
+                for (var i = 0; i < 5; i++)
+                {
+                    Assert.True(
+                        rects[i].Right <= rects[i + 1].X + 1e-9,
+                        $"island {i} overlaps island {i + 1} at position {position}: {rects[i]} / {rects[i + 1]}");
+                }
+
+                var widths = rects.Sum(rect => rect.Width) + (5 * ArchipelagoStrip.Gap);
+                Assert.Equal(ArchipelagoStrip.TotalWidth, widths, 1e-9);
+                Assert.Equal(352, widths, 1e-9);
+            }
+
+            // Integer positions keep the spike's exact widths: active 72, neighbours 48.
+            foreach (var position in new[] { 0.0, 1.0, 2.0, 5.0 })
+            {
+                var active = ArchipelagoStrip.ActiveIndex(position);
+                for (var i = 0; i < 6; i++)
+                {
+                    Assert.Equal(i == active ? ArchipelagoStrip.ActiveWidth : ArchipelagoStrip.MiniWidth,
+                        strip.IslandRect(i, position).Width, 1e-9);
+                }
+            }
+
+            // Fractional positions interpolate the growth across the two adjacent islands.
+            Assert.Equal(60, strip.IslandRect(1, 1.5).Width, 1e-9);
+            Assert.Equal(60, strip.IslandRect(2, 1.5).Width, 1e-9);
+        });
+    }
+
+    [Fact]
+    public async Task Archipelago_HitTestUsesTheSameFlowRects_AndActiveDrawsLast()
+    {
+        await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("en-US");
+            var (settings, _) = TestFixtures.CreateSettings();
+            var panel = CreatePanel(settings, localizer);
+            panel.RevealArchipelago(0);
+
+            var strip = panel.Archipelago;
+            var position = strip.ActivePosition;
+            for (var i = 0; i < 6; i++)
+            {
+                Assert.Equal(i, strip.HitTest(strip.IslandRect(i, position).Center));
+            }
+
+            var first = strip.IslandRect(0, position);
+            var second = strip.IslandRect(1, position);
+            var gapX = (first.Right + second.X) / 2;
+            Assert.Equal(-1, strip.HitTest(new Point(gapX, first.Center.Y)));
+
+            // The old layout placed island 1 at x+56 and let it paint over the 72 DIP active pill.
+            Assert.Equal(0, strip.HitTest(new Point(first.X + 60, first.Center.Y)));
+
+            // Active island is the last entry in the z-order for every position.
+            foreach (var p in new[] { 0.0, 1.5, 2.0, 4.5, 5.0 })
+            {
+                var order = ArchipelagoStrip.DrawOrder(p);
+                Assert.Equal(6, order.Count);
+                Assert.Equal(ArchipelagoStrip.ActiveIndex(p), order[^1]);
+                Assert.Equal(6, order.Distinct().Count());
+            }
+
+            Assert.Equal([0, 1, 3, 4, 5, 2], ArchipelagoStrip.DrawOrder(2));
+        });
+    }
+
+    [Fact]
     public async Task Archipelago_RevealsOnActivity_AndAutoHidesAfter1200ms()
     {
         await AvaloniaTest.Run(() =>
