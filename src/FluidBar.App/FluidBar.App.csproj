@@ -7,6 +7,7 @@
     <RootNamespace>FluidBar.App</RootNamespace>
     <AssemblyName>FluidBar</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\fluidbar.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -37,3 +38,4 @@
   </ItemGroup>
 
 </Project>
+

@@ -66,3 +66,8 @@
 - DPI：`WM_DPICHANGED` 先应用 OS 建议再通知 App；surface 按 ceil(DIP×scale) 重建；150%/200% 数学与 placement 测试通过。
 - dock：`PlaceForWindowPlacement` 统一 float/flush/dock；Platform 组合常量与 Core 对齐（panel 24..308、strip 316..368、arch 378..408）。
 - 测试：**1402 passed / 0 failed**（Core 473, Platform 382, UI 159, Island 135, SDK 152, PluginHost 36, Builtin 23, Integration 31, Architecture 11）。
+
+### 2026-10-19 00:56 — 发布脚本 / 应用图标
+- 新增 `tools/release/publish.ps1`：win-x64/win-arm64、单文件、可选 self-contained、复制 README/PROJECT-NOTES/CHANGELOG/插件文档、生成 SHA256 + publish.json + zip。
+- 新增 `src/FluidBar.App/Assets/fluidbar.ico` 并设置 `ApplicationIcon`。
+- 首次 Release 发布验证：`build/release/win-x64/FluidBar.exe` 53.5 MB（framework-dependent single-file），SHA256 7DC72D16…D1730。
