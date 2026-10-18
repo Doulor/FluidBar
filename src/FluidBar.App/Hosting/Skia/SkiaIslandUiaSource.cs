@@ -880,7 +880,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             FocusElement(request.ElementId);
             return;
         }
-
         var id = request.ElementId;
         if (string.Equals(id, SkiaIslandUiaElementIds.Root, StringComparison.Ordinal))
         {
@@ -1277,3 +1276,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private string F(string key, string fallback, params object?[] arguments)
         => string.Format(_localizer.CurrentCulture, L(key, fallback), arguments);
 }
+
+
+
