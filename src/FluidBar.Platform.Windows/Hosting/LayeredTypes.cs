@@ -109,9 +109,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// Surface-local DIP offset of the mode's anchor shell rect: the panel for
     /// <see cref="LayeredHostMode.Float"/>, the dock strip for <see cref="LayeredHostMode.Dock"/>.
     /// </summary>
-    public static VisualPoint ShellLocalOffset(LayeredHostMode mode) => mode == LayeredHostMode.Dock
-        ? new VisualPoint(Padding, Padding + DockLaneHeight + PanelHeight + DockGap)
-        : new VisualPoint(Padding, Padding);
+    public static VisualPoint ShellLocalOffset(LayeredHostMode mode) => new(Padding, Padding);
 
     /// <summary>Converts to physical pixels with the ceiling size rule (never clips a DIP).</summary>
     public LayeredPixelSize ToPixels(double scale)
@@ -464,3 +462,4 @@ public sealed class LayeredHostOptions
     /// <summary>Log every committed frame (diagnostics only; never in production).</summary>
     public bool LogFrames { get; init; }
 }
+

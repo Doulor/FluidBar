@@ -56,16 +56,17 @@ public sealed class LayeredHostTests
     }
 
     [Fact]
-    public void SurfaceSize_ShellLocalOffset_IsPanelTopForFloatAndStripTopForDock()
+    public void SurfaceSize_ShellLocalOffset_IsPanelTopForAllModes()
     {
         Assert.Equal(new VisualPoint(24, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
 
-        // Dock anchors on the strip: 24 + 52 lane + 284 panel + 8 gap.
+        // Core dock composition keeps the panel at the top (24..308); the dock strip lives below
+        // it (316..368) and the archipelago strip below that (378..408). The host must not shift
+        // the window for dock mode; Core's WindowPixel is authoritative.
         var dockOffset = LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock);
         Assert.Equal(24, dockOffset.X);
-        Assert.Equal(368, dockOffset.Y);
-        Assert.Equal(368 + LayeredSurfaceSize.DockStripHeight + LayeredSurfaceSize.Padding,
-            LayeredSurfaceSize.Dock.HeightDip);
+        Assert.Equal(24, dockOffset.Y);
+        Assert.Equal(444, LayeredSurfaceSize.Dock.HeightDip);
     }
 
     [Fact]

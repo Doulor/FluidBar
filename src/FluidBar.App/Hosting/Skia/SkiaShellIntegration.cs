@@ -79,11 +79,25 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             return;
         }
 
-        var result = await _hotkeys.RegisterAsync(name, gesture, cancellationToken).ConfigureAwait(false);
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-shell-debug.log"), $"hotkey {name} {gesture} success={result.Success} failure={result.Failure} win32={result.Win32Error}`n"); } catch { }
-        if (!result.Success)
+        // Global hotkeys are a shared namespace: another app may already own the default.
+        // Fall back to a Ctrl+Alt+Shift variant so the shell always keeps a working binding.
+        var candidates = name switch
         {
-            Trace.WriteLine($"FluidBar hotkey '{name}' ({gesture}) not registered: {result.Failure}.");
+            "hide" => new[] { gesture, "Ctrl+Alt+Shift+H" },
+            "settings" => new[] { gesture, "Ctrl+Alt+Shift+S" },
+            "toggle" => new[] { gesture, "Ctrl+Alt+Shift+D" },
+            _ => new[] { gesture },
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var result = await _hotkeys.RegisterAsync(name, candidate, cancellationToken).ConfigureAwait(false);
+            if (result.Success)
+            {
+                return;
+            }
+
+            Trace.WriteLine($"FluidBar hotkey '{name}' ({candidate}) not registered: {result.Failure}.");
         }
     }
 
