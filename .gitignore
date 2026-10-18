@@ -1,4 +1,5 @@
 # Build output
+build/
 bin/
 obj/
 publish/
@@ -24,3 +25,4 @@ docs/rewrite/prototype/_shots/
 # Misc
 *.zip
 example.txt
+
