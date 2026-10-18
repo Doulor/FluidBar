@@ -1,6 +1,6 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-18 23:00（Asia/Shanghai）
+> 最后更新：2026-10-18 23:36（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
@@ -42,9 +42,9 @@
 
 ## 进行中
 
-1. **Skia 渲染器 MVP：已完成代码 + 62 tests + 16 张 golden**（紧凑 8 态、展开 home/media、dock/flush/light/transition、transient strip）；待打磨：壳体描边当前误用强调色（应为中性 hairline），以及通知/剪贴板/Agent/小组件页面。
+1. **Skia 渲染器：134 tests + 20 张 golden**（紧凑 8 态、展开 home/media/notifications/clipboard/agent/widgets、dock/flush/light/transition、transient strip）；壳体描边正在改中性 hairline。
 2. **prototype2：设置面板/插件市场/3 小岛/远处页小点/切换动效已完成**（14+ 截图）；等待用户验收。
-3. **App 集成（下一关键路径）**：用 `LayeredWindowHost` 替换 Avalonia 岛窗口，渲染器接入 Core 状态/事件/设置；保留设置/市场 Avalonia 窗口；`PlatformServiceGraph` 统一装配。
+3. **App 集成（进行中）**：`src/FluidBar.App/Hosting/Skia/` 已写入 controller、Core→渲染状态映射、pager、archipelago、主题映射、hit-test、`SkiaIslandHost`；正在修编译并接 `FLUIDBAR_HOST=skia` 开关；之后做真机验收。
 
 ## 可用版本预估（基于当前进度）
 
@@ -69,3 +69,4 @@
 2. 接入分层宿主到 App，跑真机桌面验收（透明/点击穿透/DPI/60-120fps）。
 3. 补全通知/剪贴板/Agent/小组件页面与 UIA。
 4. Release 浸泡、单文件发布、市场发布链路。
+
