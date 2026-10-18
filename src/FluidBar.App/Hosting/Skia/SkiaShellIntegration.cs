@@ -55,7 +55,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         _tray.LeftClicked += OnTrayLeftClicked;
         _hotkeys.Pressed += OnHotkeyPressed;
 
-        await _tray.StartAsync(new TrayIconOptions { ToolTip = "FluidBar 2.0", IconFilePath = null }, cancellationToken).ConfigureAwait(false);
+        await _tray.StartAsync(new TrayIconOptions { ToolTip = "FluidBar 2.0", IconFilePath = TryExtractTrayIcon() }, cancellationToken).ConfigureAwait(false);
         _tray.SetMenuItems(
         [
             new TrayMenuItem("toggle", "显示 / 隐藏灵动岛"),
@@ -101,6 +101,34 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         }
     }
 
+    /// <summary>Extracts the exe's associated icon to a temp .ico so the tray uses the FluidBar mark.</summary>
+    private static string? TryExtractTrayIcon()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exe))
+            {
+                return null;
+            }
+
+            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(exe);
+            if (icon is null)
+            {
+                return null;
+            }
+
+            var path = Path.Combine(Path.GetTempPath(), "fluidbar-tray.ico");
+            using var stream = File.Create(path);
+            icon.Save(stream);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine("tray icon extraction failed: " + ex.Message);
+            return null;
+        }
+    }
     private void OnTrayMenuItem(object? sender, TrayMenuItemInvokedEventArgs e)
     {
         switch (e.ItemId)
@@ -165,6 +193,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             => Trace.WriteLine($"[{entry.Level}] {entry.Category}/{entry.EventId}: {entry.Message}");
     }
 }
+
 
 
 

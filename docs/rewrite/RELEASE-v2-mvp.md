@@ -61,7 +61,7 @@ FluidBar 2.0 是从零重写的 Windows 灵动岛：默认 iOS 风格小岛，�
 4. **MSAA/OBJID_CLIENT**：仅实现 UIA raw provider；旧式 MSAA 客户端未覆盖。
 5. **多显示器/200%**：逻辑与单元测试覆盖，真机只有单显示器 150% 环境；需在双屏/200% 机器上复测。
 6. **Narrator 手工验收**：UIA 自动化测试通过，仍需按清单人工跑一次 Narrator。
-7. **托盘图标**：当前使用系统默认图标（应用 exe 已带 FluidBar 图标）。
+7. **托盘图标**：已从 exe 提取 FluidBar 图标（`System.Drawing.Common` 9.0.0）；若提取失败回退系统默认图标。
 8. **双 PlatformMessageHost**：tray/hotkey 与页面控件各持一个消息宿主；功能正常，后续可合并。
 9. **插件市场生产密钥/托管**：CI 已就绪，签名密钥与发布环境需维护者配置。
 
@@ -82,3 +82,4 @@ FluidBar 2.0 是从零重写的 Windows 灵动岛：默认 iOS 风格小岛，�
 - 原型：`docs/rewrite/prototype2/`
 - 发布脚本：`tools/release/publish.ps1`
 - 验收清单：`docs/rewrite/contracts/skia-host-acceptance.md`
+
