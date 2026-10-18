@@ -301,7 +301,7 @@ public sealed class PagerMotionTests
         var pager = new PagerMotion(pageCount: 6, pageWidth: 400, initialPage: 0);
         pager.BeginDrag(100, 0);
         var offset = pager.DragTo(300, 100);
-        Assert.InRange(offset, -80, -60); // 200 DIP drag past the edge × 0.35
+        Assert.InRange(offset, -75, -40); // 200 DIP × 0.80 follow = 160, then × 0.35 edge resistance ≈ 56
         Assert.Equal(0, pager.EndDrag(120));
     }
 

@@ -211,15 +211,20 @@ public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
 {
     private readonly TimeProvider _timeProvider;
     private readonly ILocalizer _localizer;
+    private readonly Action<Action> _uiPost;
     private ITimer? _minuteTimer;
     private bool _started;
     private IslandContent _content;
 
     /// <summary>Creates the design data source.</summary>
-    public DesignIslandDataSource(ILocalizer localizer, TimeProvider? timeProvider = null)
+    /// <param name="localizer">Localizer for host labels.</param>
+    /// <param name="timeProvider">Injected time source (tests).</param>
+    /// <param name="uiPost">Dispatcher for <see cref="Changed"/>; defaults to the Avalonia UI thread.</param>
+    public DesignIslandDataSource(ILocalizer localizer, TimeProvider? timeProvider = null, Action<Action>? uiPost = null)
     {
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _uiPost = uiPost ?? (static action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         _content = BuildSnapshot(_timeProvider.GetLocalNow());
     }
 
@@ -253,14 +258,30 @@ public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
     public void Refresh(DateTimeOffset now)
     {
         _content = BuildSnapshot(now);
-        Changed?.Invoke(this, EventArgs.Empty);
+        RaiseChanged();
     }
 
     /// <summary>Replaces parts of the content (developer preview hooks).</summary>
     public void Update(Func<IslandContent, IslandContent> mutate)
     {
         _content = mutate(_content);
-        Changed?.Invoke(this, EventArgs.Empty);
+        RaiseChanged();
+    }
+
+    /// <summary>
+    /// Raises <see cref="Changed"/> on the UI thread. Timer callbacks (clock minute tick) run on the
+    /// thread pool, so raising directly would let the host touch Avalonia controls off-thread
+    /// (fixed idle crash: InvalidOperationException "calling thread cannot access this object").
+    /// </summary>
+    private void RaiseChanged()
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        _uiPost(() => Changed?.Invoke(this, EventArgs.Empty));
     }
 
     /// <inheritdoc />

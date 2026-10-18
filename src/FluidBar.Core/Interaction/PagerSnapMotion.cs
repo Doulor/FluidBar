@@ -3,24 +3,30 @@ using FluidBar.Core.Motion;
 namespace FluidBar.Core.Interaction;
 
 /// <summary>
-/// Snap animation for the horizontal pager: a single spring authored as
-/// <c>motion.tab</c> (T = 0.34 s, ζ = 0.92) driving the content offset towards the target page.
+/// Snap animation for the horizontal pager: a single dedicated spring authored as
+/// <b>T = 0.44 s, ζ = 0.97</b> (pager v2, stronger damping) driving the content offset towards the
+/// target page. It is intentionally decoupled from <c>motion.tab</c> (the first-cut version reused
+/// that token; the approved design wants a slower, calmer page snap).
 /// Interruptible: <see cref="Interrupt"/> freezes the spring at its current visual offset so a new
 /// drag starts from what the user actually sees (not from the target page).
 /// </summary>
 public sealed class PagerSnapMotion
 {
+    private static readonly SpringParameters SnapSpring = new(
+        PagerConstants.SnapSpringPeriodSeconds,
+        PagerConstants.SnapSpringDampingRatio);
+
     private readonly Spring _spring;
 
     /// <summary>Creates the snap spring at <paramref name="initialOffsetDip"/>.</summary>
     /// <param name="initialOffsetDip">Initial content offset in DIP.</param>
     public PagerSnapMotion(double initialOffsetDip = 0)
     {
-        _spring = new Spring(MotionTokens.Tab.Spring, initialOffsetDip);
+        _spring = new Spring(SnapSpring, initialOffsetDip);
     }
 
-    /// <summary>The authored spring parameters (T 0.34 s, ζ 0.92 — equal to <c>motion.tab</c>).</summary>
-    public static SpringParameters SpringParameters => MotionTokens.Tab.Spring;
+    /// <summary>The authored spring parameters (T 0.44 s, ζ 0.97; pager v2 — not <c>motion.tab</c>).</summary>
+    public static SpringParameters SpringParameters => SnapSpring;
 
     /// <summary>Current visual content offset in DIP.</summary>
     public double CurrentOffsetDip => _spring.Value;

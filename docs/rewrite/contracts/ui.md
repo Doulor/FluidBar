@@ -222,6 +222,11 @@ The App's `IUiSettingsStore` seam is now backed by Core `SettingsStore`:
 `AppSettings ↔ FluidBarSettings` via `ToAppSettings`/`ApplyToCore` (read-modify-write preserves
 Core-owned hotkeys/activities/placement/dock tiles), loads/saves on the thread pool, debounces 500 ms,
 uses Core's atomic protocol, logs failed loads/saves and never blocks the UI thread.
+`CreateDefault` also performs the requested one-time legacy migration (`Settings/LegacySettingsImporter.cs`):
+if `%APPDATA%\FluidBar\settings.ui.json` exists and no Core `settings.json` exists yet, it parses the
+legacy App model, maps it through `ApplyToCore`, saves it via Core, and renames the legacy file to
+`settings.ui.json.imported` (corrupt legacy files are preserved; an existing Core file always wins).
+This runs inside the first background `LoadAsync`, never on the UI thread.
 **Paused-file one-liner** (platform-owner/Lead applies when `AppBootstrap` is handed back): replace
 `new JsonUiSettingsStore(JsonUiSettingsStore.DefaultPath, _logger)` with
 `CoreSettingsStoreAdapter.CreateDefault(_logger)`, then remove the `settings.ui.json` adapter.
@@ -248,37 +253,72 @@ injected via `FLUIDBAR_MARKET_URL` until Core settings exposes it; without it th
 to the deterministic design catalog and installs fail with a localized message rather than pretending.
 Tests cover index mapping/filtering/update state and install-state derivation.
 
-Test suite after this increment: **66/66 passing** (`tests/FluidBar.Ui.Tests`), including the new
-`SettingsPluginMarketTests` (Core settings adapter, built-in plugin descriptors/contributions,
-declarative page rendering + command invocation, secret redaction, marketplace index mapping).
-`src/FluidBar.App` builds with 0 errors; App now references `FluidBar.Sdk`, `FluidBar.PluginHost`,
-`FluidBar.Marketplace` and `FluidBar.Plugins.Builtin`.
+Test suite after the archipelago increment: **83/83 passing** (`tests/FluidBar.Ui.Tests`), adding
+`ArchipelagoAndStabilityTests`, `WheelScrollChainTests` and the idle-stability regression.
+
+### Page Archipelago navigation (user-chosen variant A, 2026-10-18, replaces the page dots)
+
+`Island/Expanded/ArchipelagoStrip.cs` + `ExpandedPanel` wiring: title top-left and collapse chevron
+top-right stay; the dots are gone. A 34 DIP floating strip (subtle scrim) holds six 48×26 mini-islands
+(8 DIP gap, radius 13); the active island grows to 72×30 and shows the localized page name. Each island
+has a live micro-preview (home clock, media 16 px art + wave bars, notifications dot + lines, clipboard
+lines, agent pulsing dot, widgets mini calendar). Reveal rules: hidden at rest, shown on page drag/wheel
+and after a 300 ms hover in the bottom 12 DIP band, auto-hidden 1200 ms after the last activity; the
+strip follows the page offset through a ~30 ms lag. Clicking an island jumps to its page; dragging the
+strip scrubs pages by distance (tap-without-movement = jump). Wheel over the strip pages only.
+
+Version-A tuning (App overrides until Core publishes the tuned constants): pointer follow **0.80**,
+snap spring **T 0.44 s ζ 0.97** (Core `Spring`), wheel threshold **140 DIP**, cooldown **180 ms**,
+snap-back threshold **26 DIP**; incoming pages scale **0.985→1** with **6 DIP** parallax; rubber band
+0.35 and the flick≤1-page / long-drag-distance rules unchanged. All constants are asserted by tests;
+when core-owner lands the updated Core pager constants + `PagerScrollChainPolicy`, only
+`PagerMotion`/`WheelScrollChain` need swapping (single seam).
+
+Wheel vs content scroll: interim single-owner gate (`WheelScrollChain`): content keeps the wheel while
+it can scroll; at a boundary 40 DIP overscroll + 120 ms dwell turns the page, reverse cancels,
+horizontal wheel and Shift+wheel always page, and a running page animation locks content scroll. Pages
+are still custom-drawn (not scrollable), so the boundary path is what currently executes; swap to Core
+`PagerScrollChainPolicy` on hand-off.
+
+### Idle-crash fix (Lead report 0xE0434352)
+
+Root cause found and fixed: `DesignIslandDataSource` clock `ITimer` callbacks run on the thread pool and
+raised `Changed` there, so the host updated Avalonia controls off-thread (`InvalidOperationException`
+"calling thread cannot access this object") ~30–75 s after startup. `RaiseChanged()` now marshals to the
+UI thread (`Action<Action> uiPost`, injectable for tests; defaults to the Avalonia dispatcher). Verified:
+apphost exe stayed alive 80 s with empty stderr (previously crashed). `Diagnostics/CrashLog.cs` adds a
+last-resort unhandled-exception log (`%LOCALAPPDATA%\FluidBar\logs\crash.log`) and task-exception
+logging; it needs one line in the paused `Program.Main`: `CrashLog.Install();` (platform-owner).
 
 ## 9. Known gaps / blockers (honest status)
 
-1. **Transparency blocker (desktop)**: the host window currently paints an opaque light-grey
-   rectangle over the full host bounds although `ActualTransparencyLevel=Transparent`,
-   `TransparencyBackgroundFallback=Transparent`, WinUIComposition/DirectComposition/RedirectionSurface
-   all report `Transparent`, and an empty `Canvas` window reproduces it. The spike binary
-   (`%TEMP%\fluidbar-spikes\av-win2\...\Spike.exe`) is transparent on the same machine at the same
-   time; our window differs only in application-level wiring. A/B harness is in `Program.cs`:
-   `FLUIDBAR_SPIKE_WINDOW=1` (minimal window), `FLUIDBAR_COMPOSITION=default|winui|direct|redirection`,
-   `FLUIDBAR_NO_INTEROP_STYLES=1`. **Needs platform-owner/Lead comparison against the spike host; the
-   island content itself renders correctly (screenshot evidence).**
+1. **Transparency (desktop)**: the host window paints an opaque light-grey rectangle over the full
+   host bounds in `CopyFromScreen` captures while diagnostics report
+   `ActualTransparencyLevel=Transparent`. New evidence (Lead, 2026-10-18) shows the approved spike and
+   a WPF layered probe are also grey in captures on this machine, so it may be a capture artifact of
+   the ToDesk/GameViewer virtual displays rather than a render failure. Platform-owner owns the
+   verdict/hotfix; no App changes are pending from UI. `src/FluidBar.App` must not change host code
+   until that verdict.
 2. **DPI**: `dotnet run` launches through the .NET host and bypasses `app.manifest`
-   (PerMonitorV2) → the window behaves DPI-unaware (EnumWindows reports 488×332 physical instead of
-   732×498 at 150 %). Always launch the apphost exe
-   (`src/FluidBar.App/bin/Debug/net10.0-windows10.0.19041.0/FluidBar.exe`). Even then EnumWindows
-   reports the DIP-sized rect, so the spike's and our app's DPI story must be re-verified on the
-   target machine; Core placement math is physical-pixel correct and unit-tested.
+   (PerMonitorV2) → the window behaves DPI-unaware. Always launch the apphost exe
+   (`src/FluidBar.App/bin/Debug/net10.0-windows10.0.19041.0/FluidBar.exe`); Lead re-verifies 732×498 px
+   once transparency is settled.
 3. **Click-through desktop verification** blocked by (1): the WM_NCHITTEST hook is installed by
-   Platform and the hit-test matrix is unit-tested, but the 20-click transparent-corner QA needs a
+   Platform and the hit-test matrix is unit-tested, but the transparent-corner QA needs a verified
    visible transparent window.
-4. **Dock mode**: the 488×332 fixed host cannot contain 52 strip + 8 gap + 284 panel (+2×24 bleed) =
-   392 DIP, so dock uses a per-mode fixed 488×392 window (never resized during animation) and the
-   strip/panel share the bottom edge. Pending Lead decision; no AppBar registration.
+4. **Dock mode**: 488×392 per-mode fixed window executed (no AppBar registration); accepted by Lead
+   and being folded into spec/DECISIONS.
 5. **Multi-monitor / 150 % RDP** unverified in this environment (one virtual display).
-6. **Settings persistence** still uses the App adapter file (see §6); Core `SettingsStore` mapping is
-   the next integration step. **Plugin settings pages** renderer and **built-in plugin registration**
-   are not yet wired (design data sources are in place); contracts are frozen and documented above.
-7. **Native acrylic/mica** not shipped (Tier 0 default + self-drawn simulated glass), per final spike.
+6. **Settings persistence**: `CoreSettingsStoreAdapter` + legacy import are implemented and tested;
+   only the paused-`AppBootstrap` one-liner swap remains (see §8b). **Plugin settings pages /
+   built-in registration UI** are live from descriptors (declarative pages, commands, redacted
+   secrets); `BuiltinPluginCatalog.CreateAll(BuiltinPlatformServices)` and PluginHost command dispatch
+   remain host composition for platform-owner. **Marketplace install** browse + `IPluginInstallOperations`
+   delegation implemented; host wires `PluginInstallService`/package sources.
+7. **Navigation**: Page Archipelago variant A is implemented (see §8b). Pending hand-off: Core
+   `PagerScrollChainPolicy` + tuned Core pager constants (App currently carries the version-A
+   overrides in `PagerMotion`/`WheelScrollChain`); visual review with the user is next.
+8. **Idle crash**: fixed (thread-pool `Changed` marshalling) and verified 80 s idle; `CrashLog` is
+   implemented but its one-line `CrashLog.Install()` hook lives in the paused `Program.cs`
+   (platform-owner). Watch for platform-owner handback to wire it.
+9. **Native acrylic/mica** not shipped (Tier 0 default + self-drawn simulated glass), per final spike.

@@ -670,7 +670,20 @@ public sealed class IslandHost : IDisposable
         }
     }
 
-    private void OnDataChanged(object? sender, EventArgs e) => SyncView();
+    private void OnDataChanged(object? sender, EventArgs e)
+    {
+        // The design/platform data sources may raise Changed from a timer or producer thread
+        // (DesignIslandDataSource.ScheduleMinuteTick uses System.Threading.Timer). All visual-tree
+        // mutation must run on the Avalonia UI thread or LayoutManager throws VerifyAccess
+        // (crash 0xE0434352 observed in release perf sampling).
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            SyncView();
+            return;
+        }
+
+        Dispatcher.UIThread.Post(SyncView, DispatcherPriority.Background);
+    }
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {

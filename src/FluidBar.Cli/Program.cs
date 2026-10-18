@@ -492,17 +492,24 @@ internal static class FluidBarCli
             return true;
         }
 
-        // 2. Build output directory: manifest.json + assemblies next to it (dotnet build output).
-        var buildOutput = Path.Combine(full, "bin", configuration, "net10.0");
-        if (File.Exists(Path.Combine(buildOutput, "manifest.json")))
+        // 2. Build output directory: manifest.json + assemblies next to it. The target framework directory is
+        //    discovered (not hardcoded) so a TFM change does not break CI.
+        var configurationDirectory = Path.Combine(full, "bin", configuration);
+        if (Directory.Exists(configurationDirectory))
         {
-            var staging = FbpStagingBuilder.FromPluginOutput(buildOutput);
-            stagingDisposer = staging;
-            resolvedDirectory = staging.StagingDirectory;
-            return false;
+            var buildOutput = Directory.EnumerateDirectories(configurationDirectory)
+                .OrderBy(static directory => directory, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(static directory => File.Exists(Path.Combine(directory, "manifest.json")));
+            if (buildOutput is not null)
+            {
+                var staging = FbpStagingBuilder.FromPluginOutput(buildOutput);
+                stagingDisposer = staging;
+                resolvedDirectory = staging.StagingDirectory;
+                return false;
+            }
         }
 
-        // 3. Flat directory containing manifest + assemblies (e.g. samples/<Id>/bin/Debug/net10.0 passed directly).
+        // 3. Flat directory containing manifest + assemblies (e.g. a build output path passed directly).
         if (File.Exists(Path.Combine(full, "manifest.json")) &&
             Directory.EnumerateFiles(full, "*.dll", SearchOption.TopDirectoryOnly).Any())
         {
@@ -513,7 +520,7 @@ internal static class FluidBarCli
         }
 
         throw new DirectoryNotFoundException(
-            $"No built plugin found for '{full}'. Expected a package layout or a build output at '{buildOutput}'. " +
+            $"No built plugin found for '{full}'. Expected a package layout or a build output with manifest.json under '{configurationDirectory}'. " +
             $"Build it first (dotnet build \"{full}\" -c {configuration}).");
     }
 

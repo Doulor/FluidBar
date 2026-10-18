@@ -6,7 +6,7 @@
 | Owner | core-owner (M1), integrated by Lead |
 | Status | **M1 frozen for integration** (additive changes only after sign-off) |
 | Spec | [`docs/rewrite/specs/2026-10-18-fluidbar-v2-design.md`](../specs/2026-10-18-fluidbar-v2-design.md) |
-| Tests | `tests/FluidBar.Core.Tests` — 388 xUnit tests, all green |
+| Tests | `tests/FluidBar.Core.Tests` — 409 xUnit tests, all green |
 | Constraints | UI-free, Win32-free, no ambient time/I/O, no unbounded collections, immutable snapshots |
 
 All coordinates are **DIP** unless a name ends in `Pixel`. `FluidBar.Core` references BCL only
@@ -524,10 +524,11 @@ Plugin source identity should be stable (`plugin:<id>`), and plugin activities s
    empty, `HasRail` is always false, and `LayoutTokens.RailWidth`/`Rail*` item tokens are
    `[Obsolete]` (values retained for source compatibility, unused by layout). Content is
    400×252 at a (20,16) inset — the old "rail 48 + content 392/usable 360" math is gone.
-8. **Pager constants are UI-contract numbers**: page count 6, pitch 400 DIP, damping 0.90, edge
-   resistance 0.35, drag threshold 24 DIP, flick velocity 0.6 DIP/ms, wheel notch 100 DIP /
-   120 ms cooldown. UI code must call `PagePagerPolicy`/`PagerWheelPolicy`/`PagerSnapMotion`
-   instead of re-deriving these rules.
+8. **Pager constants are UI-contract numbers (pager v2)**: page count 6, pitch 400 DIP, pointer
+   damping **0.80**, snap spring **T 0.44 s / ζ 0.97**, wheel notch **140 DIP** / **180 ms**
+   cooldown, scroll-chain **40 DIP / 120 ms**, edge resistance 0.35, drag threshold 24 DIP, flick
+   velocity 0.6 DIP/ms. UI code must call `PagePagerPolicy` / `PagerWheelPolicy` /
+   `PagerScrollChainPolicy` / `PagerSnapMotion` instead of re-deriving these rules.
 
 ---
 
@@ -544,15 +545,21 @@ and renders the returned offset — it must not re-derive any of the math below.
 |---|---|---|
 | `PageCount` | 6 | home / media / notifications / clipboard / agent / widgets |
 | `PagePitchDip` | 400 | one page step in DIP |
-| `PointerDamping` | 0.90 | content follows the pointer at 90 % |
+| `PointerDamping` | **0.80** | content follows the pointer at 80 % (pager v2) |
 | `EdgeResistance` | 0.35 | rubber-band factor beyond first/last page |
 | `PageThresholdDip` | 24 | minimum drag before a release may change page |
 | `FlickVelocityDipPerMs` | 0.6 | velocity that classifies a short drag as a flick |
 | `LongDragPageFraction` | 0.5 | drag ≥ 0.5 page switches to distance-based paging |
-| `WheelNotchDip` | 100 | accumulated wheel DIP per page step |
-| `WheelCooldownMs` | 120 | minimum interval between wheel page steps |
+| `SnapSpringPeriodSeconds` / `SnapSpringDampingRatio` | **0.44 / 0.97** | dedicated page-snap spring (pager v2; not `motion.tab`) |
+| `WheelNotchDip` | **140** | accumulated wheel DIP per page step (pager v2) |
+| `WheelCooldownMs` | **180** | minimum interval between wheel page steps (pager v2) |
+| `ScrollChainOverscrollDip` | **40** | boundary overscroll DIP before a wheel page step |
+| `ScrollChainDwellMs` | **120** | boundary dwell ms before a wheel page step |
 | `RetargetFrameSeconds` | 1/120 | reference frame delta used for snap retarget velocity clamp |
 | `ContentWidthDip` / `ContentHorizontalInsetDip` / `ContentVerticalInsetDip` | 400 / 20 / 16 | no-rail expanded content |
+
+These supersede the first-cut pager values (damping 0.90, snap 0.34/0.92 via `motion.tab`, wheel
+100 DIP / 120 ms).
 
 Sign convention: **`dragDip` is accumulated pointer drag in DIP, positive = towards the next
 page** (feed `-pointerDeltaX` if dragging content left advances pages). Offsets are content
@@ -565,7 +572,7 @@ PagerDragState drag = PagePagerPolicy.Drag(startPage, accumulatedRawDragDip);
 // drag.DisplayOffsetDip is what the shell/page strip renders while the pointer is down
 ```
 
-* pointer damping: `damped = rawDrag × 0.90`;
+* pointer damping: `damped = rawDrag × 0.80`;
 * raw offset: `startPage × pitch + damped`;
 * rubber band: past `[0, (pageCount−1) × pitch]`, only the overshoot is scaled by `0.35`
   (`display = max + overshoot × 0.35`); `AtStartEdge`/`AtEndEdge` flag the band;
@@ -600,11 +607,11 @@ var result = wheel.Accumulate(deltaDip, now, controlOwnsGesture: sliderOrScrolla
 page = PagerWheelPolicy.ApplyPageDelta(page, result.PageDelta);
 ```
 
-* accumulates deltas until `±100 DIP`, then emits exactly one page step and resets the
+* accumulates deltas until `±140 DIP`, then emits exactly one page step and resets the
   accumulator (one page per notch/window);
-* a page step starts a **120 ms cooldown**: events inside the window are dropped
+* a page step starts a **180 ms cooldown**: events inside the window are dropped
   (`CooldownBlocked=true`) so trackpad inertia cannot cascade several pages; a discrete notch
-  cadence ≥120 ms apart advances one page per notch;
+  cadence ≥180 ms apart advances one page per notch;
 * `controlOwnsGesture: true` (slider, scrollable, text field) suppresses the event and resets the
   accumulator (`OwnerSuppressed=true`);
 * `now` is injected (the host passes `TimeProvider.GetUtcNow()`), `Reset()` clears accumulator and
@@ -612,9 +619,10 @@ page = PagerWheelPolicy.ApplyPageDelta(page, result.PageDelta);
 
 ### 11.5 Snap motion (`PagerSnapMotion`)
 
-The snap uses the frozen `motion.tab` spring: **T = 0.34 s, ζ = 0.92** (exposed via
-`PagerSnapMotion.SpringParameters`; fixed 1/300 s substeps, `dt` clamp, settle detection as the rest
-of Core). It is **interruptible**: on pointer-down call `Interrupt()`, which freezes the spring at
+The snap uses its own dedicated spring (pager v2): **T = 0.44 s, ζ = 0.97** (exposed via
+`PagerSnapMotion.SpringParameters`; it intentionally no longer reuses `motion.tab` 0.34/0.92 so
+page snaps are calmer). Fixed 1/300 s substeps, `dt` clamp and settle detection are the rest of Core.
+It is **interruptible**: on pointer-down call `Interrupt()`, which freezes the spring at
 the current visual offset and returns it — the new drag starts from what the user sees, not from the
 previous target page.
 
@@ -629,7 +637,8 @@ Render(drag.DisplayOffsetDip);                  // indicator: drag.PagePosition
 // pointer-up:
 var decision = PagePagerPolicy.Release(startPage, accumulated, velocityDipPerMs);
 snap.SnapToOffset(decision.TargetOffsetDip);    // frame loop: snap.Step(dt), stop when snap.IsAtRest
-// wheel:
+// wheel (expanded panel): let the scroll chain decide the owner (see §11.6); simple contexts can use
+// PagerWheelPolicy directly:
 var currentPage = PagePagerPolicy.OffsetToPage(snap.CurrentOffsetDip);
 var wheel = wheelPolicy.Accumulate(deltaDip, timeProvider.GetUtcNow(), controlOwnsGesture);
 snap.SnapToPage(PagerWheelPolicy.ApplyPageDelta(currentPage, wheel.PageDelta));
@@ -637,7 +646,56 @@ snap.SnapToPage(PagerWheelPolicy.ApplyPageDelta(currentPage, wheel.PageDelta));
 snap.JumpTo(page * PagerConstants.PagePitchDip);
 ```
 
-### 11.6 Layout consumption (no rail)
+### 11.6 Wheel scroll chain (`PagerScrollChainPolicy`) — pager v2
+
+Wheel/trackpad input over the expanded panel must first respect the scrollable content under the
+pointer (lyrics, notification list, clipboard history, plugin scrollables). The pure scroll-chain
+policy decides the owner per event; it tracks boundary overscroll + dwell internally and takes an
+injected clock (no timers, no UI):
+
+```csharp
+var chain = new PagerScrollChainPolicy();           // one per expanded panel; Reset() on close/leave
+var decision = chain.Handle(new PagerScrollChainRequest
+{
+    WheelDeltaDip = deltaDip,                       // signed: + = down/next page, - = up/previous
+    ContentScrollable = contentScrollable,          // caller hit-tests the content under the pointer
+    ContentBoundary = boundary,                     // None | Top | Bottom
+    CurrentPage = currentPage,
+    PageCount = PagerConstants.PageCount,
+    Now = timeProvider.GetUtcNow(),
+    PageAnimationLocked = snap.IsRunning,           // page snap freezes the chain
+    HorizontalWheel = isHorizontalWheel,
+    ShiftHeld = shift,
+});
+
+switch (decision.Action)
+{
+    case PagerScrollChainAction.ScrollContent: content.ApplyWheel(deltaDip); break;
+    case PagerScrollChainAction.PageNext:
+    case PagerScrollChainAction.PagePrevious:  snap.SnapToPage(decision.TargetPage); break;
+    case PagerScrollChainAction.None: break;   // accumulating / reversed / locked
+}
+```
+
+Rules (constants `ScrollChainOverscrollDip = 40`, `ScrollChainDwellMs = 120`):
+
+| Condition | Decision |
+|---|---|
+| content scrollable with room in the wheel direction | `ScrollContent` (content consumes the delta) |
+| content at the boundary, `< 40 DIP` accumulated | `None` (accumulating; `decision.AccumulatedOverscrollDip` exposes state) |
+| content at the boundary, `≥ 40 DIP` but `< 120 ms` dwell | `None` |
+| content at the boundary, `≥ 40 DIP` **and** `≥ 120 ms` dwell | `PageNext` / `PagePrevious` (one page; state resets) |
+| direction reverses before the page step | `None` with `ReverseCancelled = true`; pending step reset |
+| content not scrollable | immediate `PageNext` / `PagePrevious` |
+| horizontal wheel or Shift held | immediate page (content bypassed) |
+| `PageAnimationLocked = true` | whole chain frozen: `None`, `PageLocked = true` |
+| page target out of `[0, pageCount−1]` | clamped; no change ⇒ `None` with `TargetPage = CurrentPage` |
+
+Diagnostics/state: `AccumulatedOverscrollDip`, `DwellStartedAt`, `HasPendingPageStep`; call
+`Reset()` on pointer leave / panel close / mode switch. `PagerWheelPolicy` remains for simple wheel
+contexts without content hit-testing; the expanded panel uses the scroll chain as the owner.
+
+### 11.7 Layout consumption (no rail)
 
 `IslandLayoutResult.Content` for the expanded panel is **400 × 252 DIP** starting at
 `Shell.X + 20, Shell.Y + 16` (shell is still 440 × 284; window host 488 × 332). Render the six pages
@@ -645,13 +703,19 @@ as one horizontal strip inside that 400-wide clip: page `i` occupies
 `content.X + (i × 400) − snap.CurrentOffsetDip`. There is no rail; `Rail` is obsolete/empty,
 `HasRail` is false, and `LayoutTokens.RailWidth`/`Rail*` item tokens are obsolete (unused).
 
-### 11.7 Tests
+### 11.8 Tests
 
-`PagerPolicyTests` (44 cases): constants, damping, rubber band at both ends, all release rules
+`PagerPolicyTests` (44 cases): pager v2 constants (damping 0.80, snap spring 0.44/0.97, wheel
+140/180, scroll-chain 40/120), damping, rubber band at both ends, all release rules
 (small drag, 5-velocity flick cap incl. huge velocity, ±1 negative flick, 2.7-page multi-page drag
 both directions, half-page rounding, bounds clamping), custom pitch/pageCount/NaN handling,
 determinism; wheel one notch/negative/sub-threshold/cooldown/5-notch/rapid-notch/owner-suppression/
 reset; snap spring parameters, exact settle on target page, interrupt-at-current-offset, drag
-handoff continuity, instant jump, page position, wall-clock independence. The 108-case layout
-matrix now additionally asserts the no-rail content rect and empty `Rail` for every mode × anchor
-× DPI × stacking combination. Full Core suite: **388 passed / 0 failed**.
+handoff continuity, instant jump, page position, wall-clock independence.
+`PagerScrollChainPolicyTests` (21 cases): constants, scrollable-with-room both directions,
+boundary-mismatch scroll, sub-threshold overscroll, <120 ms dwell, ≥40 DIP & ≥120 ms page step both
+directions, reverse-cancel, immediate paging for non-scrollable, horizontal/Shift bypass,
+page-animation lock, first/last-page clamping, fresh-gesture requirement, custom page count,
+zero/NaN delta, Reset, deterministic repeats.
+The 108-case layout matrix additionally asserts the no-rail content rect and empty `Rail` for every
+mode × anchor × DPI × stacking combination. Full Core suite: **409 passed / 0 failed**.

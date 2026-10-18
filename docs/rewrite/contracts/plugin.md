@@ -323,11 +323,13 @@ assets/...            LICENSE          README.md          checksums.json
 order, explicit `generatedAt`, stable JSON writer) and validates the result before writing. It is exposed through
 `fluidbar-plugin publish-prepare` and used by [`.github/workflows/marketplace.yml`](../../../.github/workflows/marketplace.yml):
 PRs run validate/policy/pack-determinism; merges pack + sign with the protected marketplace key
-(`MARKETPLACE_SIGNING_KEY_PEM`, never in the repo), regenerate + verify the index, then deploy Pages with a
-self-contained `marketplace-site` artifact fallback. Offline end-to-end coverage:
-`tests/FluidBar.PluginHost.Tests/MarketplaceEndToEndTests` (catalog fetch → install → host load/unload → update →
-rollback → load/unload, no network). Maintainer flow: [`docs/plugin/publish-runbook.md`](../../plugin/publish-runbook.md),
-signing/key rotation: [`docs/plugin/signing-and-keys.md`](../../plugin/signing-and-keys.md).
+(`MARKETPLACE_SIGNING_KEY_PEM`, never in the repo), regenerate + verify the index, publish packages/site
+artifacts, then a separate protected `github-pages` deploy job runs `configure-pages` → `upload-pages-artifact`
+→ `deploy-pages` (explicit artifact-only mode via `MARKETPLACE_DEPLOY_PAGES=false`; no silent fallback). Offline
+end-to-end coverage: `tests/FluidBar.PluginHost.Tests/MarketplaceEndToEndTests` (catalog fetch → install → host
+load/unload → update → rollback → load/unload, no network). Maintainer flow:
+[`docs/plugin/publish-runbook.md`](../../plugin/publish-runbook.md), signing/key rotation:
+[`docs/plugin/signing-and-keys.md`](../../plugin/signing-and-keys.md).
 
 ### Install / update / rollback / uninstall
 
