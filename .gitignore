@@ -1,11 +1,26 @@
+# Build output
 bin/
 obj/
+publish/
+artifacts/
+TestResults/
+
+# IDE / local
+.vs/
 *.user
 *.suo
-.vs/
 *.cache
-FluidBar/
-publish/
 *.bak
+*.log
+.playwright-cli/
+
+# Local agent / tooling state
+.superpowers/
+.claude/worktrees/
+
+# Prototype review artifacts (screenshots are regenerated on demand)
+docs/rewrite/prototype/_shots/
+
+# Misc
 *.zip
 example.txt
