@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using FluidBar.App.Diagnostics;
 using FluidBar.App.Hosting;
 using FluidBar.App.Hosting.Skia;
@@ -8,6 +9,7 @@ using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.App.Views.Settings;
 using FluidBar.Core.Diagnostics;
+using FluidBar.Core.Settings;
 
 namespace FluidBar.App;
 
@@ -29,6 +31,7 @@ internal sealed class AppBootstrap
     private DesignIslandDataSource? _data;
     private IslandHost? _host;
     private SkiaIslandHost? _skiaHost;
+    private SkiaShellIntegration? _shell;
     private JsonUiSettingsStore? _settingsStore;
 
     public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
@@ -54,6 +57,7 @@ internal sealed class AppBootstrap
             _data = new DesignIslandDataSource(_localizer);
             _lifetime.Exit += (_, _) => DisposeServices();
             await StartIslandHostAsync().ConfigureAwait(true);
+            await StartShellIntegrationAsync().ConfigureAwait(true);
 
             if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE"), "1", StringComparison.Ordinal))
             {
@@ -227,6 +231,30 @@ internal sealed class AppBootstrap
         await Task.CompletedTask;
     }
 
+    private async Task StartShellIntegrationAsync()
+    {
+        if (_skiaHost is null || string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_NO_TRAY"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            _shell = new SkiaShellIntegration(
+                toggle: () => Dispatcher.UIThread.Post(() => _skiaHost?.SimulateToggleHotkey()),
+                settings: () => Dispatcher.UIThread.Post(OpenSettings),
+                market: () => Dispatcher.UIThread.Post(OpenMarket),
+                exit: () => Dispatcher.UIThread.Post(Shutdown),
+                bindings: new HotkeySettings());
+            await _shell.StartAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Lifecycle, "app.shell-integration-failed",
+                "Tray/hotkey integration could not be started; the island still runs.", ex);
+            _shell = null;
+        }
+    }
     private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
 
     private void OpenMarket() => ShowSettingsWindow(SettingsWindowSection.Marketplace);
@@ -268,3 +296,4 @@ internal sealed class AppBootstrap
         _lifetime.Shutdown();
     }
 }
+
