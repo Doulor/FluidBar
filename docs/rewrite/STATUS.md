@@ -1,6 +1,6 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-18 22:45（Asia/Shanghai）
+> 最后更新：2026-10-18 23:00（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
@@ -42,9 +42,19 @@
 
 ## 进行中
 
-1. `src/FluidBar.Island`（SkiaSharp + HarfBuzzSharp）MVP：紧凑态、主页/媒体页、pager、面板外小岛 + 远处页小点；golden/hit-test 测试。
-2. `docs/rewrite/prototype2`：设置面板/插件市场已回归；迷你岛切换动效 + 远处页小点收尾验证。
-3. App 集成（下一步）：用 `LayeredWindowHost` 替换 Avalonia 岛窗口，保留设置/市场 Avalonia 窗口；`PlatformServiceGraph` 统一装配。
+1. **Skia 渲染器 MVP：已完成代码 + 62 tests + 16 张 golden**（紧凑 8 态、展开 home/media、dock/flush/light/transition、transient strip）；待打磨：壳体描边当前误用强调色（应为中性 hairline），以及通知/剪贴板/Agent/小组件页面。
+2. **prototype2：设置面板/插件市场/3 小岛/远处页小点/切换动效已完成**（14+ 截图）；等待用户验收。
+3. **App 集成（下一关键路径）**：用 `LayeredWindowHost` 替换 Avalonia 岛窗口，渲染器接入 Core 状态/事件/设置；保留设置/市场 Avalonia 窗口；`PlatformServiceGraph` 统一装配。
+
+## 可用版本预估（基于当前进度）
+
+| 目标 | 范围 | 预估 |
+|---|---|---|
+| 内部预览 | 紧凑岛 + 展开 home/media + 设置 + 托盘，真实透明宿主 | **~1–1.5 周** |
+| **可用初代版本** | 上述 + 通知/剪贴板基础 + 插件列表 + 热键/托盘 + 桌面验收 | **~3 周（约 15 个工作日）** |
+| v2 完整版 | 全部页面/插件/市场/UIA/多显示器/发布链路 | **~8–12 周** |
+
+关键风险：App 宿主集成（最大未知量）、UIA 无障碍、多显示器真机复测、市场签名密钥/托管（Q3–Q5）。
 
 ## 阻塞 / 风险
 
