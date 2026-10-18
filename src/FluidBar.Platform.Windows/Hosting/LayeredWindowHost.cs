@@ -242,6 +242,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         _placement = new LayeredHostPlacement(
             new LayeredRect(0, 0, sizePx.Width, sizePx.Height), sizePx, surfaceSize, _scale,
             OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(mode), _scale));
+        UpdateUiaGeometry();
 
         _logger.LogInfo(PlatformLogCategory.Platform, "layered-host.created",
             "Layered island host created.",
@@ -280,6 +281,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         }
 
         _visible = true;
+        UpdateUiaGeometry();
         SetTopmostUnconditional();
         _logger.LogDebug(PlatformLogCategory.Platform, "layered-host.shown", "Layered island host shown.");
     }
@@ -302,6 +304,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         NativeMethods.User32.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
         _visible = false;
         _pointerInside = false;
+        UpdateUiaGeometry();
         _logger.LogDebug(PlatformLogCategory.Platform, "layered-host.hidden", "Layered island host hidden.");
     }
 
@@ -385,6 +388,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         ApplyWindowRect(rect);
         _geometryDirty = true;
         _placement = _placement with { WindowPixel = rect };
+        UpdateUiaGeometry();
         return _placement;
     }
 
@@ -412,6 +416,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         _needsFullFrame = true;
         _geometryDirty = true;
         _pacer?.Reset();
+        UpdateUiaGeometry();
         return _placement;
     }
 
@@ -443,6 +448,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         _needsFullFrame = true;
         _geometryDirty = true;
         _pacer?.Reset();
+        UpdateUiaGeometry();
         return _placement;
     }
 
@@ -763,6 +769,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         _geometryDirty = true;
         _placement = new LayeredHostPlacement(windowRect, sizePx, surfaceSize, scale,
             OffsetToPixels(offsetDip, scale));
+        UpdateUiaGeometry();
         return _placement;
     }
 
@@ -942,6 +949,8 @@ public sealed partial class LayeredWindowHost : IDisposable
             _dragging = false;
             NativeMethods.User32.ReleaseCapture();
         }
+
+        DisposeAccessibility();
 
         if (_hwnd != IntPtr.Zero)
         {

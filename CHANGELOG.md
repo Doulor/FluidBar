@@ -82,3 +82,9 @@
 - 修复插件生命周期 dispose 未走 Unloading→Unloaded；修复 App 控制测试对 deferred compact click 的假设。
 - 全量：`dotnet test FluidBar.sln -m:1` = **1423 passed / 0 failed**（Core 491, Platform 382, UI 159, Island 135, SDK 152, PluginHost 39, Builtin 23, Integration 31, Architecture 11）。
 - 生产 smoke：331 帧、0 提交失败、surface 732×576 @150%、上传 ~192µs、空闲无帧。
+
+### 2026-10-19 02:50 — UIA 无障碍 + Wi-Fi/BT/Focus 服务
+- UIA：`FluidBar.Platform.Windows.Accessibility`（UiaElementProvider/UiaInterop/UiaNative/UiaTypes）+ `LayeredWindowHost.Accessibility` + `SkiaIslandUiaSource`；根元素/页面/控件/小岛树、Invoke/ExpandCollapse/Selection/RangeValue/Toggle 模式、WM_GETOBJECT、键盘焦点；文档 `contracts/island-uia.md`。
+- 快捷开关：`RadioToggleService`（Wi-Fi/Bluetooth，Windows.Devices.Radios）+ `FocusAssistService`（FocusSessionManager，LAF 受限时显式 unsupported）；`SkiaPlatformActions` 接线；平台测试 +13。
+- 构建：`WindowsSdkPackageVersion=10.0.26100.57`（FocusSessionManager 投影；OS floor 仍 19041）。
+- 全量：**1475 passed / 0 failed**（Core 491, Platform 409, UI 184, Island 135, SDK 152, PluginHost 39, Builtin 23, Integration 31, Architecture 11）。

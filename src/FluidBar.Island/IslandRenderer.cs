@@ -348,6 +348,32 @@ public sealed class IslandRenderer : IDisposable
         }
 
         _strip.Draw(canvas, state, shell);
+        DrawFocusRing(canvas, state);
+    }
+
+    /// <summary>
+    /// Draws the logical keyboard/UIA focus ring (spec §2.9/§3.6): a 2 DIP informational outline
+    /// around the focused element, in host-local DIP. Painted after the strip so it is never covered.
+    /// </summary>
+    private void DrawFocusRing(SKCanvas canvas, in IslandRenderState state)
+    {
+        if (state.FocusRing is not { } ring || ring.Width <= 0 || ring.Height <= 0)
+        {
+            return;
+        }
+
+        var rect = new SKRect((float)ring.X, (float)ring.Y, (float)ring.Right, (float)ring.Bottom);
+        rect.Inflate(-1f, -1f);
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = 2f;
+        _stroke.Shader = null;
+        _stroke.Color = _theme.Info.WithAlpha((byte)Math.Clamp(230 * state.Opacity, 0, 255));
+        canvas.DrawRoundRect(rect, 6f, 6f, _stroke);
     }
 
     private void DrawShellBody(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity)

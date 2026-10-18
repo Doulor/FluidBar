@@ -17,6 +17,10 @@ internal static partial class NativeMethods
     internal const uint WM_CLOSE = 0x0010;
     internal const uint WM_QUIT = 0x0012;
     internal const uint WM_SETTINGCHANGE = 0x001A;
+    internal const uint WM_SETFOCUS = 0x0007;
+    internal const uint WM_KILLFOCUS = 0x0008;
+    internal const uint WM_GETDLGCODE = 0x0087;
+    internal const uint WM_GETOBJECT = 0x003D;
     internal const uint WM_MOUSEACTIVATE = 0x0021;
     internal const uint WM_INPUTLANGCHANGE = 0x0051;
     internal const uint WM_DISPLAYCHANGE = 0x007E;
@@ -90,6 +94,20 @@ internal static partial class NativeMethods
     internal const int VK_SHIFT = 0x10;
     internal const int VK_CONTROL = 0x11;
     internal const int VK_MENU = 0x12;
+    internal const int VK_TAB = 0x09;
+    internal const int VK_RETURN = 0x0D;
+    internal const int VK_ESCAPE = 0x1B;
+    internal const int VK_SPACE = 0x20;
+    internal const int VK_END = 0x23;
+    internal const int VK_HOME = 0x24;
+    internal const int VK_LEFT = 0x25;
+    internal const int VK_UP = 0x26;
+    internal const int VK_RIGHT = 0x27;
+    internal const int VK_DOWN = 0x28;
+
+    internal const int DLGC_WANTARROWS = 0x0001;
+    internal const int DLGC_WANTTAB = 0x0002;
+    internal const int DLGC_WANTALLKEYS = 0x0004;
 
     internal static readonly IntPtr IDC_ARROW = new(32512);
     internal static readonly IntPtr IDC_IBEAM = new(32513);
@@ -629,6 +647,15 @@ internal static partial class NativeMethods
 
         [DllImport(Lib)]
         internal static extern IntPtr GetForegroundWindow();
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr SetFocus(IntPtr hWnd);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr GetFocus();
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
 
         [DllImport(Lib)]
         internal static extern bool IsWindow(IntPtr hWnd);

@@ -222,6 +222,76 @@ fields (`Level`, `IsActive`, `ShowsAudioWave`, `PositionTicks/EndTicks`, `IconTo
 `DetailLines` tokens such as `capslock:on`, `ime:native`, `remaining_minutes:45`). The Core presenter +
 i18n layer turns those into localized text.
 
+### 3.10 Quick-toggle radios and focus (`Radios`, `Focus`)
+
+The island's home quick toggles need real switches, not the read-only monitors. Both services are
+`PlatformMonitor<T>` (explicit lifecycle, change-only snapshot, off the UI thread) with an injectable
+backend so the whole path is testable without hardware.
+
+| Type | Contract |
+|---|---|
+| `PlatformRadioKind` | `Wifi` / `Bluetooth` (no WinRT type leaks into the App-facing API). |
+| `RadioAvailability` | `Available`, `NoAdapter`, `AccessDenied`, `HardwareDisabled`, `Unavailable`, `Failed`. |
+| `RadioSnapshot(PlatformRadioKind Kind, RadioAvailability Availability, bool IsEnabled, string? RadioName, string? Reason)` | Immutable state; `IsSupported`/`CanToggle` are true only for `Available`; `NoAdapter(kind)` builds the exact "no Wi-Fi/Bluetooth radio" snapshot. |
+| `RadioToggleOutcome` / `RadioToggleResult(Outcome, RadioSnapshot? Snapshot, string? Reason)` | `Succeeded` / `Unsupported` / `AccessDenied` / `Failed`. `Snapshot.IsEnabled` is the **observed** state right after the request (a still-pending transition is corrected by `StateChanged`); "accepted" is never reported as "changed". |
+| `IRadioToggleService` | `Kind`, `State`, `Current`, `IsEnabled`, `SnapshotChanged`, `StartAsync`, `StopAsync`, `RefreshAsync`, `Task<RadioToggleResult> SetEnabledAsync(bool)`. |
+| `RadioToggleService(IRadioBackend, IPlatformLogger, PlatformCounters, TimeProvider?)` | Wraps the backend, publishes change-only snapshots, refreshes on `StateChanged` (no timer, no polling). |
+| `IRadioBackend` / `WindowsRadioBackend(PlatformRadioKind, IPlatformLogger, PlatformCounters)` | Test seam + production `Windows.Devices.Radios` implementation: `Radio.GetRadiosAsync()`, `Radio.RequestAccessAsync()`, `Radio.SetStateAsync(RadioState.On/Off)`, `Radio.StateChanged`. |
+| `FocusAssistAvailability` | `Available`, `Unsupported`, `LimitedAccessDenied`, `Failed`. |
+| `FocusAssistSnapshot(bool IsActive, FocusAssistAvailability Availability, string? Reason, string? Mechanism)` | Immutable focus/quiet-hours state; `CanToggle` is true only for `Available`. |
+| `FocusToggleResult` / `FocusToggleOutcome` | `Succeeded` / `Unsupported` / `Failed` with the exact reason. |
+| `IFocusAssistService` / `FocusAssistService(IFocusAssistBackend, …)` | Same lifecycle/snapshot shape as `RadioToggleService`; `SetActiveAsync(bool)` starts/ends a focus session. |
+| `IFocusAssistBackend` / `WindowsFocusAssistBackend(IPlatformLogger, PlatformCounters)` | Production `Windows.UI.Shell.FocusSessionManager` backend (`IsSupported`, `IsFocusActive`, `IsFocusActiveChanged`, `TryStartFocusSession`, `DeactivateFocus`). |
+
+**Supported OS / API**
+
+| Toggle | Mechanism | Minimum OS |
+|---|---|---|
+| Wi-Fi | `Windows.Devices.Radios.Radio` (`RadioKind.WiFi`) | Windows 10 1703 (10.0.15063); no WLAN capability needed for an unpackaged desktop app |
+| Bluetooth | `Windows.Devices.Radios.Radio` (`RadioKind.Bluetooth`) | Windows 10 1703 (10.0.15063) |
+| Focus / quiet hours | `Windows.UI.Shell.FocusSessionManager` (UniversalApiContract v15) | Windows 11 22H2 (build 22621) |
+
+Windows exposes **no public quiet-hours/Focus-Assist registry or WNF toggle**; `FocusSessionManager` is
+the documented mechanism. Its write methods (`TryStartFocusSession`, `DeactivateFocus`) are a **Limited
+Access Feature** (`com.microsoft.windows.focussessionmanager.1`) and fail with `E_ACCESSDENIED`
+(0x80070005) unless Microsoft issued an unlock token. The service reports
+`FocusAssistAvailability.LimitedAccessDenied` with that exact reason and a precise TODO instead of
+pretending the toggle worked. Verified on Windows 11 25H2 (build 26200.9711): `IsSupported=true`,
+`IsFocusActive` readable, both write calls throw `UnauthorizedAccessException` "Feature
+com.microsoft.windows.focussessionmanager.1 is not available".
+
+The App's Windows SDK projection is pinned in `Directory.Build.props`
+(`WindowsSdkPackageVersion=10.0.26100.57`) while `TargetPlatformMinVersion` stays
+`10.0.19041.0`; without that override the 19041 projection has no `FocusSessionManager` type at all.
+Calls are guarded by `OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621)`.
+
+**Failure modes (all explicit, never silent)**
+
+| Condition | Snapshot / result |
+|---|---|
+| No adapter / no Bluetooth hardware | `RadioAvailability.NoAdapter`; `SetEnabledAsync` → `Unsupported` ("no Wi-Fi/Bluetooth radio is present …") |
+| Consent, policy or capability denies access | `AccessDenied` (`RadioAccessStatus.DeniedByUser/DeniedBySystem`) |
+| Hardware kill switch / firmware disabled | `RadioAvailability.HardwareDisabled`; `Unsupported` — software never claims it can fix it |
+| Driver reports `RadioState.Unknown` | `RadioAvailability.Unavailable`; `Unsupported` |
+| WinRT/COM failure | `RadioAvailability.Failed` / `RadioToggleOutcome.Failed` with the exception message |
+| Focus on Windows 10 / pre-22H2 | `FocusAssistAvailability.Unsupported` ("requires Windows 11 22H2 (build 22621) or later …") |
+| Focus LAF without token | `FocusAssistAvailability.LimitedAccessDenied` + `Unsupported` with the feature id and HRESULT |
+| Focus `TryStartFocusSession` returns null | `FocusToggleOutcome.Failed` (no fake success) |
+
+**Threading / lifetime:** every call is async and off the UI thread; the App dispatches through
+`Task.Run`. There is no polling: radio state refreshes on start, after a request and on
+`Radio.StateChanged`; focus state refreshes on start, after a request and on `IsFocusActiveChanged`.
+Disposal unsubscribes the WinRT events, drops the RCW references and disposes the backend
+(idempotent). The focus backend performs one no-op capability probe (`DeactivateFocus` while focus is
+inactive) so the LAF gate is detected at start-up rather than on the user's first click.
+
+**Tests:** `tests/FluidBar.Platform.Tests/QuickToggleTests.cs` — fake radio/focus backends for
+start/snapshot, on/off, no-adapter, hardware-disabled, access-denied, state-change refresh, disposal,
+LAF/unsupported focus, plus two guarded read-only integration checks for the real WinRT backends.
+`tests/FluidBar.Ui.Tests/SkiaPlatformActionsTests.cs` — App adapter mapping with fake
+`IRadioToggleService`/`IFocusAssistService` (Wi-Fi/Bluetooth flip, no-adapter unsupported, focus
+LAF unsupported, focus available dispatch, public `SetWifiEnabledAsync`/state accessors).
+
 ## 4. Snapshot → Core activity mapping
 
 | Snapshot | `ActivityKind` | Mapper | Notes |
@@ -272,13 +342,26 @@ elapsed-since-start timestamps per the Core event-hub spec.
 - Fullscreen/session suppression is policy-only (`TopmostPolicy.IsSuppressingUserNotificationState`,
   `IsFullScreenState`); the App decides to hide the host.
 - System theme monitor emits light/dark/high-contrast + accent; the App maps it to its theme system.
+- **Focus/quiet-hours toggle is LAF-gated**: the documented `Windows.UI.Shell.FocusSessionManager`
+  write methods require a Microsoft Limited Access Feature unlock token
+  (`com.microsoft.windows.focussessionmanager.1`). The service reports
+  `FocusAssistAvailability.LimitedAccessDenied` with the exact HRESULT on this OS. TODO: apply for the
+  token via the Microsoft LAF Access Token Request Form, call
+  `LimitedAccessFeatures.TryUnlockFeature(...)` at start-up, then remove the short-circuit in
+  `WindowsFocusAssistBackend`. Do not ship a hard-coded token.
+- **Quick-toggle painted state** still comes from `IslandContent` (`SkiaIslandStateBuilder`): the
+  platform snapshots (`RadioSnapshot`/`FocusAssistSnapshot`) are exposed by `SkiaPlatformActions` but
+  the home pills update only when the App content model feeds them (same gap as the volume/brightness
+  tracks).
 
 ## 7. Verification (repository state at delivery)
 
 ```powershell
 dotnet build FluidBar.sln                                             # 0 errors
 dotnet test tests/FluidBar.Platform.Tests/FluidBar.Platform.Tests.csproj
-#   → 266 passed, 0 failed, 0 skipped
+#   → 408 passed, 0 failed, 0 skipped (includes the 13 quick-toggle tests)
+dotnet test tests/FluidBar.Ui.Tests/FluidBar.Ui.Tests.csproj
+#   → 179 passed; SkiaPlatformActionsTests: 11 passed (fake radio/focus services, no hardware)
 dotnet test tests/FluidBar.Architecture.Tests/FluidBar.Architecture.Tests.csproj
 #   → passes (no P/Invoke outside Platform, no UI-thread blocking patterns)
 ```
@@ -288,8 +371,10 @@ hit-test squircle matrix, topmost/shell-whitelist policy, hotkey parsing, batter
 lock-key pure policies, DDC/CI + WMI brightness parsing, media source selection, image-header parsing,
 artwork/lyrics cache eviction + TTL, clipboard dedupe/bounded history, notification verification-code
 detection + watermark ring, rolling-log rotation/rate-limit/truncation, monitor lifecycle + snapshot
-coalescing, Core snapshot mapping/logger adapter, plus guarded in-host integration tests (message host,
-monitor enumeration, battery, volume, hotkeys, clipboard, tray, island interop).
+coalescing, Core snapshot mapping/logger adapter, radio/focus quick-toggle services (fake backends:
+on/off, no adapter, hardware-disabled, access-denied, LAF-gated focus, state-change refresh, disposal),
+plus guarded in-host integration tests (message host, monitor enumeration, battery, volume, hotkeys,
+clipboard, tray, island interop, read-only radio/focus backend probes).
 
 ## 8. P3 parity services (follow-up delivery)
 

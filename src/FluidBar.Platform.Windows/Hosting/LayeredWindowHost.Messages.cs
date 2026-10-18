@@ -107,6 +107,26 @@ public sealed partial class LayeredWindowHost
                 // Clicking the island must never steal focus from the user's application.
                 return new IntPtr(NativeMethods.MA_NOACTIVATE);
 
+            case NativeMethods.WM_GETOBJECT:
+                return OnGetObject(hwnd, wParam, lParam);
+
+            case NativeMethods.WM_GETDLGCODE:
+                return Volatile.Read(ref _uiaKeyboard) is null
+                    ? NativeMethods.User32.DefWindowProcW(hwnd, message, wParam, lParam)
+                    : new IntPtr(NativeMethods.DLGC_WANTARROWS | NativeMethods.DLGC_WANTTAB
+                        | NativeMethods.DLGC_WANTALLKEYS);
+
+            case NativeMethods.WM_KEYDOWN:
+                return OnKeyDown(wParam, lParam);
+
+            case NativeMethods.WM_SETFOCUS:
+                OnWindowFocusChanged(true);
+                return IntPtr.Zero;
+
+            case NativeMethods.WM_KILLFOCUS:
+                OnWindowFocusChanged(false);
+                return IntPtr.Zero;
+
             case NativeMethods.WM_SETCURSOR:
                 return OnSetCursor(wParam, lParam);
 
@@ -333,6 +353,7 @@ public sealed partial class LayeredWindowHost
         ApplyWindowRect(rect);
         _placement = new LayeredHostPlacement(rect, sizePx, surfaceSize, _scale,
             OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(_mode), _scale));
+        UpdateUiaGeometry();
 
         if (notification is { } change)
         {

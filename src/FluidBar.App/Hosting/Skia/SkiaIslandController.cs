@@ -57,6 +57,7 @@ public sealed class SkiaIslandController : IDisposable
     private string _dynamicSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
+    private VisualRect? _accessibilityFocus;
 
     private bool _pendingFull = true;
     private bool _pendingDirty;
@@ -434,6 +435,80 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Moves one page left/right (keyboard arrows).</summary>
     /// <param name="delta">Signed page delta.</param>
     public void HandlePageMove(int delta) => _pager.MoveBy(delta);
+
+    /// <summary>
+    /// Sets the logical keyboard/UIA focus ring (host-local DIP), or clears it. Repaints once; it does
+    /// not raise <see cref="StateChanged"/> (the accessibility source owns its snapshot refresh).
+    /// </summary>
+    /// <param name="bounds">Focused element bounds in host-local DIP, or null.</param>
+    public void SetAccessibilityFocus(VisualRect? bounds)
+    {
+        if (!_hasRenderState || Nullable.Equals(_accessibilityFocus, bounds))
+        {
+            return;
+        }
+
+        _accessibilityFocus = bounds;
+        BuildRenderState();
+        InvalidateFull();
+        FrameRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// Invokes one expanded page control from UI Automation/keyboard without a pointer position.
+    /// Reuses the same <see cref="SkiaIslandControlRouter"/> mapping as a click.
+    /// </summary>
+    /// <param name="control">Page control identity.</param>
+    /// <param name="page">Page index the control belongs to.</param>
+    /// <param name="index">Row/toggle index when applicable.</param>
+    /// <returns>Whether an action was dispatched.</returns>
+    public bool ActivateAccessibleControl(IslandPageControl control, int page, int index = -1)
+    {
+        if (!_hasRenderState || control is IslandPageControl.None or IslandPageControl.Scroll)
+        {
+            return false;
+        }
+
+        if (control == IslandPageControl.MediaCard)
+        {
+            HandlePageRequest(CoreIslandPage.Media);
+            return true;
+        }
+
+        var hit = new IslandHitTarget(IslandHitKind.PageControl, page, control, index);
+        var action = SkiaIslandControlRouter.Map(hit, _renderState, 0);
+        if (action is null)
+        {
+            return false;
+        }
+
+        DispatchControl(action.Value, page);
+        return true;
+    }
+
+    /// <summary>Sets a slider through the platform seam (UIA RangeValue / keyboard arrows).</summary>
+    /// <param name="control">Volume, brightness or seek.</param>
+    /// <param name="page">Page index the slider belongs to.</param>
+    /// <param name="fraction">Value fraction 0..1.</param>
+    /// <returns>Whether an action was dispatched.</returns>
+    public bool SetAccessibleSlider(IslandPageControl control, int page, double fraction)
+    {
+        var kind = control switch
+        {
+            IslandPageControl.VolumeSlider => IslandPlatformActionKind.VolumeSet,
+            IslandPageControl.BrightnessSlider => IslandPlatformActionKind.BrightnessSet,
+            IslandPageControl.Seek => IslandPlatformActionKind.MediaSeek,
+            _ => (IslandPlatformActionKind?)null,
+        };
+        if (kind is null)
+        {
+            return false;
+        }
+
+        var value = double.IsFinite(fraction) ? Math.Clamp(fraction, 0, 1) : 0;
+        DispatchControl(new IslandPlatformAction(kind.Value, Value: value), page);
+        return true;
+    }
 
     /// <summary>Pointer moved over the island (host-local DIP).</summary>
     /// <param name="xDip">Client X in DIP.</param>
@@ -1160,6 +1235,7 @@ public sealed class SkiaIslandController : IDisposable
                 : ArchipelagoState.HiddenState,
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
+            FocusRing = _accessibilityFocus,
         };
         _hasRenderState = true;
     }

@@ -111,6 +111,56 @@ public static partial class LocKeys
             /// <summary><c>Island.Hidden.Hint</c></summary>
             public const string Hint = "Island.Hidden.Hint";
         }
+        /// <summary>Keys in the 'Accessibility' area (UIA names/help).</summary>
+        public static class Accessibility
+        {
+            /// <summary><c>Island.Accessibility.RootHelp</c></summary>
+            public const string RootHelp = "Island.Accessibility.RootHelp";
+            /// <summary><c>Island.Accessibility.Pages</c></summary>
+            public const string Pages = "Island.Accessibility.Pages";
+            /// <summary><c>Island.Accessibility.PageHiddenHelp</c></summary>
+            public const string PageHiddenHelp = "Island.Accessibility.PageHiddenHelp";
+            /// <summary><c>Island.Accessibility.CollapseHelp</c></summary>
+            public const string CollapseHelp = "Island.Accessibility.CollapseHelp";
+            /// <summary><c>Island.Accessibility.CompactPlayHelp</c></summary>
+            public const string CompactPlayHelp = "Island.Accessibility.CompactPlayHelp";
+            /// <summary><c>Island.Accessibility.ToggleHelp</c></summary>
+            public const string ToggleHelp = "Island.Accessibility.ToggleHelp";
+            /// <summary><c>Island.Accessibility.SliderHelp</c></summary>
+            public const string SliderHelp = "Island.Accessibility.SliderHelp";
+            /// <summary><c>Island.Accessibility.TaskHelp</c></summary>
+            public const string TaskHelp = "Island.Accessibility.TaskHelp";
+            /// <summary><c>Island.Accessibility.NowPlaying</c></summary>
+            public const string NowPlaying = "Island.Accessibility.NowPlaying";
+            /// <summary><c>Island.Accessibility.OpenMediaPage</c></summary>
+            public const string OpenMediaPage = "Island.Accessibility.OpenMediaPage";
+            /// <summary><c>Island.Accessibility.Battery</c></summary>
+            public const string Battery = "Island.Accessibility.Battery";
+            /// <summary><c>Island.Accessibility.NotificationRow</c></summary>
+            public const string NotificationRow = "Island.Accessibility.NotificationRow";
+            /// <summary><c>Island.Accessibility.ClipboardRow</c></summary>
+            public const string ClipboardRow = "Island.Accessibility.ClipboardRow";
+            /// <summary><c>Island.Accessibility.PreviousPage</c></summary>
+            public const string PreviousPage = "Island.Accessibility.PreviousPage";
+            /// <summary><c>Island.Accessibility.CurrentPage</c></summary>
+            public const string CurrentPage = "Island.Accessibility.CurrentPage";
+            /// <summary><c>Island.Accessibility.NextPage</c></summary>
+            public const string NextPage = "Island.Accessibility.NextPage";
+            /// <summary><c>Island.Accessibility.PageDot</c></summary>
+            public const string PageDot = "Island.Accessibility.PageDot";
+            /// <summary><c>Island.Accessibility.PreviousMonth</c></summary>
+            public const string PreviousMonth = "Island.Accessibility.PreviousMonth";
+            /// <summary><c>Island.Accessibility.NextMonth</c></summary>
+            public const string NextMonth = "Island.Accessibility.NextMonth";
+            /// <summary><c>Island.Accessibility.UnsupportedOutput</c></summary>
+            public const string UnsupportedOutput = "Island.Accessibility.UnsupportedOutput";
+            /// <summary><c>Island.Accessibility.UnsupportedQueue</c></summary>
+            public const string UnsupportedQueue = "Island.Accessibility.UnsupportedQueue";
+            /// <summary><c>Island.Accessibility.Unpin</c></summary>
+            public const string Unpin = "Island.Accessibility.Unpin";
+            /// <summary><c>Island.Accessibility.PageNavigation</c></summary>
+            public const string PageNavigation = "Island.Accessibility.PageNavigation";
+        }
     }
     /// <summary>Keys in the 'Rail' area.</summary>
     public static class Rail
@@ -334,6 +384,10 @@ public static partial class LocKeys
             public const string Source = "Page.Media.Source";
             /// <summary><c>Page.Media.NoSession</c></summary>
             public const string NoSession = "Page.Media.NoSession";
+            /// <summary><c>Page.Media.Output</c></summary>
+            public const string Output = "Page.Media.Output";
+            /// <summary><c>Page.Media.Queue</c></summary>
+            public const string Queue = "Page.Media.Queue";
         }
         /// <summary>Keys in the 'Notifications' area.</summary>
         public static class Notifications

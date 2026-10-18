@@ -70,6 +70,7 @@ public sealed class SkiaIslandHost : IDisposable
     private readonly TimeProvider _time;
     private readonly SkiaHostDispatcher _dispatcher;
     private readonly SkiaIslandController _controller;
+    private readonly SkiaIslandUiaSource _uiaSource;
     private readonly IslandRenderer _renderer;
     private readonly IslandWindowInterop _interop;
     private readonly IFrameClock _frameClock;
@@ -108,6 +109,7 @@ public sealed class SkiaIslandHost : IDisposable
         _dispatcher = new SkiaHostDispatcher();
         _interop = new IslandWindowInterop(_platformLogger, _platformCounters, _time);
         _controller = new SkiaIslandController(options, _dispatcher);
+        _uiaSource = new SkiaIslandUiaSource(_controller, _options.Localizer, _dispatcher);
         _renderer = new IslandRenderer(IslandTheme.Dark);
         _frameClock = options.FrameClockFactory?.Invoke() ?? new SkiaFrameClock(_time);
         _deadlineTicker = new UiThreadTicker(_time);
@@ -316,6 +318,7 @@ public sealed class SkiaIslandHost : IDisposable
             }
 
             UpdateHitRegions(force: true);
+            RefreshAccessibility();
             RenderNow(forceFull: true);
             EnsureFollowMousePolling();
             EnsureDeadlineTicker();
@@ -358,6 +361,7 @@ public sealed class SkiaIslandHost : IDisposable
         _controller.PlacementRequested -= OnPlacementRequested;
         _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
+        _uiaSource.Dispose();
         _controller.Dispose();
 
         foreach (var entry in _windows)
@@ -488,6 +492,7 @@ public sealed class SkiaIslandHost : IDisposable
         // NotifyDisplayChanged already rendered a full frame through PlacementRequested; only the
         // hit regions (shell squircle + pills) need an explicit refresh for the new windows.
         UpdateHitRegions(force: true);
+        RefreshAccessibility();
 
         _logger.Information(LogCategories.Render, "island.skia.monitors-changed",
             "Applied a monitor-set change to the layered island windows.",
@@ -553,6 +558,7 @@ public sealed class SkiaIslandHost : IDisposable
 
         host.Create(monitor.ToPlatform(), layeredMode);
         host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _options.ResolvedFrameRate);
+        host.AttachAccessibility(_uiaSource, _uiaSource);
 
         var entry = new WindowEntry(host, monitor);
         host.PointerMoved += pointer =>
@@ -656,6 +662,7 @@ public sealed class SkiaIslandHost : IDisposable
             // Snap + re-place every window through Core (PlacementRequested) and request a full frame.
             _controller.NotifyDisplayChanged();
             UpdateHitRegions(force: true);
+            RefreshAccessibility();
         };
 
         _logger.Information(LogCategories.Render, "island.skia.window-created", "Layered island window created.",
@@ -996,6 +1003,7 @@ public sealed class SkiaIslandHost : IDisposable
             {
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
+                RefreshAccessibility();
             }
         }
         catch (Exception ex)
@@ -1021,6 +1029,10 @@ public sealed class SkiaIslandHost : IDisposable
             _controller.PumpTimers();
             RenderAllLocked(forceFull: false);
             UpdateHitRegions(force: false);
+            if (!_controller.IsAnimating)
+            {
+                RefreshAccessibility();
+            }
         }
         catch (Exception ex)
         {
@@ -1063,9 +1075,37 @@ public sealed class SkiaIslandHost : IDisposable
         }
 
         UpdateHitRegions(force: false);
+        RefreshAccessibility();
         EnsureDeadlineTicker();
         EnsureFrameLoop();
         RenderNow();
+    }
+
+    /// <summary>
+    /// Rebuilds the accessibility snapshot from the current render state and publishes it to every
+    /// monitor's host. State/strip/focus driven; at most once when an animation settles, never per frame.
+    /// </summary>
+    private void RefreshAccessibility()
+    {
+        if (_disposed || _windows.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = _uiaSource.BuildSnapshot();
+            foreach (var entry in _windows)
+            {
+                entry.Host.SetUiaSnapshot(snapshot);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Accessibility must never break the island: a provider failure leaves the last tree.
+            _logger.Warning(LogCategories.Render, "island.skia.uia-refresh-failed",
+                "Publishing the island accessibility snapshot failed.", ex);
+        }
     }
 
     private void RenderAllLocked(bool forceFull)

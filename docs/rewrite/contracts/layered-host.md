@@ -99,6 +99,8 @@ thread.
 | `void ConfigurePacing(LayeredPacingMode, double fps = 60)` | Replaces the pacer at runtime (settings/refresh change). |
 | `LayeredPacingStats GetPacingStats()` | Counters since `Reset()` (frames, late frames, mean/p99/max interval, effective fps). |
 | `void SetCursorKind(LayeredCursorKind)` | Cursor for the hover state (arrow/hand/I-beam/size-all/WE/NS). |
+| `void AttachAccessibility(IUiaElementSource, IUiaKeyboardSink?)` / `DetachAccessibility()` | Attaches the island UIA source and keyboard sink; `WM_GETOBJECT` then answers with a managed provider. See [`island-uia.md`](island-uia.md). |
+| `void SetUiaSnapshot(UiaElementSnapshot?)` | Publishes a new immutable element tree (UI thread). The provider is rebuilt lazily on the next UIA query; structure/focus events are raised only when a client is listening. |
 | `void ApplyWindowRegionOnSettle(ShellGeometry)` | Optional `SetWindowRgn` via `IslandWindowInterop`; **not required** (alpha clips the pixels, `LayeredHitRegion` clips the clicks) and never per frame. |
 | `Dispose()` | Releases capture, destroys the HWND, releases the DIB and the screen DC, disposes the pacer, frees the `GCHandle`. |
 | Properties | `Handle`, `IsCreated`, `IsVisible`, `HasPendingFrame`, `Mode`, `SurfaceSizeDip`, `SurfaceSizePx`, `Scale`, `Dpi`, `Monitor`, `Placement`, `Surface`, `Pacer`, `HitRegion`, `Options`, `MergeDirtyRects` (settable: merge vs per-rect upload). |
@@ -211,6 +213,8 @@ movement back into the delta (observed as a 20 px drift before the fix).
 | `WM_MOUSEWHEEL` / `WM_MOUSEHWHEEL` | `PointerWheel` with `Delta` (multiples of 120) and `IsHorizontal`; lParam is converted from screen to client. |
 | `WM_SETCURSOR` | Over `HTCLIENT` returns `TRUE` after `SetCursor(cursor)`; otherwise `DefWindowProc`. |
 | `WM_MOUSEACTIVATE` | `MA_NOACTIVATE` — clicking never activates the window. |
+| `WM_GETOBJECT` | With `UiaRootObjectId`, returns the island's managed UIA provider through `UiaReturnRawElementProvider`; every other object id falls through to `DefWindowProc`. See [`island-uia.md`](island-uia.md). |
+| `WM_GETDLGCODE` / `WM_KEYDOWN` / `WM_SETFOCUS` / `WM_KILLFOCUS` | Keyboard path used only when accessibility/keyboard is attached: Tab/arrows/Enter/Space/Escape are forwarded to the App's logical focus sink, and `WM_GETDLGCODE` asks for Tab/arrow keys. Pointer activation stays `MA_NOACTIVATE`. |
 | `WM_DPICHANGED` | Rebuilds the surface at `ceil(DIP × scale)`, applies the suggested origin/size (fixed surface size), updates `Placement`, then raises `LayeredDpiChanged` so the App's Core re-place wins over the suggestion; forces a full frame. |
 | `WM_ERASEBKGND` / `WM_PAINT` | Never paint with GDI: `1` / `BeginPaint`+`EndPaint` (validate only). |
 | `WM_NCDESTROY` | Clears `GWLP_USERDATA` before `DefWindowProc`. |
@@ -240,6 +244,10 @@ returns `-1`/`1` for the same points.
 
 - `WS_EX_TOOLWINDOW` (no taskbar entry, no Alt-Tab), `WS_EX_NOACTIVATE` (never foreground),
   `WS_EX_TOPMOST` + one `SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)` at create/show.
+- Pointer clicks never activate. An explicit UIA `SetFocus` (Narrator) or the App's accessibility
+  path may attach to the foreground thread and call `SetForegroundWindow`/`SetFocus` so Tab/arrows
+  work; losing focus is reported through `WM_KILLFOCUS` and clears the logical focus ring. See
+  [`island-uia.md`](island-uia.md) §5.
 - Re-assertion while visible is **policy-gated** (≤1 Hz, `TopmostPolicy`): never above the shell
   foreground classes (`Shell_TrayWnd`, `Windows.UI.Core.CoreWindow`, `Xaml_WindowedPopupClass`,
   `MultitaskingViewFrame`, `Progman`, `WorkerW`, `#32768`, `tooltips_class32`, …), never in
@@ -349,6 +357,8 @@ Core.
 |---|---|
 | `src/FluidBar.Platform.Windows/Hosting/LayeredWindowHost.cs` | Public API, lifecycle, frame commit, topmost policy, disposal |
 | `src/FluidBar.Platform.Windows/Hosting/LayeredWindowHost.Messages.cs` | Window class + procedure, input translation, hit-test, DPI change |
+| `src/FluidBar.Platform.Windows/Hosting/LayeredWindowHost.Accessibility.cs` | UIA source attachment, `WM_GETOBJECT` provider cache, keyboard/focus dispatch, live screen-bounds geometry |
+| `src/FluidBar.Platform.Windows/Accessibility/**` | Managed UIA provider, COM contracts, snapshots, UIAutomationCore P/Invokes ([`island-uia.md`](island-uia.md)) |
 | `src/FluidBar.Platform.Windows/Hosting/LayeredSurface.cs` | DIB section + memory DC abstraction |
 | `src/FluidBar.Platform.Windows/Hosting/LayeredTypes.cs` | Modes, sizes, rects, input/commit types, options |
 | `src/FluidBar.Platform.Windows/Hosting/LayeredHitRegion.cs` | Squircle + detached-rect click-through policy |

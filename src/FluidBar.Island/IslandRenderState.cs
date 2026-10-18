@@ -76,6 +76,12 @@ public readonly record struct IslandRenderState
     /// <summary>Host-driven animation phase in seconds (waveform/pulse); ignored when reduced motion.</summary>
     public double MotionPhase { get; init; }
 
+    /// <summary>
+    /// Logical keyboard/UIA focus ring in host-local DIP (null when nothing is focused). The renderer
+    /// paints a 2 DIP informational outline; the host never activates for pointer clicks.
+    /// </summary>
+    public VisualRect? FocusRing { get; init; }
+
     /// <summary>Committed page index (rounded pager position).</summary>
     public int PageIndex => Pager.PageIndex;
 

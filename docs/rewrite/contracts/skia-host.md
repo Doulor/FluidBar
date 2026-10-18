@@ -40,6 +40,7 @@ monitors, and App-owned list actions are emitted as deferred events (see §8). T
 | `SkiaPager.cs` | `PagePagerPolicy` drag/release + `PagerSnapMotion`; wheel via `PagerWheelPolicy` (notch/cooldown) and `PagerScrollChainPolicy` (ownership/lock/dwell). |
 | `SkiaArchipelago.cs` | Transient strip reveal/hide (hot zone 300 ms, auto-hide 1000 ms) with Core springs and pager dot counts. |
 | `SkiaIslandStateBuilder.cs` | Core state/presenter/content → `CompactActivity`, `ExpandedPageContent`, theme, structural/dynamic signatures. |
+| `SkiaIslandUiaSource.cs` | UI Automation element tree from the render state (root/compact/pages/controls/strip), accessible actions through the controller, logical focus order + keyboard. See [`island-uia.md`](island-uia.md). |
 | `SkiaIslandThemeMapper.cs` | `AppSettings` → `IslandTheme` (dark/light, obsidian; acrylic → simulated glass, accent, fill clamp, reduced motion). |
 | `SkiaIslandHitTest.cs` | Renderer-equivalent hit testing + strip geometry (parity-tested against `IslandRenderer.MeasureStrip`); list rows are hit-tested against the model's row count/scroll offset. |
 | `SkiaIslandControlRouter.cs` | Pure hit-target → `IslandPlatformAction` mapping (slider fractions, row validation, quick-toggle identity). |
@@ -181,6 +182,9 @@ dotnet test tests/FluidBar.Ui.Tests/FluidBar.Ui.Tests.csproj --filter "FullyQual
 dotnet test tests/FluidBar.Ui.Tests/FluidBar.Ui.Tests.csproj --filter "FullyQualifiedName~SkiaMonitorPlannerTests|FullyQualifiedName~SkiaHostDockParityTests"
 # DIB ceil rule + Core WindowPixel placement (headless):
 dotnet test tests/FluidBar.Platform.Tests/FluidBar.Platform.Tests.csproj --filter "FullyQualifiedName~LayeredHostTests"
+# UIA provider (pure + guarded real HWND) and App element tree/keyboard:
+dotnet test tests/FluidBar.Platform.Tests/FluidBar.Platform.Tests.csproj --filter "FullyQualifiedName~Uia"
+dotnet test tests/FluidBar.Ui.Tests/FluidBar.Ui.Tests.csproj --filter "FullyQualifiedName~SkiaIslandUiaTests"
 $env:FLUIDBAR_HWND_TESTS='1'   # opt-in real HWND test
 $env:FLUIDBAR_HOST='skia'; $env:FLUIDBAR_SMOKE='1'   # smoke + PNG evidence
 ```
@@ -203,8 +207,10 @@ Tests added for this hardening pass:
    `island.skia.control-unmapped` path any more. Unsupported controls log
    `island.skia.control-unsupported` with the exact missing service, deferred App-owned controls log
    `island.skia.control-deferred` (see §8.1).
-2. Not implemented: hidden-state hover strip, UIA provider, IME/lookup window, pointer-follow display
-   targeting, anchor drag/persist, font-scale.
+2. Not implemented: hidden-state hover strip, IME/lookup window, pointer-follow display targeting,
+   anchor drag/persist, font-scale. The UIA provider **is** delivered for this path
+   (root/compact/pages/controls/strip, patterns, focus ring, keyboard); see
+   [`island-uia.md`](island-uia.md).
 3. **FollowMouse** targets the primary monitor. A correct implementation needs a cursor-position seam
    (Platform exposes `MonitorService.MonitorAtPoint`, but the App cannot P/Invoke `GetCursorPos`);
    the TODO is on `SkiaMonitorPlanner.ResolveTargets`.
@@ -259,7 +265,7 @@ public readonly record struct IslandActionResult(IslandActionOutcome Outcome, st
 |---|---|---|---|
 | Home (0) | volume track | `VolumeSet` (0..1) | `VolumeMonitor.SetVolumeAsync(percent)` |
 | Home (0) | brightness track | `BrightnessSet` (0..1) | `BrightnessMonitor.SetPercentAsync(percent)` |
-| Home (0) | quick toggle 0..3 | `QuickToggle` (`Wifi`/`Bluetooth`/`Focus`/`Theme`) | theme → `SettingsController.Theme` toggle; the other three return unsupported (see below) |
+| Home (0) | quick toggle 0..3 | `QuickToggle` (`Wifi`/`Bluetooth`/`Focus`/`Theme`) | Wi-Fi/Bluetooth → `RadioToggleService.SetEnabledAsync(!IsEnabled)`; Focus → `FocusAssistService.SetActiveAsync(!IsActive)`; theme → `SettingsController.Theme` toggle |
 | Home (0) | now-playing card | navigation only | opens the media page (no platform action) |
 | Home (0) | now-playing play | `MediaTogglePlay` | `GsmtcMediaSessionService.TogglePlayPauseAsync` |
 | Media (1) | previous / play / next | `MediaPrevious` / `MediaTogglePlay` / `MediaNext` | `PreviousAsync` / `TogglePlayPauseAsync` / `NextAsync` |
@@ -290,13 +296,37 @@ feeds `VolumeSnapshot`/`BrightnessSnapshot` into `HomePageModel`. Clipboard copy
 row preview (the App content model has no untruncated text yet). Deferred list actions do not mutate
 the App's content snapshot; `DeferredActionRequested` is the extension point for that owner.
 
+**Quick toggles (real services, explicit failure):** `SkiaPlatformActions` composes
+`IslandQuickToggleServices` — two `RadioToggleService`s over `WindowsRadioBackend`
+(`Windows.Devices.Radios`, Windows 10 1703+) and one `FocusAssistService` over
+`WindowsFocusAssistBackend` (`Windows.UI.Shell.FocusSessionManager`, Windows 11 22H2+). They start
+best-effort with the other island services and are disposed with the seam. `Invoke` reads the last
+snapshot: when `RadioSnapshot.CanToggle` / `FocusAssistSnapshot.CanToggle` is false it returns
+`IslandActionResult.Unsupported(reason)` **before** dispatching anything; otherwise it flips the
+observed state on the thread pool (`Task.Run`) and returns `Handled`. Radio state refreshes on
+`Radio.StateChanged` (no polling); focus state on `IsFocusActiveChanged`.
+
+The Focus write API is a Limited Access Feature (`com.microsoft.windows.focussessionmanager.1`):
+without a Microsoft unlock token `TryStartFocusSession`/`DeactivateFocus` throw `E_ACCESSDENIED`
+(0x80070005). The backend detects that with a no-op probe at start-up and publishes
+`FocusAssistAvailability.LimitedAccessDenied`, so the toggle reports `control-unsupported` with the
+feature id and HRESULT on every click instead of pretending to toggle Do Not Disturb. The exact TODO
+(unlock-token request) is on `WindowsFocusAssistBackend`.
+
+The adapter also exposes `WifiState`, `BluetoothState`, `FocusState`, `IsWifiEnabled`,
+`IsBluetoothEnabled`, `IsFocusActive`, `SetWifiEnabledAsync`, `SetBluetoothEnabledAsync` and
+`SetFocusActiveAsync` for a future App data source. **Known display gap:** `SkiaIslandStateBuilder`
+still paints the four toggle pills from `IslandContent` (Wi-Fi from `IsOnline`, Bluetooth hard-coded
+off, Focus from `FocusOn`); the action changes the real radio/focus state, but the painted pill
+updates only once the App content model feeds these snapshots (same gap as the volume/brightness
+tracks).
+
 **Unsupported controls (exact missing service)**
 
 | Control | Reason logged |
 |---|---|
-| Wi-Fi toggle | `NetworkMonitor` is read-only; needs a `Windows.Devices.Radios`/`WlanSetInterface` seam |
-| Bluetooth toggle | `BluetoothDeviceMonitor` is read-only; needs a `Windows.Devices.Radios.Radio` seam |
-| Focus toggle | Windows exposes no supported public Focus Assist/quiet-hours toggle |
+| Wi-Fi / Bluetooth toggle | only when `RadioSnapshot.CanToggle` is false: no adapter, `RadioState.Disabled` (hardware switch), `RadioState.Unknown` (driver not ready) or denied consent/policy — the exact `RadioSnapshot.Reason` is logged |
+| Focus toggle | only when `FocusAssistSnapshot.CanToggle` is false: Windows < 22H2, `FocusSessionManager.IsSupported == false`, or the Limited Access Feature gate (`com.microsoft.windows.focussessionmanager.1`, 0x80070005) |
 | Output | no `IAudioOutputService` (IMMDeviceEnumerator picker) exists |
 | Queue | no media queue service; the GSMTC snapshot carries no queue |
 
@@ -306,11 +336,16 @@ Deferred actions log `island.skia.control-deferred` and raise
 `SkiaPlatformActions.DeferredActionRequested` for a later App owner.
 
 `SkiaPlatformActions` owns only the services the controls need (one `PlatformMessageHost` plus
-volume/brightness/GSMTC/clipboard) and starts them best-effort off the UI thread. A failed service
-leaves its controls unsupported; it never reports a fake success.
+volume/brightness/GSMTC/clipboard and the two radio services + focus service) and starts them
+best-effort off the UI thread. A failed service leaves its controls unsupported; it never reports a
+fake success.
 
 **Tests** (`tests/FluidBar.Ui.Tests/SkiaIslandControlTests.cs`, headless, fake seam): media
 transport/seek (including fraction clamping), volume/brightness fractions, all four quick toggles,
 notification row/dismiss, clipboard pin/copy/row, agent row, calendar nav/task toggle, page-model row
 counts, theme-toggle state, unsupported vs deferred logging, the no-seam legacy media fallback, and
-hit-target → action mapping including out-of-range rows.
+hit-target → action mapping including out-of-range rows. `SkiaPlatformActionsTests` covers the
+production adapter with injected fake `IRadioToggleService`/`IFocusAssistService` (Wi-Fi/Bluetooth
+flip, no-adapter unsupported, focus LAF unsupported, focus available dispatch, `SetWifiEnabledAsync`
+and the state accessors); `tests/FluidBar.Platform.Tests/QuickToggleTests.cs` covers the platform
+services with fake radio/focus backends plus guarded read-only checks against the real WinRT APIs.

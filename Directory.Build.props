@@ -9,6 +9,14 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <InvariantGlobalization>false</InvariantGlobalization>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <!--
+      Windows SDK projection used for WinRT APIs. Pinned to the 26100 targeting pack (Windows 11
+      24H2) while TargetPlatformMinVersion stays 10.0.19041.0, so the App can call newer documented
+      APIs (FocusSessionManager, Windows 11 22H2+) behind OperatingSystem.IsWindowsVersionAtLeast
+      guards without raising the OS floor. Without the override the 19041 projection has no
+      Windows.UI.Shell.FocusSessionManager type at all.
+    -->
+    <WindowsSdkPackageVersion>10.0.26100.57</WindowsSdkPackageVersion>
   </PropertyGroup>
 
   <!-- Repository-wide runtime/build identity -->
