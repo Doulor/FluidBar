@@ -80,6 +80,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         }
 
         var result = await _hotkeys.RegisterAsync(name, gesture, cancellationToken).ConfigureAwait(false);
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-shell-debug.log"), $"hotkey {name} {gesture} success={result.Success} failure={result.Failure} win32={result.Win32Error}`n"); } catch { }
         if (!result.Success)
         {
             Trace.WriteLine($"FluidBar hotkey '{name}' ({gesture}) not registered: {result.Failure}.");
@@ -150,4 +151,6 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             => Trace.WriteLine($"[{entry.Level}] {entry.Category}/{entry.EventId}: {entry.Message}");
     }
 }
+
+
 
