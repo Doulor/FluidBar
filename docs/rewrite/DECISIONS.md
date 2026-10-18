@@ -46,6 +46,8 @@
 | I10 | 签名：测试内生成开发密钥；生产公钥经 `marketplace/keys.json` 注入，私钥不入库；市场包用 detached signature | 安全底线 |
 | I11 | **材质策略修订**：Avalonia 12 无法实现"仅药丸区域"的原生 Acrylic（`AcrylicBlur`/`Mica` 作用于整个宿主矩形；DirectComposition 无 acrylic）。v2.0 默认 Tier 0 Obsidian，可选 **Tier 1 模拟玻璃**（自绘渐变+噪声+高光）；Tier 2 整窗 Acrylic 仅实验开关 | spike 05 §5 NO-GO |
 | I12 | 帧循环采用 Avalonia `TopLevel.RequestAnimationFrame`（一次性、需重复挂载）+ 固定 HWND 内自绘；接受"p99 达标但尾部偶发帧 >8.33ms"（两轮：p99 8.11/7.76ms，尾帧 4/360）。若未来需严格无尾帧，走自绘 D2D 备选 | spike 两种实现一致 |
+| I13 | Dock 模式使用独立的固定宿主高度 **488×392**（24+52 窄条+8 gap+284 面板+24 bleed）；float/flush 保持 488×332；不注册 AppBar | 52+8+284+48=392 > 332，按模式固定窗口 |
+| I14 | 展开导航最终形态待用户确认：候选为"页签群岛"（交互时浮现一排带活预览的小岛，无页点）、单岛目的地提示、扇形总览；Core `PagePagerPolicy` 的拖动/吸附/滚轮规则不变 | 用户 2026-10-18 反馈：页点丢失选项卡直观性，希望创新多页展示 |
 
 ## 待决问题（Q 系列）
 
@@ -68,7 +70,7 @@
 
 | 检查 | 结果 | 证据 |
 |---|---|---|
-| 逐像素透明 | ✅ GO | ActualTransparencyLevel=Transparent；角部 RGBA alpha=0 / 桌面像素可见，壳体 alpha=255；488×332 DIP @150% → 732×498 px |
+| 逐像素透明 | ⚠️ 本会话截图不可作证 | Avalonia/WPF/官方 spike 的窗口在 CopyFromScreen 中都显示灰色宿主矩形（疑似 ToDesk/GameViewer 虚拟显示器采集伪影）；ActualTransparencyLevel=Transparent、RTB 正确；需真机肉眼/Windows.Graphics.Capture 复测 |
 | 120fps 帧预算 | ✅ GO（有尾帧） | 轮 A：489 paints/3.0s，p50 6.05ms、p99 8.11ms；轮 B：360 预热帧 p50 6.05 / p99 7.76 / mean 165.9fps，4/360 帧 >8.33ms（max 18.59ms）。UI 线程 RAF，非合成器驱动；收敛后 0 渲染 |
 | 命中/穿透/拖拽 | ✅ GO | WM_NCHITTEST 内→HTCLIENT、外/圆角外→HTTRANSPARENT；拖拽精确 (−120,−80)px 且前台未变；MA_NOACTIVATE |
 | 不抢焦点 | ✅ GO | `WS_EX_NOACTIVATE|TOOLWINDOW`；`Window.IsActive` 不可靠，按 HWND pid/前台窗口判定 |
@@ -84,5 +86,6 @@
 1. 任何对规范的偏离 → 在本文件新增 I/Q 条目（日期、原因、影响面）。
 2. 涉及跨团队接口的偏离 → Lead 在团队任务板留言并同步相关 owner。
 3. 涉及用户可见行为的偏离 → 由 Doulor 确认后生效。
+
 
 

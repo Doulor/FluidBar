@@ -206,7 +206,7 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 | `shell.height.expanded` | **284** | 六个页面统一；内容 252（284 − 2×16 垂直 inset）；切换页面不改变外壳尺寸 |
 | `shell.height.dock.strip` | **52** | dock 窄条 |
 | `shell.window.pad` | **24** | 阴影/抗锯齿轮廓余量；窗口 = 壳体 + 2×24 |
-| `shell.window.size` | **488×332** | 每显示器固定宿主尺寸（440+48, 284+48） |
+| `shell.window.size` | **488×332**（float/flush）/ **488×392**（dock） | 每显示器固定宿主；dock = 24+52+8+284+24 |
 | `island.idle/media/hud` | 132×36 / 226×40 / 236×40 | 时钟+电量+页点 / 28 art + 8 gap + 文本 + 28 控制 / 单行 HUD（2.8） |
 | `island.notification/clipboard/agent/timer/battery` | 248×36 / 264×36 / 236×36 / 190×36 / 208×36 | 瞬时与环境类紧凑活动 |
 | `island.lookup` | 480×44 | 唯一宽于 440 的紧凑态（不属于展开面板） |
@@ -546,7 +546,7 @@ PixelRect ToPhysical(in VisualRect r, in MonitorInfo m) => new(
 
 | 检查 | 结果 | 实测（两轮独立 spike，均见 `research/05-avalonia-spike.md`） |
 |---|---|---|
-| S1 透明圆角 | ✅ GO | `ActualTransparencyLevel=Transparent`；截图角部=桌面像素、中心=`#08080A`；488×332 DIP @150% → 732×498 px；角部 RGBA alpha=0、壳体 alpha=255 |
+| S1 透明圆角 | ⚠️ 本会话证据无效 | 截图把宿主矩形记为灰色（Avalonia/WPF/官方 spike 均复现，疑似 ToDesk/GameViewer 虚拟显示器的屏幕采集伪影）；`ActualTransparencyLevel=Transparent` 与 RTB 内容正确；需真机肉眼或 Windows.Graphics.Capture 复测后再判 GO |
 | S2 Acrylic | ⛔ 原生药丸 acrylic NO-GO | `AcrylicBlur`/`Mica` 只覆盖整个宿主矩形（非药丸）；DirectComposition 无 acrylic；LowLatency 黑框；Redirection ~77fps。改为 Tier 1 **模拟玻璃**（见 §3.4），Tier 2 整窗 acrylic 仅实验 |
 | S3 120fps 形变 | ✅ GO（尾部偶发） | 两轮：p50 6.05ms、p99 8.11ms（489 paints/3.0s）；另一轮 360 预热帧 p50 6.05 / p99 7.76 / mean 165.9fps，4/360 帧 >8.33ms（max 18.59ms）。UI 线程 `RequestAnimationFrame` 非合成器驱动，但固定 HWND 不 resize、收敛后 0 渲染 |
 | S4 命中/穿透/焦点/拖拽 | ✅ GO | WM_NCHITTEST：内→HTCLIENT、外/圆角外→HTTRANSPARENT；`WS_EX_NOACTIVATE|TOOLWINDOW`；拖拽精确 (−120,−80)px 且前台未变 |
@@ -1000,6 +1000,7 @@ Forbidden.Types("System.Windows.Forms.Screen", "System.Windows.SystemParameters"
 - **只读（GPL-3.0，禁止复制代码/资源/字符串）**：WinIsland、boring.notch、Atoll、livebridge。本文引用的**理念**（固定窗口、优先级列表、签名索引、声明式贡献）属于思想，实现必须独立完成；每个借用点保留一份"clean-room 说明"（`docs/rewrite/research/clean-room-notes.md`，M1 建立）。
 - **禁止**：SF Symbols 字体或"suspiciously similar"字形、Apple Design Resources 模板、任何仓库的预览截图（含第三方专辑封面/图标）。
 - 新增第三方依赖必须在 `Directory.Packages.props` 记录许可，且限于 MIT/Apache-2.0/BSD/MS-PL。
+
 
 
 
