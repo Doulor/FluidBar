@@ -53,3 +53,9 @@
 - `AppBootstrap` 默认先启动 Skia 宿主；失败回退 Avalonia；`FLUIDBAR_HOST=skia|avalonia` 可强制。
 - 验证：`dotnet test FluidBar.sln -m:1` = 1340/1340；smoke 386 commits/0 失败、surface 732×576、全帧 0.5–1.9ms、脏帧 220；展开/媒体/中文截图与桌面点击穿透探针通过。
 - 待办：tray/hotkey、未映射页面控件、UIA/IME、多显示器热插拔、dock 放置 52 DIP 偏差。
+
+### 2026-10-19 00:28 — 生产 smoke + 托盘/热键 + dock 对齐
+- 生产 Skia 宿主 smoke（`FLUIDBAR_SMOKE=1 FLUIDBAR_HOST=skia`）：9 个状态、197 帧、0 提交失败、surface 732×576 @150%、脏帧 130、上传 193–223µs、空闲无帧；展开 home/media/notifications/clipboard/agent/widgets 与中文均正常。
+- 新增 tray icon + `HotkeyService`：Ctrl+Alt+D 注册成功；Ctrl+Alt+H/S 被占用时回退 Ctrl+Alt+Shift+H/S。
+- 修复 `LayeredSurfaceSize.ShellLocalOffset(Dock)` 与 Core dock 组合不一致（旧值 368，现 24），Platform 371 tests 通过。
+- 剩余：页面控件平台 seam、多显示器热插拔、UIA/IME、真实热键注入复测、settings 热键可配置。
