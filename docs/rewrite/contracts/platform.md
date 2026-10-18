@@ -248,12 +248,12 @@ elapsed-since-start timestamps per the Core event-hub spec.
 | 12 — no hidden global side effects | media commands target the active GSMTC session only (no `keybd_event` anywhere); startup registration is explicit user action; no timer rewrites third-party config. |
 | 13 — window lifecycle | `PlatformMessageHost`/`PlatformWindow` explicit create/destroy; services explicit `StartAsync/StopAsync/DisposeAsync`; `DisposeAsync` idempotent. |
 
-## 6. Known gaps / deferred (explicitly out of M3 delivered scope)
+## 6. Known gaps / deferred (explicitly out of delivered scope)
 
-- **P3 device notifications** (USB/Bluetooth `WM_DEVICECHANGE` + `DeviceWatcher`) and **agent hook
-  inbox watcher** / **update-check client** are not implemented in this milestone. The seams exist
-  (`PlatformWindowKind.HiddenTopLevel`, `BackgroundPoller`, `PlatformCounters`) but the App must not
-  reference them yet. Message Lead before adding.
+- **P3 parity services are delivered** in the follow-up (see §8): update-check client, agent hook
+  inbox/installer, USB/Bluetooth device events. Remaining gaps from the full v1 parity list are
+  App-side only (media window-title scraping is intentionally not ported; artwork temp files are
+  App-owned).
 - Media fallback scrapers (window-title/UIA for Kugou) are intentionally **not** ported (design §10.2:
   removed global key injection/UIA tree walking); GSMTC is the single media source.
 - `GsmtcMediaSessionService` returns `AlbumArtPath = null`: artwork is exposed as encoded bytes through
@@ -280,3 +280,56 @@ artwork/lyrics cache eviction + TTL, clipboard dedupe/bounded history, notificat
 detection + watermark ring, rolling-log rotation/rate-limit/truncation, monitor lifecycle + snapshot
 coalescing, Core snapshot mapping/logger adapter, plus guarded in-host integration tests (message host,
 monitor enumeration, battery, volume, hotkeys, clipboard, tray, island interop).
+
+## 8. P3 parity services (follow-up delivery)
+
+All three follow the same rules as the M3 services: event-driven, off the UI thread, immutable
+coalesced snapshots, explicit lifecycle, bounded history, and no periodic config rewriting.
+
+### 8.1 Update-check client (`FluidBar.Platform.Windows.Update`)
+
+| Type | Contract |
+|---|---|
+| `SemanticVersion` | pure `TryParse`/`Parse`/`CompareTo`; supports `2.1.0`, `v2.1.0`, prerelease labels; stable beats prerelease. |
+| `UpdateClientOptions` | `ReleaseFeedUrl`, `UserAgent`, `Timeout` (8 s), `MaxManifestBytes`, `MaxInstallerBytes`, `InstallerAssetPattern`, `DownloadDirectory`. |
+| `ReleaseManifestParser` | pure GitHub Releases JSON parser: newest release for channel, installer asset by pattern, SHA-256 from `digest`/`sha256`/`integrity`; malformed feed → null. |
+| `Sha256UpdateVerifier` | computes file SHA-256 async and compares against the feed digest. |
+| `IBinarySignatureVerifier` / `WinVerifyTrustSignatureVerifier` | Authenticode verification hook (`WinVerifyTrust`), returns `Verified/Unsigned/Invalid/UntrustedRoot/CheckFailed`. |
+| `CompositeUpdateVerifier` | hash + Authenticode; **only `Verified` may expose an install action**. |
+| `UpdateCheckClient(HttpClient, UpdateClientOptions, Version currentVersion, IUpdatePackageVerifier, IPlatformLogger, PlatformCounters, TimeProvider?)` | `CreateHttpClient(options)` (single shared client), `Task<UpdateCheckResult> CheckAsync(UpdateCheckRequest)` (ETag/If-None-Match, size caps, cancellable), `Task<UpdateDownloadResult> DownloadInstallerAsync(release, IProgress<double>?, ct)` (explicit only, `.part` + verify + atomic move), `ClearDownloadedInstaller`, `event Changed`, `Current` (`UpdateStatusSnapshot`). Never executes the installer. |
+
+Snapshot: `UpdateStatusSnapshot(State, CurrentVersion, AvailableRelease, DownloadedFilePath, Verification,
+LastCheckedAtUtc, Message)` with `UpdateState Idle/Checking/UpToDate/Available/Downloading/ReadyToInstall/Failed`.
+`UpdateDownloadResult.CanInstall` is the single install-gate the App must check.
+
+### 8.2 Agent hooks (`FluidBar.Platform.Windows.Agent`)
+
+| Type | Contract |
+|---|---|
+| `AgentInboxFile` / `AgentEventParser` | pure parser for hook JSON (`agent`, `event`, `title`, `message`, `timestamp`); maps to `AgentKind Claude/Codex/Generic` and `AgentEventKind Completed/Failed/WaitingForInput/Other`; malformed payloads are rejected (quarantined), never displayed. |
+| `AgentEventEntry` / `AgentEventSnapshot` / `AgentEventHistory` | immutable entry + bounded newest-first snapshot (default 100) with duplicate-id suppression. |
+| `AgentInboxWatcher(AgentInboxOptions, IPlatformLogger, PlatformCounters, TimeProvider?)` | `PlatformMonitor<AgentEventSnapshot>` on `FileSystemWatcher` over `%APPDATA%\FluidBar\agent-events`; bounded channel (drop-oldest), write-settle retry, valid files → snapshot + `processed/` (≤100 retained), malformed → `quarantine/`; existing inbox files replayed once on start. No polling, no timer. |
+| `AgentHookConfigMerger` | pure settings-JSON merge/remove for the agent's `hooks` object: preserves unknown keys and unrelated hooks, idempotent, removes only FluidBar-owned commands; invalid JSON throws. |
+| `AgentHookInstaller(HookInstallOptions, IPlatformLogger)` | `InstallAsync(bool userConfirmed)`, `UninstallAsync(bool userConfirmed)`, `IsInstalledAsync()`: **explicit only**, exclusive lock file, timestamped backup before every write, atomic temp+move, aborts on invalid JSON. Never runs on a timer and never rewrites config spontaneously. |
+
+### 8.3 USB / Bluetooth device events (`FluidBar.Platform.Windows.Devices`)
+
+| Type | Contract |
+|---|---|
+| `DeviceEventEntry` / `DeviceEventSnapshot` / `DeviceEventHistory` | immutable `DeviceId/Kind(Usb,Bluetooth)/Change(Connected,Disconnected)/Name/Timestamp`; bounded newest-first snapshot (50) with consecutive duplicate suppression. |
+| `UsbDevicePathParser` | pure `\\?\USB#VID_..&PID_..#serial#{guid}` parsing → `(VendorId, ProductId, Serial)`, `FormatFriendlyName` (`USB 0466:C52B`), `TryCreateEntry`. |
+| `UsbDeviceMonitor(PlatformMessageHost, IPlatformLogger, PlatformCounters, TimeProvider?)` | `PlatformMonitor<DeviceEventSnapshot>`: `RegisterDeviceNotification(DBT_DEVTYP_DEVICEINTERFACE)` for the USB device interface + `WM_DEVICECHANGE` arrival/removal on the platform host window. No WMI watcher, no polling. |
+| `BluetoothDeviceMonitor(IPlatformLogger, PlatformCounters, TimeProvider?)` | `PlatformMonitor<DeviceEventSnapshot>`: WinRT `DeviceWatcher` for paired devices prime-silently then publishes connected/disconnected on Added/Removed/Updated (`BluetoothDevice.ConnectionStatus`). Degrades to an empty snapshot when no radio is present. |
+
+New mapper methods (`CoreSnapshotMapper`): `ToPayload(AgentEventSnapshot)`, `ToPayload(DeviceEventSnapshot)`,
+`ToPayload(UpdateStatusSnapshot)`; new stable source tokens `agent:claude`, `agent:codex`, `system:usb`,
+`system:bluetooth`, `update:check`. Visual detail tokens (`agent:completed|failed|waiting`,
+`usb:arrival|removal`, `bluetooth:connected|disconnected`, `update:available|downloading|ready|failed`)
+are non-localized; the presenter localizes them.
+
+Tests added (all offline/deterministic): semantic-version comparison, release-manifest parsing incl.
+prerelease channel + digest formats, conditional-GET/ETag flow with a stub `HttpMessageHandler`, oversized
+manifest rejection, SHA-256 match/mismatch, composite Authenticode gating, download success/verification
+failure cleanup, agent JSON parsing/mapping/history bounds, hook merge/remove idempotency + backup on
+temp dirs, agent inbox replay/quarantine, USB path parsing, device history bounds, P3 snapshot→Core
+mapping, plus guarded integration starts for the USB monitor and Bluetooth watcher.

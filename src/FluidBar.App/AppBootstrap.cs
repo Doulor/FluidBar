@@ -1,0 +1,184 @@
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
+using FluidBar.App.Diagnostics;
+using FluidBar.App.Hosting;
+using FluidBar.App.Localization;
+using FluidBar.App.Settings;
+using FluidBar.App.State;
+using FluidBar.App.Views.Settings;
+using FluidBar.Core.Diagnostics;
+
+namespace FluidBar.App;
+
+/// <summary>
+/// Composition root: loads settings and catalogs off the UI thread, creates the island host, and
+/// wires the settings/marketplace windows. Kept free of business rules (the host only forwards).
+/// </summary>
+internal sealed class AppBootstrap
+{
+    private readonly IClassicDesktopStyleApplicationLifetime _lifetime;
+    private readonly TraceAppLogger _logger = new(LogLevel.Information);
+    private LocalizationService? _localizer;
+    private SettingsController? _settings;
+    private DesignIslandDataSource? _data;
+    private IslandHost? _host;
+    private JsonUiSettingsStore? _settingsStore;
+
+    public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
+    {
+        _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+    }
+
+    public async Task StartAsync()
+    {
+        try
+        {
+            _settingsStore = new JsonUiSettingsStore(JsonUiSettingsStore.DefaultPath, _logger);
+            var initial = await _settingsStore.LoadAsync().ConfigureAwait(true);
+            _settings = new SettingsController(initial, _settingsStore, _logger);
+
+            var pseudo = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PSEUDO"), "1", StringComparison.Ordinal);
+            _localizer = LocalizationService.CreateDefault(
+                initial.Language,
+                showMissingKeys: false,
+                enablePseudoLocale: pseudo);
+            LocalizationRuntime.Current = _localizer;
+
+            _data = new DesignIslandDataSource(_localizer);
+            _host = new IslandHost(new IslandHostOptions
+            {
+                Localizer = _localizer,
+                Settings = _settings,
+                Data = _data,
+                Logger = _logger,
+            });
+            _host.SettingsRequested += OpenSettings;
+            _host.MarketRequested += OpenMarket;
+
+            _lifetime.Exit += (_, _) => DisposeServices();
+            await _host.StartAsync().ConfigureAwait(true);
+            if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE"), "1", StringComparison.Ordinal))
+            {
+                _ = SmokeAsync();
+            }
+            _logger.Information(LogCategories.Lifecycle, "app.started", "FluidBar shell started.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Critical(LogCategories.Lifecycle, "app.start-failed", "FluidBar failed to start.", ex);
+            Shutdown();
+        }
+    }
+
+    private async Task SmokeAsync()
+    {
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            _settings?.Update(s => s with { AutoCollapseMs = 0, Language = "en-US" });
+            await Task.Delay(1500).ConfigureAwait(true);
+            await CaptureAsync("fluidbar-01-idle.png", log).ConfigureAwait(true);
+            _host?.SimulatePrimaryClick();
+            await Task.Delay(1800).ConfigureAwait(true);
+            await CaptureAsync("fluidbar-02-expanded-home.png", log).ConfigureAwait(true);
+
+            var pages = new[] { FluidBar.Core.Activities.IslandPage.Media, FluidBar.Core.Activities.IslandPage.Notifications,
+                FluidBar.Core.Activities.IslandPage.Clipboard, FluidBar.Core.Activities.IslandPage.Agent,
+                FluidBar.Core.Activities.IslandPage.Widgets };
+            var index = 3;
+            foreach (var page in pages)
+            {
+                _host?.SimulatePageRequested(page);
+                await Task.Delay(700).ConfigureAwait(true);
+                await CaptureAsync($"fluidbar-{index:00}-{page.ToString().ToLowerInvariant()}.png", log).ConfigureAwait(true);
+                index++;
+            }
+
+            _host?.SimulatePageRequested(FluidBar.Core.Activities.IslandPage.Home);
+            _settings?.Update(s => s with { Language = "zh-Hans" });
+            await Task.Delay(900).ConfigureAwait(true);
+            await CaptureAsync("fluidbar-08-zh-home.png", log).ConfigureAwait(true);
+            _settings?.Update(s => s with { Language = "en-US" });
+            await Task.Delay(500).ConfigureAwait(true);
+            _host?.SimulateEscape();
+            await Task.Delay(1200).ConfigureAwait(true);
+            await CaptureAsync("fluidbar-09-collapsed.png", log).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine("smoke-failed: " + ex);
+        }
+        finally
+        {
+            var path = Path.Combine(Path.GetTempPath(), "fluidbar-smoke.log");
+            await File.WriteAllTextAsync(path, log.ToString()).ConfigureAwait(true);
+            Shutdown();
+        }
+    }
+
+    private async Task CaptureAsync(string fileName, System.Text.StringBuilder log)
+    {
+        log.AppendLine("=== " + fileName + " ===");
+        log.AppendLine(_host?.DescribeWindows() ?? "no host");
+        var window = _host?.PrimaryWindow;
+        if (window is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var scale = window.RenderScaling;
+            var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(
+                new PixelSize((int)Math.Ceiling(window.ClientSize.Width * scale), (int)Math.Ceiling(window.ClientSize.Height * scale)),
+                new Vector(96 * scale, 96 * scale));
+            bitmap.Render(window);
+            var folder = Path.Combine(Path.GetTempPath(), "fluidbar-evidence");
+            Directory.CreateDirectory(folder);
+            bitmap.Save(Path.Combine(folder, fileName));
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine("capture-failed: " + ex);
+        }
+
+        await Task.CompletedTask;
+    }
+    private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
+
+    private void OpenMarket() => ShowSettingsWindow(SettingsWindowSection.Marketplace);
+
+    private void ShowSettingsWindow(SettingsWindowSection section)
+    {
+        if (_settings is null || _localizer is null)
+        {
+            return;
+        }
+
+        var window = new SettingsWindow(_settings, _localizer, section);
+        window.Show();
+    }
+
+    private bool _shutdownStarted;
+
+    private void DisposeServices()
+    {
+        _host?.Dispose();
+        _data?.Dispose();
+        _settings?.Dispose();
+        _settingsStore?.Dispose();
+        _localizer?.Dispose();
+    }
+
+    private void Shutdown()
+    {
+        if (_shutdownStarted)
+        {
+            return;
+        }
+
+        _shutdownStarted = true;
+        DisposeServices();
+        _lifetime.Shutdown();
+    }
+}

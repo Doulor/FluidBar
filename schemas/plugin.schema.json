@@ -1,0 +1,434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidbar.app/schemas/plugin.schema.json",
+  "title": "FluidBar Plugin Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "version",
+    "apiVersion",
+    "minAppVersion",
+    "publisher",
+    "name",
+    "summary",
+    "license",
+    "entry",
+    "locales",
+    "capabilities",
+    "contributes"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "schemaVersion": { "const": 2 },
+    "id": { "$ref": "#/$defs/pluginId" },
+    "version": { "$ref": "#/$defs/semver" },
+    "apiVersion": { "$ref": "#/$defs/semver" },
+    "minAppVersion": { "$ref": "#/$defs/semver" },
+    "maxAppVersion": { "$ref": "#/$defs/semver" },
+    "publisher": { "$ref": "#/$defs/publisher" },
+    "author": { "$ref": "#/$defs/author" },
+    "name": { "$ref": "#/$defs/localizedString" },
+    "summary": { "$ref": "#/$defs/localizedString" },
+    "description": { "$ref": "#/$defs/localizedString" },
+    "nameKey": { "$ref": "#/$defs/messageKey" },
+    "summaryKey": { "$ref": "#/$defs/messageKey" },
+    "descriptionKey": { "$ref": "#/$defs/messageKey" },
+    "license": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "repository": { "type": "string", "format": "uri" },
+    "homepage": { "type": "string", "format": "uri" },
+    "changelog": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+$" },
+    "categories": { "type": "array", "items": { "$ref": "#/$defs/category" }, "uniqueItems": true, "maxItems": 3 },
+    "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,23}$" }, "uniqueItems": true, "maxItems": 10 },
+    "icon": { "$ref": "#/$defs/iconSet" },
+    "screenshots": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/screenshot" } },
+    "entry": { "$ref": "#/$defs/entry" },
+    "platforms": { "type": "array", "items": { "enum": ["win-x64", "win-arm64", "win-x86"] }, "uniqueItems": true, "minItems": 1 },
+    "locales": { "$ref": "#/$defs/locales" },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "activation": { "type": "array", "items": { "$ref": "#/$defs/activation" }, "uniqueItems": true },
+    "contributes": { "$ref": "#/$defs/contributes" },
+    "dependencies": { "$ref": "#/$defs/dependencies" },
+    "settings": { "$ref": "#/$defs/settingsRef" },
+    "integrity": { "$ref": "#/$defs/integrity" },
+    "signature": { "$ref": "#/$defs/signatureRef" }
+  },
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$" },
+    "versionRange": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[<>=~^ ]*[0-9][0-9A-Za-z.\\-+* ]*$" },
+    "pluginId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",
+      "not": { "enum": ["fluidbar", "system", "settings", "marketplace", "core", "api", "plugin", "island", "monitor"] }
+    },
+    "locale": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$" },
+    "messageKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$" },
+    "localizedString": {
+      "oneOf": [
+        { "type": "string", "minLength": 1, "maxLength": 8000 },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/locale" },
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 8000 }
+        }
+      ]
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,38}$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "url": { "type": "string", "format": "uri" },
+        "keyId": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{3,80}$" }
+      }
+    },
+    "author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "email": { "type": "string", "format": "email" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "iconSet": {
+      "oneOf": [
+        { "type": "string", "pattern": "^assets/" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["light", "dark"],
+          "properties": {
+            "light": { "type": "string", "pattern": "^assets/" },
+            "dark": { "type": "string", "pattern": "^assets/" },
+            "monochrome": { "type": "string", "pattern": "^assets/" }
+          }
+        }
+      ]
+    },
+    "screenshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["src"],
+      "properties": {
+        "src": { "type": "string", "pattern": "^assets/" },
+        "alt": { "$ref": "#/$defs/localizedString" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "assembly", "type"],
+      "properties": {
+        "runtime": { "enum": ["inproc", "outofproc"] },
+        "assembly": { "type": "string", "pattern": "^plugin/[A-Za-z0-9._/-]+\\.dll$" },
+        "type": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.`+]*$" },
+        "targetFramework": { "type": "string", "pattern": "^net10\\.0(-windows[0-9.]+)?$" }
+      }
+    },
+    "locales": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "available"],
+      "properties": {
+        "default": { "$ref": "#/$defs/locale" },
+        "available": { "type": "array", "items": { "$ref": "#/$defs/locale" }, "uniqueItems": true, "minItems": 1, "maxItems": 64 },
+        "path": { "type": "string", "pattern": "^locales/?$" },
+        "fallback": { "$ref": "#/$defs/locale" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domains", "reason"],
+          "properties": {
+            "domains": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+            "methods": { "type": "array", "items": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "WEBSOCKET"] }, "uniqueItems": true },
+            "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+          }
+        },
+        "clipboard": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": { "type": "boolean" },
+            "write": { "type": "boolean" },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reason"],
+          "properties": {
+            "read": { "type": "array", "items": { "$ref": "#/$defs/pathScope" } },
+            "write": { "type": "array", "items": { "$ref": "#/$defs/pathScope" } },
+            "reason": { "type": "string", "minLength": 10, "maxLength": 500 }
+          }
+        },
+        "media": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sessions": { "type": "boolean" },
+            "control": { "type": "boolean" },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "notifications": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "read": { "type": "boolean" }, "post": { "type": "boolean" } }
+        },
+        "shell": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "open": { "type": "boolean" },
+            "execute": { "type": "boolean" },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "hotkeys": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "global": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "process": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "spawn": { "type": "boolean" }, "reason": { "type": "string", "maxLength": 500 } }
+        },
+        "registry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "read": { "type": "array", "items": { "type": "string" } },
+            "write": { "type": "array", "items": { "type": "string" } },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "telemetry": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "endpoint": { "type": ["string", "null"], "format": "uri" },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "background": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "intervalMinMs": { "type": "integer", "minimum": 500 },
+            "reason": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "island": { "type": "boolean" },
+            "hoverCard": { "type": "boolean" },
+            "settings": { "type": "boolean" },
+            "contextMenu": { "type": "boolean" },
+            "commands": { "type": "boolean" },
+            "widgets": { "type": "boolean" },
+            "xaml": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "pathScope": { "enum": ["$PLUGIN_DATA", "$PLUGIN_INSTALL", "$DOWNLOADS", "$DOCUMENTS", "$PICTURES", "$MUSIC", "$VIDEOS", "$DESKTOP", "$TEMP"] },
+    "activation": { "type": "string", "pattern": "^(startup|onMediaSession|onNotification|onSettingsOpen|onIslandEvent|onCommand:[a-z0-9.-]+|interval:[0-9]+)$" },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layouts": { "type": "array", "maxItems": 12, "items": { "$ref": "#/$defs/layout" } },
+        "settingsPages": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/settingsPage" } },
+        "commands": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/command" } },
+        "contextMenu": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/contextMenuItem" } },
+        "widgets": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "surface", "template"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "surface": { "enum": ["island.compact", "island.expanded", "hoverCard"] },
+        "template": { "enum": ["text.v1", "status.v1", "progress.v1", "media.v1", "media.hover.v1", "notification.v1", "agent.v1", "clock.v1", "list.v1"] },
+        "slots": { "type": "object", "additionalProperties": { "$ref": "#/$defs/slotBinding" } },
+        "constraints": { "$ref": "#/$defs/layoutConstraints" }
+      }
+    },
+    "slotBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9.]{0,63}$" },
+        "literal": { "type": "string", "maxLength": 200 },
+        "kind": { "enum": ["text", "image", "icon", "badge", "progress", "wave", "code"] },
+        "maxLines": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "style": { "enum": ["title", "subtitle", "body", "caption", "badge", "mono"] },
+        "commands": { "type": "array", "items": { "type": "string" }, "maxItems": 6 }
+      },
+      "oneOf": [{ "required": ["field"] }, { "required": ["literal"] }, { "required": ["commands"] }]
+    },
+    "layoutConstraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minWidth": { "type": "number", "minimum": 80, "maximum": 1000 },
+        "maxWidth": { "type": "number", "minimum": 120, "maximum": 1000 },
+        "minHeight": { "type": "number", "minimum": 32, "maximum": 600 },
+        "maxHeight": { "type": "number", "minimum": 32, "maximum": 600 }
+      }
+    },
+    "settingsPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "anyOf": [{ "required": ["controls"] }, { "required": ["groups"] }],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,31}$" },
+        "title": { "$ref": "#/$defs/localizedString" },
+        "description": { "$ref": "#/$defs/localizedString" },
+        "controls": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/settingControl" } },
+        "groups": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/settingsGroup" } }
+      }
+    },
+    "settingsGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "controls"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,31}$" },
+        "title": { "$ref": "#/$defs/localizedString" },
+        "description": { "$ref": "#/$defs/localizedString" },
+        "controls": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/settingControl" } }
+      }
+    },
+    "settingControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "key", "title"],
+      "properties": {
+        "type": { "enum": ["toggle", "select", "slider", "number", "text", "path", "secret", "button", "link", "info", "status"] },
+        "key": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9.]{0,63}$" },
+        "title": { "$ref": "#/$defs/localizedString" },
+        "description": { "$ref": "#/$defs/localizedString" },
+        "default": {},
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "type": "string", "maxLength": 16 },
+        "options": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["value", "label"], "properties": { "value": { "type": "string" }, "label": { "$ref": "#/$defs/localizedString" } } } },
+        "command": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "style": { "enum": ["primary", "secondary", "danger"] },
+        "format": { "enum": ["text", "number", "boolean", "timestamp"] },
+        "validation": { "type": "object", "additionalProperties": false, "properties": { "pattern": { "type": "string" }, "minLength": { "type": "integer" }, "maxLength": { "type": "integer" } } }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "title": { "$ref": "#/$defs/localizedString" },
+        "description": { "$ref": "#/$defs/localizedString" },
+        "icon": { "type": "string", "pattern": "^assets/" },
+        "defaultHotkey": { "type": "string", "maxLength": 64 },
+        "contexts": { "type": "array", "items": { "enum": ["global", "island", "contextMenu", "commandPalette", "settings"] }, "uniqueItems": true }
+      }
+    },
+    "contextMenuItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "title", "when"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "command": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "title": { "$ref": "#/$defs/localizedString" },
+        "when": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "group": { "enum": ["primary", "controls", "clipboard", "navigation", "danger"] }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "slot", "template"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,63}$" },
+        "slot": { "enum": ["island.accessory", "island.leading", "hoverCard.footer"] },
+        "template": { "enum": ["wave.v1", "badge.v1", "icon.v1", "text.v1"] },
+        "size": { "enum": ["small", "medium"] }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sdk": { "$ref": "#/$defs/versionRange" },
+        "plugins": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "range"],
+            "properties": {
+              "id": { "$ref": "#/$defs/pluginId" },
+              "range": { "$ref": "#/$defs/versionRange" },
+              "optional": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "settingsRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+\\.schema\\.json$" },
+        "defaults": { "type": "string", "pattern": "^[A-Za-z0-9._/-]+\\.json$" },
+        "storage": { "enum": ["host", "plugin"] }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entrySha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "files": { "const": "checksums.json" }
+      }
+    },
+    "signatureRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scheme": { "const": "detached-v1" },
+        "algorithm": { "enum": ["ECDSA-P256-SHA256", "Ed25519"] },
+        "publisherKeyId": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "signatureFile": { "const": "signature.json" }
+      }
+    },
+    "category": { "enum": ["productivity", "media", "developer", "system", "communication", "information", "fun", "integration", "accessibility", "theme"] }
+  }
+}

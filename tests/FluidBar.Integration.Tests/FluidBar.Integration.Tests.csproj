@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Integration suite: test naming/helpers are intentionally plain xUnit conventions. -->
+    <NoWarn>$(NoWarn);CA1707;CA1822;CA2007;CA1305;CA1861;CA2000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluidBar.Core\FluidBar.Core.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Sdk\FluidBar.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.PluginHost\FluidBar.PluginHost.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Marketplace\FluidBar.Marketplace.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Plugins.Builtin\FluidBar.Plugins.Builtin.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Platform.Windows\FluidBar.Platform.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build the sample plugin as a dependency but load it through the real marketplace + ALC path,
+         never as a reference: this is the exact install→load seam the app uses. -->
+    <ProjectReference Include="..\..\plugins\samples\FluidBar.Plugins.SampleMinimal\FluidBar.Plugins.SampleMinimal.csproj"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared M6 recording contract: replay the real soak fixture through the Core pipeline (same
+         link recipe documented in docs/rewrite/contracts/soak.md). -->
+    <Compile Include="..\FluidBar.Soak\Recording\**\*.cs" Link="Soak\Recording\%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\FluidBar.Soak\Fixtures\media-session.json" Link="Fixtures\media-session.json" />
+  </ItemGroup>
+
+</Project>

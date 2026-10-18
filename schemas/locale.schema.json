@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidbar.app/schemas/locale.schema.json",
+  "title": "FluidBar Plugin Locale Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["locale", "version", "messages"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "locale": { "$ref": "#/$defs/locale" },
+    "version": { "const": 1 },
+    "messages": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 10000,
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$" },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 4000 }
+    }
+  },
+  "$defs": {
+    "locale": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$" }
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "schemaVersion": 2,
+  "id": "sample-rich",
+  "version": "1.0.0",
+  "apiVersion": "2.0.0",
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar-samples",
+    "displayName": "FluidBar Samples",
+    "url": "https://fluidbar.app",
+    "keyId": "fluidbar-samples-2026"
+  },
+  "author": {
+    "name": "FluidBar contributors",
+    "url": "https://fluidbar.app"
+  },
+  "name": {
+    "en-US": "Sample Rich",
+    "zh-Hans": "丰富示例"
+  },
+  "summary": {
+    "en-US": "Reference plugin with settings, commands, context menu, widgets and a hover card.",
+    "zh-Hans": "包含设置、命令、右键菜单、小组件和悬停卡片的参考插件。"
+  },
+  "description": {
+    "en-US": "Shows the declarative contribution model: layout slots, host-rendered settings (groups, controls and a read-only status row), command handlers, context-menu actions and an accessory widget, plus a private helper dependency and localized messages.",
+    "zh-Hans": "展示声明式贡献模型：布局槽位、宿主渲染的设置（分组、控件与只读状态行）、命令处理、右键菜单动作和附件小组件，并包含私有依赖与本地化消息。"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "homepage": "https://fluidbar.app",
+  "categories": ["media", "developer"],
+  "tags": ["sample", "media", "settings"],
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Plugins.SampleRich.dll",
+    "type": "FluidBar.Plugins.SampleRich.RichPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": ["win-x64"],
+  "locales": {
+    "default": "en-US",
+    "available": ["en-US", "zh-Hans"],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "hoverCard": true,
+      "settings": true,
+      "contextMenu": true,
+      "commands": true,
+      "widgets": true,
+      "xaml": false
+    },
+    "background": {
+      "intervalMinMs": 60000,
+      "reason": "Refreshes the sample media card on a low-frequency schedule."
+    }
+  },
+  "activation": ["startup", "onCommand:sample-rich.refresh"],
+  "contributes": {
+    "layouts": [
+      {
+        "id": "sample-rich.compact",
+        "surface": "island.compact",
+        "template": "text.v1",
+        "slots": {
+          "title": { "field": "title", "maxLines": 1, "style": "title" },
+          "subtitle": { "field": "subtitle", "maxLines": 1, "style": "caption" },
+          "badge": { "field": "badge", "style": "badge" },
+          "progress": { "field": "progress" }
+        },
+        "constraints": {
+          "minWidth": 132,
+          "maxWidth": 430,
+          "minHeight": 36,
+          "maxHeight": 44
+        }
+      },
+      {
+        "id": "sample-rich.hover",
+        "surface": "hoverCard",
+        "template": "media.hover.v1",
+        "slots": {
+          "title": { "field": "title", "maxLines": 1, "style": "title" },
+          "subtitle": { "field": "subtitle", "maxLines": 1, "style": "caption" },
+          "body": { "field": "tracksLabel", "maxLines": 2, "style": "body" },
+          "progress": { "field": "progress" },
+          "actions": { "commands": ["sample-rich.refresh"] }
+        },
+        "constraints": {
+          "minWidth": 360,
+          "maxWidth": 760,
+          "minHeight": 176,
+          "maxHeight": 320
+        }
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "general",
+        "title": {
+          "en-US": "General",
+          "zh-Hans": "常规"
+        },
+        "description": {
+          "en-US": "Host-rendered settings; the plugin only declares groups, controls and keys.",
+          "zh-Hans": "宿主渲染的设置；插件只声明分组、控件和键。"
+        },
+        "groups": [
+          {
+            "id": "playback",
+            "title": {
+              "en-US": "Playback",
+              "zh-Hans": "播放"
+            },
+            "description": {
+              "en-US": "How the sample card behaves.",
+              "zh-Hans": "示例卡片的行为设置。"
+            },
+            "controls": [
+              {
+                "type": "toggle",
+                "key": "showDetails",
+                "title": {
+                  "en-US": "Show details",
+                  "zh-Hans": "显示详细信息"
+                },
+                "default": true
+              },
+              {
+                "type": "slider",
+                "key": "refreshMinutes",
+                "title": {
+                  "en-US": "Refresh interval",
+                  "zh-Hans": "刷新间隔"
+                },
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "default": 5,
+                "unit": "min"
+              }
+            ]
+          },
+          {
+            "id": "diagnostics",
+            "title": {
+              "en-US": "Diagnostics",
+              "zh-Hans": "诊断"
+            },
+            "controls": [
+              {
+                "type": "status",
+                "key": "status.lastRefresh",
+                "format": "timestamp",
+                "title": {
+                  "en-US": "Last refresh",
+                  "zh-Hans": "上次刷新"
+                },
+                "description": {
+                  "en-US": "Updated by the plugin after each refresh; the host renders it read-only.",
+                  "zh-Hans": "插件每次刷新后更新；宿主以只读方式显示。"
+                }
+              },
+              {
+                "type": "select",
+                "key": "greetingStyle",
+                "title": {
+                  "en-US": "Greeting style",
+                  "zh-Hans": "问候风格"
+                },
+                "default": "friendly",
+                "options": [
+                  {
+                    "value": "friendly",
+                    "label": {
+                      "en-US": "Friendly",
+                      "zh-Hans": "友好"
+                    }
+                  },
+                  {
+                    "value": "formal",
+                    "label": {
+                      "en-US": "Formal",
+                      "zh-Hans": "正式"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "button",
+                "key": "clearCache",
+                "command": "sample-rich.clear-cache",
+                "title": {
+                  "en-US": "Clear cache",
+                  "zh-Hans": "清除缓存"
+                },
+                "style": "secondary"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "sample-rich.refresh",
+        "title": {
+          "en-US": "Refresh sample card",
+          "zh-Hans": "刷新示例卡片"
+        },
+        "contexts": ["global", "island", "contextMenu", "commandPalette"]
+      },
+      {
+        "id": "sample-rich.clear-cache",
+        "title": {
+          "en-US": "Clear sample cache",
+          "zh-Hans": "清除示例缓存"
+        },
+        "contexts": ["settings"]
+      }
+    ],
+    "contextMenu": [
+      {
+        "id": "sample-rich.menu.refresh",
+        "command": "sample-rich.refresh",
+        "title": {
+          "en-US": "Refresh sample card",
+          "zh-Hans": "刷新示例卡片"
+        },
+        "when": "source == 'sample-rich'",
+        "group": "controls"
+      }
+    ],
+    "widgets": [
+      {
+        "id": "sample-rich.wave",
+        "slot": "island.accessory",
+        "template": "wave.v1",
+        "size": "small"
+      }
+    ]
+  },
+  "dependencies": {
+    "sdk": "^2.0.0"
+  }
+}

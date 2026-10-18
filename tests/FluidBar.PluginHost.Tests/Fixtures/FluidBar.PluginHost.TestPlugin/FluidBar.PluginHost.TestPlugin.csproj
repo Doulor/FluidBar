@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fixture plugin assembly for the loader/unload tests. It is referenced with ReferenceOutputAssembly=false
+    and loaded only through the real collectible AssemblyLoadContext (never as a normal project reference),
+    so the shared-SDK type identity is exercised exactly like a third-party package.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>FluidBar.PluginHost.TestPlugin</AssemblyName>
+    <RootNamespace>FluidBar.PluginHost.TestPlugin</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1822;CA2012;CA2016</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile against the shared contract; never copy FluidBar.Sdk.dll into the plugin folder. -->
+    <ProjectReference Include="..\..\..\..\src\FluidBar.Sdk\FluidBar.Sdk.csproj" Private="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidbar.app/schemas/marketplace-index.schema.json",
+  "title": "FluidBar Marketplace Index",
+  "description": "Signed root index: latest version per plugin, listing metadata, keys and signatures. Version history lives in per-plugin shards.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "sourceCommit", "appCompatibility", "defaultLocale", "plugins", "keys", "signatures"],
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "appCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minAppVersion", "supportedApiVersions"],
+      "properties": {
+        "minAppVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "supportedApiVersions": { "type": "array", "items": { "type": "string", "pattern": "^\\d+\\.\\d+$" }, "uniqueItems": true, "minItems": 1 }
+      }
+    },
+    "defaultLocale": { "$ref": "#/$defs/locale" },
+    "availableLocales": { "type": "array", "items": { "$ref": "#/$defs/locale" }, "uniqueItems": true, "minItems": 1 },
+    "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } },
+    "plugins": { "type": "array", "items": { "$ref": "#/$defs/plugin" } },
+    "advisories": { "type": "array", "items": { "$ref": "#/$defs/advisory" } },
+    "keys": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/key" } },
+    "signatures": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/signature" } }
+  },
+  "$defs": {
+    "locale": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-[A-Z]{2}|-[0-9]{3})?$" },
+    "localizedString": {
+      "oneOf": [
+        { "type": "string", "minLength": 1, "maxLength": 8000 },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/locale" },
+          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 8000 }
+        }
+      ]
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "string" }, "name": { "$ref": "#/$defs/localizedString" } }
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "verified"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,38}$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "verified": { "type": "boolean" },
+        "keyId": { "type": ["string", "null"], "maxLength": 80 },
+        "url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "size", "signatureUrl", "keyId", "algorithm"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "size": { "type": "integer", "minimum": 1, "maximum": 157286400 },
+        "signatureUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "keyId": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "algorithm": { "enum": ["ECDSA-P256-SHA256", "Ed25519"] }
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "apiVersion", "minAppVersion", "publishedAt", "channel", "artifact", "capabilities", "locales"],
+      "properties": {
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([.-][0-9A-Za-z.-]+)?$" },
+        "apiVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "minAppVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "maxAppVersion": { "type": ["string", "null"], "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "channel": { "enum": ["stable", "beta"] },
+        "yanked": { "type": "boolean", "default": false },
+        "yankReason": { "type": ["string", "null"], "maxLength": 200 },
+        "artifact": { "$ref": "#/$defs/artifact" },
+        "capabilities": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "locales": { "type": "array", "items": { "$ref": "#/$defs/locale" }, "uniqueItems": true },
+        "localeCoverage": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 100 } },
+        "changelog": { "type": "string", "maxLength": 8000 },
+        "license": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "summary", "publisher", "latest", "categories", "listing", "historyUrl", "stats", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$" },
+        "name": { "$ref": "#/$defs/localizedString" },
+        "summary": { "$ref": "#/$defs/localizedString" },
+        "publisher": { "$ref": "#/$defs/publisher" },
+        "latest": { "$ref": "#/$defs/version" },
+        "categories": { "type": "array", "items": { "type": "string" }, "uniqueItems": true, "minItems": 1, "maxItems": 3 },
+        "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true, "maxItems": 10 },
+        "icon": { "type": "string", "format": "uri" },
+        "screenshots": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["src"],
+            "properties": { "src": { "type": "string", "format": "uri" }, "alt": { "$ref": "#/$defs/localizedString" } }
+          }
+        },
+        "listing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["defaultLocale", "availableLocales", "baseUrl"],
+          "properties": {
+            "defaultLocale": { "$ref": "#/$defs/locale" },
+            "availableLocales": { "type": "array", "items": { "$ref": "#/$defs/locale" }, "uniqueItems": true },
+            "baseUrl": { "type": "string", "format": "uri", "pattern": "^https://" }
+          }
+        },
+        "historyUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["downloads"],
+          "properties": {
+            "downloads": { "type": "integer", "minimum": 0 },
+            "rating": { "type": ["number", "null"], "minimum": 0, "maximum": 5 }
+          }
+        },
+        "status": { "enum": ["active", "deprecated", "blocked"] },
+        "featured": { "type": "boolean", "default": false },
+        "blocked": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["reason", "at"],
+          "properties": {
+            "reason": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "at": { "type": "string", "format": "date-time" },
+            "replacement": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "advisory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pluginId", "severity", "summary", "publishedAt"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(GHSA|CVE|FB)-[A-Za-z0-9-]+$" },
+        "pluginId": { "type": "string" },
+        "affectedVersions": { "type": "string", "maxLength": 200 },
+        "severity": { "enum": ["low", "moderate", "high", "critical"] },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "role", "algorithm", "publicKey"],
+      "properties": {
+        "keyId": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "role": { "enum": ["marketplace", "publisher"] },
+        "algorithm": { "enum": ["ECDSA-P256-SHA256", "Ed25519"] },
+        "publicKey": { "type": "string", "minLength": 32 },
+        "notBefore": { "type": "string", "format": "date-time" },
+        "notAfter": { "type": "string", "format": "date-time" },
+        "revokedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "algorithm", "value", "signedAt"],
+      "properties": {
+        "keyId": { "type": "string" },
+        "algorithm": { "enum": ["ECDSA-P256-SHA256", "Ed25519"] },
+        "value": { "type": "string", "minLength": 32 },
+        "signedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

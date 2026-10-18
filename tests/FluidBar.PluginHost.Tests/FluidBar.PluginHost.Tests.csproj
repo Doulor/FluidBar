@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA2000;CA1822;CA1707;xUnit1031</NoWarn>
+    <!-- The fixture plugin is its own project nested under this directory; never treat it as test sources. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Fixtures\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Fixtures\**\*.cs" />
+    <None Remove="Fixtures\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluidBar.PluginHost\FluidBar.PluginHost.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Marketplace\FluidBar.Marketplace.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build fixtures/samples as dependencies, but load them through the real ALC, never as references. -->
+    <ProjectReference Include="Fixtures\FluidBar.PluginHost.TestPlugin\FluidBar.PluginHost.TestPlugin.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\plugins\samples\FluidBar.Plugins.SampleMinimal\FluidBar.Plugins.SampleMinimal.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\plugins\samples\FluidBar.Plugins.SampleRich\FluidBar.Plugins.SampleRich.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

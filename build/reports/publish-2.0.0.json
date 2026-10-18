@@ -1,0 +1,17 @@
+{
+  "product": "FluidBar",
+  "version": "2.0.0",
+  "informationalVersion": "2.0.0+a8a2c8aea577",
+  "gitSha": "a8a2c8aea577",
+  "configuration": "Release",
+  "runtime": "win-x64",
+  "selfContained": false,
+  "builtAtUtc": "2026-10-18T11:22:35.4488813Z",
+  "exe": "FluidBar.exe",
+  "exeBytes": 54896733,
+  "exeSha256": "2294f8f8d4c762054d7f6392c945bf212346081b335e68e798d4df2f23ee90d4",
+  "zipPath": "D:\\build\\GitLocal\\FluidBar\\build\\artifacts\\FluidBar-2.0.0-win-x64.zip",
+  "zipBytes": 45706132,
+  "zipSha256": "261392ea17e4b211572be17d5dcd1bb74dba1800eea757fe254cc4058973800d",
+  "signature": "unsigned"
+}

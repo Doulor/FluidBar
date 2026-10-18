@@ -1,7 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    fluidbar-plugin — contributor/CI tooling (validate | pack | sign | policy | dev).
+    The same implementation is used locally and by CI; no network access for validate/pack.
+  -->
   <ItemGroup>
     <ProjectReference Include="..\FluidBar.Marketplace\FluidBar.Marketplace.csproj" />
+    <ProjectReference Include="..\FluidBar.Sdk\FluidBar.Sdk.csproj" />
+    <ProjectReference Include="..\FluidBar.PluginHost\FluidBar.PluginHost.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -9,6 +15,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>fluidbar-plugin</AssemblyName>
+    <RootNamespace>FluidBar.Cli</RootNamespace>
+    <NoWarn>$(NoWarn);CA1859;CA1822;CA1513;CA2000</NoWarn>
   </PropertyGroup>
 
 </Project>

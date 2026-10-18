@@ -16,7 +16,7 @@ Designed at **1440 × 900**; usable from 1280 × 800. On viewports narrower than
 |---|---|
 | [`index.html`](index.html) | Scene, island shell, modal and annotation mount points. |
 | [`styles.css`](styles.css) | Design tokens, Windows scene, island states, expanded panes, console, settings/market, annotation overlay, responsive rules. |
-| [`app.js`](app.js) | Spring engine, state machine, all rendering, i18n (zh-CN/en-US), demo data, console, settings/market, interactions, URL params. |
+| [`app.js`](app.js) | Spring engine, state machine, all rendering, pager gestures/snap logic, i18n (zh-CN/en-US), demo data, console, settings/market, interactions, URL params. |
 | [`icons.js`](icons.js) | Inline SVG icon set (24×24 grid). No icon font, no emoji. |
 | `README.md` | This file. |
 
@@ -62,7 +62,7 @@ All parameters are applied on load and snap to their state without an opening an
 | Parameter | Values | Effect |
 |---|---|---|
 | `state` | `idle` · `media` · `notifications` · `clipboard` · `agent` · `hud` · `timer` · `battery` | Compact live-activity pill |
-| `state` | `home` · `widgets` | Expanded panel on that tab |
+| `state` | `home` · `widgets` | Expanded pager on that page |
 | `state` | `settings` · `market` | Open the settings window / plugin market |
 | `mode` | `float` · `flush` · `dock` | Floating pill, top-flush bar, or taskbar-replacing dock |
 | `material` | `obsidian` · `acrylic` | Opaque black or acrylic island |
@@ -86,12 +86,14 @@ These are not part of the required parameter list, but make it possible to captu
 
 | Parameter | Values | Effect |
 |---|---|---|
-| `state=expanded&tab=…` | `home` · `media` · `notifications` · `clipboard` · `agent` · `widgets` | Open the expanded island on a specific tab (works with `mode=dock` too). All six render the same 440×284 shell |
+| `state=expanded&tab=…` | `home` · `media` · `notifications` · `clipboard` · `agent` · `widgets` | Open the expanded pager on a specific page (works with `mode=dock` too). All six render the same 440×284 shell and 400×244 viewport |
+| `state=expanded&slide=…` | `0` · `1` · `2` · `3` · `4` · `5` | Zero-based page index for the expanded pager; useful for direct captures of any pager position. Takes precedence over `tab` when both are present |
 | `state=hud&hud=…` | `volume` · `brightness` | Seed the compact HUD with a specific control (defaults to volume) |
 | `state=settings&tab=…` | `general` · `appearance` · `island` · `plugins` · `market` · `advanced` · `about` | Open settings directly on a page |
 
 ```
 ?state=expanded&tab=clipboard
+?state=expanded&slide=4
 ?state=hud&hud=brightness
 ?mode=dock&state=expanded&tab=media
 ?state=settings&tab=appearance&theme=light
@@ -115,14 +117,38 @@ In `mode=dock`, compact-only states (`media`, `notifications`, etc.) open the eq
 | Drag horizontally | Repositions the island; release keeps the drop position, clamped to a 24px screen margin |
 | Double-click empty desktop / press `Esc` | Collapse |
 | Click outside the island | Collapse (clicking the demo console or settings window does not) |
-| Collapse chevron in the panel header | Collapse (top-right of the expanded panel) |
-| Expanded navigation rail | Six sections stacked vertically at the left edge: Home · Media · Notifications · Clipboard · Agent · Widgets. Identical 34px visuals with 8px gaps and 36px hit targets on every section; the active icon gets a raised pill, accent glyph and 2px edge indicator; hover shows its localized label to the right. Switching sections keeps the shell at 440×284 |
-| Keyboard `1`–`6` | Switch expanded sections |
-| Keyboard `↑` / `↓` | Move up / down through the expanded navigation rail |
+| Collapse chevron (top-right overlay) | Collapse the expanded pager |
+| Drag the page background horizontally | Grab cursor; content follows at 0.9× with rubber-band resistance at either end. A short flick commits one page, a long continuous drag can cross several pages by distance |
+| Mouse wheel / trackpad | One notch = exactly one page. Vertical `deltaY` and horizontal `deltaX` are both accepted; 100px accumulation and a 120ms commit cadence prevent multi-page jumps. Wheel over a slider or scroll area never pages |
+| Page dots (bottom center) | Six 6px dots with a 20px active pill. Click to jump; each dot has a localized tooltip and aria-label; the active dot gets `aria-current="page"` |
+| Keyboard `1`–`6` | Jump to Home · Media · Notifications · Clipboard · Agent · Widgets |
+| Keyboard `←` / `→` | Previous / next page |
+| Keyboard `Home` / `End` | First / last page |
 | Keyboard `Esc` | Close settings → close island → stop auto demo, in that order |
 | New transient events | Multi-activity ghost pills stack behind the main pill with a `+N` badge (disable via Settings → 灵动岛 → 显示策略 → 仅显示最新) |
 
 Other panel actions: clear/dismiss notifications, copy/pin clipboard items, open agents, navigate the mini calendar, tick the three widget tasks, seek, switch tracks, etc.
+
+### Expanded pager — interaction contract
+
+- **Geometry.** The expanded shell is fixed at **440 × 284** with a **20px inset**, leaving a **400 × 244** page viewport. Six 400 × 244 pages live in a single 2400px flex strip. Paging only changes `transform: translate3d(…)` on the strip: no layout, no remount, no resize, no crossfade. The top-left title/count, top-right chevron and bottom-center dots are separate overlays above the strip.
+- **Title + dots.** The overlay title is 15px semibold and localized; counts/badges appear for Notifications, Clipboard and Agent, and the notification clear action sits beside the count. Dots sit over a subtle bottom scrim; inactive dots are 6px, the active dot is a 20px accent pill. Inactive pages are `inert` and `aria-hidden`; page changes are announced through an `aria-live="polite"` region.
+- **Drag.** A primary-button pointerdown on page background (not a button, slider, list or scroll area) starts a drag. The strip follows the pointer at **0.9×** gain (10% resistance) for a weighted 1:1 feel, with **0.35×** rubber-band resistance beyond page 0 or page 5. The cursor is `grab` / `grabbing`.
+- **Release.** A drag shorter than **28px** always snaps back. A short flick under **0.9 page** of damped travel commits at most one page no matter how fast it is released. Once a gesture travels **0.9 page** or more, the target is chosen by distance (`round(damped page offset)`), so a 2.7-page-width drag commits two pages because 2.7 × 0.9 = 2.43 pages rounds to page +2. Snaps use the shell's spring family at **T = 0.34s, ζ = 0.90** and are interruptible: a new drag starts from the current visual offset, not from the last committed page.
+- **Wheel.** Wheel deltas accumulate to 100px per page. A single physical wheel event can commit at most one page; the 120ms cooldown queues additional notches so five rapid notches produce five sequential one-page commits rather than a five-page jump. Horizontal trackpad deltas use the same path. Wheels over sliders/scroll areas are ignored for paging.
+- **Click safety.** If a pointer gesture moves more than 6px, the synthetic click is suppressed for 220ms. Buttons and native range inputs still receive normal clicks and pointer capture when pressed without dragging; sliders keep their own thumb drag.
+
+| Constant | Value | Role |
+|---|---|---|
+| `dragGain` | **0.90** | Page strip follows 90% of pointer travel |
+| `rubberBand` | **0.35** | Overscroll resistance past first/last page |
+| `thresholdPx` | **28px** | Sub-threshold drags snap back |
+| `flickVelocity` | **0.55 px/ms** | Fast short-flick classification |
+| `flickMaxPages` | **0.9 page** | A gesture under this travel can never commit more than ±1 page |
+| `snapT` / `snapZ` | **0.34s / 0.90** | Spring settle period / damping ratio |
+| `wheelThreshold` | **100px** | Accumulated wheel delta per page |
+| `wheelCooldown` | **120ms** | Minimum cadence between wheel page commits |
+| `wheelLinePx` | **16px** | Normalization for line-mode wheel deltas |
 
 ### Notification stack
 
@@ -172,10 +198,10 @@ Trigger **通知** in the console two or three times. The latest notification re
 
 1. **“Obsidian instrument” direction.** The desktop is a deep blue/graphite radial mesh with fine grain, vignette and a subtle contour pattern. The island is the only fully opaque, hard-edged object, with a single soft downward shadow and a 1px key line — no rim light, no glow ring, no purple-gradient page wash.
 2. **The island stays black in light theme.** Switching to light changes the wallpaper, windows, taskbar, console and settings to a cool porcelain system, while the island remains `#08080A`. This makes the island read as hardware, like iOS, and creates a dramatic contrast. Verified visually before deciding; no porcelain island variant was needed.
-3. **One shell, one expanded size.** A single spring-driven `.island` element owns width/height/radius; content is clipped inside. All six expanded panes use the same **440 × 284** shell (20px inset, 48px rail, 12px gap, 340px content), so switching sections never resizes the shell — only the pane content crossfades while the rail and header stay put. Content never reflows during the morph.
+3. **One shell, one expanded pager viewport.** A single spring-driven `.island` element owns width/height/radius; content is clipped inside. Every page opens in the same **440 × 284** shell with a 20px inset, giving a **400 × 244** viewport. Six 400 × 244 pages sit on one 2400px strip; changing page only changes the strip's `translate3d` transform. The shell, title overlay, chevron and dots never move or resize, and page content is never remounted for a swipe.
 4. **Spring engine.** Authored as `(T, ζ)`; `k = (2π/T)²`, `c = 4πζ/T`; fixed 1/300s substeps; `dt` clamped to 1–50ms; retarget velocity retained at 100% when direction is unchanged, otherwise ×0.35 and clamped; the rAF loop stops at rest. Expanded content opacity is derived from shell height (`(h − 0.62·hLarge) / (0.35·hLarge)`) and compact content fades inversely. Height uses a separate, ~8% slower spring (`expand.height`), adjustable in Motion Lab.
-5. **Geometry tokens.** Compact widths/heights exactly follow the brief: 132×36 idle, 226×40 media, 248×36 notification, 208×40 HUD, 264×36 clipboard, 236×36 agent, 190×36 timer, 208×36 battery. Every expanded section is **440 × 284**; there are no per-page heights. The 20px inset, 48px rail and 12px gap leave 340px for content. The rail keeps identical metrics on every section: six 34×34 visual buttons with 8px gaps, vertically centered (6 × 34 + 5 × 8 = 244, exactly the 284 shell minus 2 × 20 padding), each with a 36×36 hit target, active pill, 2px accent indicator and hover tooltip. Panes fill the 284 height: media uses a 146px artwork, title/artist/album, a current + next lyric card, elapsed/remaining seek and transport/output/queue rows; notifications and clipboard use five 40px rows with slightly taller line-height; agent uses four 48px rows. Large radius 28; flush bottom radius 22; dock height 52.
-6. **Typography.** Segoe UI Variable Display/Text with Segoe UI and Microsoft YaHei UI fallbacks; Cascadia Mono/Consolas for code. Compact clock 13.5 semibold; dashboard time 28 bold; body 13.5; secondary 11; rail/panel icons 15–18. The compact HUD is a single 40px row: 17px icon, 11px secondary label, flexible 3px accent track, 13.5px semibold right-aligned value. Settings/console/market use their own dense scale but remain legible at 900px.
+5. **Geometry tokens.** Compact widths/heights exactly follow the brief: 132×36 idle, 226×40 media, 248×36 notification, 208×40 HUD, 264×36 clipboard, 236×36 agent, 190×36 timer, 208×36 battery. Every expanded page is **440 × 284**; there are no per-page heights. The 20px inset yields a **400 × 244** viewport; each page uses 26px top / 18px bottom safe insets (leaving a 400 × 200 content band) and 14px side padding (372px usable width). Page compositions fit that band: Home is 40 + 44 + 34 + 34 + 18px with four 6px gaps; Media uses a 132px artwork, lyric card, 18px seek and 32px transport row; Notifications and Clipboard use five 40px rows; Agent uses four 48px rows; Widgets fills the band with a 172px calendar and a weather/stats/todo column. Large radius 28; flush bottom radius 22; dock height 52.
+6. **Typography.** Segoe UI Variable Display/Text with Segoe UI and Microsoft YaHei UI fallbacks; Cascadia Mono/Consolas for code. Compact clock 13.5 semibold; dashboard time 28 bold; body 13.5; secondary 11. The pager overlay title is **15px semibold**, page counts 9.5px, and dots are 6px (20px active pill). The compact HUD is a single 40px row: 17px icon, 11px secondary label, flexible 3px accent track, 13.5px semibold right-aligned value. Settings/console/market use their own dense scale but remain legible at 900px.
 7. **Layered stack.** Ghost pills are real DOM layers with softened fills and key lines. The island's soft shadow lives on a dedicated anchor pseudo-element so the stack remains readable instead of being swallowed by the shadow. The `+N` badge uses a dark glass chip with an accented key line so it doesn't compete with the unread count.
 8. **Content is localized at render time.** A single i18n dictionary plus localized data objects. Language switching re-renders the scene, taskbar, dock, island, console, open modal and annotation card without a reload. Dates, weekdays, month labels and terminal output are localized too.
 9. **Appearance preview.** A miniature media island lives inside the Appearance pane so radius, opacity, material, accent and font scale changes provide immediate feedback even while the settings window covers the real island.
@@ -203,15 +229,21 @@ Trigger **通知** in the console two or three times. The latest notification re
 ## Verification performed
 
 - `node --check app.js` and `node --check icons.js` — clean.
-- Re-verified at 1440 × 900 in Microsoft Edge (Chromium) at device scale 1.
-- Zero console errors and zero page errors across the URL-state sweep and while clicking every expanded section.
-- Measured with `getBoundingClientRect()` while switching all six rail sections: **home, media, notifications, clipboard, agent and widgets are each exactly 440 × 284**. The inline `width`/`height` stay `440px`/`284px`; only the 340px-wide pane content is replaced/crossfaded.
-- Rail metrics measured on every section: six 36×36 hit buttons (34×34 painted surface via a 1px inset), 8px visual gaps, vertically centered; active pill plus 2px indicator; keyboard `1`–`6` and `↑`/`↓` keep the shell at 440×284.
-- Compact sizes unchanged: idle 132×36, media 226×40, notifications 248×36, clipboard 264×36, agent 236×36, HUD (volume and brightness) 208×40, timer 190×36, battery 208×36. Expanded `home` and `widgets` are 440×284; settings/market modals remain 900×620.
-- The live design-spec overlay reports `440 × 284` for every section (width×height tag, height tag and radius tag all update from the live DOM).
-- Tested idle → expand → all six rail sections → `Esc` collapse; rail hover tooltips, `1`–`6` and `↑`/`↓` navigation; close chevron; outside click; hover peek (132×36 → 142×42); drag with clamped drop; flush mode (top 0, bottom radius 22); dock open/close/above-dock panel (440×284 above the dock); mode switching; language switch; theme, material, accent, opacity; media prev/next plus output/queue; notification open/dismiss/clear; clipboard copy/pin; widget todo and calendar navigation; volume/brightness HUD layout, hover and auto-collapse; auto demo start/stop; settings nav and market install; advanced two-step reset; `file://` render.
-- Capture set in [`_shots/`](_shots/): `fix2-expanded-home.png`, `fix2-expanded-media.png`, `fix2-expanded-notifications.png`, `fix2-expanded-clipboard.png`, `fix2-expanded-agent.png`, `fix2-expanded-widgets.png`, `fix2-compact-volume-hud.png`, `fix2-compact-brightness-hud.png`.
-- Additional captures: `fix2-rail-tooltip.png`, `fix2-spec-overlay.png`, `fix2-expanded-en-light.png`.
+- Playwright / Microsoft Edge (Chromium), device scale 1. Interaction and screenshot pass at **1440 × 900**; the 2.7-page-width drag test used a **2560 × 1200** viewport so the pointer could travel 1080px in one gesture.
+- **Zero console errors and zero page errors** across the URL sweep (all six pages, HUDs, dock, light/acrylic/English) and the UI pass (drag, wheel, dots, keyboard, mode switches, settings open/close).
+- **Geometry:** the island measures exactly **440 × 284** and the page viewport exactly **400 × 244** on all six pages. Each `.pager-page` is **400 × 244**, the track is 2400px, and every page reports `scrollWidth/scrollHeight = 400/244`. A descendant scan found zero visible elements outside the 26px top / 18px bottom / 14px side safe box: no clipping or overflow. The shell does not resize during drag or snap.
+- **Pager gesture measurements:**
+  - **1 — sub-threshold:** from page index 2, a 20px quick flick ends on **index 2**, offset 2.000 (`snap-back`).
+  - **2 — fast flick:** from page index 2, a 170px fast left flick ends on **index 3** (`flick-one`, 11.2px/ms); from page index 2, a 170px fast right flick ends on **index 1**. No ±2 jumps.
+  - **3 — long drag:** from page index 0, a continuous 1080px drag (2.7 × 400px) ends on **index 2**. Damped displacement is 2.43 pages, so this is distance-based page +2 (the accepted +2/+3 outcome), not stuck at +1.
+  - **4 — rubber-band:** at page 0, a 260px rightward drag shows offset **−0.2048** page while held, then settles back to **index 0, offset 0**. At page 5, a 300px leftward drag shows offset **5.2363**, then settles back to **index 5, offset 5**. Both ends rubber-band.
+  - **5 — wheel:** one 100px notch lands on **index 1**. Five rapid notches reach **index 5** with the mutation log `0 → 1 → 2 → 3 → 4 → 5` — every commit is exactly one page, never a multi-page jump. A single 500px wheel event still commits only **index 1**, horizontal `deltaX=100` lands on **index 1**, and a wheel over the Home volume slider leaves the pager at **index 0**.
+  - **6 — interrupt snap:** after a long drag targets page 2, the in-flight snap is interrupted with the visual offset at **2.2081**; the new pointerdown starts at **2.1921** (current visual position, not page 2), and that second drag settles on **index 3**. The new gesture reports `startOffset: 2.192`.
+- **Keyboard + assistive state:** dot click → Agent (index 4), `←` → Clipboard (index 3), `Home` → index 0, `End` → index 5, `3` → index 2; `Esc` and outside-click collapse. Active dot exposes `aria-current="page"`; the live region announces e.g. “通知 · 第 3 页，共 6 页” / “Notifications · page 3 of 6”. Inactive pages are `inert` + `aria-hidden`. `↑`/`↓` no longer change pages. Dots are buttons and respond to Enter.
+- **Page controls still work:** quick toggles flip, native range sliders seek/change value without paging, and the notification clear action remains in the top-left overlay (clicking it clears all five rows, hides itself, and keeps the pager on the notifications page).
+- **Modes / theme / i18n:** switching Float → Flush → Dock through the console keeps the expanded shell at **440 × 284** and viewport at **400 × 244** above the dock; language, dark/light, obsidian/acrylic and horizontal dock interaction all switch live. Compact HUDs remain **208 × 40** (volume and brightness); other compact sizes are unchanged. Settings window still measures **900 × 620**.
+- **Design-spec overlay:** reports **440 × 284**, page **通知**, index **3 / 6**, plus the existing radius, alpha, spring and k/c rows.
+- **Capture set in [`_shots/`](_shots/):** `fix3-pager-home.png`, `fix3-pager-media.png`, `fix3-pager-notifications.png`, `fix3-pager-dots.png`, `fix3-pager-drag.png`, `fix3-pager-rubberband.png`, plus `fix3-pager-clipboard.png`, `fix3-pager-agent.png`, `fix3-pager-widgets.png`, `fix3-pager-en-light-acrylic.png`, `fix3-pager-dock-en.png`, `fix3-compact-volume-hud.png`, `fix3-compact-brightness-hud.png`, `fix3-spec-overlay.png`.
 - Zero external assets; all icons inline SVG; artwork is CSS gradients + SVG grain.
 
 ---

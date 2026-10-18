@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FluidBar.PluginHost — collectible-ALC loader, manifest gates and plugin lifecycle.
+    net10.0, UI-free: no WPF/Avalonia/Win32. The App injects the UI dispatcher and the island publisher.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FluidBar.PluginHost</RootNamespace>
+    <AssemblyName>FluidBar.PluginHost</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CA1716: IPluginLocalization.Get comes from the frozen v2.0 SDK contract. -->
+    <NoWarn>$(NoWarn);CS1591;CA1716</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FluidBar.Sdk\FluidBar.Sdk.csproj" />
+    <ProjectReference Include="..\FluidBar.Core\FluidBar.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The unload/leak evidence tests need to observe host-internal weak references and counters. -->
+    <InternalsVisibleTo Include="FluidBar.PluginHost.Tests" />
+  </ItemGroup>
+
+</Project>

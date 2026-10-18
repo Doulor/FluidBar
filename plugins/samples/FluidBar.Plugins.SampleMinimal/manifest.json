@@ -1,0 +1,78 @@
+{
+  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "schemaVersion": 2,
+  "id": "sample-minimal",
+  "version": "1.0.0",
+  "apiVersion": "2.0.0",
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar-samples",
+    "displayName": "FluidBar Samples",
+    "url": "https://fluidbar.app",
+    "keyId": "fluidbar-samples-2026"
+  },
+  "author": {
+    "name": "FluidBar contributors",
+    "url": "https://fluidbar.app"
+  },
+  "name": {
+    "en-US": "Sample Minimal",
+    "zh-Hans": "最小示例"
+  },
+  "summary": {
+    "en-US": "A minimal starter plugin that shows one island message.",
+    "zh-Hans": "一个最小化的入门插件，显示一条灵动岛消息。"
+  },
+  "description": {
+    "en-US": "Reference implementation for the smallest possible plugin: lifecycle, localization, declarative layout and a lease-owned timer.",
+    "zh-Hans": "最小插件的参考实现：生命周期、本地化、声明式布局和租约计时器。"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "categories": ["developer"],
+  "tags": ["sample", "minimal"],
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Plugins.SampleMinimal.dll",
+    "type": "FluidBar.Plugins.SampleMinimal.MinimalPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": ["win-x64"],
+  "locales": {
+    "default": "en-US",
+    "available": ["en-US", "zh-Hans"],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "hoverCard": false,
+      "settings": false,
+      "contextMenu": false,
+      "commands": false,
+      "widgets": false,
+      "xaml": false
+    }
+  },
+  "activation": ["startup"],
+  "contributes": {
+    "layouts": [
+      {
+        "id": "sample-minimal.island",
+        "surface": "island.compact",
+        "template": "text.v1",
+        "slots": {
+          "title": { "field": "title", "maxLines": 1, "style": "title" },
+          "subtitle": { "field": "subtitle", "maxLines": 1, "style": "caption" }
+        },
+        "constraints": {
+          "minWidth": 132,
+          "maxWidth": 300,
+          "minHeight": 36,
+          "maxHeight": 44
+        }
+      }
+    ]
+  }
+}

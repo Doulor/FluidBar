@@ -9,7 +9,7 @@
 | 许可 | FluidBar 为 MIT。WinIsland / boring.notch / Atoll / livebridge 为 GPL-3.0，**只读参考，不复制代码/资源/字符串表**；MIT 参考（devcode90 模组、mchack、NotchDrop）可复制但须保留版权声明。 |
 | 输入 | [01 参考与视觉研究](../research/01-references-design.md) · [02 v1 代码审计](../research/02-current-code-audit.md) · [03 渲染栈研究](../research/03-tech-stack-rendering.md) · [04 插件生态与 i18n](../research/04-plugin-ecosystem-i18n.md) · [交互原型](../prototype/README.md) |
 | 关联 | 实施计划 [`plans/2026-10-18-v2-implementation-plan.md`](../plans/2026-10-18-v2-implementation-plan.md) |
-| 原型差异 | 原型为 420 px 宽 + 底部标签栏；**本规范以最新用户反馈为准：440 px 宽 + 左侧竖向导航栏（rail 48）**，展开面板统一 **440×284**（六个页面同尺寸，切换页面不改变外壳尺寸）；紧凑 HUD 为单行 40 高。原型其余视觉/动效结论继续有效。 |
+| 原型差异 | 原型为 420 px 宽 + 底部标签栏；**本规范以最新用户反馈为准：440 px 宽、无 rail 的横向分页（鼠标拖动/滚轮翻页）**，展开面板统一 **440×284**（六个页面同尺寸，切换页面不改变外壳尺寸）；紧凑 HUD 为单行 40 高。原型其余视觉/动效结论继续有效。 |
 
 **阅读约定**：所有尺寸为 **DIP @96 DPI**（100% 缩放）；`[审计 F-xx]` 指向 v1 缺陷编号；`未决` 项必须带 owner 与决策截止日；本规范中出现的每个数字都可被测试或验收项引用，禁止实现时"就近取值"。
 
@@ -19,7 +19,7 @@
 |---|---|---|
 | D1 | 产品是**悬浮药丸**，不是贴边条；`flush`（贴顶）与 `dock`（底部任务栏替身）是同一外壳的两种模式，不是三套 UI | 参考共识：Windows 无刘海，悬浮是正解 [01 §7.1] |
 | D2 | 状态机五态：`Hidden / Compact / Peek / Expanded / Closing`；**没有** v1 的"每事件重建快照窗口" | [审计 F-03]，硬规则 3 |
-| D3 | 展开面板 = **440 宽 = 左 rail 48 + 内容 392**；六个页面统一高度 **284**（切换页面仅内容交叉淡入，外壳不 resize） | 最新用户反馈 |
+| D3 | 展开面板 = **440 宽（左右 inset 20 → 内容 400）**；六个页面统一 440×284 的横向分页（鼠标拖动/滚轮/键盘翻页，外壳不 resize） | 最新用户反馈 |
 | D4 | 动效统一以 `(T, ζ)` 授权，运行时推导 `k=(2π/T)²`、`c=4πζ/T`；定步长 1/300 s 子步 | [01 §8.1]、原型 Motion Lab |
 | D5 | 渲染底座：Win32 + `Windows.UI.Composition`（`WS_EX_NOREDIRECTIONBITMAP`）+ **Avalonia 12** UI 层；M0 做 GO/NO-GO spike | [03 §6]、第 5.7 节 |
 | D6 | 回退顺序：Avalonia 失败 → WPF 固定尺寸分层窗口（60 fps 天花板）→ 自绘 D2D（仅在需要 120 fps 且 Avalonia 不可用时） | [03 §7 F1/F2] |
@@ -33,7 +33,7 @@
 ## 1. 目标 / 非目标 / 用户场景
 ### 1.1 目标（v2.0 必须全部成立）
 1. **常驻不打扰**：小岛在屏幕顶部常驻，空闲时 0 帧回调、0 GPU 工作、CPU < 0.3%；淡出后不吞点击、不抢焦点。
-2. **一点即达**：点击/热键展开为 440 px 控制中心；左 rail 六页（home / media / notifications / clipboard / agent / widgets）；Esc 逐级返回。
+2. **一点即达**：点击/热键展开为 440 px 控制中心；六页横向分页（home / media / notifications / clipboard / agent / widgets），鼠标拖动/滚轮/键盘翻页；Esc 逐级返回。
 3. **可替代任务栏（可选）**：`dock` 模式在底部提供 52 高的窄条（应用瓦片 + 托盘簇），展开面板从窄条上方弹出；不注册系统 AppBar、不抢占工作区。
 4. **插件市场闭环**：浏览 → 同意能力 → 安装 → 更新 → 回滚 → 卸载；全部产物由 CI 从评审过的源码构建并签名。
 5. **双语与可切换**：`zh-Hans` + `en-US` 运行时切换不重启；岛内文字、设置、托盘、错误、市场页全部走资源。
@@ -51,7 +51,7 @@
 |---|---|---|---|
 | S1 | 小岛常驻 | 无操作，看视频/写代码 10 min | 岛可见或已淡出；点击穿透到下方应用；`dotnet-counters` 采样的进程 CPU 均值 < 0.3%，帧回调计数 = 0 |
 | S2 | 点击展开 | 单击 idle 药丸 | ≤ 2 帧内出现首个变化像素；展开在 0.27 s（±20%）内收敛；焦点不跳到岛（除文本框） |
-| S3 | 控制中心 | 点击 rail 第 2 项（媒体） | 面板尺寸不变（440×284）；页面切换只做内容交叉淡入，外壳不 resize；键盘 `2` 等效 |
+| S3 | 控制中心 | 横向拖动/滚轮到第 2 页（媒体） | 面板尺寸不变（440×284）；页面切换只做横向位移动画，外壳不 resize；键盘 `2` 等效 |
 | S4 | 悬停预览 | 指针停在 media 药丸 90 ms | +10 w / +6 h 的 Peek，露出上一首/下一首；移开 120 ms 后回落 |
 | S5 | 通知打断 | 媒体展开时来一条通知 | 外壳状态不变；内容 220 ms 交叉淡入；+1 角标；不重建页面、不丢焦点 |
 | S6 | Dock 替代 | 切到 dock 模式 | 底部 52 高窄条出现；点应用瓦片在窄条上方展开对应页；再点同一瓦片或 Esc 关闭 |
@@ -61,6 +61,8 @@
 | S10 | 全屏抑制 | 启动全屏游戏/放映 | 1 s 内进入 Hidden；退出后 1 s 内恢复；有按应用豁免名单 |
 
 ## 2. 产品与交互模型
+
+> **修订 A1（2026-10-18，用户反馈）**：否决左侧 rail。展开面板导航改为**横向鼠标拖动 pager**：页宽 400 DIP、视口 400×252；拖动阻尼 0.90、端点橡皮筋 0.35；释放时 |拖动|<24 DIP 回弹，flick（<0.5 页）最多 ±1 页，长拖 ≥0.5 页按 `round(dx/400)` 可跨多页；滚轮 100 DIP/120 ms 一格一页；吸附弹簧 `motion.tab`（T .34/ζ .92）可打断；页点+标题+右上收起。本节及后文任何 rail 字样以本修订为准。
 ### 2.1 状态机（五态）
 `Hidden ⇄ Compact ⇄ Peek`；`Compact|Peek → Expanded`；`Expanded → Closing → {Compact | Hidden}`；`Closing → Expanded`（T12 重定向）。`pinned` 与抑制集合（2.3/2.9）是状态机之上的正交标志，不增加状态。
 
@@ -69,7 +71,7 @@
 | T1 | Hidden | 活动到达（优先级 ≥ 环境类） | 非全屏、非锁屏、非专注抑制、`island.enabled` | Compact | **瞬时显形**（无展开动画），1 次 nudge（−6 DIP 垂直踢） |
 | T2 | Compact | 指针进入药丸 | `hoverPeek` 且未 pinned、未被拖动 | Peek | 90 ms 悬停意图后 `motion.hoverPop`，+10 w / +6 h；露出 Peek 附件 |
 | T3 | Peek | 指针离开（120 ms 去抖） | — | Compact | `motion.hoverPop` 反向；重入取消去抖 |
-| T4 | Compact / Peek | 主键单击、`Ctrl+Alt+D`、交互类活动（lookup） | 未被拖动 | Expanded | `motion.expand` + `motion.expand.height`；**一次布局**；轨道焦点进入 rail 当前项 |
+| T4 | Compact / Peek | 主键单击、`Ctrl+Alt+D`、交互类活动（lookup） | 未被拖动 | Expanded | `motion.expand` + `motion.expand.height`；**一次布局**；焦点进入当前页项 |
 | T5 | Expanded | Esc / 点击外部 / 热键 / 自动收起到期 / 活动结束 | 非 pinned（Esc/热键除外） | Closing | `motion.collapse`；内容透明度按高度派生 |
 | T6 | Closing | 收敛 | 仍有活动 | Compact | 播放 1 次收尾 nudge；恢复点击穿透判定 |
 | T7 | Closing | 收敛 | 无活动或刚被隐藏 | Hidden | 窗口进入 click-through 空集，帧循环停止 |
@@ -99,7 +101,7 @@
 
 > **Dock 决策**：v2.0 **不注册** AppBar（不调用 `ABM_NEW`，不保留工作区）。原因：AppBar 会永久改变全系统工作区，卸载/崩溃残留是高风险缺陷；`ABS_AUTOHIDE` 是文档化、可恢复的最小侵入方案。是否在 v2.1 做真正的任务栏替换（含 `ABM_SETPOS`）为 **未决**（owner: Doulor，截止 2026-11-14）。
 
-模式切换规则：`mode` 变更 → snap（不做跨模式补间）→ 一次 `SetWindowPos` → 重新计算锚点与 rail 方向（dock 的展开方向为向上）。dock 模式下的紧凑尺寸统一为 `440×52`（窄条整宽），非活动包络不再使用紧凑药丸尺寸。
+模式切换规则：`mode` 变更 → snap（不做跨模式补间）→ 一次 `SetWindowPos` → 重新计算锚点与展开方向（dock 向上）。dock 模式下的紧凑尺寸统一为 `440×52`（窄条整宽），非活动包络不再使用紧凑药丸尺寸。
 ### 2.3 活动优先级 / 替换 / 堆叠 / 过期
 优先级顺序沿用审计确认的 v1/参考排序（"短时、用户发起"高于"环境"，媒体最后）：
 
@@ -138,8 +140,9 @@
 | 双击药丸 | 打开来源应用 | 同 | 同 | "tap opens the related screen"（Apple 规则） |
 | 悬停 90 ms | Peek | Peek | 图标 scale 1.12 + 标签 | dock 的 Peek 等价物是图标放大 |
 | 拖拽 | 水平+垂直，橡皮筋 | 水平 | 禁用 | 释放吸附最近锚点（阈值 24 DIP），否则保留自由偏移并写回该显示器 |
+| 面板内横向拖动 | 指针捕获，damping 0.90，端点 0.35 | 同 | — | flick≤1 页；长拖可多页；>6 DIP 取消页内 click |
 | 拖动中 Esc | 取消并回弹 | 同 | — | 回弹用 `motion.hoverPop` |
-| 滚轮（展开时） | 切页（累积增量，不逐格翻页） | 同 | 同 | 触控板惯性不触发连翻 |
+| 滚轮（展开时） | 累积 100 DIP + 120 ms cooldown，一格一页 | 同 | 同 | 滑杆上不翻页；触控板 deltaX 同义 |
 | 右键 | 会话级菜单（固定/模式/材质/设置…） | 同 | 同 | **不得**写入持久设置（v1 的反面教材 [01 §2.7]） |
 | `Esc` | 关闭设置 → 收面板 → 无 | 同 | 同 | 逐级消费 |
 | 长按（触摸屏） | 固定/取消固定 | 同 | 同 | 仅检测到触摸数字化仪时启用 |
@@ -153,7 +156,7 @@
 | `Ctrl+Alt+H` | 隐藏/显示 |
 | `Ctrl+Alt+S` | 设置窗口 |
 | `Esc` | 逐级返回 |
-| `1`–`6` | 展开时切 rail 页 |
+| `1`–`6` | 展开时切页（pager） |
 | `LeftAlt` 长按（默认，可改） | 按住隐藏；使用 `WH_KEYBOARD_LL`，仅在岛可见时挂载，隐藏即卸载 |
 ### 2.5 多活动堆叠
 - 主药丸 + 2 个 ghost（同宽、y 偏移、缩放、透明度递减），阴影只画在最外层锚点伪元素上，避免堆叠被阴影吞掉。
@@ -172,7 +175,7 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 
 1. **外壳与内容解耦**：`Expanded` 打开后外壳尺寸由**页面**决定，事件只更新内容槽。
 2. **内容签名**：`ContentSignature = (activityKey, kind, titleHash, bodyHash, progressBucket)`；签名相同 → 丢弃，零工作。
-3. **替换而非重开**：签名变化 → 220 ms 交叉淡入 + 8 DIP 上滑；页面根、滚动位置、键盘焦点、rail 选中项全部保留。
+3. **替换而非重开**：签名变化 → 220 ms 交叉淡入 + 8 DIP 上滑；页面根、滚动位置、键盘焦点、pager 当前页与偏移全部保留。
 4. **尺寸不变**：内容替换**永不**改变面板高度；溢出走滚动（单页最大滚动 1 屏）或尾部裁切 + 省略号。
 5. **自动切页的克制**：仅当（a）用户在 current 页停留 > 600 ms，（b）新活动为交互/瞬时类，（c）非 pinned，（d）不在拖拽/滚动中 → 才切到该活动页；否则只 +1 角标 + nudge。
 6. **打开去抖**：同一目标计划在运行中不得重启；`Wanted(Expanded, page)` 是幂等目标，重复请求被合并。
@@ -189,7 +192,7 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 ### 2.9 抑制、无障碍与输入法
 - **全屏检测**：`SHQueryUserNotificationState` ∈ {`QUNS_RUNNING_D3D_FULL_SCREEN`, `QUNS_PRESENTATION_MODE`, `QUNS_BUSY`} 或前台窗口矩形覆盖目标显示器且非 shell 类 → Hidden。每应用豁免名单（设置可编辑）。
 - **锁屏/会话切换**：`WTSRegisterSessionNotification` → 立即 Hidden，停止所有生产者（不止渲染）。
-- **无障碍**：rail 项、transport、行内按钮均暴露 `AutomationProperties.Name`（本地化）；焦点环 2 DIP `--info`；全键盘可达；高对比主题下材质降级为不透明；屏幕阅读器朗读"活动 + 数值"。
+- **无障碍**：页点、transport、行内按钮均暴露 `AutomationProperties.Name`（本地化）；焦点环 2 DIP `--info`；全键盘可达；高对比主题下材质降级为不透明；屏幕阅读器朗读"活动 + 数值"。
 - **减少动效**：跟随 `SPI_GETCLIENTAREAANIMATION` 与设置三态（跟随系统/开/关）；开启后 ζ→1、nudge 振幅 0、bloom 0、时长 ×0.5、封面旋转关闭。
 - **输入法**：仅在前台窗口变化或 1 s 去抖时查询一次，使用 `SendMessageTimeout(SMTO_ABORTIFHUNG, 50ms)`；绝不 6.7 Hz 轮询（[审计 F-14]）。
 
@@ -198,10 +201,9 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 
 | Token | 值 | 用途 / 推导 |
 |---|---|---|
-| `shell.width.expanded` | **440** | 最新反馈；= rail 48 + 内容 392 |
-| `shell.rail.width` | **48** | 竖向导航栏 |
-| `shell.content.width` | **392** | 内容区，左右 inset 16 → 可用 360 |
-| `shell.height.expanded` | **284** | 六个页面统一；内容 252（284 − 2×16 inset）；切换页面不改变外壳尺寸 |
+| `shell.width.expanded` | **440** | 最新反馈；= 内容 400 + 2×20 inset |
+| `shell.content.width` | **400** | 内容区（440 − 2×20）；横向 pager 页宽 400 |
+| `shell.height.expanded` | **284** | 六个页面统一；内容 252（284 − 2×16 垂直 inset）；切换页面不改变外壳尺寸 |
 | `shell.height.dock.strip` | **52** | dock 窄条 |
 | `shell.window.pad` | **24** | 阴影/抗锯齿轮廓余量；窗口 = 壳体 + 2×24 |
 | `shell.window.size` | **488×332** | 每显示器固定宿主尺寸（440+48, 284+48） |
@@ -222,8 +224,8 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 | `radius.art.small/large` | 8 / 12 | 28 / 64 封面 |
 | `space.inset` | 12（紧凑）/ 16（内容）/ 20（分组） | |
 | `space.gap` | 4 / 8 / 10 / 16 | 行内 / 行间 / art↔text / 分组 |
-| `space.rail.item` | 34×34 视觉 / 36×36 命中 / 间距 8 | rail |
-| `space.rail.pad` | 上 16 / 下 16（rail 垂直居中） | |
+| `pager.dot` | 6 px 点 / active 20×6 胶囊，命中 20×20 | 页点 |
+| `pager.threshold` | 24 DIP（拖动）/ 0.5 页（距离）/ 0.6 DIP·ms⁻¹（flick） | 翻页判定 | |
 | `hit.min` | 32 | 桌面指针下限；transport 36 |
 | `stroke.hairline` | 1 | 关键线 `#1E1E22`（暗）/ `#D8DBE1`（亮） |
 | `focus.ring` | 2，offset 2 | `--info` |
@@ -231,18 +233,20 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 | `shadow.dock` | `0 4 12 rgba(0,0,0,.28)` | |
 | `opacity.fill` | **0.96**（范围 0.85–1.0） | 承载文字的态不得低于 0.85 |
 
-**rail 布局**（rail 是唯一在展开期间位置固定的元素）：
+**横向 pager 布局**（无 rail；展开期间只有内容条在动）：
 
 | 区域 | 规格 |
 |---|---|
-| 承载 | `48 × 面板高`，左侧圆角继承壳体（被 clip） |
-| 顶部组 | home / media / notifications / clipboard / agent / widgets，6 项 |
-| 设置/市场 | **不占 rail 项**；从标题栏图标、托盘菜单与快捷键进入（保持 rail 只有 6 项） |
-| 项 | 34×34 视觉 / 36×36 命中，圆角 10；图标 18；选中态：底色 `rgba(255,255,255,.10)` + 左侧 2×16 强调条（x=4，`--accent`） |
-| 悬停 | 底色 `rgba(255,255,255,.06)`，90 ms 淡入，无缩放 |
-| 角标 | 未读/更新：右上 6 DIP 圆点（`--danger` / `--info`），不显示数字（数字进页面标题） |
-| 滚动 | 不滚动；固定 6 项 |
-| 焦点 | Tab 循环进入 rail，上下键移动，Enter 选中 |
+| 视口 | `400 × 252`（440 − 2×20 inset；284 − 2×16 垂直 inset），六页横向排列，页距 400 |
+| 内容条 | 单层 `TranslateX`（transform-only，不触发布局）；页内控件只更新属性 |
+| 标题 | 左上 overlay，15 px SemiBold，当前页名（本地化） |
+| 页点 | 底部居中，6 点：6 px 圆点 / active 20×6 胶囊，命中 20×20，可点击跳页；`aria-current` |
+| 收起 | 右上 chevron（Esc/外部点击同义） |
+| 拖动 | 指针捕获；damped 1:1（0.90）+ 端点橡皮筋 0.35；移动 >6 DIP 取消页内 click；滑杆/按钮保留自身指针 |
+| 翻页判定 | 阈值 24 DIP；flick（<0.5 页）最多 ±1 页；长拖 ≥0.5 页按 `round(dx/400)` 可跨多页；边界 clamp |
+| 滚轮 | 累积 100 DIP + 120 ms cooldown，一格一页；滑杆上不翻页；deltaX 触控板同义 |
+| 吸附 | 目标页偏移 + 弹簧 `motion.tab`（T .34 / ζ .92），可被新拖动从当前视觉偏移打断 |
+| 键盘 | `1`–`6` 跳页，`←/→` 前后页，`Home/End` 首末页，`Esc` 收起 |
 ### 3.2 圆角与连续曲率
 用超椭圆（squircle）而非圆角矩形：`Border.CornerRadius` 的圆弧读起来像"网页卡片"，不是 iOS 岛。
 
@@ -281,12 +285,13 @@ y(θ) = cy + rr·sign·|cos θ|^(2/k)   // 每象限 15 采样足够（≤44 px 
 | 层 | 材质 | 实现 | 降级 |
 |---|---|---|---|
 | Tier 0 | **Obsidian**（默认） | 不透明 `#08080A` @96% + 向下阴影 | 永远可用 |
-| Tier 1 | **Acrylic** | Avalonia `TransparencyLevelHint=AcrylicBlur` + `WinUICompositionBackdropCornerRadius=28`；模糊被圆角裁剪 | 探测失败 → Tier 0 |
-| Tier 2（实验，默认关） | 合成器 host backdrop brush | `Compositor.CreateHostBackdropBrush` 进入自绘树 | 失败 → Tier 1 |
-| Tier 3（不采用） | `SetWindowCompositionAttribute` | 未文档化，整矩形 | 不发布 |
+| Tier 1 | **Simulated glass（模拟玻璃）** | 自绘：2 段半透明渐变 + 1.5% 噪声 + 1 px 顶部高光；无需系统模糊 | 高对比/低端 GPU → Tier 0 |
+| Tier 2（实验，默认关） | **整窗 AcrylicBlur** | Avalonia `TransparencyLevelHint=AcrylicBlur`；模糊覆盖整个固定宿主矩形，需配合 `SetWindowRgn` 才贴合壳体，动画期间会露边 | 探测失败 → Tier 1 |
+| Tier 3（不采用） | 合成器 host backdrop / `SetWindowCompositionAttribute` | 无法得到"仅药丸区域"的原生模糊（spike 05 §5 NO-GO），或未文档化且为整矩形 | 不发布 |
 
+- **原生"仅药丸区域"的 Acrylic 在 Avalonia 12 上不可行**：`AcrylicBlur`/`Mica` 作用于整个窗口矩形，而非壳体；`Compositor.CreateHostBackdropBrush` 无法进入自绘树得到药丸裁剪；`SetWindowCompositionAttribute` 未文档化且为矩形。因此 v2.0 以 **Tier 0 Obsidian 为默认、Tier 1 模拟玻璃为可选**；Tier 2 仅作实验开关（静止时可贴合，动画中会露边）。
 - 材质切换在**静止时**生效（不叠在动画上），一次重绘；切换本身用 180 ms 交叉淡入。
-- Acrylic 下禁用 `BlurEffect`/实时模糊特效；文字在模糊上使用 `Grayscale` 抗锯齿（透明表面无 ClearType，与 WPF 现状一致）。
+- 透明/模拟玻璃下禁用 `BlurEffect`/实时模糊特效；文字使用 `Grayscale` 抗锯齿（透明表面无 ClearType，与 WPF 现状一致）。
 - 高对比模式：强制 Tier 0 且 `opacity=1.0`。
 ### 3.5 字体与字阶
 字体栈（显式回退，不用默认合成）：
@@ -302,7 +307,7 @@ Icons   : "Segoe Fluent Icons" → "Segoe MDL2 Assets" → 手写矢量路径
 |---|---|---|---|
 | 岛内主标题 / 曲目 | 13.5 | SemiBold | 单行 + 字符省略 |
 | 次要（艺术家/标签） | 11 | Normal | 全系统唯一的 Normal 用例 |
-| 面板页标题 | 15 | SemiBold | 与 rail 图标基线对齐 |
+| 面板页标题 | 15 | SemiBold | 与标题 overlay 基线对齐 |
 | 仪表盘时钟 | 34 | Bold | 等宽数字 |
 | 仪表盘日期 | 13 | SemiBold | 本地化格式 |
 | HUD 数值 | 12.5 | SemiBold | tabular |
@@ -329,7 +334,7 @@ Icons   : "Segoe Fluent Icons" → "Segoe MDL2 Assets" → 手写矢量路径
 | `motion.morph` | 0.28 | 0.85 | 503.6 | 38.2 | 0.21 | 面板内页面切换 / 内容尺寸变化（仅页切换） |
 | `motion.hoverPop` | 0.24 | 0.70 | 685.4 | 36.7 | 0.21 | Peek / 图标放大 / 拖拽回弹 |
 | `motion.press` | 0.18 | 0.65 | 1218.5 | 45.4 | 0.17 | 按下 scale 0.97 |
-| `motion.tab` | 0.34 | 0.92 | 341.5 | 34.0 | 0.23 | rail 指示条 / 页横向位移 |
+| `motion.tab` | 0.34 | 0.92 | 341.5 | 34.0 | 0.23 | 页横向位移 / 页点指示 |
 | `motion.nudge` | 0.26 | 0.55 | 584.0 | 26.6 | 0.29 | 新事件 −6 DIP 垂直踢 |
 | `motion.hide` | 0.30 | 0.95 | 438.6 | 39.8 | 0.20 | 淡出 / 收起后消失 |
 | `motion.radius` | 0.30 | 0.90 | 438.6 | 37.7 | 0.22 | 紧凑↔展开圆角（28 ↔ h/2） |
@@ -425,7 +430,7 @@ tests/FluidBar.Sdk.Tests         版本范围、能力组合、清单/本地化�
 tests/FluidBar.Architecture.Tests 依赖方向 + 禁用 API（Roslyn）
 tests/FluidBar.Platform.Tests    宿主内集成：显示器/DPI/命中/COM 生命周期
 tests/FluidBar.PluginHost.Tests  加载卸载 100×、zip-slip、签名、清单
-tests/FluidBar.Ui.Tests          头less 渲染 + 快照（面板/rail/HUD/双语）
+tests/FluidBar.Ui.Tests          头less 渲染 + 快照（面板/pager/HUD/双语）
 tests/FluidBar.Soak              1 h 浸泡：句柄/内存/帧预算/插件超时
 schemas/                         plugin / index / locale / listing / settings JSON Schema
 ```
@@ -485,7 +490,7 @@ TimeProvider──►                                                     ─┘
 | `PeekPolicy` | 悬停意图/离开去抖 | ✅ 带 `now` |
 | `CollapsePolicy` | 自动收起、pinned、抑制 | ✅ |
 | `StackLayout` | ghost 偏移/缩放/角标 | ✅ 纯几何 |
-| `IslandLayout` | 壳体/内容/rail/命中区域的 DIP 矩形 | ✅ |
+| `IslandLayout` | 壳体/内容/pager 视口/命中区域的 DIP 矩形 | ✅ |
 | `DpiPolicy` | DIP↔物理像素、显示器选择、钳制 | ✅ |
 | `MotionPolicy` | token 选择、reduced-motion 折算、速度重定向 | ✅ |
 | `SettingsMigrator` | schema 版本迁移 | ✅ |
@@ -497,7 +502,7 @@ TimeProvider──►                                                     ─┘
 ```csharp
 readonly record struct VisualRect(double X, double Y, double W, double H);
 
-// 布局：纯函数 → { Shell, Content(Shell − rail − inset), Rail(48), HitRegion(同 Shell 的 squircle), Anchor }
+// 布局：纯函数 → { Shell, Content(Shell − inset), PagerViewport(400), HitRegion(同 Shell 的 squircle), Anchor }
 IslandLayout Layout(in IslandState s, in MonitorInfo m, IslandSettings cfg);
 
 // 唯一的 DIP → 物理像素转换；只在窗口创建/锚点/显示器变化时调用（不在动画路径上）
@@ -539,15 +544,16 @@ PixelRect ToPhysical(in VisualRect r, in MonitorInfo m) => new(
 
 **M0 结果（2026-10-18，本机）：GO** — 证据见 [`research/05-avalonia-spike.md`](../research/05-avalonia-spike.md)：
 
-| 检查 | 结果 | 实测 |
+| 检查 | 结果 | 实测（两轮独立 spike，均见 `research/05-avalonia-spike.md`） |
 |---|---|---|
-| S1 透明圆角 | ✅ GO | `ActualTransparencyLevel=Transparent`；截图角部=桌面像素 `#D3D3D3`、中心=`#08080A`；488×332 DIP @150% 渲染为 732×498 px |
-| S2 Acrylic | ✅ 可用 | `AcrylicBlur` 生效且可见模糊；模糊为整窗矩形，圆角需 `UpdateWindowRegionOnSettle` 或降级 Tier0 |
-| S3 120fps 形变 | ✅ GO | 固定 HWND 不 resize；3.003 s / 489 paints：p50 6.05ms（165.2fps）、p99 8.11ms（< 8.33ms 预算），收敛后 0 渲染 |
-| S4 命中/穿透/焦点 | ✅ GO | WM_NCHITTEST：内→HTCLIENT、外/圆角外→HTTRANSPARENT；WS_EX_NOACTIVATE+TOOLWINDOW 验证；有效点击时前台未变 |
-| S5 内存浸泡 | ⏳ M6 | Debug 冷启动 157 MB / 156 线程；Release + 4 插件 30 min 浸泡待 M6 复测 |
-| S6 构建 | ✅ GO | .NET 10 + Avalonia 12.1.4：0 warning / 0 error，增量构建 ~1 s |
-| 多显示器 | ⏳ 环境未覆盖 | 本机 Avalonia 仅暴露 1 屏（虚拟显示适配器不可见），真机双屏复测，不阻塞 M4 |
+| S1 透明圆角 | ✅ GO | `ActualTransparencyLevel=Transparent`；截图角部=桌面像素、中心=`#08080A`；488×332 DIP @150% → 732×498 px；角部 RGBA alpha=0、壳体 alpha=255 |
+| S2 Acrylic | ⛔ 原生药丸 acrylic NO-GO | `AcrylicBlur`/`Mica` 只覆盖整个宿主矩形（非药丸）；DirectComposition 无 acrylic；LowLatency 黑框；Redirection ~77fps。改为 Tier 1 **模拟玻璃**（见 §3.4），Tier 2 整窗 acrylic 仅实验 |
+| S3 120fps 形变 | ✅ GO（尾部偶发） | 两轮：p50 6.05ms、p99 8.11ms（489 paints/3.0s）；另一轮 360 预热帧 p50 6.05 / p99 7.76 / mean 165.9fps，4/360 帧 >8.33ms（max 18.59ms）。UI 线程 `RequestAnimationFrame` 非合成器驱动，但固定 HWND 不 resize、收敛后 0 渲染 |
+| S4 命中/穿透/焦点/拖拽 | ✅ GO | WM_NCHITTEST：内→HTCLIENT、外/圆角外→HTTRANSPARENT；`WS_EX_NOACTIVATE|TOOLWINDOW`；拖拽精确 (−120,−80)px 且前台未变 |
+| S5 内存/空闲 | ✅ GO（Debug 基线） | 62s 空闲：0 渲染、0.151% 单核、+28.7KB 分配、GC 平坦、WS 170.5MB（Debug）；Release + 4 插件 30min 浸泡留 M6 |
+| S6 构建 | ✅ GO | .NET 10 + Avalonia 12.1.4：0 warning / 0 error，增量构建 ~1s |
+| 置顶策略 | ✅ GO | 前台为 Chrome 时允许置顶；`Windows.UI.Core.CoreWindow`（开始菜单）在前台时抑制；开始菜单可覆盖岛 |
+| 多显示器 | ⏳ 环境未覆盖 | 本机 Avalonia 仅暴露 1 屏（虚拟显示适配器不可见）；PMv2 @144DPI/1.5× 主屏放置精确。真机双屏复测为发布前硬门槛 |
 
 **回退路径（触发即切换，设计不变）**
 1. S1/S3 失败 → **WPF 固定尺寸分层窗口**：同一套 `FrameClock`/`SpringEngine`/`Layout`/`HitTester`，`FrameworkElement.OnRender` 自绘壳体；上限 60 fps，`DropShadowEffect` 全部替换为 9-slice 烘焙阴影；定位为"能发布但不达标"的兜底。
@@ -719,12 +725,12 @@ GitHub Releases (plugins repo)   fluidbar-plugin-<id>-<version>.fbp
   "version": 1,
   "messages": {
     "Island.Peek.Hint": "点击展开",
-    "Rail.Home": "主页",
-    "Rail.Media": "媒体",
-    "Rail.Notifications": "通知",
-    "Rail.Clipboard": "剪贴板",
-    "Rail.Agent": "代理",
-    "Rail.Widgets": "小组件",
+    "Page.Home": "主页",
+    "Page.Media": "媒体",
+    "Page.Notifications": "通知",
+    "Page.Clipboard": "剪贴板",
+    "Page.Agent": "代理",
+    "Page.Widgets": "小组件",
     "Hud.Volume": "音量",
     "Hud.Muted": "静音",
     "Media.TrackCount": "{count, plural, other {# 首曲目}}",
@@ -882,7 +888,7 @@ Forbidden.Types("System.Windows.Forms.Screen", "System.Windows.SystemParameters"
 - [ ] 展开态：点击面板外收起；点击面板内不收起；Esc 逐级；`pinned` 抑制自动收起
 - [ ] 拖拽：橡皮筋、吸附、Esc 取消、跨显示器交接、重启后位置保持
 - [ ] 全部 14 类活动的紧凑尺寸与 HUD 单行布局（含静音、0%、100%、超长标签）
-- [ ] 双语即时切换（岛 + rail + 设置 + 市场 + 托盘 + 错误）；`qps-ploc` 下无裁切
+- [ ] 双语即时切换（岛 + pager + 设置 + 市场 + 托盘 + 错误）；`qps-ploc` 下无裁切
 - [ ] 媒体：播放/暂停/上一首/下一首/拖动进度/换源/无会话降级/浏览器源
 - [ ] 通知：验证码识别与复制；免打扰时不弹
 - [ ] 剪贴板：文本/图片/超长文本；复制回写；权限被占时不崩
@@ -983,7 +989,7 @@ Forbidden.Types("System.Windows.Forms.Screen", "System.Windows.SystemParameters"
 | **M1** Core | 10-25 → 11-07（2 周） | 事件枢纽、活动状态机、纯策略、布局、弹簧、设置模型与迁移、i18n 抽象 | Core 测试 ≥ 180 个全部通过；布局快照（3×6×3×2）锁定；弹簧收敛时间误差 < 20%；v1 样本迁移 0 失败 |
 | **M2** SDK + 插件宿主 | 10-25 → 11-07（并行，2 周） | `FluidBar.Sdk` 冻结、manifest v2 + Schema、ALC 加载器、安装/更新/回滚、样例插件、CLI 工具 | 加载/卸载 100× 无泄漏（或给出 `restartRequired` 数据）；zip-slip/签名/清单负例全部拦截；两个样例插件可安装并出岛 |
 | **M3** Platform.Windows | 11-08 → 11-21（2 周） | 显示器/DPI、媒体栈、剪贴板、通知、代理 hook、托盘/热键/更新；全部后台化 + 合并快照 | 空闲 0 定时器（除 ≥1 s 且变化才发布者）；UI 线程 I/O 静态扫描 0 命中；24 h 句柄增长 < 60 |
-| **M4** App 外壳 | 11-08 → 11-28（3 周） | 组合器宿主、岛控件 + 弹簧循环、rail 六页、HUD、dock、设置窗口、i18n 全量、市场 UI | 120 fps p99 < 8.33 ms（或回退路径 60 fps 达标）；点击穿透矩阵通过；`zh↔en` 全量即时切换；`qps-ploc` 无裁切 |
+| **M4** App 外壳 | 11-08 → 11-28（3 周） | 组合器宿主、岛控件 + 弹簧循环、pager 六页、HUD、dock、设置窗口、i18n 全量、市场 UI | 120 fps p99 < 8.33 ms（或回退路径 60 fps 达标）；点击穿透矩阵通过；`zh↔en` 全量即时切换；`qps-ploc` 无裁切 |
 | **M5** 插件迁移 + 市场 | 11-29 → 12-12（2 周） | 4 个内置插件迁移、签名索引、发布流水线、回滚/封禁、贡献者文档 | 首个第三方插件走完 PR→CI→签名→上线 < 10 min；公网安装到 `Active` < 60 s；回滚演练通过 |
 | **M6** 加固与发布 | 12-13 → 01-09（4 周） | 性能/浸泡/QA/崩溃护栏/诊断包/安装器/发布说明 | 1 h 浸泡达标（9.1 全部上限）；手工 QA 清单全绿；RC2 无 P0/P1；发布包签名与校验通过 |
 
@@ -994,4 +1000,7 @@ Forbidden.Types("System.Windows.Forms.Screen", "System.Windows.SystemParameters"
 - **只读（GPL-3.0，禁止复制代码/资源/字符串）**：WinIsland、boring.notch、Atoll、livebridge。本文引用的**理念**（固定窗口、优先级列表、签名索引、声明式贡献）属于思想，实现必须独立完成；每个借用点保留一份"clean-room 说明"（`docs/rewrite/research/clean-room-notes.md`，M1 建立）。
 - **禁止**：SF Symbols 字体或"suspiciously similar"字形、Apple Design Resources 模板、任何仓库的预览截图（含第三方专辑封面/图标）。
 - 新增第三方依赖必须在 `Directory.Packages.props` 记录许可，且限于 MIT/Apache-2.0/BSD/MS-PL。
+
+
+
 

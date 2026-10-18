@@ -66,7 +66,9 @@
       'tray.wifi': '网络', 'tray.volume': '音量', 'tray.battery': '电池 86%', 'tray.clock': '时间和日期',
 
       'island.expand': '点击展开', 'island.collapse': '收起灵动岛',
-      'rail.label': '面板导航',
+      'pager.label': '页面导航',
+      'pager.dot': '{name} · 第 {n} 页，共 {m} 页',
+      'pager.dotTooltip': '转到{name}',
       'tab.home': '主页', 'tab.media': '媒体', 'tab.notifications': '通知', 'tab.clipboard': '剪贴板',
       'tab.agent': 'Agent', 'tab.widgets': '小组件',
       'media.prev': '上一首', 'media.next': '下一首', 'media.play': '播放', 'media.pause': '暂停',
@@ -214,6 +216,7 @@
 
       'anno.title': 'FLUIDBAR · 实时标注', 'anno.shell': 'SHELL', 'anno.width': 'W', 'anno.height': 'H',
       'anno.radius': 'R', 'anno.size': '尺寸', 'anno.radiusLabel': '圆角', 'anno.alpha': '内容 α',
+      'anno.page': '页面', 'anno.pageIndex': '页序',
       'anno.spring': '展开弹簧', 'anno.kc': 'k / c', 'anno.settle': '收敛', 'anno.tokens': 'TOKENS'
     },
 
@@ -243,7 +246,9 @@
       'tray.wifi': 'Network', 'tray.volume': 'Volume', 'tray.battery': 'Battery 86%', 'tray.clock': 'Time and date',
 
       'island.expand': 'Click to expand', 'island.collapse': 'Collapse island',
-      'rail.label': 'Panel navigation',
+      'pager.label': 'Page navigation',
+      'pager.dot': '{name} · page {n} of {m}',
+      'pager.dotTooltip': 'Go to {name}',
       'tab.home': 'Home', 'tab.media': 'Media', 'tab.notifications': 'Notifications', 'tab.clipboard': 'Clipboard',
       'tab.agent': 'Agent', 'tab.widgets': 'Widgets',
       'media.prev': 'Previous', 'media.next': 'Next', 'media.play': 'Play', 'media.pause': 'Pause',
@@ -391,6 +396,7 @@
 
       'anno.title': 'FLUIDBAR · LIVE SPEC', 'anno.shell': 'SHELL', 'anno.width': 'W', 'anno.height': 'H',
       'anno.radius': 'R', 'anno.size': 'SIZE', 'anno.radiusLabel': 'RADIUS', 'anno.alpha': 'CONTENT α',
+      'anno.page': 'PAGE', 'anno.pageIndex': 'INDEX',
       'anno.spring': 'EXPAND SPRING', 'anno.kc': 'k / c', 'anno.settle': 'SETTLE', 'anno.tokens': 'TOKENS'
     }
   };
@@ -637,6 +643,22 @@
   var EXPANDED_W = 440;
   /* One shell size for every expanded section — sections never resize the island. */
   var EXPANDED_H = 284;
+  var PAGE_W = 400;
+  var PAGE_H = 244;
+
+  /* Pager feel + snap contract. T/ζ match the expanded-shell spring family. */
+  var PAGER = {
+    dragGain: 0.9,        /* 10% follow resistance — weighted, not icy */
+    rubberBand: 0.35,     /* overscroll beyond the first/last page */
+    thresholdPx: 28,      /* below this a gesture always snaps back */
+    flickVelocity: 0.55,  /* px/ms — fast/light gesture commits exactly one page */
+    flickMaxPages: 0.9,   /* gestures under 0.9 page can never commit more than one */
+    snapT: 0.34,
+    snapZ: 0.9,
+    wheelThreshold: 100,  /* px of accum. wheel delta per page */
+    wheelCooldown: 120,   /* ms between wheel commits */
+    wheelLinePx: 16
+  };
 
   /* ==========================================================================
      03. APPLICATION STATE
@@ -665,7 +687,19 @@
   };
   ALL_PLUGINS.forEach(function (p) { S.pluginEnabled[p.id] = true; });
 
-  var ISLAND = null, ANCHOR = null, COMPACT_LAYER = null, PANEL = null, RAIL = null;
+  var PAGER_STATE = {
+    offset: 0, index: 0, target: 0, snapping: false, dragging: false,
+    pointerId: null, startX: 0, origin: 0, dragTarget: 0, totalDx: 0,
+    moved: false, lastX: 0, lastT: 0, velocity: 0,
+    suppressClickUntil: 0, wheelAccum: 0, wheelLast: 0, wheelLockUntil: 0,
+    wheelQueue: [], wheelTimer: 0,
+    lastGesture: null
+  };
+
+  var ISLAND = null, ANCHOR = null, COMPACT_LAYER = null;
+  var PAGER_EL = null, PAGER_VIEWPORT = null, PAGER_TRACK = null;
+  var PAGER_TITLE = null, PAGER_COUNT = null, PAGER_ACTION = null;
+  var PAGER_CLOSE = null, PAGER_DOTS = null, PAGER_LIVE = null;
   var ghosts = [], stackBadge = null, expandedLayer = null;
   var consoleEl = null, consoleHandle = null, settingsWindow = null, modalLayer = null;
   var toastEl = null, annotationsEl = null, measureSvg = null, specCard = null, measureTags = null;
@@ -738,6 +772,7 @@
   var radiusSpring = new Spring(18, 0.3, 0.9);
   var pressSpring = new Spring(1, DEFAULTS.pressT, DEFAULTS.pressZ);
   var nudgeSpring = new Spring(0, DEFAULTS.nudgeT, DEFAULTS.nudgeZ);
+  var pagerSpring = new Spring(0, PAGER.snapT, PAGER.snapZ);
 
   var rafId = 0, lastTs = 0, fpsLast = 60, fpsAccum = 0, fpsCount = 0;
   var fpsText = null;
@@ -864,6 +899,19 @@
     if (radiusSpring.step(dt)) awake = true;
     if (pressSpring.step(dt)) awake = true;
     if (nudgeSpring.step(dt)) awake = true;
+
+    if (PAGER_STATE.snapping) {
+      var pageAwake = pagerSpring.step(dt);
+      PAGER_STATE.offset = pagerSpring.x;
+      if (!pageAwake) {
+        PAGER_STATE.offset = PAGER_STATE.target;
+        pagerSpring.snap(PAGER_STATE.target);
+        PAGER_STATE.snapping = false;
+      } else {
+        awake = true;
+      }
+      applyPagerTransform();
+    }
 
     applyShellFrame();
     noteFrame(dt);
@@ -1241,15 +1289,6 @@
   /* ==========================================================================
      07. EXPANDED PANEL
      ========================================================================== */
-  var RAIL_BTN = 34;
-  var RAIL_GAP = 8;
-
-  function syncRailMetrics() {
-    /* Fixed metrics on every section: 6 × 34px buttons + 5 × 8px gaps = 244px,
-       exactly the content height of the 440×284 shell (284 − 2 × 20 padding). */
-    return { contentH: EXPANDED_H - 40, btn: RAIL_BTN, gap: RAIL_GAP };
-  }
-
   function sectionTitle(tab) {
     if (tab === 'notifications') return t('notifications.title');
     if (tab === 'clipboard') return t('clipboard.title');
@@ -1257,70 +1296,152 @@
     return t('tab.' + tab);
   }
 
-  function renderRail() {
-    if (!RAIL) return;
-    RAIL.setAttribute('aria-label', t('rail.label'));
-    RAIL.innerHTML =
-      '<span class="rail-indicator" id="railIndicator" aria-hidden="true"></span>' +
-      TAB_META.map(function (tab) {
-        return '<button class="rail-btn" type="button" data-tab="' + tab.id + '" aria-label="' + t(tab.label) + '">' +
-          icon(tab.icon, 17) +
-          '<span class="rail-tip" aria-hidden="true">' + t(tab.label) + '</span>' +
-          '</button>';
-      }).join('');
-    updateRail(true);
+  function pageIndexFor(tab) {
+    var idx = TAB_META.findIndex(function (m) { return m.id === tab; });
+    return idx < 0 ? 0 : idx;
   }
 
-  function updateRail(instant) {
-    if (!RAIL) return;
-    var metrics = syncRailMetrics();
-    var idx = TAB_META.findIndex(function (m) { return m.id === S.tab; });
-    if (idx < 0) idx = 0;
-    var btns = $$('.rail-btn', RAIL);
-    btns.forEach(function (b) {
-      var active = b.dataset.tab === S.tab;
-      b.classList.toggle('active', active);
-      if (active) b.setAttribute('aria-current', 'page');
-      else b.removeAttribute('aria-current');
-    });
-    var indicator = $('#railIndicator', RAIL);
-    if (!indicator) return;
-    if (instant) indicator.classList.remove('ready');
-    var stack = TAB_META.length * metrics.btn + (TAB_META.length - 1) * metrics.gap;
-    var top = (metrics.contentH - stack) / 2 + idx * (metrics.btn + metrics.gap) + (metrics.btn - 18) / 2;
-    indicator.style.top = Math.max(0, top).toFixed(2) + 'px';
-    indicator.style.height = '18px';
-    if (instant) {
-      requestAnimationFrame(function () { indicator.classList.add('ready'); });
-    } else {
-      indicator.classList.add('ready');
+  function pageCountFor(tab) {
+    if (tab === 'notifications') {
+      return S.unread > 0 ? t('notifications.unread', { n: S.unread }) : t('notifications.allRead');
     }
-  }
-
-  function panelHeadHTML() {
-    var title = sectionTitle(S.tab);
-    var count = '';
-    var action = '';
-    if (S.tab === 'notifications') {
-      count = S.unread > 0 ? t('notifications.unread', { n: S.unread }) : t('notifications.allRead');
-      if (visibleNotifications().length) {
-        action = '<button class="text-btn" type="button" data-act="clear-notifs">' + t('notifications.clear') + '</button>';
-      }
-    } else if (S.tab === 'clipboard') {
-      count = t('clipboard.count', { n: sortedClipItems().length });
-    } else if (S.tab === 'agent') {
+    if (tab === 'clipboard') return t('clipboard.count', { n: sortedClipItems().length });
+    if (tab === 'agent') {
       var running = AGENTS.filter(function (a) { return a.status === 'running'; }).length;
-      count = t('agent.count', { n: running });
+      return t('agent.count', { n: running });
     }
-    return '<div class="panel-head">' +
-      '<span class="panel-title">' + title + '</span>' +
-      (count ? '<span class="panel-count">' + count + '</span>' : '') +
-      '<span class="panel-head-actions">' + action +
-        '<button class="panel-close" type="button" data-act="collapse" aria-label="' + t('island.collapse') + '" title="' + t('island.collapse') + '">' +
-          icon(S.mode === 'dock' ? 'chevronDown' : 'chevronUp', 15) +
-        '</button>' +
-      '</span>' +
-    '</div>';
+    return '';
+  }
+
+  function pageActionFor(tab) {
+    if (tab === 'notifications' && visibleNotifications().length) {
+      return { act: 'clear-notifs', label: t('notifications.clear') };
+    }
+    return null;
+  }
+
+  function updatePagerChrome() {
+    if (!PAGER_TITLE) return;
+    var idx = pageIndexFor(S.tab);
+    var count = pageCountFor(S.tab);
+    var action = pageActionFor(S.tab);
+
+    PAGER_TITLE.textContent = sectionTitle(S.tab);
+    PAGER_COUNT.textContent = count;
+    PAGER_COUNT.hidden = !count;
+    if (action) {
+      PAGER_ACTION.hidden = false;
+      PAGER_ACTION.textContent = action.label;
+      PAGER_ACTION.dataset.act = action.act;
+    } else {
+      PAGER_ACTION.hidden = true;
+      PAGER_ACTION.textContent = '';
+      delete PAGER_ACTION.dataset.act;
+    }
+    if (PAGER_CLOSE) {
+      PAGER_CLOSE.innerHTML = icon(S.mode === 'dock' ? 'chevronDown' : 'chevronUp', 15);
+      PAGER_CLOSE.setAttribute('aria-label', t('island.collapse'));
+      PAGER_CLOSE.title = t('island.collapse');
+    }
+
+    if (PAGER_DOTS) {
+      PAGER_DOTS.setAttribute('aria-label', t('pager.label'));
+      if (PAGER_DOTS.children.length !== TAB_META.length) {
+        PAGER_DOTS.innerHTML = TAB_META.map(function (tab) {
+          return '<button class="pager-dot" type="button" data-page="' + tab.id + '"></button>';
+        }).join('');
+      }
+      $$('.pager-dot', PAGER_DOTS).forEach(function (dot, i) {
+        var tab = TAB_META[i];
+        var active = i === idx;
+        var label = t('pager.dot', { name: t(tab.label), n: i + 1, m: TAB_META.length });
+        dot.classList.toggle('active', active);
+        dot.setAttribute('aria-label', label);
+        dot.title = t('pager.dotTooltip', { name: t(tab.label) });
+        dot.dataset.page = tab.id;
+        if (active) dot.setAttribute('aria-current', 'page');
+        else dot.removeAttribute('aria-current');
+      });
+    }
+
+    if (PAGER_TRACK) {
+      $$('.pager-page', PAGER_TRACK).forEach(function (page) {
+        var active = page.dataset.page === S.tab;
+        page.toggleAttribute('inert', !active);
+        page.setAttribute('aria-hidden', active ? 'false' : 'true');
+      });
+    }
+
+    PAGER_EL.dataset.page = S.tab;
+    PAGER_EL.dataset.pageIndex = String(idx);
+    if (ISLAND) ISLAND.dataset.page = S.tab;
+    if (S.annotations) updateAnnotations();
+  }
+
+  function announcePage() {
+    if (!PAGER_LIVE) return;
+    var idx = pageIndexFor(S.tab);
+    PAGER_LIVE.textContent = t('pager.dot', {
+      name: sectionTitle(S.tab), n: idx + 1, m: TAB_META.length
+    });
+  }
+
+  function applyPagerTransform() {
+    if (!PAGER_TRACK) return;
+    var w = PAGER_VIEWPORT && PAGER_VIEWPORT.clientWidth ? PAGER_VIEWPORT.clientWidth : PAGE_W;
+    PAGER_TRACK.style.transform = 'translate3d(' + (-PAGER_STATE.offset * w).toFixed(3) + 'px, 0, 0)';
+    if (PAGER_EL) PAGER_EL.dataset.offset = PAGER_STATE.offset.toFixed(4);
+  }
+
+  function pageHTML(tab) {
+    if (tab === 'media') return mediaHTML();
+    if (tab === 'notifications') return notificationsHTML();
+    if (tab === 'clipboard') return clipboardHTML();
+    if (tab === 'agent') return agentHTML();
+    if (tab === 'widgets') return widgetsHTML();
+    return homeHTML();
+  }
+
+  function renderPane() {
+    if (!PAGER_TRACK) return;
+    PAGER_TRACK.innerHTML = TAB_META.map(function (tab, i) {
+      var label = t('pager.dot', { name: sectionTitle(tab.id), n: i + 1, m: TAB_META.length });
+      return '<section class="pager-page" data-page="' + tab.id + '" role="group" ' +
+        'aria-roledescription="slide" aria-label="' + esc(label) + '">' + pageHTML(tab.id) + '</section>';
+    }).join('');
+    updatePagerChrome();
+    applyPagerTransform();
+    requestAnimationFrame(updateScrollFades);
+  }
+
+  function setPagerInstant(index) {
+    index = clamp(Math.round(index), 0, TAB_META.length - 1);
+    PAGER_STATE.index = index;
+    PAGER_STATE.target = index;
+    PAGER_STATE.offset = index;
+    PAGER_STATE.snapping = false;
+    pagerSpring.snap(index);
+    applyPagerTransform();
+  }
+
+  function setPagerSnap(index) {
+    index = clamp(Math.round(index), 0, TAB_META.length - 1);
+    PAGER_STATE.index = index;
+    PAGER_STATE.target = index;
+    pagerSpring.setParams(PAGER.snapT, PAGER.snapZ);
+    if (!PAGER_STATE.snapping) {
+      pagerSpring.snap(PAGER_STATE.offset);
+    }
+    PAGER_STATE.snapping = true;
+    pagerSpring.retarget(index, PAGER.snapT, PAGER.snapZ);
+    wake();
+  }
+
+  function syncDockPage() {
+    if (S.mode !== 'dock') return;
+    var app = DOCK_APPS.filter(function (a) { return a.tab === S.tab; })[0];
+    if (app) S.dockActiveApp = app.id;
+    updateDockActive();
   }
 
   function homeHTML() {
@@ -1544,19 +1665,6 @@
         '</div>' +
       '</div>' +
       '</div></div>';
-  }
-
-  function renderPane() {
-    if (!PANEL) return;
-    var html;
-    if (S.tab === 'media') html = mediaHTML();
-    else if (S.tab === 'notifications') html = notificationsHTML();
-    else if (S.tab === 'clipboard') html = clipboardHTML();
-    else if (S.tab === 'agent') html = agentHTML();
-    else if (S.tab === 'widgets') html = widgetsHTML();
-    else html = homeHTML();
-    PANEL.innerHTML = panelHeadHTML() + html;
-    requestAnimationFrame(updateScrollFades);
   }
 
   function updateScrollFades() {
@@ -2111,6 +2219,8 @@
       '<div class="spec-grid">' +
         '<div class="spec-row"><label>' + t('anno.size') + '</label><b data-spec="size">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.radiusLabel') + '</label><b data-spec="radius">—</b></div>' +
+        '<div class="spec-row wide"><label>' + t('anno.page') + '</label><b data-spec="page">—</b></div>' +
+        '<div class="spec-row wide"><label>' + t('anno.pageIndex') + '</label><b data-spec="pageIndex">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.alpha') + '</label><b data-spec="alpha">—</b></div>' +
         '<div class="spec-row"><label>T / ζ</label><b data-spec="spring">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.kc') + '</label><b data-spec="kc">—</b></div>' +
@@ -2170,6 +2280,10 @@
     if (spec) {
       var sizeEl = $('[data-spec="size"]', spec);
       if (sizeEl) sizeEl.textContent = Math.round(r.width) + ' × ' + Math.round(r.height);
+      var pageEl = $('[data-spec="page"]', spec);
+      if (pageEl) pageEl.textContent = sectionTitle(S.tab);
+      var pageIdxEl = $('[data-spec="pageIndex"]', spec);
+      if (pageIdxEl) pageIdxEl.textContent = (pageIndexFor(S.tab) + 1) + ' / ' + TAB_META.length;
       var radEl = $('[data-spec="radius"]', spec);
       if (radEl) radEl.textContent = S.mode === 'flush' ? '0 0 22 22' : rad + ' px';
       var alphaEl = $('[data-spec="alpha"]', spec);
@@ -2255,8 +2369,9 @@
     if (S.expanded) {
       if (S.tab !== tabForView(view)) {
         S.tab = tabForView(view);
-        updateRail();
         renderPane();
+        setPagerSnap(pageIndexFor(S.tab));
+        announcePage();
       }
       syncTargets('morph');
     } else {
@@ -2277,6 +2392,7 @@
   function expandTo(tab, opts) {
     opts = opts || {};
     clearTransient();
+    cancelPagerWheelQueue();
     S.activeTrigger = null;
     if (S.expanded && S.tab === tab && S.mode !== 'dock') return;
     S.peek = false;
@@ -2292,36 +2408,41 @@
       }
       S.dockOpen = true;
       document.body.classList.add('dock-panel-open');
-      renderRail();
       renderPane();
+      setPagerInstant(pageIndexFor(S.tab));
       syncTargets(opts.instant ? 'snap' : 'expand', { instant: !!opts.instant });
       updateDockActive();
       updateConsoleActive();
       return;
     }
 
-    renderRail();
     renderPane();
+    setPagerInstant(pageIndexFor(S.tab));
     clampDragForWidth(EXPANDED_W);
     syncTargets(opts.instant ? 'snap' : 'expand', { instant: !!opts.instant });
     updateConsoleActive();
   }
 
-  function setTab(tab) {
+  function setTab(tab, opts) {
     if (!S.expanded) return;
-    S.tab = tab;
-    updateRail();
-    renderPane();
+    cancelPagerWheelQueue();
+    var idx = pageIndexFor(tab);
+    S.tab = TAB_META[idx].id;
+    if (!PAGER_TRACK.children.length) renderPane();
+    updatePagerChrome();
+    if (opts && opts.instant) setPagerInstant(idx);
+    else setPagerSnap(idx);
+    if (!opts || !opts.silent) announcePage();
     syncTargets('morph');
-    if (S.mode === 'dock') {
-      var app = DOCK_APPS.filter(function (a) { return a.tab === tab; })[0];
-      S.dockActiveApp = app ? app.id : S.dockActiveApp;
-      updateDockActive();
-    }
+    syncDockPage();
   }
 
   function collapse() {
     clearTransient();
+    cancelPagerWheelQueue();
+    PAGER_STATE.dragging = false;
+    PAGER_STATE.snapping = false;
+    if (PAGER_EL) PAGER_EL.classList.remove('dragging');
     if (S.mode === 'dock') {
       if (!S.dockOpen) return;
       S.expanded = false;
@@ -2555,7 +2676,7 @@
     renderTaskbar();
     renderDock();
     renderCompact();
-    renderRail();
+    updatePagerChrome();
     if (S.expanded) renderPane();
     renderConsole();
     updateConsoleActive();
@@ -2592,7 +2713,7 @@
       applyShellFrame();
     } else {
       renderCompact();
-      renderRail();
+      updatePagerChrome();
       var tgt = targetSize();
       widthSpring.snap(tgt.w);
       heightSpring.snap(tgt.h);
@@ -2714,7 +2835,8 @@
     renderTaskbar();
     renderDock();
     renderCompact();
-    renderRail();
+    renderPane();
+    setPagerInstant(0);
     renderConsole();
     updateConsoleActive();
     syncTargets('snap');
@@ -2834,7 +2956,244 @@
   }
 
   function isInteractive(el) {
-    return !!(el.closest && el.closest('button, input, [role="slider"], [data-act], [data-tab], .js-seek, .mini-media, .notif-row, .clip-row, .agent-row'));
+    return !!(el.closest && el.closest('button, input, [role="slider"], [data-act], .js-seek, .mini-media, .notif-row, .clip-row, .agent-row, .pager-dot'));
+  }
+
+  function isPagerControl(el) {
+    return !!(el.closest && el.closest('button, input, textarea, select, a, [role="slider"], [role="switch"], [role="button"], [data-act], .js-seek, .scroll-area, .pager-dot'));
+  }
+
+  function isWheelOverControl(el) {
+    return !!(el.closest && el.closest('input, textarea, select, [role="slider"], .js-seek, .scroll-area'));
+  }
+
+  function cancelPagerWheelQueue() {
+    if (PAGER_STATE.wheelTimer) {
+      clearTimeout(PAGER_STATE.wheelTimer);
+      PAGER_STATE.wheelTimer = 0;
+    }
+    PAGER_STATE.wheelQueue.length = 0;
+    PAGER_STATE.wheelAccum = 0;
+  }
+
+  function pageWidthPx() {
+    return (PAGER_VIEWPORT && PAGER_VIEWPORT.clientWidth) || PAGE_W;
+  }
+
+  function startPagerDrag(e) {
+    cancelPagerWheelQueue();
+    stopDemo();
+    PAGER_STATE.snapping = false;
+    PAGER_STATE.offset = pagerSpring.x;
+    PAGER_STATE.dragging = true;
+    PAGER_STATE.pointerId = e.pointerId;
+    PAGER_STATE.startX = e.clientX;
+    PAGER_STATE.origin = PAGER_STATE.offset;
+    PAGER_STATE.dragTarget = PAGER_STATE.offset;
+    PAGER_STATE.totalDx = 0;
+    PAGER_STATE.moved = false;
+    PAGER_STATE.lastX = e.clientX;
+    PAGER_STATE.lastT = performance.now();
+    PAGER_STATE.velocity = 0;
+    PAGER_EL.classList.add('dragging');
+    try { PAGER_VIEWPORT.setPointerCapture(e.pointerId); } catch (err) { /* pointer capture is optional */ }
+    if (e.cancelable) e.preventDefault();
+  }
+
+  function movePagerDrag(e) {
+    var dx = e.clientX - PAGER_STATE.startX;
+    PAGER_STATE.totalDx = dx;
+    if (Math.abs(dx) > 6) PAGER_STATE.moved = true;
+
+    var raw = PAGER_STATE.origin - (dx / pageWidthPx()) * PAGER.dragGain;
+    var lastPage = TAB_META.length - 1;
+    if (raw < 0) raw *= PAGER.rubberBand;
+    else if (raw > lastPage) raw = lastPage + (raw - lastPage) * PAGER.rubberBand;
+    PAGER_STATE.dragTarget = raw;
+    PAGER_STATE.offset = raw;
+    applyPagerTransform();
+
+    var now = performance.now();
+    var dt = now - PAGER_STATE.lastT;
+    if (dt > 0) {
+      var instant = (e.clientX - PAGER_STATE.lastX) / dt;
+      PAGER_STATE.velocity = PAGER_STATE.velocity * 0.32 + instant * 0.68;
+    }
+    PAGER_STATE.lastX = e.clientX;
+    PAGER_STATE.lastT = now;
+  }
+
+  function finishPagerDrag() {
+    var lastPage = TAB_META.length - 1;
+    var dx = PAGER_STATE.totalDx;
+    var absDx = Math.abs(dx);
+    var base = clamp(Math.round(PAGER_STATE.origin), 0, lastPage);
+    var target = base;
+    var kind = 'snap-back';
+    var movedPages = PAGER_STATE.dragTarget - PAGER_STATE.origin;
+    var velocity = PAGER_STATE.velocity;
+
+    if (performance.now() - PAGER_STATE.lastT > 110) velocity = 0;
+
+    if (absDx >= PAGER.thresholdPx && Math.abs(movedPages) > 0.0001) {
+      var dir = movedPages > 0 ? 1 : -1;
+      if (Math.abs(movedPages) < PAGER.flickMaxPages) {
+        /* Short flick / light drag: one page maximum, independent of velocity. */
+        target = clamp(base + dir, 0, lastPage);
+        kind = Math.abs(velocity) > PAGER.flickVelocity ? 'flick-one' : 'short-drag-one';
+      } else {
+        /* Long continuous drag: distance-based, may cross several pages. */
+        target = clamp(Math.round(PAGER_STATE.dragTarget), 0, lastPage);
+        kind = 'distance-drag';
+      }
+    }
+
+    PAGER_STATE.index = target;
+    S.tab = TAB_META[target].id;
+    updatePagerChrome();
+    syncDockPage();
+    setPagerSnap(target);
+    announcePage();
+
+    PAGER_STATE.lastGesture = {
+      startIndex: pageIndexFor(TAB_META[base].id),
+      startOffset: +PAGER_STATE.origin.toFixed(3),
+      endOffset: +PAGER_STATE.dragTarget.toFixed(3),
+      dx: +dx.toFixed(1),
+      velocity: +velocity.toFixed(3),
+      pagesMoved: +movedPages.toFixed(3),
+      targetIndex: target,
+      kind: kind
+    };
+  }
+
+  function endPagerDrag(e) {
+    if (!PAGER_STATE.dragging) return;
+    if (e && e.pointerId !== PAGER_STATE.pointerId) return;
+    var moved = PAGER_STATE.moved;
+    try {
+      if (PAGER_VIEWPORT.hasPointerCapture(PAGER_STATE.pointerId)) {
+        PAGER_VIEWPORT.releasePointerCapture(PAGER_STATE.pointerId);
+      }
+    } catch (err) { /* ignore lost capture */ }
+    PAGER_EL.classList.remove('dragging');
+    PAGER_STATE.dragging = false;
+    PAGER_STATE.pointerId = null;
+
+    if (moved) {
+      PAGER_STATE.suppressClickUntil = performance.now() + 220;
+      finishPagerDrag();
+    } else {
+      /* A simple click never pages; restore any sub-threshold visual drift. */
+      setPagerSnap(PAGER_STATE.index);
+    }
+  }
+
+  function pagerWheelDelta(e) {
+    var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (e.deltaMode === 1) d *= PAGER.wheelLinePx;
+    else if (e.deltaMode === 2) d *= PAGE_W;
+    return d;
+  }
+
+  function drainPagerWheelQueue() {
+    PAGER_STATE.wheelTimer = 0;
+    if (!S.expanded || !PAGER_STATE.wheelQueue.length) {
+      PAGER_STATE.wheelQueue.length = 0;
+      return;
+    }
+    var wait = PAGER_STATE.wheelLockUntil - performance.now();
+    if (wait > 0) {
+      PAGER_STATE.wheelTimer = setTimeout(drainPagerWheelQueue, Math.ceil(wait) + 1);
+      return;
+    }
+    var dir = PAGER_STATE.wheelQueue.shift();
+    var lastPage = TAB_META.length - 1;
+    var next = clamp(PAGER_STATE.index + dir, 0, lastPage);
+    PAGER_STATE.wheelLockUntil = performance.now() + PAGER.wheelCooldown;
+    if (next !== PAGER_STATE.index) {
+      PAGER_STATE.index = next;
+      S.tab = TAB_META[next].id;
+      updatePagerChrome();
+      syncDockPage();
+      setPagerSnap(next);
+      announcePage();
+      PAGER_STATE.lastGesture = {
+        kind: 'wheel', dir: dir, targetIndex: next, at: performance.now()
+      };
+    }
+    if (PAGER_STATE.wheelQueue.length) {
+      PAGER_STATE.wheelTimer = setTimeout(drainPagerWheelQueue, PAGER.wheelCooldown);
+    }
+  }
+
+  function queuePagerWheelStep(dir) {
+    if (PAGER_STATE.wheelQueue.length > 6) return;
+    PAGER_STATE.wheelQueue.push(dir);
+    if (!PAGER_STATE.wheelTimer) drainPagerWheelQueue();
+  }
+
+  function onPagerWheel(e) {
+    if (!S.expanded || PAGER_STATE.dragging) return;
+    if (isWheelOverControl(e.target)) return;
+    var delta = pagerWheelDelta(e);
+    if (!delta) return;
+    e.preventDefault();
+    stopDemo();
+    var now = performance.now();
+    if (now - PAGER_STATE.wheelLast > 240) PAGER_STATE.wheelAccum = 0;
+    PAGER_STATE.wheelLast = now;
+    PAGER_STATE.wheelAccum += delta;
+    if (Math.abs(PAGER_STATE.wheelAccum) >= PAGER.wheelThreshold) {
+      var dir = PAGER_STATE.wheelAccum > 0 ? 1 : -1;
+      /* One physical event can only ever commit one page. */
+      PAGER_STATE.wheelAccum = 0;
+      queuePagerWheelStep(dir);
+    }
+  }
+
+  function bindPager() {
+    PAGER_VIEWPORT.addEventListener('pointerdown', function (e) {
+      if (!S.expanded) return;
+      if (e.button != null && e.button !== 0) return;
+      if (isPagerControl(e.target)) return;
+      startPagerDrag(e);
+    });
+    PAGER_VIEWPORT.addEventListener('pointermove', function (e) {
+      if (!PAGER_STATE.dragging || e.pointerId !== PAGER_STATE.pointerId) return;
+      movePagerDrag(e);
+    }, { passive: true });
+    PAGER_VIEWPORT.addEventListener('pointerup', endPagerDrag);
+    PAGER_VIEWPORT.addEventListener('pointercancel', endPagerDrag);
+    PAGER_VIEWPORT.addEventListener('dragstart', function (e) { if (PAGER_STATE.dragging) e.preventDefault(); });
+    PAGER_EL.addEventListener('wheel', onPagerWheel, { passive: false });
+
+    /* A drag that moves more than 6px must not fire a page-internal click. */
+    expandedLayer.addEventListener('click', function (e) {
+      if (performance.now() < PAGER_STATE.suppressClickUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+
+    window.__FB_PAGER__ = {
+      constants: Object.freeze(Object.assign({}, PAGER)),
+      getState: function () {
+        return {
+          index: PAGER_STATE.index,
+          offset: +PAGER_STATE.offset.toFixed(4),
+          target: PAGER_STATE.target,
+          snapping: PAGER_STATE.snapping,
+          dragging: PAGER_STATE.dragging,
+          tab: S.tab,
+          lastGesture: PAGER_STATE.lastGesture ? Object.assign({}, PAGER_STATE.lastGesture) : null
+        };
+      }
+    };
+    Object.defineProperties(window.__FB_PAGER__, {
+      index: { get: function () { return PAGER_STATE.index; } },
+      offset: { get: function () { return +PAGER_STATE.offset.toFixed(4); } }
+    });
   }
 
   /* ==========================================================================
@@ -2927,17 +3286,18 @@
     ISLAND.addEventListener('click', function (e) {
       stopDemo();
       if (performance.now() < suppressClickUntil) return;
+      if (performance.now() < PAGER_STATE.suppressClickUntil) return;
+      var pageDot = e.target.closest('.pager-dot');
+      if (pageDot) {
+        e.stopPropagation();
+        setTab(pageDot.dataset.page);
+        return;
+      }
       var actEl = e.target.closest('[data-act]');
       if (actEl) {
         if (actEl.matches('input, .js-seek')) return;
         e.stopPropagation();
         handleIslandAction(actEl.dataset.act, actEl);
-        return;
-      }
-      var tabBtn = e.target.closest('[data-tab]');
-      if (tabBtn) {
-        e.stopPropagation();
-        setTab(tabBtn.dataset.tab);
         return;
       }
       if (S.expanded) return;
@@ -3283,19 +3643,22 @@
       }
       if (S.settingsOpen || inField) return;
       if (e.target.closest && e.target.closest('input, textarea, select, .js-seek, [role="slider"]')) return;
-      if (S.expanded && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-        var idx = TAB_META.findIndex(function (m) { return m.id === S.tab; });
-        if (idx < 0) idx = 0;
-        var step = e.key === 'ArrowDown' ? 1 : -1;
-        var nextTab = TAB_META[(idx + step + TAB_META.length) % TAB_META.length];
-        setTab(nextTab.id);
-        var activeRailBtn = $('.rail-btn.active', RAIL);
-        if (activeRailBtn) activeRailBtn.focus({ preventScroll: true });
+      if (!S.expanded) return;
+      var pageIdx = pageIndexFor(S.tab);
+      var lastIdx = TAB_META.length - 1;
+      if (/^[1-6]$/.test(e.key)) {
+        setTab(TAB_META[parseInt(e.key, 10) - 1].id);
         e.preventDefault();
         return;
       }
-      if (S.expanded && /^[1-6]$/.test(e.key)) {
-        setTab(TAB_META[parseInt(e.key, 10) - 1].id);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        var delta = e.key === 'ArrowLeft' ? -1 : 1;
+        setTab(TAB_META[clamp(pageIdx + delta, 0, lastIdx)].id);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Home' || e.key === 'End') {
+        setTab(TAB_META[e.key === 'Home' ? 0 : lastIdx].id);
         e.preventDefault();
       }
     });
@@ -3317,8 +3680,7 @@
     renderTaskbar();
     renderDock();
     renderCompact();
-    renderRail();
-    if (S.expanded) renderPane();
+    renderPane();
     renderConsole();
     updateConsoleActive();
     renderSpecCard();
@@ -3343,6 +3705,7 @@
     if (state === 'market') { openSettings('market', { instant: true }); return; }
 
     if (state === 'expanded') {
+      if (opts.slide != null) wantTab = ISLAND_TABS[opts.slide];
       var tab = ISLAND_TABS.indexOf(wantTab) !== -1 ? wantTab : 'home';
       if (S.mode === 'dock') {
         var dockApp = DOCK_APPS.filter(function (a) { return a.tab === tab && a.id !== 'files' && a.id !== 'terminal' && a.id !== 'settings'; })[0];
@@ -3353,8 +3716,8 @@
       S.expanded = true;
       S.tab = tab;
       renderShellAttrs();
-      renderRail();
       renderPane();
+      setPagerInstant(pageIndexFor(tab));
       syncTargets('snap');
       updateConsoleActive();
       return;
@@ -3369,8 +3732,8 @@
       S.expanded = true;
       S.tab = state;
       renderShellAttrs();
-      renderRail();
       renderPane();
+      setPagerInstant(pageIndexFor(state));
       syncTargets('snap');
       updateConsoleActive();
       return;
@@ -3412,10 +3775,13 @@
       var v = q.get(k);
       if (v && valid[k].indexOf(v) !== -1) S[k] = v;
     });
+    var slide = parseInt(q.get('slide'), 10);
+    if (isNaN(slide) || slide < 0 || slide > TAB_META.length - 1) slide = null;
     return {
       state: q.get('state') || 'idle',
       tab: q.get('tab') || '',
-      hud: q.get('hud') || ''
+      hud: q.get('hud') || '',
+      slide: slide
     };
   }
 
@@ -3424,8 +3790,15 @@
     ANCHOR = $('#islandAnchor');
     COMPACT_LAYER = $('#compactLayer');
     expandedLayer = $('#expandedLayer');
-    PANEL = $('#panel');
-    RAIL = $('#sectionRail');
+    PAGER_EL = $('#pager');
+    PAGER_VIEWPORT = $('#pagerViewport');
+    PAGER_TRACK = $('#pagerTrack');
+    PAGER_TITLE = $('#pagerTitle');
+    PAGER_COUNT = $('#pagerCount');
+    PAGER_ACTION = $('#pagerAction');
+    PAGER_CLOSE = $('#pagerClose');
+    PAGER_DOTS = $('#pagerDots');
+    PAGER_LIVE = $('#pagerLive');
     ghosts = [$('#ghostA'), $('#ghostB')];
     stackBadge = $('#stackBadge');
     consoleEl = $('#console');
@@ -3459,12 +3832,13 @@
     renderTaskbar();
     renderDock();
     renderCompact();
-    renderRail();
+    renderPane();
+    setPagerInstant(pageIndexFor(S.tab));
     renderConsole();
     renderSpecCard();
     updateConsoleActive();
 
-    applyURLState(params.state, { instant: true, tab: params.tab, hud: params.hud });
+    applyURLState(params.state, { instant: true, tab: params.tab, hud: params.hud, slide: params.slide });
 
     // Any initial state is applied without a morph, then the boot shade clears.
     if (!S.expanded && S.mode !== 'dock') {
@@ -3484,6 +3858,7 @@
     }
 
     bindIsland();
+    bindPager();
     bindScene();
     bindConsole();
     bindModal();

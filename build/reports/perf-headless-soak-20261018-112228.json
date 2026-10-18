@@ -1,0 +1,27 @@
+{
+  "handleEnd": 685,
+  "durationSeconds": 180,
+  "threadEnd": 32,
+  "handleStart": 685,
+  "sourceReport": "soak-idle-platform-20261018-112529.json",
+  "startupMs": 333,
+  "note": "Headless platform composition-root soak (App not runnable/absent). App numbers come from the published EXE mode.",
+  "scenario": "headless-platform-soak",
+  "sampledAtUtc": "2026-10-18T11:25:31.3257985Z",
+  "workingSetEndMb": 116.5,
+  "gen2Collections": 0,
+  "workingSetStartMb": 116.5,
+  "machine": {
+    "machineName": "TX-LAPTOP",
+    "os": "Microsoft Windows 10.0.26200",
+    "osVersion": "Microsoft Windows NT 10.0.26200.0",
+    "processorCount": 32,
+    "cpu": "AMD Ryzen 9 9955HX 16-Core Processor            (16C/32T)",
+    "memoryGb": 31.2,
+    "gpu": "GameViewer Virtual Display Adapter",
+    "dotnet": "10.0.301",
+    "powershell": "7.6.7"
+  },
+  "idleCpuPercent": 0.022,
+  "threadStart": 32
+}

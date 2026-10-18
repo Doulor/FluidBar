@@ -1,0 +1,105 @@
+name: release
+
+# FluidBar release workflow (M6 draft — Lead co-reviews before first use).
+# Triggers:
+#   * workflow_dispatch — manual release with an explicit version.
+#   * push tag v*      — publishes that tag as a GitHub Release.
+# Signing status: UNSIGNED for now. The future Authenticode step is documented in
+# docs/rewrite/release.md (§ Signing). Do not publish a public release until that section is implemented.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver, without leading v). Empty = derive from git tag/VersionPrefix.'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-test-publish:
+    name: build / test / publish (win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # Actions are pinned to major versions; pin to full commit SHAs before public release (Lead review).
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = '${{ github.event.inputs.version }}'
+          if ([string]::IsNullOrWhiteSpace($version) -and '${{ github.ref_type }}' -eq 'tag') {
+            $version = '${{ github.ref_name }}'.TrimStart('v', 'V')
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = '0.0.0-ci'
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release version: $version"
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore FluidBar.sln
+
+      - name: Build + warning gate + tests + publish
+        shell: pwsh
+        run: |
+          ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}'
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FluidBar-${{ steps.version.outputs.version }}-win-x64
+          path: |
+            build/artifacts/*.zip
+            build/reports/publish-${{ steps.version.outputs.version }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $zip = Get-ChildItem build/artifacts/*.zip | Select-Object -First 1
+          $manifest = Get-ChildItem "build/reports/publish-$version.json" | Select-Object -First 1
+          if (-not $zip -or -not $manifest) {
+            throw 'release artifact or publish manifest is missing'
+          }
+          Write-Host "Uploading $($zip.Name); SHA-256 manifest=$($manifest.Name); signing: unsigned"
+          gh release create "v$version" $zip.FullName $manifest.FullName `
+            --title "FluidBar $version" `
+            --notes "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker." `
+            --verify-tag
+
+      - name: Release summary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host '== reports =='
+          Get-ChildItem build/reports -ErrorAction SilentlyContinue | Format-Table Name, Length

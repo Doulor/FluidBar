@@ -1,14 +1,28 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FluidBar.Marketplace — .fbp packaging, ECDSA P-256 signatures, signed index parsing and the
+    install/update/rollback/uninstall state machine. net10.0, UI-free; network access goes through
+    injectable HttpMessageHandler/HttpClient so tests never touch the network.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FluidBar.Marketplace</RootNamespace>
+    <AssemblyName>FluidBar.Marketplace</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CA1859;CA1716;CA1822</NoWarn>
+  </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\FluidBar.Sdk\FluidBar.Sdk.csproj" />
     <ProjectReference Include="..\FluidBar.Core\FluidBar.Core.csproj" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluidBar.Sdk.Tests" />
+    <InternalsVisibleTo Include="FluidBar.PluginHost.Tests" />
+  </ItemGroup>
 
 </Project>

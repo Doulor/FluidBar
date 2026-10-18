@@ -1,0 +1,424 @@
+using System.Collections.Immutable;
+using FluidBar.App.Island;
+using FluidBar.App.Localization;
+using FluidBar.App.Theme;
+using FluidBar.Core.Presentation;
+
+namespace FluidBar.App.State;
+
+/// <summary>One media session snapshot shown on the compact pill and expanded media page.</summary>
+public sealed record MediaSessionData
+{
+    /// <summary>Track title (user data, never translated).</summary>
+    public string Title { get; init; } = string.Empty;
+
+    /// <summary>Artist name.</summary>
+    public string Artist { get; init; } = string.Empty;
+
+    /// <summary>Album name.</summary>
+    public string Album { get; init; } = string.Empty;
+
+    /// <summary>Source application.</summary>
+    public string Source { get; init; } = string.Empty;
+
+    /// <summary>Progress 0..100.</summary>
+    public int ProgressPercent { get; init; }
+
+    /// <summary>Elapsed time display text.</summary>
+    public string PositionText { get; init; } = "0:00";
+
+    /// <summary>Total duration display text.</summary>
+    public string DurationText { get; init; } = "0:00";
+
+    /// <summary>Whether playback is active.</summary>
+    public bool IsPlaying { get; init; }
+
+    /// <summary>Artwork-derived accent hex.</summary>
+    public string? AccentHex { get; init; }
+
+    /// <summary>Current lyric line.</summary>
+    public string? LyricLine { get; init; }
+
+    /// <summary>Next lyric line.</summary>
+    public string? NextLyricLine { get; init; }
+
+    /// <summary>Track index for "n of m" displays, 1-based; 0 when unknown.</summary>
+    public int TrackIndex { get; init; }
+
+    /// <summary>Playlist size; 0 when unknown.</summary>
+    public int TrackCount { get; init; }
+}
+
+/// <summary>One notification row on the expanded notifications page.</summary>
+public sealed record NotificationItemData
+{
+    /// <summary>Notification title.</summary>
+    public string Title { get; init; } = string.Empty;
+
+    /// <summary>Body text.</summary>
+    public string Body { get; init; } = string.Empty;
+
+    /// <summary>Localized relative time.</summary>
+    public string TimeText { get; init; } = string.Empty;
+
+    /// <summary>Detected verification code.</summary>
+    public string? VerificationCode { get; init; }
+
+    /// <summary>Source application name.</summary>
+    public string Source { get; init; } = string.Empty;
+}
+
+/// <summary>One clipboard history row.</summary>
+public sealed record ClipboardItemData
+{
+    /// <summary>Text preview or image label.</summary>
+    public string Preview { get; init; } = string.Empty;
+
+    /// <summary>Localized metadata (relative time, size).</summary>
+    public string Meta { get; init; } = string.Empty;
+
+    /// <summary>Whether the item is pinned.</summary>
+    public bool Pinned { get; init; }
+
+    /// <summary>Whether the item is an image.</summary>
+    public bool IsImage { get; init; }
+}
+
+/// <summary>One agent session row.</summary>
+public sealed record AgentItemData
+{
+    /// <summary>Session/agent title.</summary>
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>Localized status text.</summary>
+    public string StatusText { get; init; } = string.Empty;
+
+    /// <summary>Status tone.</summary>
+    public StatusTone Tone { get; init; }
+
+    /// <summary>Localized elapsed/relative time.</summary>
+    public string TimeText { get; init; } = string.Empty;
+
+    /// <summary>Detail line (task/result summary).</summary>
+    public string Detail { get; init; } = string.Empty;
+}
+
+/// <summary>One widget task row.</summary>
+public sealed record WidgetTaskData
+{
+    /// <summary>Localized task title.</summary>
+    public string Title { get; init; } = string.Empty;
+
+    /// <summary>Whether the task is checked.</summary>
+    public bool Done { get; init; }
+}
+
+/// <summary>One calendar cell on the widgets page.</summary>
+public sealed record CalendarDayData
+{
+    /// <summary>Day of month.</summary>
+    public int Day { get; init; }
+
+    /// <summary>Whether the day belongs to the displayed month.</summary>
+    public bool InMonth { get; init; }
+
+    /// <summary>Whether the day is today.</summary>
+    public bool IsToday { get; init; }
+
+    /// <summary>Whether the day has events.</summary>
+    public bool HasEvents { get; init; }
+
+    /// <summary>Whether the day is selected.</summary>
+    public bool IsSelected { get; init; }
+}
+
+/// <summary>
+/// All non-activity island content (system status + page data). Activities arrive through the Core
+/// event hub; this snapshot carries everything that is not an activity.
+/// </summary>
+public sealed record IslandContent
+{
+    /// <summary>Snapshot time.</summary>
+    public DateTimeOffset Now { get; init; } = DateTimeOffset.Now;
+
+    /// <summary>Battery percentage 0..100, or null when unknown.</summary>
+    public int? BatteryPercent { get; init; }
+
+    /// <summary>Whether the battery is charging.</summary>
+    public bool IsCharging { get; init; }
+
+    /// <summary>Localized network name.</summary>
+    public string? NetworkName { get; init; }
+
+    /// <summary>Whether a network is connected.</summary>
+    public bool IsOnline { get; init; } = true;
+
+    /// <summary>Whether focus assist is on.</summary>
+    public bool FocusOn { get; init; }
+
+    /// <summary>Localized input method label (e.g. EN / 中).</summary>
+    public string? InputMethod { get; init; }
+
+    /// <summary>Active media session, if any.</summary>
+    public MediaSessionData? Media { get; init; }
+
+    /// <summary>Notification rows, newest first.</summary>
+    public ImmutableArray<NotificationItemData> Notifications { get; init; } = [];
+
+    /// <summary>Clipboard rows, newest first.</summary>
+    public ImmutableArray<ClipboardItemData> Clipboard { get; init; } = [];
+
+    /// <summary>Agent session rows.</summary>
+    public ImmutableArray<AgentItemData> Agents { get; init; } = [];
+
+    /// <summary>Widget task rows.</summary>
+    public ImmutableArray<WidgetTaskData> Tasks { get; init; } = [];
+
+    /// <summary>Unread notification count.</summary>
+    public int UnreadCount { get; init; }
+
+    /// <summary>Localized calendar month title.</summary>
+    public string CalendarMonthTitle { get; init; } = string.Empty;
+
+    /// <summary>Calendar cells for the displayed month (6×7 grid).</summary>
+    public ImmutableArray<CalendarDayData> CalendarDays { get; init; } = [];
+
+    /// <summary>Localized weekday header labels, Monday first.</summary>
+    public ImmutableArray<string> WeekdayHeaders { get; init; } = [];
+}
+
+/// <summary>Source of non-activity island content; the host replaces the design source with platform data later.</summary>
+public interface IIslandDataSource
+{
+    /// <summary>Current snapshot.</summary>
+    IslandContent Snapshot();
+
+    /// <summary>Raised when the snapshot changed (raised on the UI thread).</summary>
+    event EventHandler? Changed;
+
+    /// <summary>Starts producing content (idempotent).</summary>
+    void Start();
+
+    /// <summary>Stops producing content (idempotent).</summary>
+    void Stop();
+}
+
+/// <summary>
+/// Deterministic design-time/development data source (clock + realistic sample content). Used by the
+/// preview/headless tests and as the fallback until Platform event sources are wired by the host.
+/// </summary>
+public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
+{
+    private readonly TimeProvider _timeProvider;
+    private readonly ILocalizer _localizer;
+    private ITimer? _minuteTimer;
+    private bool _started;
+    private IslandContent _content;
+
+    /// <summary>Creates the design data source.</summary>
+    public DesignIslandDataSource(ILocalizer localizer, TimeProvider? timeProvider = null)
+    {
+        _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _content = BuildSnapshot(_timeProvider.GetLocalNow());
+    }
+
+    /// <inheritdoc />
+    public event EventHandler? Changed;
+
+    /// <inheritdoc />
+    public IslandContent Snapshot() => _content;
+
+    /// <inheritdoc />
+    public void Start()
+    {
+        if (_started)
+        {
+            return;
+        }
+
+        _started = true;
+        ScheduleMinuteTick();
+    }
+
+    /// <inheritdoc />
+    public void Stop()
+    {
+        _started = false;
+        _minuteTimer?.Dispose();
+        _minuteTimer = null;
+    }
+
+    /// <summary>Refreshes the snapshot at an explicit time (tests).</summary>
+    public void Refresh(DateTimeOffset now)
+    {
+        _content = BuildSnapshot(now);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Replaces parts of the content (developer preview hooks).</summary>
+    public void Update(Func<IslandContent, IslandContent> mutate)
+    {
+        _content = mutate(_content);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => Stop();
+
+    private void ScheduleMinuteTick()
+    {
+        var now = _timeProvider.GetLocalNow();
+        var nextMinute = now.AddMinutes(1);
+        var delay = TimeSpan.FromSeconds(60 - now.Second) - TimeSpan.FromMilliseconds(now.Millisecond);
+        if (delay < TimeSpan.FromSeconds(1))
+        {
+            delay = TimeSpan.FromSeconds(1);
+        }
+
+        _minuteTimer?.Dispose();
+        _minuteTimer = _timeProvider.CreateTimer(
+            static state =>
+            {
+                var source = (DesignIslandDataSource)state!;
+                var clock = source._timeProvider.GetLocalNow();
+                source.Refresh(clock);
+                if (source._started)
+                {
+                    source.ScheduleMinuteTick();
+                }
+            },
+            this,
+            delay,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private IslandContent BuildSnapshot(DateTimeOffset now)
+    {
+        var culture = _localizer.CurrentCulture;
+        var media = new MediaSessionData
+        {
+            Title = "Midnight City",
+            Artist = "M83",
+            Album = "Hurry Up, We're Dreaming",
+            Source = "Spotify",
+            ProgressPercent = 42,
+            PositionText = "1:52",
+            DurationText = "4:03",
+            IsPlaying = true,
+            AccentHex = "#F06AB0",
+            LyricLine = "Waiting for a car to drive me home",
+            NextLyricLine = "The city is my church",
+            TrackIndex = 3,
+            TrackCount = 12,
+        };
+
+        var notifications = ImmutableArray.Create(
+            new NotificationItemData
+            {
+                Title = "Doulor",
+                Body = "The v2 branch is green again — pull before you start.",
+                TimeText = "2 min",
+                Source = "Teams",
+            },
+            new NotificationItemData
+            {
+                Title = "GitHub",
+                Body = "Your verification code is 418302",
+                TimeText = "14 min",
+                VerificationCode = "418302",
+                Source = "Edge",
+            },
+            new NotificationItemData
+            {
+                Title = "Windows Update",
+                Body = "Restart to finish installing updates.",
+                TimeText = "1 h",
+                Source = "Windows",
+            });
+
+        var clipboardItems = ImmutableArray.Create(
+            new ClipboardItemData { Preview = "docs/rewrite/specs/2026-10-18-fluidbar-v2-design.md", Meta = "2 min", Pinned = true },
+            new ClipboardItemData { Preview = "The island stays obsidian in every theme.", Meta = "12 min" },
+            new ClipboardItemData { Preview = _localizer.Get(LocKeys.Clipboard.Image), Meta = "1 h", IsImage = true });
+
+        var agents = ImmutableArray.Create(
+            new AgentItemData
+            {
+                Name = "Claude Code",
+                StatusText = _localizer.Get(LocKeys.Agent.Running),
+                Tone = StatusTone.Info,
+                TimeText = "3 min",
+                Detail = "Refactor spring integrator",
+            },
+            new AgentItemData
+            {
+                Name = "Codex",
+                StatusText = _localizer.Get(LocKeys.Agent.Completed),
+                Tone = StatusTone.Success,
+                TimeText = "18 min",
+                Detail = "Avalonia spike report",
+            });
+
+        var tasks = ImmutableArray.Create(
+            new WidgetTaskData { Title = _localizer.Get(LocKeys.Page.Widgets.Task.Review), Done = true },
+            new WidgetTaskData { Title = _localizer.Get(LocKeys.Page.Widgets.Task.Ship) },
+            new WidgetTaskData { Title = _localizer.Get(LocKeys.Page.Widgets.Task.Inbox) });
+
+        return new IslandContent
+        {
+            Now = now,
+            BatteryPercent = 82,
+            IsCharging = false,
+            NetworkName = "Home Wi-Fi",
+            IsOnline = true,
+            FocusOn = false,
+            InputMethod = "EN",
+            Media = media,
+            Notifications = notifications,
+            Clipboard = clipboardItems,
+            Agents = agents,
+            Tasks = tasks,
+            UnreadCount = 3,
+            CalendarMonthTitle = now.ToString("MMMM yyyy", culture),
+            WeekdayHeaders = BuildWeekdayHeaders(culture),
+            CalendarDays = BuildCalendar(now, culture),
+        };
+    }
+
+    private static ImmutableArray<string> BuildWeekdayHeaders(System.Globalization.CultureInfo culture)
+    {
+        var builder = ImmutableArray.CreateBuilder<string>(7);
+        // Monday-first short weekday names derived from the culture's shortest day names.
+        var firstDay = culture.DateTimeFormat.FirstDayOfWeek;
+        var names = culture.DateTimeFormat.AbbreviatedDayNames;
+        for (var i = 0; i < 7; i++)
+        {
+            builder.Add(names[((int)firstDay + i) % 7]);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static ImmutableArray<CalendarDayData> BuildCalendar(DateTimeOffset now, System.Globalization.CultureInfo culture)
+    {
+        var firstOfMonth = new DateTime(now.Year, now.Month, 1);
+        var offset = ((int)firstOfMonth.DayOfWeek - (int)culture.DateTimeFormat.FirstDayOfWeek + 7) % 7;
+        var start = firstOfMonth.AddDays(-offset);
+        var builder = ImmutableArray.CreateBuilder<CalendarDayData>(42);
+        for (var i = 0; i < 42; i++)
+        {
+            var day = start.AddDays(i);
+            builder.Add(new CalendarDayData
+            {
+                Day = day.Day,
+                InMonth = day.Month == now.Month,
+                IsToday = day.Date == now.Date,
+                HasEvents = day.Day % 7 == 3,
+                IsSelected = day.Date == now.Date,
+            });
+        }
+
+        return builder.ToImmutable();
+    }
+}

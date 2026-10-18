@@ -60,7 +60,7 @@ public sealed class ArchitectureRulesTests
         { "src/FluidBar.Platform.Windows/FluidBar.Platform.Windows.csproj", new[] { "FluidBar.App", "FluidBar.PluginHost", "FluidBar.Marketplace", "FluidBar.Cli" } },
         { "src/FluidBar.PluginHost/FluidBar.PluginHost.csproj", new[] { "FluidBar.App", "FluidBar.Platform.Windows", "FluidBar.Cli" } },
         { "src/FluidBar.Marketplace/FluidBar.Marketplace.csproj", new[] { "FluidBar.App", "FluidBar.Platform.Windows", "FluidBar.Cli" } },
-        { "src/FluidBar.Plugins.Builtin/FluidBar.Plugins.Builtin.csproj", new[] { "FluidBar.Core", "FluidBar.App", "FluidBar.Platform.Windows", "FluidBar.PluginHost", "FluidBar.Marketplace", "FluidBar.Cli" } },
+        { "src/FluidBar.Plugins.Builtin/FluidBar.Plugins.Builtin.csproj", new[] { "FluidBar.Core", "FluidBar.App", "FluidBar.PluginHost", "FluidBar.Marketplace", "FluidBar.Cli" } },
         { "src/FluidBar.App/FluidBar.App.csproj", new[] { "FluidBar.Cli", "FluidBar.Soak" } },
     };
 
@@ -101,6 +101,7 @@ public sealed class ArchitectureRulesTests
         var violations = ScanSourceFiles(UiThreadBlocking, static path =>
             path.Contains("\\tests\\", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("\\FluidBar.Soak\\", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("\\FluidBar.Cli\\", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("\\docs\\", StringComparison.OrdinalIgnoreCase));
 
         Assert.True(

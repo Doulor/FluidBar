@@ -1,0 +1,166 @@
+{
+  "format": "fluidbar.event-recording.v1",
+  "name": "media-session",
+  "description": "GSMTC media session: track start, progress/lyric increments, track replacement, retract.",
+  "seed": 1101,
+  "tickExpiryBeforeEachEvent": true,
+  "events": [
+    {
+      "offsetMs": 0,
+      "kind": "New",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 1,
+      "payload": {
+        "title": "Midnight City",
+        "subtitle": "M83",
+        "isActive": true,
+        "showsAudioWave": true,
+        "albumArtPath": "C:\\cache\\art\\midnight.png",
+        "positionTicks": 0,
+        "endTicks": 3000000000
+      }
+    },
+    {
+      "offsetMs": 30000,
+      "kind": "Incremental",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 2,
+      "payload": {
+        "title": "Midnight City",
+        "subtitle": "M83",
+        "progressPercent": 10,
+        "positionTicks": 300000000,
+        "endTicks": 3000000000,
+        "isActive": true,
+        "showsAudioWave": true
+      }
+    },
+    {
+      "offsetMs": 60000,
+      "kind": "Incremental",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 3,
+      "payload": {
+        "title": "Midnight City",
+        "subtitle": "M83",
+        "progressPercent": 20,
+        "lyricLine": "Waiting for the night",
+        "positionTicks": 600000000,
+        "endTicks": 3000000000,
+        "isActive": true,
+        "showsAudioWave": true
+      }
+    },
+    {
+      "offsetMs": 75000,
+      "kind": "Replacement",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 4,
+      "payload": {
+        "title": "Out of Touch",
+        "subtitle": "Hall & Oates",
+        "isActive": true,
+        "showsAudioWave": true,
+        "albumArtPath": "C:\\cache\\art\\out-of-touch.png",
+        "positionTicks": 0,
+        "endTicks": 2400000000
+      }
+    },
+    {
+      "offsetMs": 120000,
+      "kind": "Incremental",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 5,
+      "payload": {
+        "title": "Out of Touch",
+        "subtitle": "Hall & Oates",
+        "progressPercent": 50,
+        "positionTicks": 1200000000,
+        "endTicks": 2400000000,
+        "isActive": true,
+        "showsAudioWave": true
+      }
+    },
+    {
+      "offsetMs": 240000,
+      "kind": "Retract",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 6,
+      "payload": {}
+    }
+  ],
+  "expected": [
+    {
+      "atEventIndex": 0,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Midnight City",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 0,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 1,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Midnight City",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 10,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 2,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Midnight City",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 20,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 3,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Out of Touch",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 0,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 4,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Out of Touch",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 50,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 5,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": null,
+      "title": null,
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": null,
+      "showsWave": false
+    }
+  ]
+}

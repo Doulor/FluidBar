@@ -1,9 +1,28 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    FluidBar.Sdk — the public plugin contract for FluidBar v2.
+    Hard rules (enforced by FluidBar.Architecture.Tests):
+      * net10.0 only, BCL only: no WPF/Avalonia/Win32, no UI, no app projects.
+      * No PackageReference. The same contract must be servable over IPC in v2.1.
+      * Additive-only within a major version (see docs/rewrite/contracts/plugin.md).
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>FluidBar.Sdk</RootNamespace>
+    <AssemblyName>FluidBar.Sdk</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      CS1591: XML docs are pruned to the public frozen surface; not every member is documented yet.
+      CA1711: the WireEnum name is intentional public vocabulary for manifest wire values.
+      CA1716: IPluginLocalization.Get is the frozen v2.0 contract from the design spec.
+      CA1859: micro-optimisation suggestion on static lookup tables; readability wins here.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1711;CA1716;CA1859</NoWarn>
+    <Description>Public plugin SDK for FluidBar v2. UI-free, BCL-only contracts.</Description>
   </PropertyGroup>
 
 </Project>

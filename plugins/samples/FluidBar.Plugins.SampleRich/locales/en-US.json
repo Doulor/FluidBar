@@ -1,0 +1,12 @@
+{
+  "$schema": "https://fluidbar.app/schemas/locale.schema.json",
+  "locale": "en-US",
+  "version": 1,
+  "messages": {
+    "island.title": "Sample Rich",
+    "island.body": "Showing {count, plural, =0 {no details} one {# detail} other {# details}} in {style} style.",
+    "track.title": "FluidBar Theme",
+    "track.artist": "The Samples",
+    "tracks.count": "{count, plural, =0 {no tracks} one {# track} other {# tracks}}"
+  }
+}

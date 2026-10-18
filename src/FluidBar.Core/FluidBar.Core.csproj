@@ -1,9 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: public API XML docs are authored on types and important members; enum/record
+         members are documented through their owning type to keep the surface readable.
+         CA1716: IEventSource.Start/Stop are the contract-mandated lifecycle names (spec 5.3).
+         CA1720: IslandMode.Float is the spec-mandated mode token (float/flush/dock). -->
+    <NoWarn>$(NoWarn);CS1591;CA1716;CA1720</NoWarn>
   </PropertyGroup>
 
 </Project>

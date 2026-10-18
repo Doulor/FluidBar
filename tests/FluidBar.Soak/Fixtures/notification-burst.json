@@ -1,0 +1,127 @@
+{
+  "format": "fluidbar.event-recording.v1",
+  "name": "notification-burst",
+  "description": "Notification burst: same-rank replacement, clipboard preemption of a transient notification, media joining as a ghost, retracts back to idle.",
+  "seed": 1102,
+  "tickExpiryBeforeEachEvent": true,
+  "events": [
+    {
+      "offsetMs": 0,
+      "kind": "New",
+      "activityKind": "Notification",
+      "source": "notif:toast-a",
+      "sequence": 1,
+      "payload": { "title": "Build finished", "body": "CI is green" }
+    },
+    {
+      "offsetMs": 500,
+      "kind": "New",
+      "activityKind": "Notification",
+      "source": "notif:toast-b",
+      "sequence": 1,
+      "payload": { "title": "New message", "body": "2 unread" }
+    },
+    {
+      "offsetMs": 1000,
+      "kind": "New",
+      "activityKind": "Clipboard",
+      "source": "clipboard:host",
+      "sequence": 1,
+      "payload": { "title": "Copied", "body": "npm run build" }
+    },
+    {
+      "offsetMs": 1500,
+      "kind": "New",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 1,
+      "payload": {
+        "title": "Lo-fi beats",
+        "subtitle": "Soak radio",
+        "isActive": true,
+        "showsAudioWave": true,
+        "endTicks": 1800000000
+      }
+    },
+    {
+      "offsetMs": 2000,
+      "kind": "Retract",
+      "activityKind": "Clipboard",
+      "source": "clipboard:host",
+      "sequence": 2,
+      "payload": {}
+    },
+    {
+      "offsetMs": 12000,
+      "kind": "Retract",
+      "activityKind": "Media",
+      "source": "media:gsmtc",
+      "sequence": 2,
+      "payload": {}
+    }
+  ],
+  "expected": [
+    {
+      "atEventIndex": 0,
+      "stateKind": "Compact",
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "Build finished",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "showsWave": false
+    },
+    {
+      "atEventIndex": 1,
+      "stateKind": "Compact",
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "showsWave": false
+    },
+    {
+      "atEventIndex": 2,
+      "stateKind": "Compact",
+      "page": "Clipboard",
+      "primaryKind": "Clipboard",
+      "title": "Copied",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "showsWave": false
+    },
+    {
+      "atEventIndex": 3,
+      "stateKind": "Compact",
+      "page": "Clipboard",
+      "primaryKind": "Clipboard",
+      "title": "Copied",
+      "ghostCount": 1,
+      "badgeCount": 0,
+      "showsWave": false
+    },
+    {
+      "atEventIndex": 4,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": "Media",
+      "title": "Lo-fi beats",
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": 0,
+      "showsWave": true
+    },
+    {
+      "atEventIndex": 5,
+      "stateKind": "Compact",
+      "page": "Media",
+      "primaryKind": null,
+      "title": null,
+      "ghostCount": 0,
+      "badgeCount": 0,
+      "progressPercent": null,
+      "showsWave": false
+    }
+  ]
+}

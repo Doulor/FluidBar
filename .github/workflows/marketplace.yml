@@ -1,0 +1,287 @@
+name: marketplace
+
+# Plugin marketplace CI: PR validation (validate/policy/pack determinism), and on merge/manual dispatch the
+# signed publish pipeline (pack -> sign -> regenerate index.json + shards + keys.json -> Pages or artifact).
+# No private key material is stored in the repository: the signing key comes from the protected
+# `marketplace-publish` environment secret documented in docs/plugin/signing-and-keys.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the signed marketplace index (false = validation only)"
+        type: boolean
+        required: false
+        default: true
+      channel:
+        description: "Release channel for the generated index"
+        type: choice
+        required: false
+        default: stable
+        options: [stable, beta]
+  pull_request:
+    paths:
+      - "plugins/**"
+      - "schemas/**"
+      - "src/FluidBar.Cli/**"
+      - "src/FluidBar.Marketplace/**"
+      - "src/FluidBar.Sdk/**"
+      - "src/FluidBar.PluginHost/**"
+      - "marketplace/**"
+      - ".github/workflows/marketplace.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "schemas/**"
+      - "src/FluidBar.Cli/**"
+      - "src/FluidBar.Marketplace/**"
+      - "src/FluidBar.Sdk/**"
+      - "src/FluidBar.PluginHost/**"
+      - "marketplace/**"
+      - ".github/workflows/marketplace.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  CONFIGURATION: Release
+
+jobs:
+  validate:
+    name: Validate plugins and marketplace tooling
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore tooling and sample plugins
+        run: |
+          dotnet restore src/FluidBar.Cli/FluidBar.Cli.csproj
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
+          foreach ($project in $projects) { dotnet restore $project.FullName }
+
+      - name: Build tooling and plugins (Release)
+        run: |
+          dotnet build src/FluidBar.Cli -c $env:CONFIGURATION --no-restore
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
+          foreach ($project in $projects) { dotnet build $project.FullName -c $env:CONFIGURATION --no-restore }
+
+      - name: Test plugin platform (SDK + host, includes offline publish/install E2E)
+        run: |
+          dotnet test tests/FluidBar.Sdk.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=sdk-tests.trx" --results-directory artifacts/test-results
+          dotnet test tests/FluidBar.PluginHost.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=host-tests.trx" --results-directory artifacts/test-results
+
+      - name: Validate JSON Schemas parse
+        run: |
+          Get-ChildItem schemas -Filter *.json | ForEach-Object {
+            Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null
+            Write-Host "schema OK: $($_.Name)"
+          }
+
+      - name: Validate + policy + deterministic pack (all plugins)
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dryRun = "artifacts/dry-run"
+          New-Item -ItemType Directory -Force -Path $dryRun | Out-Null
+          $pluginDirs = Get-ChildItem plugins -Recurse -Directory |
+            Where-Object {
+              $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and
+              (Test-Path (Join-Path $_.FullName "manifest.json") -PathType Leaf)
+            }
+          if (-not $pluginDirs) { throw "No plugin manifests found under plugins/." }
+
+          foreach ($dir in $pluginDirs) {
+            $manifest = Get-Content (Join-Path $dir.FullName "manifest.json") -Raw | ConvertFrom-Json
+            $id = $manifest.id
+            $buildOutput = Join-Path $dir.FullName "bin/$env:CONFIGURATION/net10.0"
+            if (-not (Test-Path (Join-Path $buildOutput "manifest.json"))) {
+              throw "Plugin '$id' was not built at '$buildOutput'. Ensure the project copies manifest.json/locales to the output."
+            }
+
+            Write-Host "::group::Plugin $id"
+            dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- validate --plugin $buildOutput
+            if ($LASTEXITCODE -ne 0) { throw "validate failed for $id" }
+            dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- policy --plugin $buildOutput
+            if ($LASTEXITCODE -ne 0) { throw "policy failed for $id" }
+
+            $first = Join-Path $dryRun "$id-1.fbp"
+            $second = Join-Path $dryRun "$id-2.fbp"
+            dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- pack --plugin $buildOutput --out $first
+            if ($LASTEXITCODE -ne 0) { throw "pack failed for $id" }
+            dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- pack --plugin $buildOutput --out $second
+            if ($LASTEXITCODE -ne 0) { throw "pack failed for $id" }
+
+            $hashOne = (Get-FileHash $first -Algorithm SHA256).Hash
+            $hashTwo = (Get-FileHash $second -Algorithm SHA256).Hash
+            if ($hashOne -ne $hashTwo) { throw "packaging is not deterministic for $id ($hashOne != $hashTwo)" }
+            Write-Host "deterministic: $id sha256=$hashOne"
+            Write-Host "::endgroup::"
+          }
+
+      - name: Validate manifest strictness sample
+        run: |
+          # A workflow-level guard that the CLI validator actually rejects unknown manifest properties.
+          $bad = Join-Path $env:RUNNER_TEMP "bad-manifest"
+          New-Item -ItemType Directory -Force -Path $bad | Out-Null
+          Copy-Item plugins/samples/FluidBar.Plugins.SampleMinimal/bin/$env:CONFIGURATION/net10.0/* $bad -Recurse -Force
+          $manifestPath = Join-Path $bad "manifest.json"
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest | Add-Member -NotePropertyName "unexpectedProperty" -NotePropertyValue "should-fail" -Force
+          $manifest | ConvertTo-Json -Depth 64 | Set-Content $manifestPath
+          dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- validate --plugin $bad
+          if ($LASTEXITCODE -eq 0) { throw "validator accepted a manifest with an unknown property" }
+          Write-Host "strict manifest validation confirmed."
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-validation
+          path: |
+            artifacts/test-results
+            artifacts/dry-run
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    name: Publish signed marketplace index
+    needs: validate
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || inputs.publish)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    environment: marketplace-publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore and build tooling + plugins (Release)
+        run: |
+          dotnet restore src/FluidBar.Cli/FluidBar.Cli.csproj
+          dotnet build src/FluidBar.Cli -c $env:CONFIGURATION --no-restore
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
+          foreach ($project in $projects) {
+            dotnet restore $project.FullName
+            dotnet build $project.FullName -c $env:CONFIGURATION --no-restore
+          }
+
+      - name: Fail fast if the signing key secret is missing
+        env:
+          MARKETPLACE_SIGNING_KEY_PEM: ${{ secrets.MARKETPLACE_SIGNING_KEY_PEM }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:MARKETPLACE_SIGNING_KEY_PEM)) {
+            throw "MARKETPLACE_SIGNING_KEY_PEM is not configured for the 'marketplace-publish' environment. See docs/plugin/signing-and-keys.md."
+          }
+          Write-Host "Signing key secret detected (value not printed)."
+
+      - name: Pack, sign, regenerate index + shards + keys
+        env:
+          MARKETPLACE_SIGNING_KEY_PEM: ${{ secrets.MARKETPLACE_SIGNING_KEY_PEM }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $keyId = "${{ vars.MARKETPLACE_SIGNING_KEY_ID }}"
+          if ([string]::IsNullOrWhiteSpace($keyId)) { $keyId = "fluidbar-marketplace-2026" }
+          $artifactBaseUrl = "${{ vars.MARKETPLACE_ARTIFACT_BASE_URL }}"
+          if ([string]::IsNullOrWhiteSpace($artifactBaseUrl)) { $artifactBaseUrl = "https://github.com/fluidbar/plugins/releases/download" }
+          $marketplaceBaseUrl = "${{ vars.MARKETPLACE_BASE_URL }}"
+          if ([string]::IsNullOrWhiteSpace($marketplaceBaseUrl)) { $marketplaceBaseUrl = "https://marketplace.fluidbar.app" }
+          $channel = "${{ inputs.channel }}"
+          if ([string]::IsNullOrWhiteSpace($channel)) { $channel = "stable" }
+
+          dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- publish-prepare `
+            --plugins-root plugins/samples `
+            --artifacts artifacts/plugins `
+            --marketplace marketplace-site `
+            --key-env MARKETPLACE_SIGNING_KEY_PEM `
+            --key-id $keyId `
+            --artifact-base-url $artifactBaseUrl `
+            --marketplace-base-url $marketplaceBaseUrl `
+            --configuration $env:CONFIGURATION `
+            --channel $channel `
+            --source-commit "${{ github.sha }}"
+          if ($LASTEXITCODE -ne 0) { throw "publish-prepare failed" }
+
+      - name: Post-generation verification (signed index + determinism)
+        run: |
+          dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- verify-index --marketplace marketplace-site
+          if ($LASTEXITCODE -ne 0) { throw "generated index failed signature verification" }
+          Get-ChildItem marketplace-site -Recurse -File | ForEach-Object {
+            Write-Host ("site: {0} ({1} bytes)" -f $_.FullName.Substring((Get-Location).Path.Length + 1), $_.Length)
+          }
+
+      - name: Upload plugin packages (workflow artifact, always available)
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-packages
+          path: artifacts/plugins
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload self-contained marketplace site (fallback when Pages is unavailable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-site
+          path: marketplace-site
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Configure GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: marketplace-site
+
+      - name: Deploy to GitHub Pages
+        id: deploy-pages
+        # Pages can be disabled/blocked (private mirrors, forks, incidents). The site artifact above is the
+        # documented fallback: download it and host it on any static host.
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Publish run summary (Pages or fallback instructions)
+        if: always()
+        run: |
+          $deployed = "${{ steps.deploy-pages.outcome }}" -eq "success"
+          $lines = @(
+            "## Marketplace publish",
+            "",
+            "- Plugin packages: ``marketplace-packages`` workflow artifact (retained 30 days).",
+            "- Site: ``marketplace-site`` workflow artifact (retained 30 days).",
+            "- Index signature verified by ``fluidbar-plugin verify-index``.",
+            "- Signing key: ``${{ vars.MARKETPLACE_SIGNING_KEY_ID }}`` (secret value never logged)."
+          )
+          if ($deployed) {
+            $lines += "- GitHub Pages: deployed successfully."
+          } else {
+            $lines += "- **GitHub Pages deploy unavailable** — download the ``marketplace-site`` artifact and host it on a static host; the index is self-contained (index.json + keys.json + plugins/*.json)."
+          }
+          $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if (-not $deployed) { Write-Warning "Pages deploy did not succeed; artifact fallback is available." }

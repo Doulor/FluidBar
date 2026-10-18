@@ -1,10 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA2000;CA1822;CA1707;xUnit1031</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FluidBar.Sdk\FluidBar.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Marketplace\FluidBar.Marketplace.csproj" />
   </ItemGroup>
 
 </Project>

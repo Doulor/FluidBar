@@ -1,0 +1,51 @@
+{
+  "Scenario": "soak-notification-storm",
+  "StartedAtUtc": "2026-10-18T11:22:33.1021886\u002B00:00",
+  "DurationSeconds": 1,
+  "Machine": {
+    "MachineName": "TX-LAPTOP",
+    "ProcessorCount": 32,
+    "OsVersion": "Microsoft Windows NT 10.0.26200.0",
+    "DotnetVersion": "10.0.9",
+    "Is64BitProcess": true
+  },
+  "SampleIntervalSeconds": 5,
+  "Samples": [
+    {
+      "TimestampUtc": "2026-10-18T11:22:32.0927587+00:00",
+      "WorkingSetBytes": 102469632,
+      "PrivateBytes": 44437504,
+      "HandleCount": 479,
+      "ThreadCount": 27,
+      "CpuSeconds": 1.25,
+      "ManagedHeapBytes": 9513680,
+      "Gen2Collections": 0
+    },
+    {
+      "TimestampUtc": "2026-10-18T11:22:33.1021495+00:00",
+      "WorkingSetBytes": 102469632,
+      "PrivateBytes": 44437504,
+      "HandleCount": 479,
+      "ThreadCount": 27,
+      "CpuSeconds": 1.5625,
+      "ManagedHeapBytes": 9513680,
+      "Gen2Collections": 0
+    }
+  ],
+  "AverageCpuPercent": 1.016,
+  "WorkingSetStartBytes": 102469632,
+  "WorkingSetEndBytes": 102469632,
+  "HandleStart": 479,
+  "HandleEnd": 479,
+  "ThreadStart": 27,
+  "ThreadEnd": 27,
+  "Gen2Collections": 0,
+  "Metadata": {
+    "candidates": 5000,
+    "acceptedEntries": 5000,
+    "seenIdsRetained": 256,
+    "watermark": 5000,
+    "processingMilliseconds": 20.8,
+    "managedHeapBytes": 9376096
+  }
+}

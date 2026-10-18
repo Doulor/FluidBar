@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Local (private) dependency of the rich sample plugin: shipped inside the .fbp under plugin/. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>FluidBar.Plugins.SampleRich.Core</AssemblyName>
+    <RootNamespace>FluidBar.Plugins.SampleRich.Core</RootNamespace>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>

@@ -31,7 +31,7 @@
 | **Core owner** | `src/FluidBar.Core/**`、`tests/FluidBar.Core.Tests/**` | 其余 | 状态机/策略/布局/弹簧/设置/i18n |
 | **Plugin owner** | `src/FluidBar.Sdk/**`、`src/FluidBar.PluginHost/**`、`src/FluidBar.Marketplace/**`、`src/FluidBar.Cli/**`、`plugins/**`、`tests/FluidBar.PluginHost.Tests/**`、`tests/FluidBar.Sdk.Tests/**` | 其余 | SDK、加载器、manifest、市场领域、样例插件 |
 | **Platform owner** | `src/FluidBar.Platform.Windows/**`、`tests/FluidBar.Platform.Tests/**` | 其余 | 显示器/媒体/剪贴板/通知/托盘/热键/更新 |
-| **UI owner** | `src/FluidBar.App/**`、`tests/FluidBar.Ui.Tests/**` | 其余 | 组合器宿主、岛、rail 六页、dock、设置、市场 UI |
+| **UI owner** | `src/FluidBar.App/**`、`tests/FluidBar.Ui.Tests/**` | 其余 | 组合器宿主、岛、横向 pager 六页、dock、设置、市场 UI |
 | **共同** | — | — | `tests/FluidBar.Soak/**` 由 Lead 建骨架，M6 由四人共同补场景 |
 
 ### 0.2 完成定义（每个里程碑都适用）
@@ -81,7 +81,7 @@
 - [ ] `Events/`：`IslandEvent`(record struct)、`ActivityKey`、`IslandEventKind`、`IIslandEventHub` + `BoundedEventHub`（容量 256、`DropOldest`、按键合并 `Incremental`、计数器 `published/coalesced/dropped`）。
 - [ ] `Activities/`：`ActivityRank`（14 类，规范 §2.3 表逐行落地）、`ActivityScheduler`（抢占/替换/背景层 2/队列 8/过期）、`StackState`、`ActivityExpiry`。
 - [ ] `State/`：`IslandState`（不可变）、`IslandStateMachine`（T1–T12 表驱动）、`InputEvent`、`Effect`（数据枚举）、`EffectRunner` 接口。
-- [ ] `Layout/`：`VisualRect`、`IslandLayout`（Shell/Content/Rail/HitRegion/Anchor）、`LayoutEngine`（3 模式 × 6 锚点 × 3 DPI）、`RailLayout`（48 宽、六项；设置/市场为标题栏动作，不占 rail）、`DpiPolicy`（DIP↔px、工作区钳制）。
+- [ ] `Layout/`：`VisualRect`、`IslandLayout`（Shell/Content/PagerViewport/HitRegion/Anchor）、`LayoutEngine`（3 模式 × 6 锚点 × 3 DPI）、`RailLayout`（48 宽、六项；设置/市场为标题栏动作，不占 rail）、`DpiPolicy`（DIP↔px、工作区钳制）。
 - [ ] `Motion/`：`Spring`（定步长 1/300、dt clamp、squash 派生）、`SpringSet`（单循环 + 全静止短路）、`MotionTokens`（规范 §4.1 全表）、`MotionPolicy`（reduced-motion 折算）、`VelocityRetarget`、`SettleDetector`。
 - [ ] `Settings/`：`SettingsV2` 模型（§8.2）、`SettingsMigrator`（v1→v2 映射表 + 报告）、`ISettingsStore` 抽象 + `AtomicJsonSettingsStore`（tmp→Flush→Replace→bak）、`SettingsSchema`（版本、默认值、校验）。
 - [ ] `Localization/`：`ILocalizer`、`JsonCatalog`（解析/回退链）、`IcuFormatter`（复数/数字/日期子集）、`PluralRules`（CLDR 表）、`LocKeys` 源生成器（从 `en-US.json` 生成常量 + 编译期校验）。
@@ -149,14 +149,14 @@
 
 ## M4 — FluidBar.App：Avalonia 外壳（UI owner）
 
-**目标**：把规范 §2/§3/§4 变成可点的东西：固定窗口 + 组合器宿主、岛与弹簧循环、rail 六页、HUD、dock、设置、i18n 全量、市场 UI。
+**目标**：把规范 §2/§3/§4 变成可点的东西：固定窗口 + 组合器宿主、岛与弹簧循环、横向 pager 六页、HUD、dock、设置、i18n 全量、市场 UI。
 
 **任务**
 
 - [ ] `Hosting/`：`IslandWindow`（`WS_POPUP|NOREDIRECTIONBITMAP|TOOLWINDOW|NOACTIVATE`、`488×332`、每显示器一个）、`WindowFactory`、`CompositionHost`（`TransparencyLevelHint=Transparent` + `Win32CompositionMode=WinUIComposition` + backdrop corner radius）、`HitTestHook`（`WM_NCHITTEST`→`HTTRANSPARENT`）、`MouseActivateHook`（`MA_NOACTIVATE`）、`TopmostGuardHost`（≤1 Hz + 白名单）。
 - [ ] `Rendering/`：`FrameClock`（组合器帧回调优先，`DispatcherTimer(Render)` 退化）、`SpringSet` 驱动 + 收敛即停、`ShellGeometry`/`SquirclePath`（超椭圆 + 缓存）、`ShadowNineSlice`、`BackdropService`（Tier 0/1/2 探测与降级）、`IslandShellVisual`（一次 `InvalidateVisual`）。
-- [ ] `Controls/`：`Rail`（48 宽、六项、34/36 命中、2×16 强调条、键盘导航）、`HudRow`（40 高单行：icon+label+track+value）、`TransportBar`、`ProgressTrack`（可拖拽 seek）、`ListRow`、`Badge`、`FocusRing`。
-- [ ] `Pages/`：Home/Media/Notifications/Clipboard/Agent/Widgets —— 全部统一 440×284 外壳（内容宽 392）；页面切换只做内容交叉淡入（不 resize、不重排、不丢焦点、220 ms）。
+- [ ] `Controls/`：`Pager`（400 视口、拖动 damping 0.90、端点橡皮筋 0.35、flick≤1 页、长拖多页、滚轮 100 DIP/120ms、页点/标题/键盘）、`HudRow`（40 高单行：icon+label+track+value）、`TransportBar`、`ProgressTrack`（可拖拽 seek）、`ListRow`、`Badge`、`FocusRing`。
+- [ ] `Pages/`：Home/Media/Notifications/Clipboard/Agent/Widgets —— 全部统一 440×284 外壳（内容宽 400）；页面切换只做内容交叉淡入（不 resize、不重排、不丢焦点、220 ms）。
 - [ ] `Dock/`：`DockStrip`（52 高、8 瓦片 + 托盘簇、向上展开、`ABM_SETSTATE` 可选自动隐藏并在退出恢复）。
 - [ ] `Settings/`：七页（通用/外观/灵动岛/插件/市场/高级/关于），外部预览岛、声明式生成（从 `SettingsV2` 注解），首开 < 250 ms。
 - [ ] `Localization/`：`LocalizationService`（运行时切换 + `Version` 抬升）、`LocExtension`、`en-US.json`/`zh-Hans.json`（全量 key）、`qps-ploc` 生成、字体栈与 RTL 开关。
@@ -166,9 +166,9 @@
 
 **触碰**：`src/FluidBar.App/**`、`tests/FluidBar.Ui.Tests/**`。
 
-**验收**：120 fps p99 < 8.33 ms（或按 M0 结论走 WPF 回退并达 60 fps）；点透矩阵通过（透明角 20 次点击全穿透、点药丸不改前台）；`zh↔en` 全量即时切换；`qps-ploc` 无裁切；六页统一 440×284、切换不改变外壳尺寸（实测 ±1 DIP）；首帧输入延迟 ≤ 2 帧。
+**验收**：120 fps p99 < 8.33 ms（或按 M0 结论走 WPF 回退并达 60 fps）；点透矩阵通过（透明角 20 次点击全穿透、点药丸不改前台）；`zh↔en` 全量即时切换；`qps-ploc` 无裁切；六页统一 440×284、pager 切换不改变外壳尺寸（实测 ±1 DIP；flick≤1 页、长拖可多页）；首帧输入延迟 ≤ 2 帧。
 
-**依赖**：M0 的 GO/NO-GO（Q1）；M1 的 `IslandState`/`Layout`/`MotionTokens`；M3 的事件源（M3 未完成时用 M1 的录制回放夹具）。**并行**：与 M2 并行；`Rail`/`HudRow`/`Pages` 可由 UI owner 内部按页拆分串行推进（同目录，避免冲突）。
+**依赖**：M0 的 GO/NO-GO（Q1）；M1 的 `IslandState`/`Layout`/`MotionTokens`；M3 的事件源（M3 未完成时用 M1 的录制回放夹具）。**并行**：与 M2 并行；`Pager`/`HudRow`/`Pages` 可由 UI owner 内部按页拆分串行推进（同目录，避免冲突）。
 
 ---
 
@@ -250,4 +250,6 @@ M0 ──┬── M1 ──┐
 - 每个 PR 必须包含：改了什么、怎么验证（命令 + 输出摘要）、影响了哪个规范章节、是否新增依赖（许可）。
 - 评审：默认 1 人（当前仅 Doulor）；涉及 `schemas/**`、`Directory.*.props`、`FluidBar.sln`、架构测试的 PR 必须 Lead 评审。
 - 禁止：注释掉的代码、`TODO` 无 issue 号、`catch { }`、`Thread.Sleep`、`.Result`、未本地化的字符串。
+
+
 

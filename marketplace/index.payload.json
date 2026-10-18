@@ -1,0 +1,136 @@
+{
+  "$schema": "https://fluidbar.app/schemas/marketplace-index.schema.json",
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-18T09:12:00Z",
+  "sourceCommit": "9f2c1b7e5d4a3c2b1a0f9e8d7c6b5a4f3e2d1c0b",
+  "appCompatibility": {
+    "minAppVersion": "2.0.0",
+    "supportedApiVersions": ["2.0"]
+  },
+  "defaultLocale": "en-US",
+  "availableLocales": ["en-US", "zh-Hans"],
+  "categories": [
+    {
+      "id": "media",
+      "name": { "en-US": "Media", "zh-Hans": "媒体" }
+    },
+    {
+      "id": "developer",
+      "name": { "en-US": "Developer", "zh-Hans": "开发者" }
+    }
+  ],
+  "plugins": [
+    {
+      "id": "sample-minimal",
+      "name": { "en-US": "Sample Minimal", "zh-Hans": "最小示例" },
+      "summary": {
+        "en-US": "A minimal starter plugin that shows one island message.",
+        "zh-Hans": "一个最小化的入门插件，显示一条灵动岛消息。"
+      },
+      "publisher": {
+        "id": "fluidbar-samples",
+        "displayName": "FluidBar Samples",
+        "verified": true,
+        "keyId": "fluidbar-marketplace-sample",
+        "url": "https://fluidbar.app"
+      },
+      "latest": {
+        "version": "1.0.0",
+        "apiVersion": "2.0.0",
+        "minAppVersion": "2.0.0",
+        "maxAppVersion": null,
+        "publishedAt": "2026-10-18T08:00:00Z",
+        "channel": "stable",
+        "yanked": false,
+        "yankReason": null,
+        "artifact": {
+          "url": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-minimal-v1.0.0/fluidbar-plugin-sample-minimal-1.0.0.fbp",
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "size": 18432,
+          "signatureUrl": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-minimal-v1.0.0/signature.json",
+          "keyId": "fluidbar-marketplace-sample",
+          "algorithm": "ECDSA-P256-SHA256"
+        },
+        "capabilities": ["ui"],
+        "locales": ["en-US", "zh-Hans"],
+        "localeCoverage": { "en-US": 100, "zh-Hans": 100 },
+        "changelog": "### 1.0.0\n- First sample release.",
+        "license": "MIT"
+      },
+      "categories": ["developer"],
+      "tags": ["sample", "minimal"],
+      "icon": "https://marketplace.fluidbar.app/assets/sample-minimal/icon.png",
+      "screenshots": [
+        {
+          "src": "https://marketplace.fluidbar.app/assets/sample-minimal/compact.png",
+          "alt": { "en-US": "Compact island", "zh-Hans": "紧凑灵动岛" }
+        }
+      ],
+      "listing": {
+        "defaultLocale": "en-US",
+        "availableLocales": ["en-US", "zh-Hans"],
+        "baseUrl": "https://marketplace.fluidbar.app/listings/sample-minimal/"
+      },
+      "historyUrl": "https://marketplace.fluidbar.app/plugins/sample-minimal.json",
+      "stats": { "downloads": 0, "rating": null },
+      "status": "active",
+      "featured": true,
+      "blocked": null
+    },
+    {
+      "id": "sample-rich",
+      "name": { "en-US": "Sample Rich", "zh-Hans": "丰富示例" },
+      "summary": {
+        "en-US": "Reference plugin with settings, commands, widgets and a hover card.",
+        "zh-Hans": "包含设置、命令、小组件和悬停卡片的参考插件。"
+      },
+      "publisher": {
+        "id": "fluidbar-samples",
+        "displayName": "FluidBar Samples",
+        "verified": true,
+        "keyId": "fluidbar-marketplace-sample",
+        "url": "https://fluidbar.app"
+      },
+      "latest": {
+        "version": "1.0.0",
+        "apiVersion": "2.0.0",
+        "minAppVersion": "2.0.0",
+        "maxAppVersion": null,
+        "publishedAt": "2026-10-18T08:05:00Z",
+        "channel": "stable",
+        "yanked": false,
+        "yankReason": null,
+        "artifact": {
+          "url": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-rich-v1.0.0/fluidbar-plugin-sample-rich-1.0.0.fbp",
+          "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "size": 25600,
+          "signatureUrl": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-rich-v1.0.0/signature.json",
+          "keyId": "fluidbar-marketplace-sample",
+          "algorithm": "ECDSA-P256-SHA256"
+        },
+        "capabilities": ["ui", "background"],
+        "locales": ["en-US", "zh-Hans"],
+        "localeCoverage": { "en-US": 100, "zh-Hans": 100 },
+        "changelog": "### 1.0.0\n- First rich sample release.",
+        "license": "MIT"
+      },
+      "categories": ["media", "developer"],
+      "tags": ["sample", "media", "settings"],
+      "icon": "https://marketplace.fluidbar.app/assets/sample-rich/icon.png",
+      "screenshots": [],
+      "listing": {
+        "defaultLocale": "en-US",
+        "availableLocales": ["en-US", "zh-Hans"],
+        "baseUrl": "https://marketplace.fluidbar.app/listings/sample-rich/"
+      },
+      "historyUrl": "https://marketplace.fluidbar.app/plugins/sample-rich.json",
+      "stats": { "downloads": 0, "rating": null },
+      "status": "active",
+      "featured": false,
+      "blocked": null
+    }
+  ],
+  "advisories": [],
+  "keys": [],
+  "signatures": []
+}

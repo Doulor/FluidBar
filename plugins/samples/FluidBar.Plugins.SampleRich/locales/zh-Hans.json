@@ -1,0 +1,12 @@
+{
+  "$schema": "https://fluidbar.app/schemas/locale.schema.json",
+  "locale": "zh-Hans",
+  "version": 1,
+  "messages": {
+    "island.title": "丰富示例",
+    "island.body": "以{style}风格显示 {count, plural, other {# 条详情}}。",
+    "track.title": "FluidBar 主题曲",
+    "track.artist": "示例乐队",
+    "tracks.count": "{count, plural, other {# 首曲目}}"
+  }
+}

@@ -9,6 +9,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: internal composition types are documented where they are public API surface. -->
+    <!-- CA1716: ILocalizer.Get is the frozen spec 7.1 localization contract name. -->
+    <NoWarn>$(NoWarn);CS1591;CA1716</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,5 +21,18 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
   </ItemGroup>
 
-  <!-- Project references are wired in M4 once Core/PluginHost contracts are green. -->
+  <ItemGroup>
+    <ProjectReference Include="..\FluidBar.Core\FluidBar.Core.csproj" />
+    <ProjectReference Include="..\FluidBar.Platform.Windows\FluidBar.Platform.Windows.csproj" />
+    <ProjectReference Include="..\FluidBar.Sdk\FluidBar.Sdk.csproj" />
+    <ProjectReference Include="..\FluidBar.PluginHost\FluidBar.PluginHost.csproj" />
+    <ProjectReference Include="..\FluidBar.Marketplace\FluidBar.Marketplace.csproj" />
+    <ProjectReference Include="..\FluidBar.Plugins.Builtin\FluidBar.Plugins.Builtin.csproj" />
+  </ItemGroup>
+
+  <!-- JSON locale catalogs are embedded as avares:// resources (spec 7.1). -->
+  <ItemGroup>
+    <AvaloniaResource Include="Localization\*.json" />
+  </ItemGroup>
+
 </Project>

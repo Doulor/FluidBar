@@ -39,8 +39,23 @@
         <div class="shell-clip" id="shellClip">
           <div class="compact-layer" id="compactLayer"></div>
           <div class="expanded-layer" id="expandedLayer" aria-hidden="true">
-            <nav class="section-rail" id="sectionRail"></nav>
-            <div class="panel" id="panel"></div>
+            <div class="pager" id="pager">
+              <div class="pager-viewport" id="pagerViewport">
+                <div class="pager-track" id="pagerTrack"></div>
+              </div>
+              <div class="pager-scrim pager-scrim-top" aria-hidden="true"></div>
+              <div class="pager-top" id="pagerTop">
+                <div class="pager-heading">
+                  <span class="pager-title" id="pagerTitle"></span>
+                  <span class="pager-count" id="pagerCount"></span>
+                  <button class="pager-action" id="pagerAction" type="button" hidden></button>
+                </div>
+                <button class="pager-close" id="pagerClose" type="button" data-act="collapse"></button>
+              </div>
+              <div class="pager-scrim pager-scrim-bottom" aria-hidden="true"></div>
+              <nav class="pager-dots" id="pagerDots"></nav>
+              <span class="pager-live sr-only" id="pagerLive" aria-live="polite" aria-atomic="true"></span>
+            </div>
           </div>
         </div>
       </div>

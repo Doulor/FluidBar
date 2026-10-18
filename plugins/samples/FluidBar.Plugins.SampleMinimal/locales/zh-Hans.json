@@ -1,0 +1,9 @@
+{
+  "$schema": "https://fluidbar.app/schemas/locale.schema.json",
+  "locale": "zh-Hans",
+  "version": 1,
+  "messages": {
+    "island.title": "最小示例",
+    "island.body": "来自 FluidBar v2 插件的问候。"
+  }
+}
