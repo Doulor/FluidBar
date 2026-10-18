@@ -33,15 +33,19 @@ per frame (spec §5.6). All values in DIP at 96 DPI; physical size is `ceil(DIP 
 
 | Mode | Surface (DIP) | 150 % physical | Composition | Anchor shell rect (surface-local DIP) |
 |---|---|---|---|---|
-| `Float` | 488 × 384 | 732 × 576 | 24 bleed + 284 panel + **76 lane** (2 rows of mini-islands below) | panel at (24, 24) |
-| `Dock` | 488 × 444 | 732 × 666 | 24 bleed + **52 lane** (1 row above) + 284 panel + 8 gap + 52 strip + 24 bleed | strip at (24, 368) |
+| `Float` | 488 × 384 | 732 × 576 | 24 bleed + 284 panel + 10 gap + **30 archipelago** + 36 bottom bleed | panel at (24, 24) |
+| `Dock` | 488 × 444 | 732 × 666 | 24 bleed + 284 panel + 8 gap + **52 strip** + 10 gap + 30 archipelago + 36 bottom bleed | panel at (24, 24); compact strip at (24, 316) |
 
 - Width is always `440 shell + 2 × 24 bleed` = 488 DIP.
-- The **detached-island lane** is the whole point of the extra height: mini-islands live in the same
-  HWND but outside the panel, and the lane between them is click-through (§6).
+- The **bottom band** is the whole point of the extra height: the archipelago mini-islands (and, for
+  dock, the dock strip) live in the same HWND but outside the panel, and the band between them is
+  click-through (§6).
 - `LayeredSurfaceSize.ForMode(mode)`, `.ToPixels(scale)`, `.ShellLocalOffset(mode)` are the single
-  source of truth; `LayeredSurfaceSize.DockLaneHeight` (52) and `DetachedLaneHeight` (76) are
-  deliberately different (a unit test pins both derivations).
+  source of truth and mirror Core's `HostSurface`: `DockStripTop` = 316, `ArchipelagoTop(Dock)` = 378,
+  `DetachedLaneHeight` = 76 (float bottom band), `DockBottomAllowance` = 136. A unit test pins the
+  Platform↔Core parity.
+- `ShellLocalOffset(mode)` is the **expanded panel** top (24, 24) for both modes. The overload
+  `ShellLocalOffset(mode, ShellForm)` returns (24, 316) for dock compact/peek/closing/hidden.
 
 Placement is **one** `SetWindowPos` (spec §5.6/§5.5), delegated to
 `IslandWindowInterop.PlacePhysical` when an interop instance was supplied, otherwise issued directly
@@ -53,15 +57,19 @@ windowOriginPx = workArea.Origin + round((shellDip − shellLocalOffsetDip) × s
 windowSizePx   = ceil(surfaceDip × scale)
 ```
 
-`PlaceForWindowPlacement(in WindowPlacement, mode)` consumes Core's single placement product
-(`WindowPlacementConverter.PlaceWindow`) and keeps the host's taller surface: it takes the placement
-origin/scale and derives `originY = placement.WindowPixel.Y + round((placement.Padding − shellLocalOffsetY) × scale)`
-(identical to `Place` for float, −344 DIP for dock). Placement never happens inside the frame path.
+`PlaceForWindowPlacement(in WindowPlacement, mode)` is the authoritative seam: it consumes Core's
+single placement product (`WindowPlacementConverter.PlaceWindow`) and uses
+`placement.WindowPixel` **verbatim** as the window origin (both modes now have the same surface size
+as Core's `HostSurface`, so there is no dock offset correction). `ComputePlacement(...)` is the pure
+static math behind it (no HWND/thread affinity) and is pinned by tests at 100/150/200 %.
+`Place(monitor, shellDip, mode, form = Compact)` remains for legacy callers/spikes and derives the
+origin from the form-aware shell offset. Placement never happens inside the frame path.
 
 **DPI.** The host is Per-Monitor-V2 by contract (the process must declare it; the spike's manifest
-does). `WM_DPICHANGED` rebuilds the DIB at the new physical size, follows the OS suggested origin
-(but keeps the fixed surface size), raises `LayeredDpiChanged`, and forces the next commit to be a
-full frame. `SetMonitor(monitor)` does the same for a programmatic monitor move.
+does). `WM_DPICHANGED` rebuilds the DIB at the new physical size, applies the OS suggested origin
+(but keeps the fixed surface size), updates `Placement`, then raises `LayeredDpiChanged`; the event is
+raised **after** the suggestion so the App's `PlaceForWindowPlacement` is the final word. The next
+commit is forced full. `SetMonitor(monitor)` does the same for a programmatic monitor move.
 
 ## 3. Public API (`FluidBar.Platform.Windows.Hosting`)
 
@@ -76,9 +84,10 @@ thread.
 | `LayeredWindowHost(LayeredHostOptions?, IslandWindowInterop?, IPlatformLogger?, PlatformCounters?, TimeProvider?)` | Constructs the object only; no HWND. |
 | `void Create(MonitorInfo monitor, LayeredHostMode mode = Float)` | Registers the window class once per process, creates `WS_POPUP \| WS_EX_LAYERED \| WS_EX_TOOLWINDOW \| WS_EX_NOACTIVATE \| WS_EX_TOPMOST`, asserts `HWND_TOPMOST` with `SWP_NOACTIVATE`, creates the DIB at the mode's physical size, creates the pacer. Window starts **hidden**. |
 | `void Show()` / `void Hide()` | `ShowWindow(SW_SHOWNOACTIVATE)` **plus** `SetWindowPos(SWP_SHOWWINDOW)` (the first `ShowWindow` of a process is overridden by `STARTUPINFO`); `Show` asserts topmost once. `Hide` releases capture, hides, keeps the DIB. |
-| `LayeredHostPlacement Place(MonitorInfo, in VisualRect shellDip, LayeredHostMode)` | One `SetWindowPos`; rebuilds the DIB if the mode/scale changed. `shellDip` is work-area-relative (Core layout output). |
-| `LayeredHostPlacement PlaceForWindowPlacement(in WindowPlacement, LayeredHostMode)` | Core placement seam (see §2). |
-| `LayeredHostPlacement PlacePhysical(int xPx, int yPx)` | Moves the window, keeps the surface size (drag path). |
+| `LayeredHostPlacement Place(MonitorInfo, in VisualRect shellDip, LayeredHostMode, ShellForm form = Compact)` | One `SetWindowPos`; rebuilds the DIB if the mode/scale changed. `shellDip` is work-area-relative (Core layout output); `form` selects the dock strip vs expanded-panel local offset. |
+| `LayeredHostPlacement PlaceForWindowPlacement(in WindowPlacement, LayeredHostMode)` | Authoritative Core placement seam: origin = `WindowPixel` verbatim (see §2). |
+| `static LayeredHostPlacement ComputePlacement(in WindowPlacement, LayeredHostMode)` | Pure placement math (no HWND/thread affinity) used by the seam and pinned by tests. |
+| `LayeredHostPlacement PlacePhysical(int xPx, int yPx)` | Moves the window, keeps the surface size (drag/legacy path; the App no longer uses it for placement). |
 | `LayeredHostPlacement SetMode(LayeredHostMode)` | Rebuilds the DIB at the other fixed size, keeps the origin, forces a full frame. Re-`Place` afterwards. |
 | `LayeredHostPlacement SetMonitor(MonitorInfo)` | Rebuilds the DIB when the scale changed, keeps the origin. |
 | `LayeredFrame BeginFrame()` | Opens a frame and returns a zero-copy view over the DIB (`Surface`, `Bits`, `Pixels`, `Pixels32`, `Stride`, `WidthPx`, `HeightPx`, `Scale`, `Index`). Throws if a frame is already open. |
@@ -202,7 +211,7 @@ movement back into the delta (observed as a 20 px drift before the fix).
 | `WM_MOUSEWHEEL` / `WM_MOUSEHWHEEL` | `PointerWheel` with `Delta` (multiples of 120) and `IsHorizontal`; lParam is converted from screen to client. |
 | `WM_SETCURSOR` | Over `HTCLIENT` returns `TRUE` after `SetCursor(cursor)`; otherwise `DefWindowProc`. |
 | `WM_MOUSEACTIVATE` | `MA_NOACTIVATE` — clicking never activates the window. |
-| `WM_DPICHANGED` | Rebuilds the surface, follows the suggested origin, raises `LayeredDpiChanged`, forces a full frame. |
+| `WM_DPICHANGED` | Rebuilds the surface at `ceil(DIP × scale)`, applies the suggested origin/size (fixed surface size), updates `Placement`, then raises `LayeredDpiChanged` so the App's Core re-place wins over the suggestion; forces a full frame. |
 | `WM_ERASEBKGND` / `WM_PAINT` | Never paint with GDI: `1` / `BeginPaint`+`EndPaint` (validate only). |
 | `WM_NCDESTROY` | Clears `GWLP_USERDATA` before `DefWindowProc`. |
 | Any handler exception | Logged + counted; the message falls through to `DefWindowProc` (a managed exception never unwinds through the native proc). |
@@ -346,7 +355,9 @@ Core.
 | `src/FluidBar.Platform.Windows/Hosting/LayeredFramePacer.cs` | Composition / deadline / none pacing |
 | `src/FluidBar.Platform.Windows/Interop/NativeMethods.cs` | Added: `UpdateLayeredWindow[Indirect]`, DIB/DC, input, `DwmFlush`, waitable timer, `SendMessageW` |
 | `tools/spikes/layered-host/**` | Spike app, evidence PNGs, `results.md`/`results.json`, `spike.log` |
-| `tests/FluidBar.Platform.Tests/LayeredHostTests.cs` | 23 pure tests (sizes, rects, hit region, pacer, surface) |
+| `tests/FluidBar.Platform.Tests/LayeredHostTests.cs` | 34 pure tests (sizes, form-aware offsets, Core placement parity at 100/150/200 %, rects, hit region, pacer, surface) |
+| `tests/FluidBar.Ui.Tests/SkiaHostDockParityTests.cs` | Headless Core `HostSurface.Dock` ↔ renderer dock local-rect + placement parity |
+| `tests/FluidBar.Ui.Tests/SkiaMonitorPlannerTests.cs` | Headless monitor targeting/add-remove diff for the App host |
 | `tests/FluidBar.Platform.Tests/PlatformIntegrationTests.cs` | Guarded real-HWND test (styles, placement, full+dirty upload, hit-test) |
 
 Verification commands:

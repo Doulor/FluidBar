@@ -32,6 +32,7 @@ internal sealed class AppBootstrap
     private IslandHost? _host;
     private SkiaIslandHost? _skiaHost;
     private SkiaShellIntegration? _shell;
+    private SkiaPlatformActions? _platformActions;
     private JsonUiSettingsStore? _settingsStore;
 
     public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
@@ -74,6 +75,32 @@ internal sealed class AppBootstrap
     }
 
     /// <summary>
+    /// Composes the narrow page-control seam (volume/brightness/media/clipboard). Starting is
+    /// best-effort and off the UI thread: a failed service leaves its controls reporting
+    /// <c>control-unsupported</c> instead of pretending to work.
+    /// </summary>
+    private SkiaPlatformActions? TryCreatePlatformActions()
+    {
+        if (_settings is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var actions = new SkiaPlatformActions(_settings, _logger);
+            actions.StartInBackground();
+            return actions;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "app.island-actions-failed",
+                "The page-control platform seam could not be composed; controls will report unsupported.", ex);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Starts the island host. The Skia layered host is the default; the legacy Avalonia host is the
     /// fallback (and can be forced with <c>FLUIDBAR_HOST=avalonia</c>).
     /// </summary>
@@ -85,6 +112,7 @@ internal sealed class AppBootstrap
 
         if (!forceAvalonia)
         {
+            _platformActions = TryCreatePlatformActions();
             try
             {
                 var host = new SkiaIslandHost(new SkiaIslandHostOptions
@@ -93,6 +121,7 @@ internal sealed class AppBootstrap
                     Settings = _settings!,
                     Data = _data!,
                     Logger = _logger,
+                    PlatformActions = _platformActions,
                     TargetFrameRate = 120,
                 });
                 host.SettingsRequested += OpenSettings;
@@ -108,6 +137,8 @@ internal sealed class AppBootstrap
                     "The Skia layered host could not be created; falling back to the Avalonia island host.", ex);
                 _skiaHost?.Dispose();
                 _skiaHost = null;
+                _platformActions?.DisposeInBackground();
+                _platformActions = null;
             }
         }
 
@@ -278,6 +309,8 @@ internal sealed class AppBootstrap
         _skiaHost = null;
         _host?.Dispose();
         _host = null;
+        _platformActions?.DisposeInBackground();
+        _platformActions = null;
         _data?.Dispose();
         _settings?.Dispose();
         _settingsStore?.Dispose();

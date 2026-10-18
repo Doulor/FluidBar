@@ -59,3 +59,10 @@
 - 新增 tray icon + `HotkeyService`：Ctrl+Alt+D 注册成功；Ctrl+Alt+H/S 被占用时回退 Ctrl+Alt+Shift+H/S。
 - 修复 `LayeredSurfaceSize.ShellLocalOffset(Dock)` 与 Core dock 组合不一致（旧值 368，现 24），Platform 371 tests 通过。
 - 剩余：页面控件平台 seam、多显示器热插拔、UIA/IME、真实热键注入复测、settings 热键可配置。
+
+### 2026-10-19 00:50 — 页面控件 / 多显示器 / DPI / dock 完成
+- 页面控件平台 seam：`IIslandPlatformActions` + `SkiaIslandControlRouter` + `SkiaPlatformActions`；媒体播放/上一首/下一首/seek、音量、亮度、主题切换、剪贴板复制已接；通知/Agent/任务/日历为 deferred 事件；Wi-Fi/BT/Focus/output/queue 明确 unsupported。
+- 多显示器：`SkiaMonitorPlanner` + `SkiaIslandHost` 热插拔 reconcile（Primary/All、稳定 primary、300ms debounce、移除/新增/保留、DisplayOn 变更）。
+- DPI：`WM_DPICHANGED` 先应用 OS 建议再通知 App；surface 按 ceil(DIP×scale) 重建；150%/200% 数学与 placement 测试通过。
+- dock：`PlaceForWindowPlacement` 统一 float/flush/dock；Platform 组合常量与 Core 对齐（panel 24..308、strip 316..368、arch 378..408）。
+- 测试：**1402 passed / 0 failed**（Core 473, Platform 382, UI 159, Island 135, SDK 152, PluginHost 36, Builtin 23, Integration 31, Architecture 11）。

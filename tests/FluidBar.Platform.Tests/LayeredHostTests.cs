@@ -24,15 +24,22 @@ public sealed class LayeredHostTests
         // The surface must be wide enough for the 440 DIP shell plus 24 DIP bleed on both sides.
         Assert.Equal(LayeredSurfaceSize.PanelWidth + (2 * LayeredSurfaceSize.Padding), floatSize.WidthDip);
 
-        // Float: 24 bleed + 284 panel + 76 detached-island lane.
-        Assert.Equal(LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight + LayeredSurfaceSize.DetachedLaneHeight,
-            floatSize.HeightDip);
-
-        // Dock: 24 bleed + 52 lane + 284 panel + 8 gap + 52 strip + 24 bleed.
+        // Float: 24 bleed + 284 panel + 10 gap + 30 archipelago + 36 bottom bleed (Core composition).
         Assert.Equal(
-            LayeredSurfaceSize.Padding + LayeredSurfaceSize.DockLaneHeight + LayeredSurfaceSize.PanelHeight
-                + LayeredSurfaceSize.DockGap + LayeredSurfaceSize.DockStripHeight + LayeredSurfaceSize.Padding,
+            LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight + LayeredSurfaceSize.ArchipelagoGap
+                + LayeredSurfaceSize.ArchipelagoStripHeight + LayeredSurfaceSize.BottomPadding,
+            floatSize.HeightDip);
+        Assert.Equal(LayeredSurfaceSize.DetachedLaneHeight,
+            LayeredSurfaceSize.ArchipelagoGap + LayeredSurfaceSize.ArchipelagoStripHeight + LayeredSurfaceSize.BottomPadding);
+
+        // Dock: 24 bleed + 284 panel + 8 gap + 52 strip + 10 gap + 30 archipelago + 36 bottom bleed.
+        Assert.Equal(
+            LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight + LayeredSurfaceSize.DockGap
+                + LayeredSurfaceSize.DockStripHeight + LayeredSurfaceSize.ArchipelagoGap
+                + LayeredSurfaceSize.ArchipelagoStripHeight + LayeredSurfaceSize.BottomPadding,
             dockSize.HeightDip);
+        Assert.Equal(dockSize.HeightDip - LayeredSurfaceSize.Padding - LayeredSurfaceSize.PanelHeight,
+            LayeredSurfaceSize.DockBottomAllowance);
     }
 
     [Theory]
@@ -48,11 +55,31 @@ public sealed class LayeredHostTests
         Assert.Equal(expectedHeight, pixels.Height);
     }
 
-    [Fact]
-    public void SurfaceSize_DockToPixels_IsTallerThanFloat()
+    [Theory]
+    [InlineData(1.0, 488, 444)]
+    [InlineData(1.25, 610, 555)]
+    [InlineData(1.5, 732, 666)]
+    [InlineData(2.0, 976, 888)]
+    public void SurfaceSize_DockToPixels_UsesTheCeilRule(double scale, int expectedWidth, int expectedHeight)
     {
-        Assert.Equal(666, LayeredSurfaceSize.Dock.ToPixels(1.5).Height);
+        var pixels = LayeredSurfaceSize.Dock.ToPixels(scale);
+
+        Assert.Equal(expectedWidth, pixels.Width);
+        Assert.Equal(expectedHeight, pixels.Height);
         Assert.True(LayeredSurfaceSize.Dock.ToPixels(1.5).Height > LayeredSurfaceSize.Float.ToPixels(1.5).Height);
+    }
+
+    [Theory]
+    [InlineData(1.1, 537, 423)] // 488*1.1=536.8, 384*1.1=422.4: both must ceil
+    [InlineData(1.75, 854, 672)] // 488*1.75=854, 384*1.75=672
+    public void SurfaceSize_ToPixels_CeilsFractionalPixels(double scale, int expectedWidth, int expectedHeight)
+    {
+        var pixels = LayeredSurfaceSize.Float.ToPixels(scale);
+
+        Assert.Equal(expectedWidth, pixels.Width);
+        Assert.Equal(expectedHeight, pixels.Height);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.Width * scale), pixels.Width);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.FloatHeight * scale), pixels.Height);
     }
 
     [Fact]
@@ -67,6 +94,112 @@ public sealed class LayeredHostTests
         Assert.Equal(24, dockOffset.X);
         Assert.Equal(24, dockOffset.Y);
         Assert.Equal(444, LayeredSurfaceSize.Dock.HeightDip);
+    }
+
+    [Fact]
+    public void SurfaceSize_FormAwareOffset_AnchorsDockCompactOnTheStrip()
+    {
+        Assert.Equal(new VisualPoint(24, 316),
+            LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Compact));
+        Assert.Equal(new VisualPoint(24, 316),
+            LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Peek));
+        Assert.Equal(new VisualPoint(24, 24),
+            LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Expanded));
+        Assert.Equal(new VisualPoint(24, 24),
+            LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float, ShellForm.Compact));
+
+        // Local rects the renderer paints in dock mode: panel 24..308, strip 316..368, arch 378..408.
+        Assert.Equal(24, LayeredSurfaceSize.Padding);
+        Assert.Equal(308, LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight);
+        Assert.Equal(316, LayeredSurfaceSize.DockStripTop);
+        Assert.Equal(368, LayeredSurfaceSize.DockStripTop + LayeredSurfaceSize.DockStripHeight);
+        Assert.Equal(378, LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock));
+        Assert.Equal(408, LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock) + LayeredSurfaceSize.ArchipelagoStripHeight);
+    }
+
+    [Fact]
+    public void SurfaceSize_MatchesCoreHostSurface_ForBothModes()
+    {
+        var floatSurface = HostSurface.Float;
+        var dockSurface = HostSurface.Dock;
+
+        Assert.Equal(LayeredSurfaceSize.Width, floatSurface.Width);
+        Assert.Equal(LayeredSurfaceSize.FloatHeight, floatSurface.Height);
+        Assert.Equal(LayeredSurfaceSize.Width, dockSurface.Width);
+        Assert.Equal(LayeredSurfaceSize.DockHeight, dockSurface.Height);
+
+        Assert.Equal(LayeredSurfaceSize.Padding, dockSurface.ShellLocalOffset.X);
+        Assert.Equal(LayeredSurfaceSize.Padding, dockSurface.ShellLocalOffset.Y);
+        Assert.Equal(LayeredSurfaceSize.PanelHeight, dockSurface.ShellEnvelopeLocal.Height);
+        Assert.Equal(LayeredSurfaceSize.DockStripTop, dockSurface.DockStripTopLocal);
+        Assert.Equal(LayeredSurfaceSize.DockStripHeight, dockSurface.DockStripLocal.Height);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock), dockSurface.ArchipelagoTopLocal);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoStripHeight, dockSurface.ArchipelagoStripLocal.Height);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Float), floatSurface.ArchipelagoTopLocal);
+    }
+
+    [Theory]
+    [InlineData(96u, 1.0, 24, 316)]
+    [InlineData(144u, 1.5, 36, 474)]
+    [InlineData(192u, 2.0, 48, 632)]
+    public void ComputePlacement_Dock_UsesCoreWindowPixel_AndCeilSurface(
+        uint dpi, double scale, int expectedOffsetX, int expectedOffsetY)
+    {
+        var monitor = FluidBar.Core.Layout.MonitorInfo.Create(
+            "\\\\.\\DISPLAY1",
+            new PixelRect(1920, 0, 2560, 1400),
+            dpi,
+            new PixelRect(1920, 0, 2560, 1440),
+            isPrimary: false);
+        var shell = IslandLayout.MeasureCompact(
+            new IslandLayoutRequest
+            {
+                Form = ShellForm.Compact,
+                Mode = IslandMode.Dock,
+                Anchor = IslandAnchor.BottomCenter,
+            },
+            monitor.WorkAreaDip);
+        var placement = WindowPlacementConverter.PlaceWindow(
+            shell, monitor, HostSurface.Dock, ShellForm.Compact, IslandAnchor.BottomCenter);
+
+        var computed = LayeredWindowHost.ComputePlacement(placement, LayeredHostMode.Dock);
+
+        // No 344 DIP dock shift: Core's WindowPixel is the host window origin verbatim.
+        Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);
+        Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.Width * scale), computed.SurfaceSizePx.Width);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.DockHeight * scale), computed.SurfaceSizePx.Height);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.Width * scale), computed.WindowPixel.Width);
+        Assert.Equal((int)Math.Ceiling(LayeredSurfaceSize.DockHeight * scale), computed.WindowPixel.Height);
+        Assert.Equal(scale, computed.Scale, 4);
+        Assert.Equal(expectedOffsetX, computed.ShellLocalOffsetPx.Width);
+        Assert.Equal(expectedOffsetY, computed.ShellLocalOffsetPx.Height);
+    }
+
+    [Fact]
+    public void ComputePlacement_Float_UsesCoreWindowPixel()
+    {
+        var monitor = FluidBar.Core.Layout.MonitorInfo.Create(
+            "\\\\.\\DISPLAY1",
+            new PixelRect(0, 0, 2560, 1400),
+            dpi: 144,
+            isPrimary: true);
+        var shell = IslandLayout.MeasureCompact(
+            new IslandLayoutRequest { Form = ShellForm.Compact, Mode = IslandMode.Float, Anchor = IslandAnchor.TopCenter },
+            monitor.WorkAreaDip);
+        var placement = WindowPlacementConverter.PlaceWindow(
+            shell, monitor, HostSurface.Float, ShellForm.Compact, IslandAnchor.TopCenter);
+
+        var computed = LayeredWindowHost.ComputePlacement(placement, LayeredHostMode.Float);
+
+        Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);
+        Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
+        Assert.Equal(732, computed.SurfaceSizePx.Width);
+        Assert.Equal(576, computed.SurfaceSizePx.Height);
+        Assert.Equal(
+            (int)Math.Round(placement.ShellLocalOffset.X * 1.5, MidpointRounding.AwayFromZero),
+            computed.ShellLocalOffsetPx.Width);
+        Assert.Equal(36, computed.ShellLocalOffsetPx.Height);
     }
 
     [Fact]

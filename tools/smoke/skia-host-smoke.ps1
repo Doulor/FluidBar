@@ -39,7 +39,7 @@ $psi.FileName = $exe
 $psi.WorkingDirectory = Split-Path -Parent $exe
 $psi.UseShellExecute = $false
 $psi.Environment['FLUIDBAR_HOST'] = 'skia'
-$psi.Environment['FLUIDBAR_SMOKE'] = '1'
+if ($EnableSmoke) { $psi.Environment['FLUIDBAR_SMOKE'] = '1' }
 
 Write-Host "Launching $exe (FLUIDBAR_HOST=skia)..."
 $proc = [System.Diagnostics.Process]::Start($psi)
@@ -115,3 +115,4 @@ finally {
 }
 
 if ($report.error) { exit 1 }
+

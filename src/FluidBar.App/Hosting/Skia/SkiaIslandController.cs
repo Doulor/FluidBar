@@ -45,6 +45,7 @@ public sealed class SkiaIslandController : IDisposable
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
+    private readonly IIslandPlatformActions? _platformActions;
 
     private ActivitySchedulerState _schedulerState = ActivitySchedulerState.Empty;
     private IslandStateController _controller;
@@ -85,6 +86,7 @@ public sealed class SkiaIslandController : IDisposable
         _time = options.TimeProvider ?? TimeProvider.System;
         _logger = options.Logger ?? new Diagnostics.TraceAppLogger();
         _dispatcher = dispatcher ?? new SkiaHostDispatcher();
+        _platformActions = options.PlatformActions;
 
         _hub = new EventHub(logger: _logger, dispatcher: _dispatcher);
         _controller = CreateController(_settings.Current);
@@ -491,7 +493,7 @@ public sealed class SkiaIslandController : IDisposable
             case IslandHitKind.Compact:
                 if (hit.Control == IslandPageControl.PlayPause)
                 {
-                    MediaCommandRequested?.Invoke(MediaTransportCommand.TogglePlay);
+                    DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.MediaTogglePlay), hit.PageIndex);
                     return true;
                 }
 
@@ -748,7 +750,19 @@ public sealed class SkiaIslandController : IDisposable
                 case IslandEffectKind.UpdateTray:
                     break;
                 case IslandEffectKind.PersistPlacement:
-                    // TODO(skia-mvp): persist the dragged anchor through Core settings.
+                    // TODO(skia-anchor-drag): the Skia host has no drag-to-move gesture, so there is
+                    // no new anchor/offset to persist yet. A correct implementation needs all three:
+                    //   1. click-vs-drag discrimination on press: a compact press currently expands
+                    //      immediately (IslandInput.PrimaryClick), so a drag can never be told apart
+                    //      from a click; defer the click to release and cancel it past the Core drag
+                    //      threshold;
+                    //   2. a host move path during the drag (LayeredWindowHost.PlacePhysical with the
+                    //      Core window origin) plus monitor hit-testing for cross-monitor drops;
+                    //   3. a per-monitor placement write. Core already models
+                    //      PlacementSettings.Monitors[monitorId] = MonitorPlacement(anchor, offsetX,
+                    //      offsetY), but IUiSettingsStore only exposes AppSettings; the adapter's
+                    //      read-modify-write preserves the Core section, so a small seam is needed.
+                    // Until then placement stays settings-driven (anchor only) and never drifts.
                     break;
                 case IslandEffectKind.PauseProducers:
                     _data.Stop();
@@ -775,7 +789,7 @@ public sealed class SkiaIslandController : IDisposable
 
         var peeked = State.Kind == IslandStateKind.Peek;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked);
-        _pages = SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer);
+        _pages = SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings);
         _theme = SkiaIslandThemeMapper.Map(settings);
         _motion.SetTarget(BuildTarget(viewModel));
         BuildRenderState();
@@ -921,33 +935,90 @@ public sealed class SkiaIslandController : IDisposable
 
     private void HandlePageControl(in IslandHitTarget hit)
     {
-        switch (hit.Control)
+        if (hit.Control == IslandPageControl.MediaCard)
         {
-            case IslandPageControl.PlayPause:
-                MediaCommandRequested?.Invoke(MediaTransportCommand.TogglePlay);
+            HandlePageRequest(CoreIslandPage.Media);
+            return;
+        }
+
+        var action = SkiaIslandControlRouter.Map(hit, _renderState, _pointerX);
+        if (action is { } value)
+        {
+            DispatchControl(value, hit.PageIndex);
+        }
+    }
+
+    /// <summary>
+    /// Dispatches one semantic page-control action through the injected platform seam. Without a
+    /// seam, media transport falls back to the legacy <see cref="MediaCommandRequested"/> event and
+    /// every other action is reported as unsupported (never silently swallowed).
+    /// </summary>
+    private void DispatchControl(in IslandPlatformAction action, int page)
+    {
+        if (_platformActions is null)
+        {
+            if (TryRaiseLegacyMediaCommand(action.Kind))
+            {
+                return;
+            }
+
+            LogControlOutcome(action, page, "island.skia.control-unsupported",
+                "no IIslandPlatformActions seam is configured for this host");
+            return;
+        }
+
+        var result = _platformActions.Invoke(action);
+        switch (result.Outcome)
+        {
+            case IslandActionOutcome.Handled:
                 break;
-            case IslandPageControl.Previous:
-                MediaCommandRequested?.Invoke(MediaTransportCommand.Previous);
+            case IslandActionOutcome.Deferred:
+                LogControlOutcome(action, page, "island.skia.control-deferred",
+                    result.Reason ?? "the action was emitted as an App event for a later owner");
                 break;
-            case IslandPageControl.Next:
-                MediaCommandRequested?.Invoke(MediaTransportCommand.Next);
-                break;
-            case IslandPageControl.MediaCard:
-                HandlePageRequest(CoreIslandPage.Media);
-                break;
-            case IslandPageControl.QuickToggle:
-            case IslandPageControl.Seek:
-            case IslandPageControl.VolumeSlider:
-            case IslandPageControl.BrightnessSlider:
-            case IslandPageControl.Output:
-            case IslandPageControl.Queue:
-                // TODO(skia-mvp): needs platform seams (audio/brightness/focus toggles, seek command)
-                // that do not exist yet; the hit target is correct so wiring them is additive.
-                _logger.Debug(LogCategories.Activity, "island.skia.control-unmapped",
-                    $"Page control {hit.Control} has no platform seam yet.",
-                    data: new Dictionary<string, object?> { ["page"] = hit.PageIndex, ["index"] = hit.Index });
+            default:
+                LogControlOutcome(action, page, "island.skia.control-unsupported",
+                    result.Reason ?? "no platform service backs this control");
                 break;
         }
+    }
+
+    private bool TryRaiseLegacyMediaCommand(IslandPlatformActionKind kind)
+    {
+        var command = kind switch
+        {
+            IslandPlatformActionKind.MediaTogglePlay => MediaTransportCommand.TogglePlay,
+            IslandPlatformActionKind.MediaPrevious => MediaTransportCommand.Previous,
+            IslandPlatformActionKind.MediaNext => MediaTransportCommand.Next,
+            _ => (MediaTransportCommand?)null,
+        };
+
+        if (command is null || MediaCommandRequested is null)
+        {
+            return false;
+        }
+
+        MediaCommandRequested.Invoke(command.Value);
+        return true;
+    }
+
+    private void LogControlOutcome(
+        in IslandPlatformAction action,
+        int page,
+        string eventId,
+        string reason)
+    {
+        _logger.Debug(LogCategories.Activity, eventId,
+            $"Page control {action} on page {page}: {reason}",
+            data: new Dictionary<string, object?>
+            {
+                ["control"] = action.Kind.ToString(),
+                ["page"] = page,
+                ["index"] = action.Index,
+                ["value"] = action.Value,
+                ["toggle"] = action.Toggle.ToString(),
+                ["reason"] = reason,
+            });
     }
 
     // ------------------------------------------------------------------ render state
@@ -1064,9 +1135,8 @@ public sealed class SkiaIslandController : IDisposable
             return VisualRect.Empty;
         }
 
-        var shell = IslandMetrics.ShellRect(_renderState);
         var host = HostSurface.ForMode(_renderState.Mode);
-        var top = shell.Bottom + IslandMetrics.StripGap;
+        var top = host.ArchipelagoTopLocal;
         var height = Math.Max(0, host.Height - top);
         return new VisualRect(0, top, host.Width, height).Inflate(2);
     }
@@ -1103,7 +1173,7 @@ public sealed class SkiaIslandController : IDisposable
             && State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing
             && hotZone.Contains(_pointerX, _pointerY);
 
-        var stripTop = shell.Bottom + IslandMetrics.StripGap;
+        var stripTop = HostSurface.ForMode(_renderState.Mode).ArchipelagoTopLocal;
         var strip = new VisualRect(shell.MidX - 200, stripTop, 400, IslandMetrics.StripHeight);
         _pointerOnStrip = _archipelago.IsVisible && _pointerInside && strip.Contains(_pointerX, _pointerY);
     }

@@ -1,4 +1,5 @@
 using FluidBar.Core.Interaction;
+using FluidBar.Core.Layout;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -81,7 +82,10 @@ internal sealed class TransientStripRenderer : IDisposable
         var islands = (float)((IslandMetrics.MiniNeighbourSize * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
         var total = leftBlock + (_leftDots > 0 ? BlockGap : 0) + islands + (_rightDots > 0 ? BlockGap : 0) + rightBlock;
 
-        var top = shell.Bottom + (float)IslandMetrics.StripGap;
+        // The strip lives in the host's bottom band, not immediately below the shell: in dock mode
+        // the 52 DIP dock strip sits between the panel and the archipelago. Core's HostSurface owns
+        // the local top (318 float, 378 dock) and the App hit-test reads the same value.
+        var top = (float)HostSurface.ForMode(state.Mode).ArchipelagoTopLocal;
         var left = shell.MidX - (total / 2);
         _strip = new SKRect(left, top, left + total, top + (float)IslandMetrics.StripHeight);
 

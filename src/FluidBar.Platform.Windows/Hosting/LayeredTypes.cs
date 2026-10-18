@@ -55,23 +55,26 @@ public readonly record struct LayeredPixelSize(int Width, int Height)
 
 /// <summary>
 /// The two fixed per-mode host surfaces (DIP). Both are 488 DIP wide (440 shell + 2x24 bleed) and
-/// reserve a detached-island lane plus the 24 DIP bleed on the far side of the anchor:
+/// follow Core's <see cref="FluidBar.Core.Layout.HostSurface"/> composition exactly:
 /// <list type="bullet">
-/// <item>Float 488x384 = 24 bleed + 284 panel + 76 lane (two rows of mini-islands below the panel).</item>
-/// <item>Dock 488x444 = 24 bleed + 52 lane (one row of small islands above the panel) + 284 panel + 8 gap + 52 strip + 24 bleed.</item>
+/// <item>Float 488x384 = 24 bleed + 284 panel + 10 gap + 30 archipelago strip + 36 bottom bleed.</item>
+/// <item>Dock 488x444 = 24 bleed + 284 panel + 8 gap + 52 dock strip + 10 gap + 30 archipelago strip + 36 bottom bleed.</item>
 /// </list>
-/// The lane is what makes the "extra bottom strip is click-through except the pills" contract
-/// possible: the lane belongs to the same HWND but has no hit region unless a pill rect is set.
+/// In dock mode the strip sits <b>below</b> the panel (Core's composition), so the expanded panel is
+/// always at (24,24) in both modes and only the compact dock shell is anchored at the strip top
+/// (<see cref="DockStripTop"/>). The transparent bottom band is what makes the "extra strip is
+/// click-through except the pills" contract possible: it belongs to the same HWND but has no hit
+/// region unless a pill rect is set.
 /// </summary>
 public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightDip)
 {
     /// <summary>Host surface width for both modes (DIP).</summary>
     public const double Width = 488;
 
-    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 76 lane.</summary>
+    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 10 gap + 30 strip + 36 bleed.</summary>
     public const double FloatHeight = 384;
 
-    /// <summary>Dock surface height (DIP): 24 bleed + 52 lane + 284 panel + 8 gap + 52 strip + 24 bleed.</summary>
+    /// <summary>Dock surface height (DIP): 24 + 284 panel + 8 gap + 52 strip + 10 gap + 30 strip + 36 bleed.</summary>
     public const double DockHeight = 444;
 
     /// <summary>Bleed around the shell for the soft shadow/antialiasing (DIP).</summary>
@@ -89,11 +92,23 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Gap between the dock strip and the panel above it (DIP).</summary>
     public const double DockGap = 8;
 
-    /// <summary>Detached mini-island lane height in float mode (DIP): two 26 DIP rows + 8 DIP gap + 16 DIP margins.</summary>
-    public const double DetachedLaneHeight = 76;
+    /// <summary>Gap between the shell/dock strip and the archipelago strip (DIP).</summary>
+    public const double ArchipelagoGap = 10;
 
-    /// <summary>Detached mini-island lane height in dock mode (DIP): one 26 DIP row plus margins.</summary>
-    public const double DockLaneHeight = 52;
+    /// <summary>Archipelago strip envelope height (DIP).</summary>
+    public const double ArchipelagoStripHeight = 30;
+
+    /// <summary>Transparent bottom bleed below the archipelago strip (DIP).</summary>
+    public const double BottomPadding = 36;
+
+    /// <summary>Dock strip top inside the surface (24 + 284 + 8 = 316); matches Core's <c>DockStripTopLocal</c>.</summary>
+    public const double DockStripTop = Padding + PanelHeight + DockGap;
+
+    /// <summary>Transparent band below the expanded panel in float mode (10 + 30 + 36 = 76 DIP).</summary>
+    public const double DetachedLaneHeight = ArchipelagoGap + ArchipelagoStripHeight + BottomPadding;
+
+    /// <summary>Transparent band below the expanded panel in dock mode (8 + 52 + 10 + 30 + 36 = 136 DIP).</summary>
+    public const double DockBottomAllowance = DockHeight - Padding - PanelHeight;
 
     /// <summary>Float surface size (488x384 DIP).</summary>
     public static LayeredSurfaceSize Float { get; } = new(Width, FloatHeight);
@@ -105,11 +120,28 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     public static LayeredSurfaceSize ForMode(LayeredHostMode mode)
         => mode == LayeredHostMode.Dock ? Dock : Float;
 
+    /// <summary>Archipelago strip top inside the surface (318 float, 378 dock), matching Core.</summary>
+    public static double ArchipelagoTop(LayeredHostMode mode) => mode == LayeredHostMode.Dock
+        ? DockStripTop + DockStripHeight + ArchipelagoGap
+        : Padding + PanelHeight + ArchipelagoGap;
+
     /// <summary>
-    /// Surface-local DIP offset of the mode's anchor shell rect: the panel for
-    /// <see cref="LayeredHostMode.Float"/>, the dock strip for <see cref="LayeredHostMode.Dock"/>.
+    /// Surface-local DIP offset of the expanded panel (24,24) for both modes. Core's
+    /// <c>HostSurface.ShellLocalOffset</c> owns this value; the dock <b>compact</b> strip is anchored
+    /// at <see cref="DockStripTop"/> instead (use the <see cref="FluidBar.Core.Layout.ShellForm"/>
+    /// overload).
     /// </summary>
     public static VisualPoint ShellLocalOffset(LayeredHostMode mode) => new(Padding, Padding);
+
+    /// <summary>
+    /// Surface-local DIP offset of the anchor shell for a form: the expanded panel for every mode,
+    /// the dock strip for dock compact/peek/closing/hidden. This mirrors Core
+    /// <c>HostSurface.ResolveLocalY</c>.
+    /// </summary>
+    public static VisualPoint ShellLocalOffset(LayeredHostMode mode, FluidBar.Core.Layout.ShellForm form)
+        => mode == LayeredHostMode.Dock && form != FluidBar.Core.Layout.ShellForm.Expanded
+            ? new VisualPoint(Padding, DockStripTop)
+            : new VisualPoint(Padding, Padding);
 
     /// <summary>Converts to physical pixels with the ceiling size rule (never clips a DIP).</summary>
     public LayeredPixelSize ToPixels(double scale)

@@ -162,9 +162,12 @@ public sealed class SkiaLayeredWindowIntegrationTests
             HostSurface.Dock,
             ShellForm.Compact,
             IslandAnchor.BottomCenter);
-        dock.PlacePhysical(placement.WindowPixel.X, placement.WindowPixel.Y);
+        // Core's WindowPlacement is authoritative for dock too: no PlacePhysical workaround.
+        dock.PlaceForWindowPlacement(placement, LayeredHostMode.Dock);
         Assert.Equal(placement.WindowPixel.X, dock.Placement.WindowPixel.X);
         Assert.Equal(placement.WindowPixel.Y, dock.Placement.WindowPixel.Y);
+        Assert.Equal(488, dock.Placement.SurfaceSizePx.Width);
+        Assert.Equal(444, dock.Placement.SurfaceSizePx.Height);
 
         var state = IslandRenderState.ForCompact(
             IslandMode.Dock,

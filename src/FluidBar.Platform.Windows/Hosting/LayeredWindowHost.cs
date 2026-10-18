@@ -307,13 +307,20 @@ public sealed partial class LayeredWindowHost : IDisposable
 
     /// <summary>
     /// Places the host for a shell rectangle given in work-area-relative DIP (Core layout output) and
-    /// the mode that rectangle belongs to. Exactly one <c>SetWindowPos</c>; never called per frame.
+    /// the mode/form that rectangle belongs to. Exactly one <c>SetWindowPos</c>; never called per
+    /// frame. Prefer <see cref="PlaceForWindowPlacement"/> when a Core
+    /// <see cref="WindowPlacement"/> is available: it is the authoritative seam.
     /// </summary>
     /// <param name="monitor">Target monitor (work-area origin and DPI).</param>
-    /// <param name="shellDip">Anchor shell rect: the panel for float, the dock strip for dock.</param>
+    /// <param name="shellDip">Anchor shell rect: the panel for float/flush, the dock strip for dock.</param>
     /// <param name="mode">Presentation mode of <paramref name="shellDip"/>.</param>
+    /// <param name="form">
+    /// Visual form the anchor rect belongs to; selects the dock compact (strip, y=316) versus expanded
+    /// (panel, y=24) local offset. Float/flush use the panel top for both.
+    /// </param>
     /// <returns>The placement that was applied.</returns>
-    public LayeredHostPlacement Place(MonitorInfo monitor, in VisualRect shellDip, LayeredHostMode mode)
+    public LayeredHostPlacement Place(MonitorInfo monitor, in VisualRect shellDip, LayeredHostMode mode,
+        FluidBar.Core.Layout.ShellForm form = FluidBar.Core.Layout.ShellForm.Compact)
     {
         EnsureOwningThread();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -322,7 +329,7 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         var scale = DisplayMetrics.ScaleFromDpi(monitor.DpiX == 0 ? 96u : monitor.DpiX);
         var surfaceSize = LayeredSurfaceSize.ForMode(mode);
-        var offset = LayeredSurfaceSize.ShellLocalOffset(mode);
+        var offset = LayeredSurfaceSize.ShellLocalOffset(mode, form);
         var sizePx = surfaceSize.ToPixels(scale);
         var originX = monitor.WorkArea.X + WindowPlacementConverter.Round((shellDip.X - offset.X) * scale);
         var originY = monitor.WorkArea.Y + WindowPlacementConverter.Round((shellDip.Y - offset.Y) * scale);
@@ -332,9 +339,10 @@ public sealed partial class LayeredWindowHost : IDisposable
 
     /// <summary>
     /// Places the host using Core's single visual→window conversion
-    /// (<see cref="WindowPlacementConverter.PlaceWindow"/>). The host's surface is taller than Core's
-    /// fixed 488x332 host, so only the placement origin and scale are used; the size comes from the
-    /// mode's fixed surface.
+    /// (<see cref="WindowPlacementConverter.PlaceWindow"/>). Core's <see cref="WindowPlacement"/>
+    /// owns the whole host-surface rectangle for both modes (488x384 float/flush, 488x444 dock), so
+    /// the window origin is exactly <see cref="WindowPlacement.WindowPixel"/>; only the DIB size is
+    /// re-derived from the mode (ceil rule) to defend against a stale/mismatched placement.
     /// </summary>
     /// <param name="placement">Core placement product.</param>
     /// <param name="mode">Presentation mode the placement was computed for.</param>
@@ -343,15 +351,29 @@ public sealed partial class LayeredWindowHost : IDisposable
         ArgumentNullException.ThrowIfNull(placement);
         EnsureOwningThread();
         ThrowIfNotCreated();
-        var scale = placement.Scale;
+        var computed = ComputePlacement(placement, mode);
+        var dpi = (uint)Math.Round(computed.Scale * 96);
+        return ApplyPlacement(_monitor ?? CreateSyntheticMonitor(placement, computed.Scale), mode, dpi,
+            computed.Scale, computed.WindowPixel, computed.SurfaceSizeDip, placement.ShellLocalOffset,
+            computed.SurfaceSizePx);
+    }
+
+    /// <summary>
+    /// Pure Core-placement → host-placement math (no HWND, no thread affinity). The window origin is
+    /// Core's <see cref="WindowPlacement.WindowPixel"/> verbatim; the size is the mode's fixed surface
+    /// at <c>ceil(DIP × scale)</c>. Used by <see cref="PlaceForWindowPlacement"/> and pinned by tests.
+    /// </summary>
+    /// <param name="placement">Core placement product.</param>
+    /// <param name="mode">Presentation mode the placement was computed for.</param>
+    public static LayeredHostPlacement ComputePlacement(in WindowPlacement placement, LayeredHostMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(placement);
+        var scale = double.IsFinite(placement.Scale) && placement.Scale > 0 ? placement.Scale : 1.0;
         var surfaceSize = LayeredSurfaceSize.ForMode(mode);
-        var offset = LayeredSurfaceSize.ShellLocalOffset(mode);
         var sizePx = surfaceSize.ToPixels(scale);
-        var originX = placement.WindowPixel.X;
-        var originY = placement.WindowPixel.Y + WindowPlacementConverter.Round((placement.Padding - offset.Y) * scale);
-        var dpi = (uint)Math.Round(scale * 96);
-        return ApplyPlacement(_monitor ?? CreateSyntheticMonitor(placement, scale), mode, dpi, scale,
-            new LayeredRect(originX, originY, sizePx.Width, sizePx.Height), surfaceSize, offset, sizePx);
+        var window = new LayeredRect(placement.WindowPixel.X, placement.WindowPixel.Y, sizePx.Width, sizePx.Height);
+        return new LayeredHostPlacement(window, sizePx, surfaceSize, scale,
+            OffsetToPixels(placement.ShellLocalOffset, scale));
     }
 
     /// <summary>Moves the window to an absolute physical origin, keeping the current surface size.</summary>

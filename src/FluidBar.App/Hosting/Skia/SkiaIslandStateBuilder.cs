@@ -65,11 +65,16 @@ public static class SkiaIslandStateBuilder
         });
     }
 
-    /// <summary>Builds the expanded page models (home + media MVP; other pages render placeholders).</summary>
+    /// <summary>Builds the expanded page models from the App content snapshot.</summary>
     /// <param name="content">Non-activity content snapshot.</param>
     /// <param name="island">Activity view model from the Core presenter.</param>
     /// <param name="localizer">Localizer for page titles and labels.</param>
-    public static ExpandedPageContent BuildPages(IslandContent content, IslandViewModel island, ILocalizer localizer)
+    /// <param name="settings">Live settings (drives the theme quick toggle state); optional for callers without settings.</param>
+    public static ExpandedPageContent BuildPages(
+        IslandContent content,
+        IslandViewModel island,
+        ILocalizer localizer,
+        AppSettings? settings = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(island);
@@ -93,7 +98,10 @@ public static class SkiaIslandStateBuilder
                 new HomeToggleModel(IslandIcon.Wifi, content.NetworkName ?? "Wi-Fi", content.IsOnline),
                 new HomeToggleModel(IslandIcon.Bluetooth, "Bluetooth", false),
                 new HomeToggleModel(IslandIcon.Moon, localizer.Get(LocKeys.Page.Home.FocusTime), content.FocusOn),
-                new HomeToggleModel(IslandIcon.Moon, localizer.Get(LocKeys.Page.Home.System), false),
+                new HomeToggleModel(
+                    IslandIcon.Moon,
+                    localizer.Get(LocKeys.Page.Home.System),
+                    settings is null || settings.Theme != AppTheme.Light),
             ],
             NowPlaying = new MediaSummaryModel
             {
@@ -132,6 +140,23 @@ public static class SkiaIslandStateBuilder
             EmptyTitle = localizer.Get(LocKeys.Media.NoSession),
         };
 
+        var notificationsPage = new NotificationsPageModel
+        {
+            Items = BuildNotifications(content.Notifications),
+        };
+
+        var clipboardPage = new ClipboardPageModel
+        {
+            Items = BuildClipboard(content.Clipboard),
+        };
+
+        var agentPage = new AgentPageModel
+        {
+            Items = BuildAgents(content.Agents),
+        };
+
+        var widgetsPage = BuildWidgets(content, localizer);
+
         string[] titles =
         [
             localizer.Get(LocKeys.Page.Home.Title),
@@ -146,8 +171,101 @@ public static class SkiaIslandStateBuilder
         {
             Home = home,
             Media = mediaPage,
+            Notifications = notificationsPage,
+            Clipboard = clipboardPage,
+            Agent = agentPage,
+            Widgets = widgetsPage,
             PageTitles = titles,
             ShortTitles = titles,
+        };
+    }
+
+    private static NotificationItemModel[] BuildNotifications(IReadOnlyList<NotificationItemData> items)
+    {
+        var models = new NotificationItemModel[items.Count];
+        for (var i = 0; i < models.Length; i++)
+        {
+            var item = items[i];
+            models[i] = new NotificationItemModel
+            {
+                AppName = NullIfEmpty(item.Source),
+                Title = item.Title,
+                Body = item.Body,
+                TimeText = item.TimeText,
+                VerificationCode = NullIfEmpty(item.VerificationCode),
+            };
+        }
+
+        return models;
+    }
+
+    private static ClipboardItemModel[] BuildClipboard(IReadOnlyList<ClipboardItemData> items)
+    {
+        var models = new ClipboardItemModel[items.Count];
+        for (var i = 0; i < models.Length; i++)
+        {
+            var item = items[i];
+            models[i] = new ClipboardItemModel
+            {
+                Preview = item.Preview,
+                TimeText = item.Meta,
+                IsPinned = item.Pinned,
+                Kind = item.IsImage ? ClipboardContentKind.Image : ClipboardContentKind.Text,
+            };
+        }
+
+        return models;
+    }
+
+    private static AgentItemModel[] BuildAgents(IReadOnlyList<AgentItemData> items)
+    {
+        var models = new AgentItemModel[items.Count];
+        for (var i = 0; i < models.Length; i++)
+        {
+            var item = items[i];
+            models[i] = new AgentItemModel
+            {
+                Tool = item.Name,
+                Task = item.Detail,
+                StatusText = item.StatusText,
+                DurationText = item.TimeText,
+                Tone = MapTone(item.Tone),
+            };
+        }
+
+        return models;
+    }
+
+    private static WidgetsPageModel BuildWidgets(IslandContent content, ILocalizer localizer)
+    {
+        var days = new CalendarDayModel[content.CalendarDays.Length];
+        for (var i = 0; i < days.Length; i++)
+        {
+            var day = content.CalendarDays[i];
+            days[i] = new CalendarDayModel(day.Day, day.InMonth, day.IsToday, day.HasEvents);
+        }
+
+        var tasks = new WidgetTaskModel[content.Tasks.Length];
+        var done = 0;
+        for (var i = 0; i < tasks.Length; i++)
+        {
+            var task = content.Tasks[i];
+            tasks[i] = new WidgetTaskModel(task.Title, task.Done);
+            if (task.Done)
+            {
+                done++;
+            }
+        }
+
+        return new WidgetsPageModel
+        {
+            CalendarMonthTitle = content.CalendarMonthTitle,
+            WeekdayHeaders = content.WeekdayHeaders,
+            CalendarDays = days,
+            TasksTitle = localizer.Get(LocKeys.Page.Widgets.Tasks),
+            TasksProgressText = tasks.Length == 0 ? null : $"{done}/{tasks.Length}",
+            TodayLabel = localizer.Get(LocKeys.Page.Widgets.Today),
+            Tasks = tasks,
         };
     }
 
@@ -172,7 +290,7 @@ public static class SkiaIslandStateBuilder
 
         var primary = island.Primary;
         var media = content.Media;
-        var builder = new StringBuilder(160);
+        var builder = new StringBuilder(320);
         builder.Append(localizer.Culture).Append('|')
             .Append(settings.Mode).Append('|').Append(settings.Anchor).Append('|')
             .Append(settings.Theme).Append('|').Append(settings.Material).Append('|')
@@ -188,8 +306,59 @@ public static class SkiaIslandStateBuilder
             .Append(media?.Title).Append('|').Append(media?.Artist).Append('|').Append(media?.Album).Append('|')
             .Append(content.BatteryPercent).Append('|').Append(content.IsCharging).Append('|')
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
-            .Append(content.UnreadCount);
+            .Append(content.UnreadCount).Append('|')
+            .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|');
+
+        AppendNotifications(builder, content.Notifications);
+        AppendClipboard(builder, content.Clipboard);
+        AppendAgents(builder, content.Agents);
+        AppendTasks(builder, content.Tasks);
         return builder.ToString();
+    }
+
+    private static void AppendNotifications(StringBuilder builder, IReadOnlyList<NotificationItemData> items)
+    {
+        builder.Append(items.Count).Append('|');
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            builder.Append(item.Title).Append('|').Append(item.Body).Append('|')
+                .Append(item.Source).Append('|').Append(item.TimeText).Append('|')
+                .Append(item.VerificationCode).Append('|');
+        }
+    }
+
+    private static void AppendClipboard(StringBuilder builder, IReadOnlyList<ClipboardItemData> items)
+    {
+        builder.Append(items.Count).Append('|');
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            builder.Append(item.Preview).Append('|').Append(item.Meta).Append('|')
+                .Append(item.Pinned ? '1' : '0').Append(item.IsImage ? '1' : '0').Append('|');
+        }
+    }
+
+    private static void AppendAgents(StringBuilder builder, IReadOnlyList<AgentItemData> items)
+    {
+        builder.Append(items.Count).Append('|');
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            builder.Append(item.Name).Append('|').Append(item.StatusText).Append('|')
+                .Append(item.TimeText).Append('|').Append(item.Detail).Append('|')
+                .Append((int)item.Tone).Append('|');
+        }
+    }
+
+    private static void AppendTasks(StringBuilder builder, IReadOnlyList<WidgetTaskData> items)
+    {
+        builder.Append(items.Count).Append('|');
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            builder.Append(item.Title).Append('|').Append(item.Done ? '1' : '0').Append('|');
+        }
     }
 
     /// <summary>Dynamic signature: progress/position/lyrics only (dirty-rect candidates).</summary>

@@ -55,8 +55,10 @@ public readonly record struct SkiaIslandHostStats(
 /// <para>
 /// The window is created at the mode's fixed surface size (488×384 float/flush, 488×444 dock) and is
 /// never resized or moved during animation; only mode/anchor/DPI changes re-place it through Core's
-/// <see cref="WindowPlacementConverter"/>. Idle means zero frames: the clock stops as soon as the
-/// springs, pager, strip and dynamic content are at rest.
+/// <see cref="WindowPlacementConverter"/>. Monitor add/remove/display changes are reconciled on the
+/// UI thread by <see cref="SkiaMonitorPlanner"/> (create/dispose one window per target monitor), and
+/// <c>WM_DPICHANGED</c> rebuilds the surface at <c>ceil(DIP × scale)</c> and re-places. Idle means
+/// zero frames: the clock stops as soon as the springs, pager, strip and dynamic content are at rest.
 /// </para>
 /// </summary>
 public sealed class SkiaIslandHost : IDisposable
@@ -77,6 +79,7 @@ public sealed class SkiaIslandHost : IDisposable
     private PlatformMessageHost? _messageHost;
     private MonitorService? _monitorService;
     private RegionSignature _regionSignature;
+    private string? _primaryMonitorId;
     private bool _started;
     private bool _disposed;
     private bool _rendering;
@@ -110,6 +113,10 @@ public sealed class SkiaIslandHost : IDisposable
         _controller.StateChanged += OnStateChanged;
         _controller.PlacementRequested += OnPlacementRequested;
         _controller.FrameRequested += EnsureFrameLoop;
+
+        // The controller re-places on a DisplayOn change; the host additionally has to create or
+        // destroy per-monitor windows. Subscribed after the controller so its handler runs second.
+        _options.Settings.Changed += OnSettingsChanged;
     }
 
     /// <summary>Raised when the settings window should open.</summary>
@@ -244,7 +251,8 @@ public sealed class SkiaIslandHost : IDisposable
             var host = entry.Host;
             var placement = host.Placement;
             builder.AppendLine(
-                $"hwnd=0x{host.Handle:X} monitor={entry.Monitor.Id} scale={host.Scale:0.00} mode={host.Mode} " +
+                $"hwnd=0x{host.Handle:X} monitor={entry.Monitor.Id} primary={entry.Monitor.IsPrimary} " +
+                $"work={entry.Monitor.WorkArea} dpi={entry.Monitor.Dpi} scale={host.Scale:0.00} mode={host.Mode} " +
                 $"surface={host.SurfaceSizePx.Width}x{host.SurfaceSizePx.Height}px visible={host.IsVisible} " +
                 $"window={placement.WindowPixel} hitRects={host.HitRegion.InteractiveRectCount} " +
                 $"frames={entry.Frames} dirty={entry.DirtyFrames}");
@@ -278,13 +286,14 @@ public sealed class SkiaIslandHost : IDisposable
         {
             await EnsureMonitorsAsync(cancellationToken).ConfigureAwait(true);
             var settings = CurrentSettings();
-            var monitors = ResolveTargetMonitors(settings);
-            if (monitors.Count == 0)
+            var plan = SkiaMonitorPlanner.Plan([], EnumerateCoreMonitors(_monitorService?.Current), settings.DisplayOn);
+            if (plan.Targets.Length == 0)
             {
                 throw new InvalidOperationException("No display monitors were enumerated for the layered island host.");
             }
 
-            foreach (var monitor in monitors)
+            _primaryMonitorId = plan.Primary?.Id;
+            foreach (var monitor in plan.Targets)
             {
                 _windows.Add(CreateWindow(monitor, settings.IslandMode));
             }
@@ -330,6 +339,7 @@ public sealed class SkiaIslandHost : IDisposable
         _logger.Information(LogCategories.Lifecycle, "island.skia.stop", "Stopping Skia island host.");
         _frameClock.Stop();
         _deadlineTicker.Dispose();
+        _options.Settings.Changed -= OnSettingsChanged;
         _controller.StateChanged -= OnStateChanged;
         _controller.PlacementRequested -= OnPlacementRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
@@ -376,30 +386,137 @@ public sealed class SkiaIslandHost : IDisposable
         _monitorService.MonitorsChanged += OnMonitorsChanged;
     }
 
-    private List<CoreMonitorInfo> ResolveTargetMonitors(AppSettings settings)
+    private static List<CoreMonitorInfo> EnumerateCoreMonitors(MonitorSet? set)
     {
-        var set = _monitorService?.Current;
-        var monitors = new List<CoreMonitorInfo>();
-        if (set is not null)
-        {
-            foreach (var monitor in set.Monitors)
-            {
-                monitors.Add(monitor.ToCore());
-            }
-        }
-
-        if (monitors.Count == 0)
+        var monitors = new List<CoreMonitorInfo>(set?.Count ?? 0);
+        if (set is null)
         {
             return monitors;
         }
 
-        var primary = monitors.Find(static m => m.IsPrimary) ?? monitors[0];
-        return settings.DisplayOn switch
+        foreach (var monitor in set.Monitors)
         {
-            // TODO(skia-mvp): FollowMouse needs a pointer query seam; the primary monitor is used.
-            DisplayTarget.All => monitors,
-            _ => [primary],
-        };
+            monitors.Add(monitor.ToCore());
+        }
+
+        return monitors;
+    }
+
+    /// <summary>
+    /// Applies a monitor snapshot on the UI thread: creates/disposes one layered host per target
+    /// monitor, keeps the primary stable and first, refreshes retained monitor geometry and re-places.
+    /// </summary>
+    private void ApplyMonitorSet(MonitorSet? set)
+    {
+        if (_disposed || !_started || !_controller.IsStarted)
+        {
+            return;
+        }
+
+        if (set is null || set.Count == 0)
+        {
+            // EnumDisplayMonitors returning nothing is a transient failure in practice (a live
+            // desktop always has at least one monitor); never tear down every window for it.
+            _logger.Warning(LogCategories.Render, "island.skia.monitors-empty",
+                "Empty monitor snapshot; keeping the existing layered island windows.");
+            return;
+        }
+
+        var settings = CurrentSettings();
+        var plan = SkiaMonitorPlanner.Plan(
+            [.. _windows.Select(static entry => entry.Monitor)],
+            EnumerateCoreMonitors(set),
+            settings.DisplayOn,
+            _primaryMonitorId);
+
+        if (plan.RequiresWindowChanges)
+        {
+            foreach (var entry in _windows.Where(entry => plan.Removed.Any(
+                removed => string.Equals(removed.Id, entry.Monitor.Id, StringComparison.Ordinal))).ToArray())
+            {
+                _windows.Remove(entry);
+                entry.Dispose();
+            }
+        }
+
+        var added = new List<WindowEntry>(plan.Added.Length);
+        foreach (var monitor in plan.Added)
+        {
+            var entry = CreateWindow(monitor, settings.IslandMode);
+            _windows.Add(entry);
+            added.Add(entry);
+        }
+
+        // Retained windows adopt the fresh monitor snapshot (work area/DPI), then the list is
+        // reordered so the stable primary stays first (PrimaryWindow identity is stable).
+        var targetsById = plan.Targets.ToDictionary(static monitor => monitor.Id, StringComparer.Ordinal);
+        foreach (var entry in _windows)
+        {
+            if (targetsById.TryGetValue(entry.Monitor.Id, out var monitor))
+            {
+                entry.Monitor = monitor;
+            }
+        }
+
+        ReorderWindows(plan.Targets);
+        _primaryMonitorId = plan.Primary?.Id;
+
+        // NotifyDisplayChanged snaps the springs, re-places every window through Core and requests a
+        // full frame. Added windows are shown afterwards so they never flash at a stale origin.
+        _controller.NotifyDisplayChanged();
+        foreach (var entry in added)
+        {
+            entry.Host.Show();
+        }
+
+        // NotifyDisplayChanged already rendered a full frame through PlacementRequested; only the
+        // hit regions (shell squircle + pills) need an explicit refresh for the new windows.
+        UpdateHitRegions(force: true);
+
+        _logger.Information(LogCategories.Render, "island.skia.monitors-changed",
+            "Applied a monitor-set change to the layered island windows.",
+            data: new Dictionary<string, object?>
+            {
+                ["targets"] = plan.Targets.Length,
+                ["added"] = plan.Added.Length,
+                ["removed"] = plan.Removed.Length,
+                ["retained"] = plan.Retained.Length,
+                ["geometryChanged"] = plan.GeometryChanged,
+                ["primary"] = plan.Primary?.Id ?? "none",
+                ["displayOn"] = settings.DisplayOn.ToString(),
+            });
+    }
+
+    private void ReorderWindows(IReadOnlyList<CoreMonitorInfo> targets)
+    {
+        if (_windows.Count <= 1 || targets.Count == 0)
+        {
+            return;
+        }
+
+        var ordered = new List<WindowEntry>(_windows.Count);
+        foreach (var monitor in targets)
+        {
+            foreach (var entry in _windows)
+            {
+                if (!ordered.Contains(entry) && string.Equals(entry.Monitor.Id, monitor.Id, StringComparison.Ordinal))
+                {
+                    ordered.Add(entry);
+                    break;
+                }
+            }
+        }
+
+        foreach (var entry in _windows)
+        {
+            if (!ordered.Contains(entry))
+            {
+                ordered.Add(entry);
+            }
+        }
+
+        _windows.Clear();
+        _windows.AddRange(ordered);
     }
 
     private WindowEntry CreateWindow(CoreMonitorInfo monitor, IslandMode mode)
@@ -481,9 +598,26 @@ public sealed class SkiaIslandHost : IDisposable
             _logger.Debug(LogCategories.Render, "island.skia.dpi-changed",
                 $"Island DPI changed {change.OldDpi} -> {change.NewDpi} ({change.SurfaceSizePx}).");
             entry.Dpi = change.NewDpi;
+
+            // The monitor service debounces WM_DISPLAYCHANGE by 300 ms, so the cached snapshot still
+            // has the old DPI. Update this entry immediately: Core layout, placement and the renderer
+            // scale must all use the new value for this frame, not 300 ms later.
+            entry.Monitor = entry.Monitor with { Dpi = change.NewDpi };
+
+            // SetMonitor early-returns when the scale already matches, but still refreshes the
+            // host's Monitor snapshot (region/topmost diagnostics use its DPI).
+            entry.Host.SetMonitor(entry.Monitor.ToPlatform());
+
+            // The host already rebuilt its DIB at ceil(DIP * scale). Drop the Skia wrapper so the next
+            // frame re-wraps the new bits/stride; never dispose it under an in-flight frame.
+            if (!_rendering)
+            {
+                entry.InvalidateSurface();
+            }
+
+            // Snap + re-place every window through Core (PlacementRequested) and request a full frame.
             _controller.NotifyDisplayChanged();
-            ApplyPlacement(entry);
-            RenderNow(forceFull: true);
+            UpdateHitRegions(force: true);
         };
 
         _logger.Information(LogCategories.Render, "island.skia.window-created", "Layered island window created.",
@@ -534,8 +668,11 @@ public sealed class SkiaIslandHost : IDisposable
         }
 
         var platformMonitor = entry.Monitor.ToPlatform();
-        if (entry.Host.Monitor is null || !string.Equals(entry.Host.Monitor.Id, platformMonitor.Id, StringComparison.Ordinal)
-            || entry.Host.Dpi != platformMonitor.DpiX)
+        var hostMonitor = entry.Host.Monitor;
+        if (hostMonitor is null
+            || !string.Equals(hostMonitor.Id, platformMonitor.Id, StringComparison.Ordinal)
+            || hostMonitor.DpiX != platformMonitor.DpiX
+            || hostMonitor.WorkArea != platformMonitor.WorkArea)
         {
             entry.Host.SetMonitor(platformMonitor);
         }
@@ -549,23 +686,13 @@ public sealed class SkiaIslandHost : IDisposable
             pagePosition: _controller.Pager.PagePosition,
             archipelagoVisible: _controller.Archipelago.IsVisible);
         var layout = IslandLayout.Calculate(request, entry.Monitor);
-        ApplyLayeredPlacement(entry.Host, layout.Placement, layeredMode);
+
+        // Core's WindowPlacement is the single placement product for float, flush and dock: the host
+        // surface sizes match HostSurface exactly, so the window origin is WindowPixel verbatim. The
+        // old dock PlacePhysical workaround is gone (see docs/rewrite/contracts/skia-host.md §5).
+        entry.Host.PlaceForWindowPlacement(layout.Placement, layeredMode);
         entry.LastPlacement = layout.Placement;
         entry.Host.HitRegion.HasInteractiveContent = _controller.RenderState.IsVisible;
-    }
-
-    private static void ApplyLayeredPlacement(LayeredWindowHost host, in WindowPlacement placement, LayeredHostMode mode)
-    {
-        if (mode == LayeredHostMode.Dock)
-        {
-            // Core's dock composition is panel 24..308 + strip 316..368 + archipelago band below,
-            // while LayeredSurfaceSize.ShellLocalOffset assumes a 52 DIP lane above the panel. Use the
-            // authoritative Core window origin so the renderer's dock geometry lands on screen.
-            host.PlacePhysical(placement.WindowPixel.X, placement.WindowPixel.Y);
-            return;
-        }
-
-        host.PlaceForWindowPlacement(placement, mode);
     }
 
     private static LayeredHostMode ToLayeredMode(IslandMode mode)
@@ -885,25 +1012,51 @@ public sealed class SkiaIslandHost : IDisposable
 
     private void OnMonitorsChanged(object? sender, SnapshotEventArgs<MonitorSet> args)
     {
-        _ = args;
+        // The monitor service publishes from a thread-pool thread; every window operation must run on
+        // the UI thread that created the hosts (the dispatcher runs inline when already there).
         _dispatcher.Post(() =>
         {
-            if (_disposed)
+            if (_disposed || !_started)
             {
                 return;
             }
 
             try
             {
-                _controller.NotifyDisplayChanged();
-                ApplyPlacementAll();
-                UpdateHitRegions(force: true);
-                RenderNow(forceFull: true);
+                ApplyMonitorSet(args.Snapshot);
             }
             catch (Exception ex)
             {
                 _logger.Warning(LogCategories.Render, "island.skia.display-change-failed",
                     "Applying a display change to the island failed.", ex);
+            }
+        });
+    }
+
+    private void OnSettingsChanged(AppSettings previous, AppSettings current)
+    {
+        if (_disposed || !_started || previous.DisplayOn == current.DisplayOn)
+        {
+            return;
+        }
+
+        // DisplayOn changed (primary <-> all): the controller already requested a re-place for the
+        // existing windows; the host must also create/dispose the per-monitor windows.
+        _dispatcher.Post(() =>
+        {
+            if (_disposed || !_started)
+            {
+                return;
+            }
+
+            try
+            {
+                ApplyMonitorSet(_monitorService?.Current);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Render, "island.skia.display-target-failed",
+                    "Applying a DisplayOn change to the island windows failed.", ex);
             }
         });
     }
@@ -949,15 +1102,17 @@ public sealed class SkiaIslandHost : IDisposable
         {
             Host = host;
             Monitor = monitor;
+            Dpi = monitor.Dpi;
         }
 
         public LayeredWindowHost Host { get; }
 
-        public CoreMonitorInfo Monitor { get; }
+        /// <summary>Fresh monitor snapshot for this window (work area/DPI updated on display changes).</summary>
+        public CoreMonitorInfo Monitor { get; set; }
 
         public WindowPlacement LastPlacement { get; set; }
 
-        public uint Dpi { get; set; }
+        public uint Dpi { get; set; } = 96;
 
         public SKSurface? Surface { get; set; }
 
@@ -973,10 +1128,22 @@ public sealed class SkiaIslandHost : IDisposable
 
         public double LastRenderMs { get; set; }
 
-        public void Dispose()
+        /// <summary>
+        /// Drops the Skia wrapper over the host DIB. Called after the host rebuilt its surface at a new
+        /// DPI; <c>EnsureSurface</c> also re-wraps defensively when the bits/size change.
+        /// </summary>
+        public void InvalidateSurface()
         {
             Surface?.Dispose();
             Surface = null;
+            SurfaceBits = IntPtr.Zero;
+            SurfaceWidth = 0;
+            SurfaceHeight = 0;
+        }
+
+        public void Dispose()
+        {
+            InvalidateSurface();
             Host.Dispose();
         }
     }

@@ -305,29 +305,38 @@ public sealed partial class LayeredWindowHost
         var suggested = Marshal.PtrToStructure<NativeMethods.RECT>(lParam);
         var changed = dpiX > 0 && dpiX != _dpi;
         var surfaceSize = LayeredSurfaceSize.ForMode(_mode);
-        var sizePx = surfaceSize.ToPixels(changed ? DisplayMetrics.ScaleFromDpi(dpiX) : _scale);
+        var scale = changed ? DisplayMetrics.ScaleFromDpi(dpiX) : _scale;
+        var sizePx = surfaceSize.ToPixels(scale);
+        LayeredDpiChange? notification = null;
 
         if (changed)
         {
             var oldDpi = _dpi;
             var oldScale = _scale;
             _dpi = dpiX;
-            _scale = DisplayMetrics.ScaleFromDpi(dpiX);
-            sizePx = surfaceSize.ToPixels(_scale);
+            _scale = scale;
             RebuildSurface(sizePx);
             _needsFullFrame = true;
             _geometryDirty = true;
             _pacer?.Reset();
-            _placement = new LayeredHostPlacement(
-                new LayeredRect(suggested.Left, suggested.Top, sizePx.Width, sizePx.Height),
-                sizePx, surfaceSize, _scale, OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(_mode), _scale));
-            LayeredDpiChanged?.Invoke(new LayeredDpiChange(oldDpi, dpiX, oldScale, _scale, sizePx));
+            notification = new LayeredDpiChange(oldDpi, dpiX, oldScale, _scale, sizePx);
         }
 
-        // Follow the OS suggestion for the origin but always keep our fixed surface size.
-        if (suggested.Right > suggested.Left && suggested.Bottom > suggested.Top)
+        // Follow the OS suggestion for the origin but always keep our fixed surface size. This must
+        // happen BEFORE LayeredDpiChanged: the App handler re-places from Core's WindowPlacement, and
+        // its SetWindowPos must win over the OS suggestion (otherwise a DPI change would undo the
+        // anchor/dock placement by one monitor-step).
+        var hasSuggestion = suggested.Right > suggested.Left && suggested.Bottom > suggested.Top;
+        var originX = hasSuggestion ? suggested.Left : _placement.WindowPixel.X;
+        var originY = hasSuggestion ? suggested.Top : _placement.WindowPixel.Y;
+        var rect = new LayeredRect(originX, originY, sizePx.Width, sizePx.Height);
+        ApplyWindowRect(rect);
+        _placement = new LayeredHostPlacement(rect, sizePx, surfaceSize, _scale,
+            OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(_mode), _scale));
+
+        if (notification is { } change)
         {
-            ApplyWindowRect(new LayeredRect(suggested.Left, suggested.Top, sizePx.Width, sizePx.Height));
+            LayeredDpiChanged?.Invoke(change);
         }
     }
 

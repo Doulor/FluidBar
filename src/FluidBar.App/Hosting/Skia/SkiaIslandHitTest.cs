@@ -69,7 +69,7 @@ public static class SkiaIslandHitTest
             {
                 var page = PageUnder(state, content, x);
                 var pageRect = IslandMetrics.PageRect(state, page);
-                var control = PageLayout.HitTest(page, pageRect, x, y, out var index);
+                var control = HitPageControl(state, page, pageRect, x, y, out var index);
                 if (control != IslandPageControl.None)
                 {
                     return new IslandHitTarget(IslandHitKind.PageControl, page, control, index);
@@ -117,7 +117,10 @@ public static class SkiaIslandHitTest
         var islands = (float)((IslandMetrics.MiniNeighbourSize * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
         var total = leftBlock + (leftDots > 0 ? blockGap : 0) + islands + (rightDots > 0 ? blockGap : 0) + rightBlock;
 
-        var top = shell.Bottom + (float)IslandMetrics.StripGap;
+        // The strip lives in the host's bottom band, not immediately below the shell: in dock mode
+        // the 52 DIP dock strip sits between the panel and the archipelago. Core's HostSurface owns
+        // the local top (318 float, 378 dock) and the renderer reads the same value.
+        var top = (float)HostSurface.ForMode(state.Mode).ArchipelagoTopLocal;
         var left = shell.MidX - (total / 2);
         var strip = new SKRect(left, top, left + total, top + (float)IslandMetrics.StripHeight);
 
@@ -160,6 +163,33 @@ public static class SkiaIslandHitTest
         }
 
         return new SkiaStripGeometry(strip, previous, current, next, page, dotsLeft, dotsRight);
+    }
+
+    /// <summary>
+    /// Page-control hit testing with the scroll offset and row count the page models actually paint,
+    /// so list rows can never be hit (or clicked) beyond the data.
+    /// </summary>
+    private static IslandPageControl HitPageControl(
+        in IslandRenderState state,
+        int page,
+        SKRect pageRect,
+        float x,
+        float y,
+        out int index)
+    {
+        var pages = state.Pages;
+        return page switch
+        {
+            2 => PageLayout.HitTest(page, pageRect, x, y, out index,
+                (float)pages.Notifications.ScrollOffset, pages.Notifications.Items?.Count ?? 0),
+            3 => PageLayout.HitTest(page, pageRect, x, y, out index,
+                (float)pages.Clipboard.ScrollOffset, pages.Clipboard.Items?.Count ?? 0),
+            4 => PageLayout.HitTest(page, pageRect, x, y, out index,
+                (float)pages.Agent.ScrollOffset, pages.Agent.Items?.Count ?? 0),
+            5 => PageLayout.HitTest(page, pageRect, x, y, out index,
+                0, pages.Widgets.Tasks?.Count ?? 0),
+            _ => PageLayout.HitTest(page, pageRect, x, y, out index),
+        };
     }
 
     private static IslandHitTarget HitStrip(in IslandRenderState state, SKRect shell, float x, float y)

@@ -21,6 +21,13 @@ public sealed record SkiaIslandHostOptions
     /// <summary>Structured logger.</summary>
     public IAppLogger? Logger { get; init; }
 
+    /// <summary>
+    /// Optional platform/App seam for expanded page controls (media, volume, brightness, toggles,
+    /// list actions). When null, media transport falls back to <c>MediaCommandRequested</c> and every
+    /// other control logs <c>island.skia.control-unsupported</c>.
+    /// </summary>
+    public IIslandPlatformActions? PlatformActions { get; init; }
+
     /// <summary>Injected time source (deadlines, wheel cooldowns).</summary>
     public TimeProvider? TimeProvider { get; init; }
 
