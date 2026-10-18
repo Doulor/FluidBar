@@ -47,14 +47,111 @@ public static class LayoutTokens
     /// <summary>Shadow/antialiasing bleed around the shell on every side.</summary>
     public const double WindowPadding = 24;
 
-    /// <summary>Fixed per-monitor host window width (440 + 2*24).</summary>
-    public const double WindowWidth = ExpandedWidth + (2 * WindowPadding);
+    /// <summary>Fixed per-monitor host surface width (488 DIP) for every mode.</summary>
+    public const double HostSurfaceWidth = ExpandedWidth + (2 * WindowPadding);
 
-    /// <summary>Fixed per-monitor host window height (284 + 2*24).</summary>
+    /// <summary>
+    /// Fixed float/flush host surface height (488x384 DIP): shell envelope 332 + the detached
+    /// Page Archipelago band 52 (gap 10 + strip 30 + bottom padding 12). The host surface is the
+    /// only thing the layered window sizes itself to; the shell stays 440x284.
+    /// </summary>
+    public const double HostSurfaceFloatHeight = ExpandedHeight + (2 * WindowPadding) + ArchipelagoBandHeight;
+
+    /// <summary>
+    /// Fixed dock host surface height (488x444 DIP): the float surface plus the 52 DIP dock strip
+    /// and its 8 DIP gap above the expanded panel (52 + 8 = 60).
+    /// </summary>
+    public const double HostSurfaceDockHeight = HostSurfaceFloatHeight + DockStripHeight + DockExpandedGap;
+
+    /// <summary>Legacy shell-envelope host height (488x332 DIP) before the detached archipelago band.</summary>
+    /// <remarks>
+    /// Kept for source compatibility with the pre-archipelago App/Platform seams. New code must use
+    /// <see cref="HostSurface"/> (float/flush <see cref="HostSurfaceFloatHeight"/>, dock
+    /// <see cref="HostSurfaceDockHeight"/>) and <see cref="WindowPlacement.WindowSizeDip"/>.
+    /// </remarks>
     public const double WindowHeight = ExpandedHeight + (2 * WindowPadding);
+
+    /// <summary>Fixed per-monitor host surface width (488 DIP); alias of <see cref="HostSurfaceWidth"/>.</summary>
+    public const double WindowWidth = HostSurfaceWidth;
 
     /// <summary>Dock strip height (spec 3.1: 52).</summary>
     public const double DockStripHeight = 52;
+
+    /// <summary>Top/side transparent padding of the host surface (shadow + antialiasing bleed).</summary>
+    public const double HostTopPadding = WindowPadding;
+
+    /// <summary>
+    /// Bottom padding below the detached archipelago strip (36 DIP): 24 DIP shadow bleed plus a
+    /// 12 DIP safety margin. The host is asymmetric on purpose: 24 top/side, 36 bottom.
+    /// </summary>
+    public const double HostBottomPadding = WindowPadding + 12;
+
+    /// <summary>Gap between the expanded shell bottom and the detached archipelago strip (10 DIP).</summary>
+    public const double ArchipelagoGap = 10;
+
+    /// <summary>Detached archipelago strip height (30 DIP; the active pill's height).</summary>
+    public const double ArchipelagoStripHeight = 30;
+
+    /// <summary>
+    /// Total bottom allowance of the float/flush host surface below the expanded shell
+    /// (gap 10 + strip 30 + bottom padding 36 = 76 DIP).
+    /// </summary>
+    public const double HostFloatBottomAllowance = ArchipelagoGap + ArchipelagoStripHeight + HostBottomPadding;
+
+    /// <summary>
+    /// Total bottom allowance of the dock host surface below the expanded panel
+    /// (dock gap 8 + dock strip 52 + archipelago gap 10 + strip 30 + bottom padding 36 = 136 DIP).
+    /// </summary>
+    public const double HostDockBottomAllowance = DockExpandedGap + DockStripHeight
+        + ArchipelagoGap + ArchipelagoStripHeight + HostBottomPadding;
+
+    // ---- Page Archipelago (detached mini-islands below the expanded shell) -------------------
+
+    /// <summary>Number of detached mini-islands (one per pager page).</summary>
+    public const int ArchipelagoSlotCount = 6;
+
+    /// <summary>Inactive mini-island width (48 DIP).</summary>
+    public const double ArchipelagoMiniWidth = 48;
+
+    /// <summary>Inactive mini-island height (26 DIP).</summary>
+    public const double ArchipelagoMiniHeight = 26;
+
+    /// <summary>Active mini-island width (72 DIP).</summary>
+    public const double ArchipelagoActiveWidth = 72;
+
+    /// <summary>Active mini-island height (30 DIP).</summary>
+    public const double ArchipelagoActiveHeight = 30;
+
+    /// <summary>Gap between mini-islands (8 DIP).</summary>
+    public const double ArchipelagoSlotGap = 8;
+
+    /// <summary>Distance between two consecutive mini-island origins (48 + 8 = 56 DIP).</summary>
+    public const double ArchipelagoSlotPitch = ArchipelagoMiniWidth + ArchipelagoSlotGap;
+
+    /// <summary>Mini-island corner radius (13 DIP).</summary>
+    public const double ArchipelagoRadius = 13;
+
+    /// <summary>
+    /// Total strip width with exactly one active island: 6x48 + 5x8 + (72-48) = 352 DIP.
+    /// </summary>
+    public const double ArchipelagoTrackWidth = (ArchipelagoSlotCount * ArchipelagoMiniWidth)
+        + ((ArchipelagoSlotCount - 1) * ArchipelagoSlotGap)
+        + (ArchipelagoActiveWidth - ArchipelagoMiniWidth);
+
+    /// <summary>Height of the bottom hot zone that reveals the archipelago (12 DIP).</summary>
+    public const double ArchipelagoHotZoneHeight = 12;
+
+    /// <summary>Dwell in the hot zone before the archipelago reveals (300 ms).</summary>
+    public const int ArchipelagoRevealDelayMs = 300;
+
+    /// <summary>Idle time after the last drag/wheel activity before the archipelago hides (1200 ms).</summary>
+    public const int ArchipelagoHideDelayMs = 1200;
+
+    /// <summary>
+    /// Total vertical band the detached archipelago adds below the legacy 332 DIP host
+    /// (gap 10 + strip 30 + bottom padding 12 = 52 DIP).
+    /// </summary>
+    public const double ArchipelagoBandHeight = ArchipelagoGap + ArchipelagoStripHeight + (HostBottomPadding - WindowPadding);
 
     /// <summary>Dock strip width (full shell width).</summary>
     public const double DockStripWidth = ExpandedWidth;
@@ -65,7 +162,7 @@ public static class LayoutTokens
     /// <summary>Default float vertical offset from the work-area edge.</summary>
     public const double DefaultFloatOffsetY = 12;
 
-    /// <summary>Default dock vertical offset from the work-area bottom edge.</summary>
+    /// <summary>Default dock host-bottom offset above the work-area bottom edge (4 DIP).</summary>
     public const double DefaultDockOffsetY = 4;
 
     /// <summary>Peek width delta (+10 DIP).</summary>

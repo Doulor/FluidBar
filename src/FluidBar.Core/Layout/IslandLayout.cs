@@ -63,6 +63,16 @@ public sealed record IslandLayoutRequest
     /// <summary>Whether the primary activity is pinned (diagnostics/visual state).</summary>
     public bool IsPinned { get; init; }
 
+    /// <summary>
+    /// Fractional pager page position (0..5) used to place the detached archipelago's active pill.
+    /// Feed <see cref="Interaction.PagePagerPolicy"/>'s <c>PagePosition</c> (or the snap offset /
+    /// pitch) here; it does not affect the shell rectangle.
+    /// </summary>
+    public double PagePosition { get; init; }
+
+    /// <summary>Whether the detached archipelago is revealed; when false its pills are not hit-testable.</summary>
+    public bool ArchipelagoVisible { get; init; } = true;
+
     /// <summary>Builds a layout request from an island state.</summary>
     /// <param name="state">Island state snapshot.</param>
     /// <param name="mode">Presentation mode from settings.</param>
@@ -71,6 +81,8 @@ public sealed record IslandLayoutRequest
     /// <param name="offsetY">Vertical offset from placement; NaN selects the mode default.</param>
     /// <param name="stacking">Stacking strategy from settings.</param>
     /// <param name="hiddenHoverStrip">Whether the hidden hover strip is enabled.</param>
+    /// <param name="pagePosition">Fractional pager page position for the archipelago (0..5).</param>
+    /// <param name="archipelagoVisible">Whether the detached archipelago is revealed.</param>
     public static IslandLayoutRequest FromState(
         Activities.IslandState state,
         IslandMode mode = IslandMode.Float,
@@ -78,7 +90,9 @@ public sealed record IslandLayoutRequest
         double offsetX = 0,
         double offsetY = double.NaN,
         Activities.StackingStrategy stacking = Activities.StackingStrategy.Stacked,
-        bool hiddenHoverStrip = true)
+        bool hiddenHoverStrip = true,
+        double pagePosition = 0,
+        bool archipelagoVisible = true)
     {
         ArgumentNullException.ThrowIfNull(state);
         var form = state.Kind switch
@@ -103,6 +117,8 @@ public sealed record IslandLayoutRequest
             OffsetY = offsetY,
             HiddenHoverStrip = hiddenHoverStrip,
             IsPinned = state.IsPinned,
+            PagePosition = pagePosition,
+            ArchipelagoVisible = archipelagoVisible,
         };
     }
 }
@@ -145,8 +161,24 @@ public sealed record IslandLayoutResult
     /// <summary>Shared squircle geometry for drawing, clipping and hit-testing.</summary>
     public required ShellGeometry Geometry { get; init; }
 
-    /// <summary>The single visual-&gt;window placement.</summary>
+    /// <summary>The single visual-&gt;window placement (host surface + shell local offset).</summary>
     public required WindowPlacement Placement { get; init; }
+
+    /// <summary>Fixed per-mode host surface used for this result (488x384 float/flush, 488x444 dock).</summary>
+    public required HostSurface HostSurface { get; init; }
+
+    /// <summary>
+    /// Detached Page Archipelago geometry for the expanded form; <see langword="null"/> for compact,
+    /// peek, closing and hidden forms. The strip lives outside the shell, in the host's transparent
+    /// bottom band.
+    /// </summary>
+    public ArchipelagoLayoutResult? Archipelago { get; init; }
+
+    /// <summary>
+    /// Transparent host band below the expanded shell envelope (holds the archipelago;
+    /// hit-test-through). Constant per mode even when a compact form is showing.
+    /// </summary>
+    public VisualRect BottomBand => Placement.BottomBand;
 
     /// <summary>Visual layers of the compact stack (main first).</summary>
     public required ImmutableArray<StackSlotLayout> StackSlots { get; init; }
@@ -170,6 +202,70 @@ public sealed record IslandLayoutResult
 
     /// <summary>Effective ghost layer count in this result.</summary>
     public int GhostCount => Math.Max(0, StackSlots.Length - 1);
+
+    /// <summary>
+    /// Hit-tests a work-area point against the interactive host surfaces. The shell squircle and
+    /// the six mini-island pills are client areas; the rest of the transparent bottom band (strip
+    /// background, gaps between pills, shadow bleed) is hit-test-through.
+    /// </summary>
+    /// <param name="x">Work-area X in DIP.</param>
+    /// <param name="y">Work-area Y in DIP.</param>
+    /// <returns>Shell, archipelago slot (with page index), or none.</returns>
+    public LayoutHitTarget HitTest(double x, double y)
+    {
+        if (!IsVisible)
+        {
+            return LayoutHitTarget.None;
+        }
+
+        if (Geometry.Contains(x, y))
+        {
+            return LayoutHitTarget.ForShell();
+        }
+
+        if (Archipelago is { } archipelago)
+        {
+            var slot = archipelago.HitTest(x, y);
+            if (slot >= 0)
+            {
+                return LayoutHitTarget.ForSlot(slot);
+            }
+        }
+
+        return LayoutHitTarget.None;
+    }
+}
+
+/// <summary>What a work-area point hits in the host surface.</summary>
+public enum LayoutHitKind
+{
+    /// <summary>Transparent area: the host returns <c>HTTRANSPARENT</c>.</summary>
+    None,
+
+    /// <summary>The shell squircle (expanded panel or compact pill): <c>HTCLIENT</c>.</summary>
+    Shell,
+
+    /// <summary>A detached archipelago mini-island pill: <c>HTCLIENT</c>.</summary>
+    ArchipelagoSlot,
+}
+
+/// <summary>Hit-test result for <see cref="IslandLayoutResult.HitTest"/>.</summary>
+/// <param name="Kind">Kind of hit surface.</param>
+/// <param name="SlotIndex">Archipelago page index when <paramref name="Kind"/> is <see cref="LayoutHitKind.ArchipelagoSlot"/>; otherwise -1.</param>
+public readonly record struct LayoutHitTarget(LayoutHitKind Kind, int SlotIndex)
+{
+    /// <summary>Transparent area (no client hit).</summary>
+    public static LayoutHitTarget None => new(LayoutHitKind.None, -1);
+
+    /// <summary>Creates a shell hit.</summary>
+    public static LayoutHitTarget ForShell() => new(LayoutHitKind.Shell, -1);
+
+    /// <summary>Creates an archipelago slot hit.</summary>
+    /// <param name="page">Zero-based pager page index.</param>
+    public static LayoutHitTarget ForSlot(int page) => new(LayoutHitKind.ArchipelagoSlot, page);
+
+    /// <summary>Whether the host should return <c>HTCLIENT</c> for this hit.</summary>
+    public bool IsClient => Kind != LayoutHitKind.None;
 }
 
 /// <summary>
@@ -186,14 +282,23 @@ public static class IslandLayout
         ArgumentNullException.ThrowIfNull(monitor);
 
         var work = monitor.WorkAreaDip;
+        var hostSurface = HostSurface.ForMode(request.Mode);
         var expandDirection = request.Mode == IslandMode.Dock ? ExpandDirection.Up : ExpandDirection.Down;
         var stackSlots = BuildStackSlots(request);
+        var offsetY = ResolvePlacementOffset(request);
 
         if (request.Form == ShellForm.Hidden)
         {
             var hoverStrip = request.HiddenHoverStrip ? BuildHoverStrip(request, work) : null;
-            var placementRect = hoverStrip ?? new VisualRect(AnchorX(request, work, 0), TopEdgeY(request, work, 0), 0, 0);
-            var hiddenPlacement = WindowPlacementConverter.PlaceWindow(placementRect, monitor);
+            var hiddenPlacement = hoverStrip is { } strip
+                ? WindowPlacementConverter.PlaceHoverStrip(strip, monitor, hostSurface, request.Anchor)
+                : WindowPlacementConverter.PlaceWindow(
+                    new VisualRect(AnchorX(request, work, 0), TopEdgeY(request, work, 0), 0, 0),
+                    monitor,
+                    hostSurface,
+                    ShellForm.Hidden,
+                    request.Anchor,
+                    offsetY);
             var emptyShell = VisualRect.Empty;
             return new IslandLayoutResult
             {
@@ -207,6 +312,8 @@ public static class IslandLayout
                 Radii = CornerRadii.Zero,
                 Geometry = ShellGeometry.ForShell(emptyShell, CornerRadii.Zero),
                 Placement = hiddenPlacement,
+                HostSurface = hostSurface,
+                Archipelago = null,
                 StackSlots = stackSlots,
                 HoverStrip = hoverStrip,
                 ExpandDirection = expandDirection,
@@ -214,25 +321,38 @@ public static class IslandLayout
             };
         }
 
-        var shell = request.Form == ShellForm.Expanded
+        var measured = request.Form == ShellForm.Expanded
             ? MeasureExpanded(request, work, expandDirection)
             : MeasureCompact(request, work);
+        measured = measured.ClampInside(work);
 
-        if (request.WidthOverride is { } widthOverride)
+        // The host surface owns the window rect. Bottom/dock anchors are host-clamped so the
+        // detached strip stays inside the work area; placement.Shell is the authoritative shell.
+        var placement = WindowPlacementConverter.PlaceWindow(
+            measured,
+            monitor,
+            hostSurface,
+            request.Form,
+            request.Anchor,
+            offsetY);
+
+        // Animation overrides change the visual shell only: the window rect stays put (D7) and the
+        // anchored edge stays fixed (top anchors grow down, bottom/dock anchors grow up).
+        var shell = ApplyOverrides(placement.Shell, request).ClampInside(work);
+        placement = placement with
         {
-            shell = shell with { Width = Math.Max(0, widthOverride) };
-        }
+            Shell = shell,
+            ShellLocalOffset = new VisualPoint(
+                shell.X - placement.WindowVisual.X,
+                shell.Y - placement.WindowVisual.Y),
+        };
 
-        if (request.HeightOverride is { } heightOverride)
-        {
-            shell = shell with { Height = Math.Max(0, heightOverride) };
-        }
-
-        shell = shell.ClampInside(work);
         var radii = LayoutTokens.RadiiFor(request.Form, request.Mode, shell.Height);
         var (content, rail) = MeasureContent(request.Form, shell);
         var geometry = ShellGeometry.ForShell(shell, radii);
-        var placement = WindowPlacementConverter.PlaceWindow(shell, monitor);
+        var archipelago = request.Form == ShellForm.Expanded
+            ? ArchipelagoLayout.Calculate(request.PagePosition, placement, request.ArchipelagoVisible)
+            : null;
 
         return new IslandLayoutResult
         {
@@ -246,6 +366,8 @@ public static class IslandLayout
             Radii = radii,
             Geometry = geometry,
             Placement = placement,
+            HostSurface = hostSurface,
+            Archipelago = archipelago,
             StackSlots = stackSlots,
             HoverStrip = null,
             ExpandDirection = expandDirection,
@@ -367,6 +489,35 @@ public static class IslandLayout
         => double.IsNaN(request.OffsetY)
             ? request.Mode == IslandMode.Dock ? LayoutTokens.DefaultDockOffsetY : LayoutTokens.DefaultFloatOffsetY
             : request.OffsetY;
+
+    /// <summary>Host placement offset: flush bottom anchors pin the host to the work-area bottom.</summary>
+    private static double ResolvePlacementOffset(IslandLayoutRequest request)
+        => request.Mode == IslandMode.Flush && IsBottomAnchor(request.Anchor) ? 0 : ResolveOffsetY(request);
+
+    /// <summary>
+    /// Applies mid-animation width/height overrides around the anchored edge: top anchors keep the
+    /// top edge fixed, bottom/dock anchors keep the bottom edge fixed, and horizontal anchors keep
+    /// left/centre/right fixed.
+    /// </summary>
+    private static VisualRect ApplyOverrides(in VisualRect shell, IslandLayoutRequest request)
+    {
+        if (request.WidthOverride is null && request.HeightOverride is null)
+        {
+            return shell;
+        }
+
+        var width = Math.Max(0, request.WidthOverride ?? shell.Width);
+        var height = Math.Max(0, request.HeightOverride ?? shell.Height);
+        var x = request.Anchor switch
+        {
+            IslandAnchor.TopLeft or IslandAnchor.BottomLeft => shell.X,
+            IslandAnchor.TopRight or IslandAnchor.BottomRight => shell.Right - width,
+            _ => shell.CenterX - (width / 2),
+        };
+        var bottomAnchored = request.Mode == IslandMode.Dock || IsBottomAnchor(request.Anchor);
+        var y = bottomAnchored ? shell.Bottom - height : shell.Y;
+        return new VisualRect(x, y, width, height);
+    }
 
     private static double TopEdgeY(IslandLayoutRequest request, VisualRect work, double height)
     {

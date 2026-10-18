@@ -21,7 +21,7 @@
 | D2 | 状态机五态：`Hidden / Compact / Peek / Expanded / Closing`；**没有** v1 的"每事件重建快照窗口" | [审计 F-03]，硬规则 3 |
 | D3 | 展开面板 = **440 宽（左右 inset 20 → 内容 400）**；六个页面统一 440×284 的横向分页（鼠标拖动/滚轮/键盘翻页，外壳不 resize） | 最新用户反馈 |
 | D4 | 动效统一以 `(T, ζ)` 授权，运行时推导 `k=(2π/T)²`、`c=4πζ/T`；定步长 1/300 s 子步 | [01 §8.1]、原型 Motion Lab |
-| D5 | 渲染底座：Win32 + `Windows.UI.Composition`（`WS_EX_NOREDIRECTIONBITMAP`）+ **Avalonia 12** UI 层；M0 做 GO/NO-GO spike | [03 §6]、第 5.7 节 |
+| D5 | 渲染底座（2026-10-18 修订）：**Win32 分层窗口（`UpdateLayeredWindow`，逐像素 alpha）+ SkiaSharp 岛渲染器**；Avalonia 仅用于设置/插件市场等普通窗口。Avalonia 11/12 的 DirectComposition 在目标机器上透明失效（灰矩形），WPF/原生分层窗口透明正常 | spike 05 + 后续探针 |
 | D6 | 回退顺序：Avalonia 失败 → WPF 固定尺寸分层窗口（60 fps 天花板）→ 自绘 D2D（仅在需要 120 fps 且 Avalonia 不可用时） | [03 §7 F1/F2] |
 | D7 | **永不逐帧改窗口 bounds**；每显示器一个固定尺寸宿主窗口（488×332），动画只发生在其内部 | [审计 F-02/F-04]、硬规则 1/3 |
 | D8 | 插件 = 内置编译期 + 社区签名 DLL（可回收 ALC），**仅声明式 UI**，禁止插件 XAML；能力是"披露+同意"，不是沙箱 | [04 §3/§6]、第 6.5 节 |
@@ -206,7 +206,7 @@ v1 的 P0 缺陷是"每个事件都重开卡片、逐帧重排、丢焦点"（[�
 | `shell.height.expanded` | **284** | 六个页面统一；内容 252（284 − 2×16 垂直 inset）；切换页面不改变外壳尺寸 |
 | `shell.height.dock.strip` | **52** | dock 窄条 |
 | `shell.window.pad` | **24** | 阴影/抗锯齿轮廓余量；窗口 = 壳体 + 2×24 |
-| `shell.window.size` | **488×332**（float/flush）/ **488×392**（dock） | 每显示器固定宿主；dock = 24+52+8+284+24 |
+| `shell.window.size` | **488×384**（float/flush）/ **488×444**（dock） | 每显示器固定宿主；底部额外留出面板外的 detached mini-island 条（gap 10 + strip 30）；dock 再加 52 窄条 |
 | `island.idle/media/hud` | 132×36 / 226×40 / 236×40 | 时钟+电量+页点 / 28 art + 8 gap + 文本 + 28 控制 / 单行 HUD（2.8） |
 | `island.notification/clipboard/agent/timer/battery` | 248×36 / 264×36 / 236×36 / 190×36 / 208×36 | 瞬时与环境类紧凑活动 |
 | `island.lookup` | 480×44 | 唯一宽于 440 的紧凑态（不属于展开面板） |
@@ -529,6 +529,9 @@ PixelRect ToPhysical(in VisualRect r, in MonitorInfo m) => new(
 | 生命周期 | `Create → Place → Show/Hide → Dispose` 显式；`Dispose` 幂等；`Closing` 一律取消并隐藏（托盘应用语义），`App.Shutdown` 唯一出口 |
 | 渲染线程 | UI 线程只做状态推入与一次 `InvalidateVisual`；合成器线程承载动画（Avalonia Composition 动画/帧回调） |
 ### 5.7 渲染底座决策与 GO/NO-GO
+
+> **修订 A2（2026-10-18，质量优先）**：渲染底座改为 **Win32 分层窗口（`UpdateLayeredWindow`，32bpp 预乘 DIB）+ SkiaSharp 岛渲染器**；Avalonia 仅保留设置/插件市场等普通窗口。原因：Avalonia 12 与 11.3.22 的 DirectComposition 窗口在目标机器上均被压平成灰色矩形（WPF 分层窗口与原生 `UpdateLayeredWindow` 同时透明）；Region 裁形被 DWM 忽略且每帧 6–8ms。宿主固定表面改为 float 488×384 / dock 488×444 DIP（面板外 detached mini-island 条）；输入仍走 `IslandWindowInterop` 的 HTCLIENT/HTTRANSPARENT、no-activate、topmost 白名单。原 Avalonia 方案作为设置窗口方案保留。
+
 **决策**：`Win32 宿主 + Windows.UI.Composition（WS_EX_NOREDIRECTIONBITMAP）` 为底座，**Avalonia 12 作为 UI 层**（其 `WinUIComposition` 后端就是该底座：`Windows.UI.Composition` + `DesktopWindowTarget`，Win10 17134+，逐像素 `Transparent`，1803+ 的 `AcrylicBlur`，圆角模糊刷，默认 PerMonitorV2）。当前 v1 的 `AllowsTransparency=true` 是"分层窗口"机制：每帧 GPU→CPU→GPU 回读 + 每帧 GPU/CPU 同步，结构性无法达到 120 fps / 真 acrylic / 逐帧 resize 下的 <150 MB。
 
 **M0 spike（GO/NO-GO，2 天内出结论）**
@@ -1000,6 +1003,7 @@ Forbidden.Types("System.Windows.Forms.Screen", "System.Windows.SystemParameters"
 - **只读（GPL-3.0，禁止复制代码/资源/字符串）**：WinIsland、boring.notch、Atoll、livebridge。本文引用的**理念**（固定窗口、优先级列表、签名索引、声明式贡献）属于思想，实现必须独立完成；每个借用点保留一份"clean-room 说明"（`docs/rewrite/research/clean-room-notes.md`，M1 建立）。
 - **禁止**：SF Symbols 字体或"suspiciously similar"字形、Apple Design Resources 模板、任何仓库的预览截图（含第三方专辑封面/图标）。
 - 新增第三方依赖必须在 `Directory.Packages.props` 记录许可，且限于 MIT/Apache-2.0/BSD/MS-PL。
+
 
 
 

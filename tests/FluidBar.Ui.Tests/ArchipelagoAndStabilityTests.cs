@@ -32,9 +32,9 @@ public sealed class ArchipelagoTests
     [Fact]
     public void Archipelago_ConstantsMatchTheChosenVariant()
     {
-        Assert.Equal(0.80, PagerMotion.PointerDamping);
-        Assert.Equal(0.44, PagerMotion.SnapPeriodSeconds);
-        Assert.Equal(0.97, PagerMotion.SnapDampingRatio);
+        Assert.Equal(0.85, PagerMotion.PointerDamping);
+        Assert.Equal(0.38, PagerMotion.SnapPeriodSeconds);
+        Assert.Equal(0.94, PagerMotion.SnapDampingRatio);
         Assert.Equal(140, PagerMotion.WheelThresholdDip);
         Assert.Equal(180, PagerMotion.WheelCooldownMs);
         Assert.Equal(26, PagerMotion.SmallDragThreshold);
@@ -259,4 +259,5 @@ public sealed class StabilityTests
         Assert.Contains("2026-10-18T19:45:00", entry);
     }
 }
+
 

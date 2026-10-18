@@ -67,8 +67,9 @@
 
       'island.expand': '点击展开', 'island.collapse': '收起灵动岛',
       'pager.label': '页面导航',
-      'pager.dot': '{name} · 第 {n} 页，共 {m} 页',
-      'pager.dotTooltip': '转到{name}',
+      'pager.page': '{name} · 第 {n} 页，共 {m} 页',
+      'pager.pageTooltip': '转到{name}',
+      'pager.arch': '页面群岛',
       'tab.home': '主页', 'tab.media': '媒体', 'tab.notifications': '通知', 'tab.clipboard': '剪贴板',
       'tab.agent': 'Agent', 'tab.widgets': '小组件',
       'media.prev': '上一首', 'media.next': '下一首', 'media.play': '播放', 'media.pause': '暂停',
@@ -217,6 +218,7 @@
       'anno.title': 'FLUIDBAR · 实时标注', 'anno.shell': 'SHELL', 'anno.width': 'W', 'anno.height': 'H',
       'anno.radius': 'R', 'anno.size': '尺寸', 'anno.radiusLabel': '圆角', 'anno.alpha': '内容 α',
       'anno.page': '页面', 'anno.pageIndex': '页序',
+      'anno.arch': '群岛条', 'anno.archLag': '群岛滞后', 'anno.stripT': '群岛弹簧', 'anno.archState': '群岛状态',
       'anno.spring': '展开弹簧', 'anno.kc': 'k / c', 'anno.settle': '收敛', 'anno.tokens': 'TOKENS'
     },
 
@@ -247,8 +249,9 @@
 
       'island.expand': 'Click to expand', 'island.collapse': 'Collapse island',
       'pager.label': 'Page navigation',
-      'pager.dot': '{name} · page {n} of {m}',
-      'pager.dotTooltip': 'Go to {name}',
+      'pager.page': '{name} · page {n} of {m}',
+      'pager.pageTooltip': 'Go to {name}',
+      'pager.arch': 'Page archipelago',
       'tab.home': 'Home', 'tab.media': 'Media', 'tab.notifications': 'Notifications', 'tab.clipboard': 'Clipboard',
       'tab.agent': 'Agent', 'tab.widgets': 'Widgets',
       'media.prev': 'Previous', 'media.next': 'Next', 'media.play': 'Play', 'media.pause': 'Pause',
@@ -397,6 +400,7 @@
       'anno.title': 'FLUIDBAR · LIVE SPEC', 'anno.shell': 'SHELL', 'anno.width': 'W', 'anno.height': 'H',
       'anno.radius': 'R', 'anno.size': 'SIZE', 'anno.radiusLabel': 'RADIUS', 'anno.alpha': 'CONTENT α',
       'anno.page': 'PAGE', 'anno.pageIndex': 'INDEX',
+      'anno.arch': 'ARCHIPELAGO', 'anno.archLag': 'STRIP LAG', 'anno.stripT': 'STRIP SPRING', 'anno.archState': 'STRIP STATE',
       'anno.spring': 'EXPAND SPRING', 'anno.kc': 'k / c', 'anno.settle': 'SETTLE', 'anno.tokens': 'TOKENS'
     }
   };
@@ -510,6 +514,24 @@
       content: { zh: 'const spring = new Spring({ T: 0.36, zeta: 0.82 })', en: 'const spring = new Spring({ T: 0.36, zeta: 0.82 })' },
       raw: 'const spring = new Spring({ T: 0.36, zeta: 0.82 })', mono: true,
       time: { zh: '2 小时前', en: '2 hr ago' }
+    },
+    {
+      id: 'mail', type: 'text', icon: 'mail', colorType: 't-text', pinned: false,
+      content: { zh: '设计评审改到周四 15:00，会议室 3B。', en: 'Design review moved to Thursday 15:00, room 3B.' },
+      raw: '设计评审改到周四 15:00，会议室 3B。', mono: false,
+      time: { zh: '3 小时前', en: '3 hr ago' }
+    },
+    {
+      id: 'release', type: 'link', icon: 'link', colorType: 't-link', pinned: false,
+      content: { zh: 'github.com/doulor/fluidbar/releases/tag/v2.0.0', en: 'github.com/doulor/fluidbar/releases/tag/v2.0.0' },
+      raw: 'https://github.com/doulor/fluidbar/releases/tag/v2.0.0', mono: false,
+      time: { zh: '昨天', en: 'Yesterday' }
+    },
+    {
+      id: 'path', type: 'command', icon: 'folder', colorType: 't-command', pinned: false,
+      content: { zh: 'D:\\build\\GitLocal\\FluidBar\\docs\\rewrite', en: 'D:\\build\\GitLocal\\FluidBar\\docs\\rewrite' },
+      raw: 'D:\\build\\GitLocal\\FluidBar\\docs\\rewrite', mono: true,
+      time: { zh: '昨天', en: 'Yesterday' }
     }
   ];
 
@@ -643,21 +665,58 @@
   var EXPANDED_W = 440;
   /* One shell size for every expanded section — sections never resize the island. */
   var EXPANDED_H = 284;
+  /* Content viewport is 440−2×20 × 284−2×16 = 400 × 252. */
   var PAGE_W = 400;
-  var PAGE_H = 244;
+  var PAGE_H = 252;
+  var PAGE_GUTTER = 8;    /* adjacent page cards peek 8px into each edge */
+  var PAGE_STEP = PAGE_W - PAGE_GUTTER * 2; /* 384 — distance between page origins */
 
   /* Pager feel + snap contract. T/ζ match the expanded-shell spring family. */
   var PAGER = {
-    dragGain: 0.9,        /* 10% follow resistance — weighted, not icy */
+    dragGain: 0.8,        /* 20% follow resistance — deliberately weighted */
     rubberBand: 0.35,     /* overscroll beyond the first/last page */
-    thresholdPx: 28,      /* below this a gesture always snaps back */
+    thresholdPx: 26,      /* below this a gesture always snaps back */
     flickVelocity: 0.55,  /* px/ms — fast/light gesture commits exactly one page */
     flickMaxPages: 0.9,   /* gestures under 0.9 page can never commit more than one */
-    snapT: 0.34,
-    snapZ: 0.9,
-    wheelThreshold: 100,  /* px of accum. wheel delta per page */
-    wheelCooldown: 120,   /* ms between wheel commits */
-    wheelLinePx: 16
+    snapT: 0.44,
+    snapZ: 0.97,
+    wheelThreshold: 140,  /* px of accum. wheel delta per page */
+    wheelCooldown: 180,   /* ms between wheel commits (one page per window) */
+    wheelLinePx: 16,
+    scrollOverscroll: 40, /* px past a content edge before a page turn is armed */
+    scrollDwell: 120,     /* ms the same-direction overscroll must be held */
+    scrollIdleLock: 240,  /* content keeps page turning locked this long after it scrolls */
+    pageParallax: 6,      /* px of incoming-page depth offset */
+    pageScale: 0.985      /* incoming-page scale before it becomes active */
+  };
+
+  /* Page archipelago — transient mini-island strip floating over the panel
+     bottom. Geometry: 48×26 islands, 8px gaps, active 72×30. Six fixed 56px
+     slots plus ±12px spring shifts keep the visual pitch at 56px while the
+     active pill grows, without ever touching layout per frame. */
+  var ARCH = {
+    height: 34,
+    stripW: 352,          /* 6×48 + 5×8 = 328, +24 for the active overhang */
+    miniW: 48,
+    miniH: 26,
+    radius: 13,
+    activeW: 72,
+    activeH: 30,
+    activeRadius: 15,
+    spread: 12,           /* (72−48)/2 — neighbour shift either side of active */
+    pitch: 56,
+    hotZone: 12,          /* bottom 12px of the panel reveals the strip */
+    hotDelay: 300,        /* ms of dwell before it appears */
+    hideDelay: 1200,      /* ms after the last drag/wheel/pointer activity */
+    followPx: 14,         /* 1:1 px of strip travel per page of pager offset */
+    followTau: 0.030,     /* 30ms low-pass — tiny lag, not a second animation */
+    revealT: 0.32,        /* strip reveal/hide spring */
+    revealZ: 0.85,
+    morphT: 0.32,         /* active-island size morph spring */
+    morphZ: 0.85,
+    shiftT: 0.32,         /* neighbour position spring */
+    shiftZ: 0.88,
+    dragStep: 56          /* px of strip travel per page while scrubbing */
   };
 
   /* ==========================================================================
@@ -690,16 +749,26 @@
   var PAGER_STATE = {
     offset: 0, index: 0, target: 0, snapping: false, dragging: false,
     pointerId: null, startX: 0, origin: 0, dragTarget: 0, totalDx: 0,
-    moved: false, lastX: 0, lastT: 0, velocity: 0,
+    moved: false, lastX: 0, lastT: 0, velocity: 0, captureEl: null, dragStep: PAGE_STEP,
     suppressClickUntil: 0, wheelAccum: 0, wheelLast: 0, wheelLockUntil: 0,
     wheelQueue: [], wheelTimer: 0,
+    scrollAccum: 0, scrollDir: 0, scrollDwellStart: 0, scrollTimer: 0, scrollLastAt: 0,
+    scrollOwnerUntil: 0, edgeDir: 0,
     lastGesture: null
+  };
+
+  var ARCH_STATE = {
+    visible: false, forced: false, active: -1, follow: 0, lastAt: 0,
+    hideTimer: 0, hotTimer: 0, hotArmed: false,
+    dragging: false, dragPointerId: null, suppressClickUntil: 0, pendingPage: null,
+    items: []
   };
 
   var ISLAND = null, ANCHOR = null, COMPACT_LAYER = null;
   var PAGER_EL = null, PAGER_VIEWPORT = null, PAGER_TRACK = null;
   var PAGER_TITLE = null, PAGER_COUNT = null, PAGER_ACTION = null;
-  var PAGER_CLOSE = null, PAGER_DOTS = null, PAGER_LIVE = null;
+  var PAGER_CLOSE = null, PAGER_ARCH = null, PAGER_ARCH_TRACK = null;
+  var PAGER_ARCH_VIEWPORT = null, PAGER_LIVE = null;
   var ghosts = [], stackBadge = null, expandedLayer = null;
   var consoleEl = null, consoleHandle = null, settingsWindow = null, modalLayer = null;
   var toastEl = null, annotationsEl = null, measureSvg = null, specCard = null, measureTags = null;
@@ -773,6 +842,7 @@
   var pressSpring = new Spring(1, DEFAULTS.pressT, DEFAULTS.pressZ);
   var nudgeSpring = new Spring(0, DEFAULTS.nudgeT, DEFAULTS.nudgeZ);
   var pagerSpring = new Spring(0, PAGER.snapT, PAGER.snapZ);
+  var archReveal = new Spring(0, ARCH.revealT, ARCH.revealZ);
 
   var rafId = 0, lastTs = 0, fpsLast = 60, fpsAccum = 0, fpsCount = 0;
   var fpsText = null;
@@ -907,12 +977,20 @@
         PAGER_STATE.offset = PAGER_STATE.target;
         pagerSpring.snap(PAGER_STATE.target);
         PAGER_STATE.snapping = false;
+        if (PAGER_EL) PAGER_EL.classList.remove('snapping');
       } else {
         awake = true;
       }
       applyPagerTransform();
     }
 
+    /* Archipelago springs: reveal/hide, per-island size morph, neighbour shift
+       and the ≤28ms filmstrip low-pass. All transform/opacity, one rAF. */
+    if (archReveal.step(dt)) awake = true;
+    if (stepArchItems(dt)) awake = true;
+    if (stepArchFollow(dt)) awake = true;
+
+    applyArchFrame();
     applyShellFrame();
     noteFrame(dt);
 
@@ -1344,25 +1422,7 @@
       PAGER_CLOSE.title = t('island.collapse');
     }
 
-    if (PAGER_DOTS) {
-      PAGER_DOTS.setAttribute('aria-label', t('pager.label'));
-      if (PAGER_DOTS.children.length !== TAB_META.length) {
-        PAGER_DOTS.innerHTML = TAB_META.map(function (tab) {
-          return '<button class="pager-dot" type="button" data-page="' + tab.id + '"></button>';
-        }).join('');
-      }
-      $$('.pager-dot', PAGER_DOTS).forEach(function (dot, i) {
-        var tab = TAB_META[i];
-        var active = i === idx;
-        var label = t('pager.dot', { name: t(tab.label), n: i + 1, m: TAB_META.length });
-        dot.classList.toggle('active', active);
-        dot.setAttribute('aria-label', label);
-        dot.title = t('pager.dotTooltip', { name: t(tab.label) });
-        dot.dataset.page = tab.id;
-        if (active) dot.setAttribute('aria-current', 'page');
-        else dot.removeAttribute('aria-current');
-      });
-    }
+    if (PAGER_ARCH) syncArchActive();
 
     if (PAGER_TRACK) {
       $$('.pager-page', PAGER_TRACK).forEach(function (page) {
@@ -1381,16 +1441,248 @@
   function announcePage() {
     if (!PAGER_LIVE) return;
     var idx = pageIndexFor(S.tab);
-    PAGER_LIVE.textContent = t('pager.dot', {
+    PAGER_LIVE.textContent = t('pager.page', {
       name: sectionTitle(S.tab), n: idx + 1, m: TAB_META.length
     });
   }
 
+  function archPreviewHTML(tab) {
+    if (tab === 'home') {
+      return '<span class="arch-pv pv-clock"><i class="pv-hour"></i><i class="pv-min"></i><b class="pv-pin"></b></span>';
+    }
+    if (tab === 'media') {
+      return '<span class="arch-pv pv-media"><i class="pv-art"></i>' +
+        '<span class="pv-bars"><i></i><i></i><i></i></span></span>';
+    }
+    if (tab === 'notifications') {
+      return '<span class="arch-pv pv-notif"><i class="pv-unread"></i>' +
+        '<span class="pv-lines"><i></i><i></i></span></span>';
+    }
+    if (tab === 'clipboard') {
+      return '<span class="arch-pv pv-clip"><i></i><i></i></span>';
+    }
+    if (tab === 'agent') {
+      return '<span class="arch-pv pv-agent"><i class="pv-pulse"></i></span>';
+    }
+    return '<span class="arch-pv pv-cal"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>';
+  }
+
+  function renderArchipelago() {
+    if (!PAGER_ARCH_TRACK) return;
+    PAGER_ARCH_TRACK.setAttribute('role', 'tablist');
+    PAGER_ARCH_TRACK.setAttribute('aria-label', t('pager.arch'));
+    PAGER_ARCH_TRACK.innerHTML = TAB_META.map(function (tab, i) {
+      var name = sectionTitle(tab.id);
+      var label = t('pager.page', { name: name, n: i + 1, m: TAB_META.length });
+      return '<button class="arch-island" type="button" role="tab" data-page="' + tab.id + '"' +
+        ' aria-selected="false" tabindex="0" aria-label="' + esc(label) + '" title="' + esc(t('pager.pageTooltip', { name: name })) + '">' +
+        '<span class="arch-pill" aria-hidden="true"></span>' +
+        '<span class="arch-face arch-face-preview" aria-hidden="true">' + archPreviewHTML(tab.id) + '</span>' +
+        '<span class="arch-face arch-face-name" aria-hidden="true">' + esc(name) + '</span>' +
+        '</button>';
+    }).join('');
+    ARCH_STATE.items = $$('.arch-island', PAGER_ARCH_TRACK).map(function (btn) {
+      return {
+        el: btn,
+        pill: $('.arch-pill', btn),
+        preview: $('.arch-face-preview', btn),
+        name: $('.arch-face-name', btn),
+        morph: new Spring(0, ARCH.morphT, ARCH.morphZ),
+        shift: new Spring(0, ARCH.shiftT, ARCH.shiftZ)
+      };
+    });
+    ARCH_STATE.active = -1;
+    syncArchActive(true);
+    applyArchFrame();
+  }
+
+  function archParams(kind) {
+    if (kind === 'morph') return motionAdjust(ARCH.morphT, ARCH.morphZ);
+    if (kind === 'shift') return motionAdjust(ARCH.shiftT, ARCH.shiftZ);
+    return motionAdjust(ARCH.revealT, ARCH.revealZ);
+  }
+
+  function syncArchActive(instant) {
+    if (!PAGER_ARCH_TRACK || !ARCH_STATE.items.length) return;
+    var idx = PAGER_STATE.dragging
+      ? clamp(Math.round(PAGER_STATE.offset), 0, TAB_META.length - 1)
+      : pageIndexFor(S.tab);
+    if (idx === ARCH_STATE.active && !instant) return;
+    ARCH_STATE.active = idx;
+    var mp = archParams('morph');
+    var sp = archParams('shift');
+    ARCH_STATE.items.forEach(function (item, i) {
+      var active = i === idx;
+      item.el.classList.toggle('active', active);
+      item.el.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) item.el.setAttribute('aria-current', 'page');
+      else item.el.removeAttribute('aria-current');
+      var shift = i < idx ? -ARCH.spread : (i > idx ? ARCH.spread : 0);
+      if (instant) {
+        item.morph.snap(active ? 1 : 0);
+        item.shift.snap(shift);
+      } else {
+        item.morph.retarget(active ? 1 : 0, mp.T, mp.z);
+        item.shift.retarget(shift, sp.T, sp.z);
+      }
+    });
+    if (!instant) wake();
+  }
+
+  function archFollowTarget() {
+    /* 1:1 with the pager's page offset, anchored on the committed page. */
+    return (PAGER_STATE.offset - PAGER_STATE.index) * ARCH.followPx;
+  }
+
+  function stepArchFollow(dt) {
+    var target = archFollowTarget();
+    if (Math.abs(target - ARCH_STATE.follow) < 0.01) {
+      if (ARCH_STATE.follow !== target) {
+        ARCH_STATE.follow = target;
+        return true;
+      }
+      return false;
+    }
+    var k = 1 - Math.exp(-dt / ARCH.followTau);
+    ARCH_STATE.follow += (target - ARCH_STATE.follow) * k;
+    return true;
+  }
+
+  function stepArchItems(dt) {
+    var awake = false;
+    for (var i = 0; i < ARCH_STATE.items.length; i++) {
+      if (ARCH_STATE.items[i].morph.step(dt)) awake = true;
+      if (ARCH_STATE.items[i].shift.step(dt)) awake = true;
+    }
+    return awake;
+  }
+
+  function applyArchFrame() {
+    if (!PAGER_ARCH) return;
+    var r = clamp(archReveal.x, 0, 1);
+    /* Below the panel in float/flush, above it in dock so the dock stays clear. */
+    var dir = S.mode === 'dock' ? -1 : 1;
+    PAGER_ARCH.style.opacity = r.toFixed(3);
+    PAGER_ARCH.style.transform = 'translate3d(-50%, ' + ((1 - r) * 8 * dir).toFixed(2) + 'px, 0) scale(' + (0.96 + 0.04 * r).toFixed(4) + ')';
+    if (PAGER_ARCH_TRACK) {
+      PAGER_ARCH_TRACK.style.transform = 'translate3d(' + ARCH_STATE.follow.toFixed(2) + 'px, 0, 0)';
+    }
+    var sxMax = ARCH.activeW / ARCH.miniW;
+    var syMax = ARCH.activeH / ARCH.miniH;
+    var mid = (ARCH_STATE.items.length - 1) / 2;
+    for (var i = 0; i < ARCH_STATE.items.length; i++) {
+      var item = ARCH_STATE.items[i];
+      var m = clamp(item.morph.x, 0, 1);
+      var baseX = (i - mid) * ARCH.pitch;
+      item.el.style.transform = 'translate3d(' + (baseX + item.shift.x).toFixed(2) + 'px, 0, 0)';
+      item.pill.style.transform = 'scale(' + (1 + (sxMax - 1) * m).toFixed(4) + ', ' + (1 + (syMax - 1) * m).toFixed(4) + ')';
+      item.pill.style.setProperty('--m', m.toFixed(3));
+      item.preview.style.opacity = (1 - m).toFixed(3);
+      item.name.style.opacity = (m * m).toFixed(3);
+      item.name.style.transform = 'translate3d(0, ' + ((1 - m) * 2).toFixed(2) + 'px, 0)';
+    }
+    if (!ARCH_STATE.visible && archReveal.x < 0.01) PAGER_ARCH.classList.remove('on');
+  }
+
+  function bumpArchHide() {
+    clearTimeout(ARCH_STATE.hideTimer);
+    ARCH_STATE.hideTimer = 0;
+    if (!ARCH_STATE.visible || ARCH_STATE.forced || ARCH_STATE.dragging || PAGER_STATE.dragging) return;
+    ARCH_STATE.hideTimer = setTimeout(hideArch, ARCH.hideDelay);
+  }
+
+  function showArch(opts) {
+    if (!S.expanded || !PAGER_ARCH) return;
+    var instant = !!(opts && opts.instant);
+    var wasVisible = ARCH_STATE.visible;
+    ARCH_STATE.visible = true;
+    if (!wasVisible) {
+      ARCH_STATE.follow = archFollowTarget();
+      PAGER_ARCH.classList.add('on');
+      var rp = archParams('reveal');
+      if (instant) archReveal.snap(1);
+      else archReveal.retarget(1, rp.T, rp.z);
+      /* Appearing is not a page change: land on the current page instantly. */
+      syncArchActive(true);
+      if (!instant) wake();
+    }
+    PAGER_ARCH.classList.add('show');
+    PAGER_ARCH.inert = false;
+    PAGER_ARCH.setAttribute('aria-hidden', 'false');
+    bumpArchHide();
+    applyArchFrame();
+  }
+
+  function hideArch() {
+    if (ARCH_STATE.forced || ARCH_STATE.dragging || PAGER_STATE.dragging) return;
+    hideArchNow();
+  }
+
+  function hideArchNow() {
+    clearTimeout(ARCH_STATE.hideTimer);
+    clearTimeout(ARCH_STATE.hotTimer);
+    ARCH_STATE.hideTimer = 0;
+    ARCH_STATE.hotTimer = 0;
+    ARCH_STATE.hotArmed = false;
+    ARCH_STATE.visible = false;
+    ARCH_STATE.dragging = false;
+    if (!PAGER_ARCH) return;
+    /* Pointer events stop immediately; the spring keeps fading the strip out. */
+    PAGER_ARCH.classList.remove('show', 'dragging');
+    PAGER_ARCH.inert = true;
+    PAGER_ARCH.setAttribute('aria-hidden', 'true');
+    var rp = archParams('reveal');
+    archReveal.retarget(0, rp.T, rp.z);
+    wake();
+  }
+
+  function bumpArchActivity() {
+    if (!ARCH_STATE.visible) return;
+    bumpArchHide();
+  }
+
+  /* The bottom 12px of the pager is a reveal hot zone: 300ms of pointer rest. */
+  function armArchHotZone() {
+    if (ARCH_STATE.hotTimer || ARCH_STATE.visible) return;
+    ARCH_STATE.hotArmed = true;
+    ARCH_STATE.hotTimer = setTimeout(function () {
+      ARCH_STATE.hotTimer = 0;
+      ARCH_STATE.hotArmed = false;
+      if (S.expanded && !ARCH_STATE.visible) showArch();
+    }, ARCH.hotDelay);
+  }
+
+  function clearArchHotZone() {
+    if (ARCH_STATE.hotTimer) clearTimeout(ARCH_STATE.hotTimer);
+    ARCH_STATE.hotTimer = 0;
+    ARCH_STATE.hotArmed = false;
+  }
+
+  function onPagerPointerActivity(e) {
+    if (!S.expanded) return;
+    if (ARCH_STATE.visible) bumpArchHide();
+    /* The hot zone belongs to the shell's bottom edge, not the 252px pager
+       (the pager ends 16px above the 284px shell). */
+    var r = ISLAND.getBoundingClientRect();
+    var inHot = e.clientY >= r.bottom - ARCH.hotZone && e.clientY <= r.bottom + 1;
+    if (inHot && !ARCH_STATE.visible) armArchHotZone();
+    else if (!inHot) clearArchHotZone();
+  }
+
   function applyPagerTransform() {
     if (!PAGER_TRACK) return;
-    var w = PAGER_VIEWPORT && PAGER_VIEWPORT.clientWidth ? PAGER_VIEWPORT.clientWidth : PAGE_W;
-    PAGER_TRACK.style.transform = 'translate3d(' + (-PAGER_STATE.offset * w).toFixed(3) + 'px, 0, 0)';
+    PAGER_TRACK.style.transform = 'translate3d(' + (PAGE_GUTTER - PAGER_STATE.offset * PAGE_STEP).toFixed(3) + 'px, 0, 0)';
+    /* Depth cue: incoming pages sit 0.985× and 6px off until they own the viewport. */
+    var pages = PAGER_TRACK.children;
+    for (var i = 0; i < pages.length; i++) {
+      var d = clamp(PAGER_STATE.offset - i, -1, 1);
+      var ad = Math.abs(d);
+      var scale = 1 - (1 - PAGER.pageScale) * ad;
+      var px = PAGER.pageParallax * d;
+      pages[i].style.transform = 'translate3d(' + px.toFixed(2) + 'px, 0, 0) scale(' + scale.toFixed(4) + ')';
+    }
     if (PAGER_EL) PAGER_EL.dataset.offset = PAGER_STATE.offset.toFixed(4);
+    if (ARCH_STATE.visible || ARCH_STATE.items.length) syncArchActive();
   }
 
   function pageHTML(tab) {
@@ -1405,10 +1697,11 @@
   function renderPane() {
     if (!PAGER_TRACK) return;
     PAGER_TRACK.innerHTML = TAB_META.map(function (tab, i) {
-      var label = t('pager.dot', { name: sectionTitle(tab.id), n: i + 1, m: TAB_META.length });
+      var label = t('pager.page', { name: sectionTitle(tab.id), n: i + 1, m: TAB_META.length });
       return '<section class="pager-page" data-page="' + tab.id + '" role="group" ' +
         'aria-roledescription="slide" aria-label="' + esc(label) + '">' + pageHTML(tab.id) + '</section>';
     }).join('');
+    renderArchipelago();
     updatePagerChrome();
     applyPagerTransform();
     requestAnimationFrame(updateScrollFades);
@@ -1420,8 +1713,11 @@
     PAGER_STATE.target = index;
     PAGER_STATE.offset = index;
     PAGER_STATE.snapping = false;
+    ARCH_STATE.follow = 0;
     pagerSpring.snap(index);
     applyPagerTransform();
+    syncArchActive(true);
+    applyArchFrame();
   }
 
   function setPagerSnap(index) {
@@ -1433,7 +1729,10 @@
       pagerSpring.snap(PAGER_STATE.offset);
     }
     PAGER_STATE.snapping = true;
+    if (PAGER_EL) PAGER_EL.classList.add('snapping');
     pagerSpring.retarget(index, PAGER.snapT, PAGER.snapZ);
+    syncArchActive();
+    resetScrollChain();
     wake();
   }
 
@@ -2221,6 +2520,9 @@
         '<div class="spec-row"><label>' + t('anno.radiusLabel') + '</label><b data-spec="radius">—</b></div>' +
         '<div class="spec-row wide"><label>' + t('anno.page') + '</label><b data-spec="page">—</b></div>' +
         '<div class="spec-row wide"><label>' + t('anno.pageIndex') + '</label><b data-spec="pageIndex">—</b></div>' +
+        '<div class="spec-row wide"><label>' + t('anno.arch') + '</label><b data-spec="arch">—</b></div>' +
+        '<div class="spec-row"><label>' + t('anno.stripT') + '</label><b data-spec="archSpring">—</b></div>' +
+        '<div class="spec-row"><label>' + t('anno.archLag') + '</label><b data-spec="archLag">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.alpha') + '</label><b data-spec="alpha">—</b></div>' +
         '<div class="spec-row"><label>T / ζ</label><b data-spec="spring">—</b></div>' +
         '<div class="spec-row"><label>' + t('anno.kc') + '</label><b data-spec="kc">—</b></div>' +
@@ -2286,6 +2588,12 @@
       if (pageIdxEl) pageIdxEl.textContent = (pageIndexFor(S.tab) + 1) + ' / ' + TAB_META.length;
       var radEl = $('[data-spec="radius"]', spec);
       if (radEl) radEl.textContent = S.mode === 'flush' ? '0 0 22 22' : rad + ' px';
+      var archEl = $('[data-spec="arch"]', spec);
+      if (archEl) archEl.textContent = (ARCH_STATE.visible ? 'ON' : 'OFF') + ' · 48×26→72×30';
+      var archSpringEl = $('[data-spec="archSpring"]', spec);
+      if (archSpringEl) archSpringEl.textContent = ARCH.revealT.toFixed(2) + 's / ' + ARCH.revealZ.toFixed(2);
+      var archLagEl = $('[data-spec="archLag"]', spec);
+      if (archLagEl) archLagEl.textContent = Math.round(ARCH.followTau * 1000) + 'ms · ' + ARCH_STATE.follow.toFixed(1) + 'px';
       var alphaEl = $('[data-spec="alpha"]', spec);
       if (alphaEl) alphaEl.textContent = computeAlpha(targetSize()).toFixed(2);
       var adj = toks('expand');
@@ -2398,6 +2706,7 @@
     S.peek = false;
     S.tab = tab || 'home';
     S.expanded = true;
+    if (!ARCH_STATE.forced) hideArchNow();
     renderShellAttrs();
 
     if (S.mode === 'dock') {
@@ -2418,6 +2727,7 @@
 
     renderPane();
     setPagerInstant(pageIndexFor(S.tab));
+    if (ARCH_STATE.forced) showArch({ instant: true });
     clampDragForWidth(EXPANDED_W);
     syncTargets(opts.instant ? 'snap' : 'expand', { instant: !!opts.instant });
     updateConsoleActive();
@@ -2440,9 +2750,10 @@
   function collapse() {
     clearTransient();
     cancelPagerWheelQueue();
+    hideArchNow();
     PAGER_STATE.dragging = false;
     PAGER_STATE.snapping = false;
-    if (PAGER_EL) PAGER_EL.classList.remove('dragging');
+    if (PAGER_EL) PAGER_EL.classList.remove('dragging', 'snapping');
     if (S.mode === 'dock') {
       if (!S.dockOpen) return;
       S.expanded = false;
@@ -2956,15 +3267,45 @@
   }
 
   function isInteractive(el) {
-    return !!(el.closest && el.closest('button, input, [role="slider"], [data-act], .js-seek, .mini-media, .notif-row, .clip-row, .agent-row, .pager-dot'));
+    return !!(el.closest && el.closest('button, input, [role="slider"], [data-act], .js-seek, .mini-media, .notif-row, .clip-row, .agent-row'));
   }
 
   function isPagerControl(el) {
-    return !!(el.closest && el.closest('button, input, textarea, select, a, [role="slider"], [role="switch"], [role="button"], [data-act], .js-seek, .scroll-area, .pager-dot'));
+    return !!(el.closest && el.closest('button, input, textarea, select, a, [role="slider"], [role="switch"], [role="button"], [data-act], .js-seek, .scroll-area'));
   }
 
   function isWheelOverControl(el) {
-    return !!(el.closest && el.closest('input, textarea, select, [role="slider"], .js-seek, .scroll-area'));
+    return !!(el.closest && el.closest('input, textarea, select, [role="slider"], .js-seek'));
+  }
+
+  function pagerScrollArea(el) {
+    var area = el && el.closest ? el.closest('.scroll-area') : null;
+    return area && PAGER_EL && PAGER_EL.contains(area) ? area : null;
+  }
+
+  function canScrollBy(area, dir) {
+    if (!area) return false;
+    if (dir > 0) return area.scrollTop + area.clientHeight < area.scrollHeight - 1;
+    return area.scrollTop > 1;
+  }
+
+  function setEdgeGlow(dir) {
+    if (!PAGER_EL) return;
+    PAGER_STATE.edgeDir = dir;
+    PAGER_EL.classList.toggle('edge-bottom', dir > 0);
+    PAGER_EL.classList.toggle('edge-top', dir < 0);
+  }
+
+  function resetScrollChain() {
+    if (PAGER_STATE.scrollTimer) {
+      clearTimeout(PAGER_STATE.scrollTimer);
+      PAGER_STATE.scrollTimer = 0;
+    }
+    PAGER_STATE.scrollAccum = 0;
+    PAGER_STATE.scrollDir = 0;
+    PAGER_STATE.scrollDwellStart = 0;
+    PAGER_STATE.edgeDir = 0;
+    if (PAGER_EL) PAGER_EL.classList.remove('edge-top', 'edge-bottom');
   }
 
   function cancelPagerWheelQueue() {
@@ -2974,16 +3315,21 @@
     }
     PAGER_STATE.wheelQueue.length = 0;
     PAGER_STATE.wheelAccum = 0;
+    resetScrollChain();
   }
 
   function pageWidthPx() {
-    return (PAGER_VIEWPORT && PAGER_VIEWPORT.clientWidth) || PAGE_W;
+    return PAGER_STATE.dragStep || PAGE_STEP;
   }
 
-  function startPagerDrag(e) {
+  function startPagerDrag(e, opts) {
+    opts = opts || {};
     cancelPagerWheelQueue();
+    resetScrollChain();
     stopDemo();
+    showArch();
     PAGER_STATE.snapping = false;
+    if (PAGER_EL) PAGER_EL.classList.remove('snapping');
     PAGER_STATE.offset = pagerSpring.x;
     PAGER_STATE.dragging = true;
     PAGER_STATE.pointerId = e.pointerId;
@@ -2995,9 +3341,18 @@
     PAGER_STATE.lastX = e.clientX;
     PAGER_STATE.lastT = performance.now();
     PAGER_STATE.velocity = 0;
-    PAGER_EL.classList.add('dragging');
-    try { PAGER_VIEWPORT.setPointerCapture(e.pointerId); } catch (err) { /* pointer capture is optional */ }
+    PAGER_STATE.dragStep = opts.step || PAGE_STEP;
+    PAGER_STATE.captureEl = opts.captureEl || PAGER_VIEWPORT;
+    if (!opts.arch) ARCH_STATE.pendingPage = null;
+    if (!opts.arch) PAGER_EL.classList.add('dragging');
+    if (opts.arch) {
+      ARCH_STATE.dragging = true;
+      if (PAGER_ARCH) PAGER_ARCH.classList.add('dragging');
+      bumpArchHide();
+    }
+    try { PAGER_STATE.captureEl.setPointerCapture(e.pointerId); } catch (err) { /* pointer capture is optional */ }
     if (e.cancelable) e.preventDefault();
+    wake();
   }
 
   function movePagerDrag(e) {
@@ -3012,6 +3367,7 @@
     PAGER_STATE.dragTarget = raw;
     PAGER_STATE.offset = raw;
     applyPagerTransform();
+    wake();
 
     var now = performance.now();
     var dt = now - PAGER_STATE.lastT;
@@ -3037,10 +3393,12 @@
 
     if (absDx >= PAGER.thresholdPx && Math.abs(movedPages) > 0.0001) {
       var dir = movedPages > 0 ? 1 : -1;
-      if (Math.abs(movedPages) < PAGER.flickMaxPages) {
-        /* Short flick / light drag: one page maximum, independent of velocity. */
+      /* A fast, short flick always commits exactly one page — even if its
+         damped travel passed 0.9 page. Long continuous drags stay distance-based. */
+      var isFlick = Math.abs(velocity) > PAGER.flickVelocity && absDx < PAGE_STEP * 1.35;
+      if (Math.abs(movedPages) < PAGER.flickMaxPages || isFlick) {
         target = clamp(base + dir, 0, lastPage);
-        kind = Math.abs(velocity) > PAGER.flickVelocity ? 'flick-one' : 'short-drag-one';
+        kind = isFlick ? 'flick-one' : 'short-drag-one';
       } else {
         /* Long continuous drag: distance-based, may cross several pages. */
         target = clamp(Math.round(PAGER_STATE.dragTarget), 0, lastPage);
@@ -3071,29 +3429,155 @@
     if (!PAGER_STATE.dragging) return;
     if (e && e.pointerId !== PAGER_STATE.pointerId) return;
     var moved = PAGER_STATE.moved;
+    var wasArch = ARCH_STATE.dragging;
     try {
-      if (PAGER_VIEWPORT.hasPointerCapture(PAGER_STATE.pointerId)) {
-        PAGER_VIEWPORT.releasePointerCapture(PAGER_STATE.pointerId);
+      if (PAGER_STATE.captureEl && PAGER_STATE.captureEl.hasPointerCapture(PAGER_STATE.pointerId)) {
+        PAGER_STATE.captureEl.releasePointerCapture(PAGER_STATE.pointerId);
       }
     } catch (err) { /* ignore lost capture */ }
     PAGER_EL.classList.remove('dragging');
     PAGER_STATE.dragging = false;
     PAGER_STATE.pointerId = null;
+    PAGER_STATE.captureEl = null;
+    PAGER_STATE.dragStep = PAGE_STEP;
+
+    if (wasArch) {
+      ARCH_STATE.dragging = false;
+      if (PAGER_ARCH) PAGER_ARCH.classList.remove('dragging');
+      bumpArchHide();
+    }
 
     if (moved) {
+      ARCH_STATE.pendingPage = null;
       PAGER_STATE.suppressClickUntil = performance.now() + 220;
+      ARCH_STATE.suppressClickUntil = performance.now() + 260;
       finishPagerDrag();
+    } else if (wasArch && ARCH_STATE.pendingPage) {
+      /* Pointer capture retargets the click to the strip, so commit the tap here. */
+      var page = ARCH_STATE.pendingPage;
+      ARCH_STATE.pendingPage = null;
+      ARCH_STATE.suppressClickUntil = performance.now() + 240;
+      setTab(page);
+      showArch();
+      bumpArchActivity();
     } else {
       /* A simple click never pages; restore any sub-threshold visual drift. */
       setPagerSnap(PAGER_STATE.index);
     }
+    bumpArchHide();
   }
 
   function pagerWheelDelta(e) {
-    var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (e.deltaMode === 1) d *= PAGER.wheelLinePx;
-    else if (e.deltaMode === 2) d *= PAGE_W;
-    return d;
+    var dx = e.deltaX || 0;
+    var dy = e.deltaY || 0;
+    if (e.deltaMode === 1) { dx *= PAGER.wheelLinePx; dy *= PAGER.wheelLinePx; }
+    else if (e.deltaMode === 2) { dx *= PAGE_W; dy *= PAGE_H; }
+    return { dx: dx, dy: dy };
+  }
+
+  function accumulatePageWheel(delta) {
+    var now = performance.now();
+    if (now - PAGER_STATE.wheelLast > 240) PAGER_STATE.wheelAccum = 0;
+    PAGER_STATE.wheelLast = now;
+    PAGER_STATE.wheelAccum += delta;
+    if (Math.abs(PAGER_STATE.wheelAccum) >= PAGER.wheelThreshold) {
+      var dir = PAGER_STATE.wheelAccum > 0 ? 1 : -1;
+      /* One physical event can only ever commit one page. */
+      PAGER_STATE.wheelAccum = 0;
+      queuePagerWheelStep(dir);
+    }
+  }
+
+  /* Content hit its edge: hold 40px of same-direction overscroll for 120ms. */
+  function armScrollDwell(dir) {
+    if (PAGER_STATE.scrollTimer) return;
+    PAGER_STATE.scrollDwellStart = performance.now();
+    PAGER_STATE.scrollTimer = setTimeout(function () {
+      PAGER_STATE.scrollTimer = 0;
+      if (!S.expanded || PAGER_STATE.dragging) { resetScrollChain(); return; }
+      if (PAGER_STATE.scrollDir !== dir) { resetScrollChain(); return; }
+      if (Math.abs(PAGER_STATE.scrollAccum) < PAGER.scrollOverscroll) { resetScrollChain(); return; }
+      var next = clamp(PAGER_STATE.index + dir, 0, TAB_META.length - 1);
+      var willPage = next !== PAGER_STATE.index;
+      resetScrollChain();
+      queuePagerWheelStep(dir);
+      if (willPage) {
+        /* drainPagerWheelQueue runs synchronously when the cooldown is free. */
+        PAGER_STATE.lastGesture = { kind: 'scroll-dwell', dir: dir, targetIndex: next, at: performance.now() };
+      }
+      bumpArchActivity();
+    }, PAGER.scrollDwell);
+  }
+
+  function onPagerWheel(e) {
+    if (!S.expanded || PAGER_STATE.dragging) return;
+    if (isWheelOverControl(e.target)) return;
+
+    var d = pagerWheelDelta(e);
+    if (!d.dx && !d.dy) return;
+
+    var horizontal = Math.abs(d.dx) >= Math.abs(d.dy) && Math.abs(d.dx) > 0;
+    var forcePage = horizontal || e.shiftKey;
+    var delta = horizontal ? d.dx : d.dy;
+
+    /* Any wheel gesture is archipelago activity. */
+    showArch();
+    bumpArchActivity();
+
+    /* A running page animation owns the whole surface: content cannot scroll. */
+    if (PAGER_STATE.snapping) {
+      e.preventDefault();
+      return;
+    }
+
+    if (forcePage) {
+      e.preventDefault();
+      stopDemo();
+      accumulatePageWheel(delta);
+      return;
+    }
+
+    var area = pagerScrollArea(e.target);
+    var dir = d.dy > 0 ? 1 : -1;
+    var now = performance.now();
+    PAGER_STATE.scrollLastAt = now;
+
+    /* Single owner: content scrolls while it can; the pager never competes. */
+    if (area && canScrollBy(area, dir)) {
+      resetScrollChain();
+      PAGER_STATE.scrollOwnerUntil = now + PAGER.scrollIdleLock;
+      return;
+    }
+
+    /* Boundary (or a page without a scroll owner): chain into paging. */
+    e.preventDefault();
+    stopDemo();
+    if (!area) {
+      /* No scroll owner: the standard 140px wheel window applies. */
+      accumulatePageWheel(d.dy);
+      return;
+    }
+
+    if (PAGER_STATE.scrollDir && dir !== PAGER_STATE.scrollDir) resetScrollChain();
+    PAGER_STATE.scrollDir = dir;
+    PAGER_STATE.scrollAccum += d.dy;
+    PAGER_STATE.scrollOwnerUntil = 0;
+    setEdgeGlow(dir);
+    if (Math.abs(PAGER_STATE.scrollAccum) >= PAGER.scrollOverscroll) armScrollDwell(dir);
+  }
+
+  /* Wheel over the detached strip pages only — it never scrolls panel content. */
+  function onArchWheel(e) {
+    if (!S.expanded) return;
+    e.preventDefault();
+    showArch();
+    bumpArchActivity();
+    if (PAGER_STATE.dragging || PAGER_STATE.snapping) return;
+    var d = pagerWheelDelta(e);
+    var delta = Math.abs(d.dx) >= Math.abs(d.dy) ? d.dx : d.dy;
+    if (!delta) return;
+    stopDemo();
+    accumulatePageWheel(delta);
   }
 
   function drainPagerWheelQueue() {
@@ -3133,40 +3617,58 @@
     if (!PAGER_STATE.wheelTimer) drainPagerWheelQueue();
   }
 
-  function onPagerWheel(e) {
-    if (!S.expanded || PAGER_STATE.dragging) return;
-    if (isWheelOverControl(e.target)) return;
-    var delta = pagerWheelDelta(e);
-    if (!delta) return;
-    e.preventDefault();
-    stopDemo();
-    var now = performance.now();
-    if (now - PAGER_STATE.wheelLast > 240) PAGER_STATE.wheelAccum = 0;
-    PAGER_STATE.wheelLast = now;
-    PAGER_STATE.wheelAccum += delta;
-    if (Math.abs(PAGER_STATE.wheelAccum) >= PAGER.wheelThreshold) {
-      var dir = PAGER_STATE.wheelAccum > 0 ? 1 : -1;
-      /* One physical event can only ever commit one page. */
-      PAGER_STATE.wheelAccum = 0;
-      queuePagerWheelStep(dir);
-    }
-  }
-
   function bindPager() {
     PAGER_VIEWPORT.addEventListener('pointerdown', function (e) {
       if (!S.expanded) return;
       if (e.button != null && e.button !== 0) return;
       if (isPagerControl(e.target)) return;
-      startPagerDrag(e);
+      startPagerDrag(e, { step: PAGE_STEP, captureEl: PAGER_VIEWPORT });
     });
-    PAGER_VIEWPORT.addEventListener('pointermove', function (e) {
+    PAGER_VIEWPORT.addEventListener('dragstart', function (e) { if (PAGER_STATE.dragging) e.preventDefault(); });
+    PAGER_EL.addEventListener('wheel', onPagerWheel, { passive: false });
+    PAGER_ARCH.addEventListener('wheel', onArchWheel, { passive: false });
+
+    /* Archipelago: hot-zone reveal, click-to-jump, drag-to-scrub. Listen on the
+       whole shell so the bottom 12px padding counts as the hot zone. */
+    ISLAND.addEventListener('pointermove', onPagerPointerActivity, { passive: true });
+    ISLAND.addEventListener('pointerleave', function () {
+      clearArchHotZone();
+      bumpArchHide();
+    });
+
+    /* Hovering the detached strip is activity too; gaps stay click-through. */
+    PAGER_ARCH.addEventListener('pointerenter', function () {
+      clearArchHotZone();
+      bumpArchActivity();
+    });
+    PAGER_ARCH.addEventListener('pointermove', function () { bumpArchActivity(); }, { passive: true });
+    PAGER_ARCH.addEventListener('pointerleave', function () { bumpArchHide(); });
+
+    PAGER_ARCH_TRACK.addEventListener('pointerdown', function (e) {
+      if (!S.expanded) return;
+      if (e.button != null && e.button !== 0) return;
+      var island = e.target.closest && e.target.closest('.arch-island');
+      if (!island) return;
+      ARCH_STATE.pendingPage = island.dataset.page || null;
+      startPagerDrag(e, { step: ARCH.dragStep, captureEl: PAGER_ARCH_VIEWPORT, arch: true });
+    });
+
+    /* Window-level move/up keeps a drag alive even if pointer capture is lost. */
+    window.addEventListener('pointermove', function (e) {
       if (!PAGER_STATE.dragging || e.pointerId !== PAGER_STATE.pointerId) return;
       movePagerDrag(e);
     }, { passive: true });
-    PAGER_VIEWPORT.addEventListener('pointerup', endPagerDrag);
-    PAGER_VIEWPORT.addEventListener('pointercancel', endPagerDrag);
-    PAGER_VIEWPORT.addEventListener('dragstart', function (e) { if (PAGER_STATE.dragging) e.preventDefault(); });
-    PAGER_EL.addEventListener('wheel', onPagerWheel, { passive: false });
+    window.addEventListener('pointerup', endPagerDrag);
+    window.addEventListener('pointercancel', endPagerDrag);
+
+    PAGER_ARCH_TRACK.addEventListener('click', function (e) {
+      if (performance.now() < ARCH_STATE.suppressClickUntil) return;
+      var island = e.target.closest && e.target.closest('.arch-island');
+      if (!island || !island.dataset.page) return;
+      setTab(island.dataset.page);
+      showArch();
+      bumpArchActivity();
+    });
 
     /* A drag that moves more than 6px must not fire a page-internal click. */
     expandedLayer.addEventListener('click', function (e) {
@@ -3186,6 +3688,12 @@
           snapping: PAGER_STATE.snapping,
           dragging: PAGER_STATE.dragging,
           tab: S.tab,
+          edgeDir: PAGER_STATE.edgeDir,
+          scrollAccum: +PAGER_STATE.scrollAccum.toFixed(1),
+          scrollDir: PAGER_STATE.scrollDir,
+          wheelQueue: PAGER_STATE.wheelQueue.slice(),
+          wheelTimer: !!PAGER_STATE.wheelTimer,
+          wheelLockIn: Math.round(PAGER_STATE.wheelLockUntil - performance.now()),
           lastGesture: PAGER_STATE.lastGesture ? Object.assign({}, PAGER_STATE.lastGesture) : null
         };
       }
@@ -3194,6 +3702,34 @@
       index: { get: function () { return PAGER_STATE.index; } },
       offset: { get: function () { return +PAGER_STATE.offset.toFixed(4); } }
     });
+
+    window.__FB_ARCH__ = {
+      constants: Object.freeze(Object.assign({}, ARCH)),
+      getState: function () {
+        var panel = ISLAND ? ISLAND.getBoundingClientRect() : null;
+        var strip = PAGER_ARCH ? PAGER_ARCH.getBoundingClientRect() : null;
+        var active = ARCH_STATE.items[ARCH_STATE.active] || null;
+        var pill = active && active.pill ? active.pill.getBoundingClientRect() : null;
+        return {
+          visible: ARCH_STATE.visible,
+          forced: ARCH_STATE.forced,
+          active: ARCH_STATE.active,
+          reveal: +archReveal.x.toFixed(4),
+          follow: +ARCH_STATE.follow.toFixed(3),
+          dragging: ARCH_STATE.dragging,
+          hotArmed: ARCH_STATE.hotArmed,
+          showClass: !!(PAGER_ARCH && PAGER_ARCH.classList.contains('show')),
+          onClass: !!(PAGER_ARCH && PAGER_ARCH.classList.contains('on')),
+          shift: PAGER_ARCH_TRACK ? PAGER_ARCH_TRACK.style.transform : '',
+          strip: strip ? { x: +strip.left.toFixed(1), y: +strip.top.toFixed(1), w: +strip.width.toFixed(1), h: +strip.height.toFixed(1) } : null,
+          gap: panel && strip ? +(strip.top - panel.bottom).toFixed(1) : null,
+          activePill: pill ? { w: +pill.width.toFixed(1), h: +pill.height.toFixed(1) } : null,
+          itemShifts: ARCH_STATE.items.map(function (it) { return +it.shift.x.toFixed(2); })
+        };
+      },
+      show: function (opts) { showArch(opts); },
+      hide: hideArchNow
+    };
   }
 
   /* ==========================================================================
@@ -3287,12 +3823,6 @@
       stopDemo();
       if (performance.now() < suppressClickUntil) return;
       if (performance.now() < PAGER_STATE.suppressClickUntil) return;
-      var pageDot = e.target.closest('.pager-dot');
-      if (pageDot) {
-        e.stopPropagation();
-        setTab(pageDot.dataset.page);
-        return;
-      }
       var actEl = e.target.closest('[data-act]');
       if (actEl) {
         if (actEl.matches('input, .js-seek')) return;
@@ -3623,7 +4153,7 @@
   function bindGlobal() {
     document.addEventListener('pointerdown', function (e) {
       if (S.settingsOpen) return;
-      if (e.target.closest('#island') || e.target.closest('#console') || e.target.closest('#consoleHandle') ||
+      if (e.target.closest('#island') || e.target.closest('#arch') || e.target.closest('#console') || e.target.closest('#consoleHandle') ||
           e.target.closest('#fluidDock') || e.target.closest('.modal-layer') || e.target.closest('.annotations')) return;
       if (S.autoDemo) stopDemo(true);
       if (S.expanded) {
@@ -3781,7 +4311,8 @@
       state: q.get('state') || 'idle',
       tab: q.get('tab') || '',
       hud: q.get('hud') || '',
-      slide: slide
+      slide: slide,
+      arch: q.get('arch') === '1'
     };
   }
 
@@ -3797,7 +4328,9 @@
     PAGER_COUNT = $('#pagerCount');
     PAGER_ACTION = $('#pagerAction');
     PAGER_CLOSE = $('#pagerClose');
-    PAGER_DOTS = $('#pagerDots');
+    PAGER_ARCH = $('#arch');
+    PAGER_ARCH_VIEWPORT = $('#archViewport');
+    PAGER_ARCH_TRACK = $('#archTrack');
     PAGER_LIVE = $('#pagerLive');
     ghosts = [$('#ghostA'), $('#ghostB')];
     stackBadge = $('#stackBadge');
@@ -3839,6 +4372,12 @@
     updateConsoleActive();
 
     applyURLState(params.state, { instant: true, tab: params.tab, hud: params.hud, slide: params.slide });
+
+    /* &arch=1 pins the archipelago open for screenshots / spec review. */
+    if (params.arch) {
+      ARCH_STATE.forced = true;
+      if (S.expanded) showArch({ instant: true });
+    }
 
     // Any initial state is applied without a morph, then the boot shade clears.
     if (!S.expanded && S.mode !== 'dock') {

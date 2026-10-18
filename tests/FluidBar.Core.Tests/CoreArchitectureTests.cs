@@ -96,7 +96,18 @@ public class CoreArchitectureTests
         Assert.Equal(440, Layout.LayoutTokens.ExpandedWidth, 1e-9);
         Assert.Equal(284, Layout.LayoutTokens.ExpandedHeight, 1e-9);
         Assert.Equal(488, Layout.LayoutTokens.WindowWidth, 1e-9);
+        // WindowHeight is the legacy shell-envelope height; the host surfaces are the contract now.
         Assert.Equal(332, Layout.LayoutTokens.WindowHeight, 1e-9);
+        Assert.Equal(488, Layout.LayoutTokens.HostSurfaceWidth, 1e-9);
+        Assert.Equal(384, Layout.LayoutTokens.HostSurfaceFloatHeight, 1e-9);
+        Assert.Equal(444, Layout.LayoutTokens.HostSurfaceDockHeight, 1e-9);
+        Assert.Equal(24, Layout.LayoutTokens.HostTopPadding, 1e-9);
+        Assert.Equal(36, Layout.LayoutTokens.HostBottomPadding, 1e-9);
+        Assert.Equal(76, Layout.LayoutTokens.HostFloatBottomAllowance, 1e-9);
+        Assert.Equal(136, Layout.LayoutTokens.HostDockBottomAllowance, 1e-9);
+        Assert.Equal(10, Layout.LayoutTokens.ArchipelagoGap, 1e-9);
+        Assert.Equal(30, Layout.LayoutTokens.ArchipelagoStripHeight, 1e-9);
+        Assert.Equal(352, Layout.LayoutTokens.ArchipelagoTrackWidth, 1e-9);
         Assert.Equal(208, Layout.LayoutTokens.CompactSize(Activities.ActivityKind.Volume).Width, 1e-9);
         Assert.Equal(40, Layout.LayoutTokens.CompactSize(Activities.ActivityKind.Volume).Height, 1e-9);
         Assert.Equal(208, Layout.LayoutTokens.CompactSize(Activities.ActivityKind.BatteryLow).Width, 1e-9);

@@ -1935,10 +1935,10 @@ body[data-mode="flush"] .stack-badge {
    ========================================================================== */
 .expanded-layer {
   position: absolute;
-  top: 20px;
+  top: 16px;
   left: 20px;
   width: 400px;
-  height: 244px;
+  height: 252px;
   opacity: var(--content-alpha, 0);
   pointer-events: none;
 }
@@ -1955,7 +1955,7 @@ body[data-mode="flush"] .stack-badge {
 .pager {
   position: relative;
   width: 400px;
-  height: 244px;
+  height: 252px;
   overflow: hidden;
   border-radius: inherit;
   isolation: isolate;
@@ -1975,24 +1975,49 @@ body[data-mode="flush"] .stack-badge {
 
 .pager-track {
   display: flex;
-  width: 2400px;
-  height: 244px;
-  transform: translate3d(0, 0, 0);
+  width: 2304px;
+  height: 252px;
+  transform: translate3d(8px, 0, 0);
   will-change: transform;
   backface-visibility: hidden;
 }
 
 .pager-page {
   position: relative;
-  flex: 0 0 400px;
-  width: 400px;
-  height: 244px;
-  padding: 26px 14px 18px;
+  flex: 0 0 384px;
+  width: 384px;
+  height: 252px;
+  padding: 26px 12px 18px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.05) 58%, rgba(255, 255, 255, 0.035) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
   user-select: none;
   -webkit-user-select: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+body[data-theme="light"] .pager-page {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.12) 60%, rgba(255, 255, 255, 0) 100%);
+  box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.055);
+}
+
+body[data-material="acrylic"] .pager-page {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.008) 60%, rgba(255, 255, 255, 0) 100%);
+}
+
+/* The 8px slivers of neighbouring cards read as rounded edges, not dead gutter. */
+.pager-page[aria-hidden="true"] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.095) 0%, rgba(255, 255, 255, 0.065) 100%);
+}
+
+body[data-theme="light"] .pager-page[aria-hidden="true"] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.34) 100%);
 }
 
 .pager-page > .pane {
@@ -2071,6 +2096,12 @@ body[data-mode="flush"] .stack-badge {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
 }
 
+/* Rest state is deliberately bare: title left, collapse chevron right only. */
+.pager-count,
+.pager-action {
+  display: none !important;
+}
+
 .pager-action {
   flex: none;
   padding: 2px 5px;
@@ -2110,54 +2141,468 @@ body[data-mode="flush"] .stack-badge {
   height: 15px;
 }
 
-.pager-dots {
+/* --- Page Archipelago: transient mini-island strip, floating over the bottom
+   of the expanded panel. 34px tall, 352px wide (six 48×26 slots + 8px gaps),
+   horizontally centred; the active pill springs to 72×30 and shows its name.
+   The scrim is a pseudo-element so the strip can sit above page content
+   without covering the rest of the panel. */
+.arch {
   position: absolute;
   left: 50%;
   bottom: 4px;
   z-index: 4;
-  height: 18px;
+  width: 352px;
+  height: 34px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(-50%, 8px, 0) scale(0.96);
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+}
+
+.arch::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  right: -24px;
+  top: -16px;
+  bottom: -8px;
+  z-index: 0;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(8, 8, 10, 0) 0%, rgba(8, 8, 10, 0.55) 16%, rgba(8, 8, 10, 0.93) 44%, rgba(8, 8, 10, 0.97) 100%),
+    radial-gradient(72% 130% at 50% 82%, rgba(8, 8, 10, 0.5) 0%, rgba(8, 8, 10, 0) 74%);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  pointer-events: none;
+}
+
+body[data-theme="light"] .arch::before {
+  background:
+    linear-gradient(180deg, rgba(244, 247, 250, 0) 0%, rgba(244, 247, 250, 0.62) 16%, rgba(244, 247, 250, 0.95) 44%, rgba(244, 247, 250, 0.98) 100%),
+    radial-gradient(72% 130% at 50% 82%, rgba(244, 247, 250, 0.5) 0%, rgba(244, 247, 250, 0) 74%);
+}
+
+.arch.on {
+  visibility: visible;
+}
+
+/* The strip overlays the panel bottom in every mode, including dock. */
+body[data-mode="dock"] .arch {
+  bottom: 4px;
+  transform-origin: 50% 100%;
+}
+
+.arch-viewport {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.arch-track {
+  position: absolute;
+  inset: 0;
+  width: 352px;
+  height: 34px;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+/* 48×26 slot. The active pill is the same element scaled by a spring; the
+   72×30 hit target is supplied by the ::after only while active. */
+.arch-island {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 26px;
+  margin: -13px 0 0 -24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  color: var(--fg-2);
+  cursor: pointer;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Six fixed 56px-pitch slots are applied by app.js as translate3d(baseX + shift),
+   so no left offsets live here: layout never changes per frame. */
+.arch.show .arch-island {
+  pointer-events: auto;
+}
+
+.arch-island::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72px;
+  height: 30px;
+  margin: -15px 0 0 -36px;
+  border-radius: 15px;
+  pointer-events: none;
+}
+
+.arch-island.active::after {
+  pointer-events: auto;
+}
+
+.arch-island:focus-visible {
+  outline: none;
+}
+
+.arch-island:focus-visible .arch-pill {
+  outline: 1px solid rgba(76, 201, 240, 0.8);
+  outline-offset: 2px;
+}
+
+/* Dark glass + hairline. transform-origin is the pill centre, so scaling to
+   1.5× / 1.1538× grows it symmetrically from 48×26 to 72×30. */
+.arch-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background: linear-gradient(180deg, rgba(32, 32, 37, 0.94) 0%, rgba(13, 13, 17, 0.94) 100%);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  transform-origin: 50% 50%;
+  transform: scale(1, 1);
+  will-change: transform;
+}
+
+.arch-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(76, 201, 240, 0.12) 0%, rgba(76, 201, 240, 0.035) 100%);
+  opacity: var(--m, 0);
+}
+
+.arch-pill::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow:
+    0 0 0 1px rgba(76, 201, 240, 0.42),
+    0 0 12px rgba(76, 201, 240, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  opacity: var(--m, 0);
+}
+
+.arch-island:hover .arch-pill {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.arch-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+}
+
+.arch-face-preview {
+  width: 48px;
+  height: 26px;
+  margin: -13px 0 0 -24px;
+  will-change: opacity;
+}
+
+.arch-face-name {
+  width: 72px;
+  height: 30px;
+  margin: -15px 0 0 -36px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: block;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 30px;
+  letter-spacing: -0.015em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transform: translate3d(0, 2px, 0);
+  will-change: opacity, transform;
+}
+
+/* Live micro-previews — static except the media wave and agent pulse, which
+   animate transform/opacity only (compositor-friendly). */
+.arch-pv {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 0 7px;
-  border-radius: 999px;
-  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
 }
 
-.pager-dot {
+.pv-clock {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-sizing: border-box;
+}
+
+.pv-clock i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 1px;
+  transform-origin: 50% 100%;
+}
+
+.pv-clock .pv-hour {
+  width: 1.5px;
+  height: 4px;
+  margin-left: -0.75px;
+  margin-top: -4px;
+  transform: rotate(42deg);
+}
+
+.pv-clock .pv-min {
+  width: 1px;
+  height: 5.5px;
+  margin-left: -0.5px;
+  margin-top: -5.5px;
+  transform: rotate(150deg);
+}
+
+.pv-clock .pv-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.pv-media {
+  gap: 4px;
+}
+
+.pv-art {
   width: 16px;
-  height: 20px;
+  height: 16px;
   flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  cursor: pointer;
+  border-radius: 4px;
+  background:
+    radial-gradient(70% 70% at 30% 25%, rgba(240, 106, 176, 0.95) 0%, rgba(240, 106, 176, 0) 70%),
+    radial-gradient(80% 80% at 80% 80%, rgba(76, 201, 240, 0.9) 0%, rgba(76, 201, 240, 0) 72%),
+    linear-gradient(140deg, #43304f 0%, #1d2b3a 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
-.pager-dot::before {
-  content: "";
+.pv-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 12px;
+}
+
+.pv-bars i {
+  display: block;
+  width: 1.5px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.85;
+  transform-origin: 50% 100%;
+  animation: archWave 1.05s ease-in-out infinite alternate;
+}
+
+.pv-bars i:nth-child(1) { height: 5px; animation-delay: -0.2s; }
+.pv-bars i:nth-child(2) { height: 10px; animation-delay: -0.65s; }
+.pv-bars i:nth-child(3) { height: 7px; animation-delay: -0.4s; }
+
+@keyframes archWave {
+  0% { transform: scaleY(0.55); opacity: 0.55; }
+  100% { transform: scaleY(1.12); opacity: 0.95; }
+}
+
+.pv-notif {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding-left: 11px;
+}
+
+.pv-unread {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  box-shadow: 0 0 5px rgba(255, 69, 58, 0.6);
+}
+
+.pv-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+}
+
+.pv-lines i {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.pv-lines i:nth-child(2) {
+  width: 68%;
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.pv-clip {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3.5px;
+  padding-left: 10px;
+}
+
+.pv-clip i {
+  display: block;
+  height: 2.5px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pv-clip i:nth-child(1) { width: 20px; }
+.pv-clip i:nth-child(2) { width: 13px; background: rgba(255, 255, 255, 0.28); }
+
+.pv-agent .pv-pulse {
+  position: relative;
+  display: block;
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
-  transition: width 220ms var(--ease-move), background 180ms var(--ease-in), box-shadow 180ms;
-}
-
-.pager-dot:hover::before {
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.pager-dot.active::before {
-  width: 20px;
   background: var(--accent);
-  box-shadow: 0 0 10px rgba(76, 201, 240, 0.35);
+  box-shadow: 0 0 6px rgba(76, 201, 240, 0.55);
 }
 
-.pager-dot:focus-visible {
-  outline: 1px solid rgba(76, 201, 240, 0.72);
-  outline-offset: -3px;
+.pv-agent .pv-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 1px solid rgba(76, 201, 240, 0.45);
+  animation: archPulse 1.8s ease-out infinite;
+}
+
+@keyframes archPulse {
+  0% { transform: scale(0.55); opacity: 0.9; }
+  70% { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+.pv-cal {
+  display: grid;
+  grid-template-columns: repeat(3, 3px);
+  grid-template-rows: 2px repeat(2, 3px);
+  gap: 1.5px;
+  align-content: center;
+  justify-content: center;
+}
+
+.pv-cal i {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.pv-cal i:nth-child(1) {
+  grid-column: 1 / -1;
+  width: auto;
+  height: 2px;
+  background: rgba(76, 201, 240, 0.6);
+}
+
+.pv-cal i:nth-child(4) {
+  background: var(--accent);
+}
+
+/* Previews are static while the strip is parked: pause the two live ones. */
+.arch:not(.show) .pv-bars i,
+.arch:not(.show) .pv-agent .pv-pulse::after {
+  animation-play-state: paused;
+}
+
+body[data-motion="reduced"] .pv-bars i,
+body[data-motion="reduced"] .pv-agent .pv-pulse::after {
+  animation-duration: 3.4s;
+}
+
+/* --- Boundary edge glow (scroll chaining cue) ---------------------------- */
+.pager-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 7;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms var(--ease-in);
+}
+
+.pager-edge-top {
+  top: 0;
+  background:
+    linear-gradient(180deg, rgba(76, 201, 240, 0.22) 0%, rgba(76, 201, 240, 0) 100%);
+}
+
+.pager-edge-top::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(76, 201, 240, 0), rgba(76, 201, 240, 0.75), rgba(76, 201, 240, 0));
+}
+
+.pager-edge-bottom {
+  bottom: 0;
+  background:
+    linear-gradient(0deg, rgba(76, 201, 240, 0.24) 0%, rgba(76, 201, 240, 0) 100%);
+}
+
+.pager-edge-bottom::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(76, 201, 240, 0), rgba(76, 201, 240, 0.8), rgba(76, 201, 240, 0));
+}
+
+.pager.edge-top .pager-edge-top,
+.pager.edge-bottom .pager-edge-bottom {
+  opacity: 1;
 }
 
 .sr-only {
@@ -3122,13 +3567,14 @@ input[type="range"].fb-range:active::-webkit-slider-thumb {
 .clip-list {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 0;
+  justify-content: flex-start;
+  gap: 4px;
+  padding-bottom: 6px;
 }
 
 .clip-row {
   position: relative;
-  height: 40px;
+  height: 42px;
   flex: none;
   display: flex;
   align-items: center;

@@ -253,7 +253,7 @@ public sealed class TokenAndGeometryTests
     public void UiMetrics_MatchTheSpecAndCoreTokens()
     {
         Assert.Equal(LayoutTokens.WindowWidth, UiMetrics.WindowWidth);
-        Assert.Equal(LayoutTokens.WindowHeight, UiMetrics.WindowHeight);
+        Assert.Equal(LayoutTokens.HostSurfaceFloatHeight, UiMetrics.WindowHeight);
         Assert.Equal(24, UiMetrics.WindowPadding);
         Assert.Equal(48, UiMetrics.RailWidth);
         Assert.Equal(34, UiMetrics.RailItemSize);

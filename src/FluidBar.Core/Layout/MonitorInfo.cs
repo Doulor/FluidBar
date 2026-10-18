@@ -90,13 +90,58 @@ public static class WindowPlacementConverter
     }
 
     /// <summary>
-    /// Places the fixed-size per-monitor host window so that the shell lands at its computed
-    /// work-area position. The host is always <c>488x332 DIP</c> (spec 5.6); the shell sits at
-    /// <see cref="WindowPlacement.ShellLocalOffset"/> inside it.
+    /// Places the fixed-size per-monitor host surface for a measured shell, using the mode's
+    /// <see cref="Layout.HostSurface"/> (float/flush 488x384, dock 488x444). The shell sits at
+    /// <see cref="WindowPlacement.ShellLocalOffset"/> inside the host; bottom/dock anchors are
+    /// host-clamped so the detached archipelago strip stays inside the work area.
     /// <para>
     /// The padding is applied to <b>both</b> axes exactly once: the v1 bug (F-04) subtracted the
     /// bleed from X only, shifting every top-anchored pill +14 DIP down and clipping bottom anchors.
     /// </para>
+    /// </summary>
+    /// <param name="shell">Shell rectangle in work-area-relative DIP.</param>
+    /// <param name="monitor">Target monitor.</param>
+    /// <param name="hostSurface">Fixed host surface for the current mode.</param>
+    /// <param name="form">Visual form (selects the dock compact/expanded local offset).</param>
+    /// <param name="anchor">Anchor within the work area.</param>
+    /// <param name="offsetY">Resolved vertical offset; NaN selects the mode default.</param>
+    public static WindowPlacement PlaceWindow(
+        in VisualRect shell,
+        MonitorInfo monitor,
+        HostSurface hostSurface,
+        ShellForm form,
+        IslandAnchor anchor,
+        double offsetY = double.NaN)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(hostSurface);
+        var placed = hostSurface.Place(shell, monitor.WorkAreaDip, form, anchor, offsetY);
+        return CreatePlacement(placed, monitor, hostSurface);
+    }
+
+    /// <summary>
+    /// Places the host surface for the hidden-state hover strip. The strip is pinned to the host
+    /// edge (top or bottom) rather than inset by the 24 DIP shadow bleed.
+    /// </summary>
+    /// <param name="hoverStrip">Hover strip in work-area-relative DIP.</param>
+    /// <param name="monitor">Target monitor.</param>
+    /// <param name="hostSurface">Fixed host surface for the current mode.</param>
+    /// <param name="anchor">Anchor within the work area.</param>
+    public static WindowPlacement PlaceHoverStrip(
+        in VisualRect hoverStrip,
+        MonitorInfo monitor,
+        HostSurface hostSurface,
+        IslandAnchor anchor)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        ArgumentNullException.ThrowIfNull(hostSurface);
+        var placed = hostSurface.PlaceHoverStrip(hoverStrip, monitor.WorkAreaDip, anchor);
+        return CreatePlacement(placed, monitor, hostSurface);
+    }
+
+    /// <summary>
+    /// Legacy placement overload: uses the float/flush host surface and an explicit bleed on both
+    /// axes. Prefer the <see cref="HostSurface"/> overload for mode-aware placement.
     /// </summary>
     /// <param name="shell">Shell rectangle in work-area-relative DIP.</param>
     /// <param name="monitor">Target monitor.</param>
@@ -105,27 +150,45 @@ public static class WindowPlacementConverter
     {
         ArgumentNullException.ThrowIfNull(monitor);
         ArgumentOutOfRangeException.ThrowIfNegative(padding);
-        var scale = monitor.Scale;
-        var windowOriginX = monitor.WorkArea.X + ((shell.X - padding) * scale);
-        var windowOriginY = monitor.WorkArea.Y + ((shell.Y - padding) * scale);
-        var windowPixel = new PixelRect(
-            Round(windowOriginX),
-            Round(windowOriginY),
-            Ceil(LayoutTokens.WindowWidth * scale),
-            Ceil(LayoutTokens.WindowHeight * scale));
+        var hostSurface = HostSurface.Float;
         var windowVisual = new VisualRect(
             shell.X - padding,
             shell.Y - padding,
-            LayoutTokens.WindowWidth,
-            LayoutTokens.WindowHeight);
-        return new WindowPlacement(
+            hostSurface.Width,
+            hostSurface.Height);
+        var placed = new HostPlacement(
             Shell: shell,
             WindowVisual: windowVisual,
-            WindowPixel: windowPixel,
-            Scale: scale,
-            Padding: padding,
             ShellLocalOffset: new VisualPoint(padding, padding),
-            WindowSizeDip: new VisualSize(LayoutTokens.WindowWidth, LayoutTokens.WindowHeight));
+            ArchipelagoStrip: hostSurface.ArchipelagoStripLocal.Offset(windowVisual.X, windowVisual.Y),
+            DockStrip: VisualRect.Empty,
+            BottomBand: hostSurface.BottomBandLocal.Offset(windowVisual.X, windowVisual.Y),
+            IsClamped: false);
+        return CreatePlacement(placed, monitor, hostSurface, padding);
+    }
+
+    private static WindowPlacement CreatePlacement(
+        in HostPlacement placed,
+        MonitorInfo monitor,
+        HostSurface hostSurface,
+        double? padding = null)
+    {
+        var windowPixel = ToPhysical(placed.WindowVisual, monitor);
+        return new WindowPlacement(
+            Shell: placed.Shell,
+            WindowVisual: placed.WindowVisual,
+            WindowPixel: windowPixel,
+            Scale: monitor.Scale,
+            Padding: padding ?? hostSurface.SidePadding,
+            ShellLocalOffset: placed.ShellLocalOffset,
+            WindowSizeDip: hostSurface.Size)
+        {
+            HostSurface = hostSurface,
+            ArchipelagoStrip = placed.ArchipelagoStrip,
+            DockStrip = placed.DockStrip,
+            BottomBand = placed.BottomBand,
+            IsClamped = placed.IsClamped,
+        };
     }
 
     /// <summary>Rounds half away from zero (DIP -&gt; px origin).</summary>
@@ -136,16 +199,16 @@ public static class WindowPlacementConverter
 }
 
 /// <summary>
-/// Result of the single visual-&gt;window conversion: where the fixed host window goes and where
-/// the shell lives inside it.
+/// Result of the single visual-&gt;window conversion: where the fixed host surface goes, where the
+/// shell lives inside it, and where the detached archipelago strip lands.
 /// </summary>
-/// <param name="Shell">Shell rectangle in work-area-relative DIP.</param>
-/// <param name="WindowVisual">Host window in work-area-relative DIP (fixed 488x332).</param>
+/// <param name="Shell">Shell rectangle in work-area-relative DIP (after host clamping).</param>
+/// <param name="WindowVisual">Host window in work-area-relative DIP (488x384 float/flush, 488x444 dock).</param>
 /// <param name="WindowPixel">Absolute physical host window rectangle.</param>
 /// <param name="Scale">Monitor DIP scale.</param>
-/// <param name="Padding">Bleed applied per side.</param>
+/// <param name="Padding">Top/side transparent bleed (24 DIP).</param>
 /// <param name="ShellLocalOffset">Shell top-left inside the host window, in DIP.</param>
-/// <param name="WindowSizeDip">Host window size in DIP (always 488x332).</param>
+/// <param name="WindowSizeDip">Host window size in DIP (per mode; see <see cref="HostSurface"/>).</param>
 public sealed record WindowPlacement(
     VisualRect Shell,
     VisualRect WindowVisual,
@@ -153,4 +216,29 @@ public sealed record WindowPlacement(
     double Scale,
     double Padding,
     VisualPoint ShellLocalOffset,
-    VisualSize WindowSizeDip);
+    VisualSize WindowSizeDip)
+{
+    /// <summary>Host surface used for this placement.</summary>
+    public HostSurface HostSurface { get; init; } = HostSurface.Float;
+
+    /// <summary>Detached archipelago track envelope in work-area DIP (empty when hidden).</summary>
+    public VisualRect ArchipelagoStrip { get; init; } = VisualRect.Empty;
+
+    /// <summary>Dock strip in work-area DIP (empty for float/flush).</summary>
+    public VisualRect DockStrip { get; init; } = VisualRect.Empty;
+
+    /// <summary>
+    /// Transparent band below the expanded shell envelope in work-area DIP (holds the strip;
+    /// hit-test-through). Constant for the mode even when a compact form is showing.
+    /// </summary>
+    public VisualRect BottomBand { get; init; } = VisualRect.Empty;
+
+    /// <summary>
+    /// Whether the shell was host-adjusted (bottom/dock anchoring) or clamped to keep the surface
+    /// inside the work area.
+    /// </summary>
+    public bool IsClamped { get; init; }
+
+    /// <summary>Host bottom allowance below the expanded shell envelope in DIP (76 float/flush, 136 dock).</summary>
+    public double BottomAllowance => HostSurface.BottomAllowance;
+}

@@ -87,5 +87,7 @@
 2. 涉及跨团队接口的偏离 → Lead 在团队任务板留言并同步相关 owner。
 3. 涉及用户可见行为的偏离 → 由 Doulor 确认后生效。
 
+| I15 | **渲染底座最终修订**：岛窗口改为 **Win32 分层窗口（UpdateLayeredWindow，32bpp 预乘 DIB）+ SkiaSharp 渲染器**；Avalonia 仅用于设置/市场普通窗口。宿主表面 float 488×384 / dock 488×444 DIP（面板外 detached mini-island 条）。Avalonia 11.3.22 与 12.1.4 在本机均透明失效（灰矩形），WPF/原生分层窗口透明正常；Region 裁形被 DWM 忽略且每帧 6–8ms，故放弃 | spike 05 + 后续探针/决策（2026-10-18） |
+
 
 

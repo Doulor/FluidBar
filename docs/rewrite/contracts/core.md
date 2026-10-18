@@ -6,7 +6,7 @@
 | Owner | core-owner (M1), integrated by Lead |
 | Status | **M1 frozen for integration** (additive changes only after sign-off) |
 | Spec | [`docs/rewrite/specs/2026-10-18-fluidbar-v2-design.md`](../specs/2026-10-18-fluidbar-v2-design.md) |
-| Tests | `tests/FluidBar.Core.Tests` — 409 xUnit tests, all green |
+| Tests | `tests/FluidBar.Core.Tests` — 472 xUnit tests, all green |
 | Constraints | UI-free, Win32-free, no ambient time/I/O, no unbounded collections, immutable snapshots |
 
 All coordinates are **DIP** unless a name ends in `Pixel`. `FluidBar.Core` references BCL only
@@ -23,7 +23,7 @@ map and the confirmed layout tokens.
 | `FluidBar.Core` | Host abstractions shared by all areas | `IDispatcher`, `InlineDispatcher` |
 | `FluidBar.Core.Events` | Producer→consumer event pipeline | `IslandEvent`, `IslandEventKind`, `IEventBus`, `EventHub`, `IEventSource`, `EventSourceHost`, `EventBusOptions`, `EventBusMetrics` |
 | `FluidBar.Core.Activities` | Domain model, priority/stack/TTL policy, state machine | `ActivityKind`, `ActivityKey`, `ActivityPayload`, `ActivityContentSignature`, `ActivityPriorityPolicy`, `ActivityRecord`, `ActivitySchedulerState`, `ActivityScheduler(Update/Tick/SetPinned/Clear)`, `ActivityStackPolicy`, `ActivitySchedulerUpdate`, `IslandState`, `IslandInput`, `IslandStateMachine.Reduce`, `IslandStateController`, `IslandTransition`, `IslandEffect`, `IslandTransitionReason`, `IslandBehaviorOptions`, `PeekPolicy`, `CollapsePolicy` |
-| `FluidBar.Core.Layout` | One coordinate contract, tokens, DPI, squircle | `VisualRect`, `PixelRect`, `VisualPoint`, `MonitorInfo`, `WindowPlacement`, `WindowPlacementConverter`, `LayoutTokens`, `IslandMode`, `IslandAnchor`, `ShellForm`, `CornerRadii`, `ShellGeometry`, `IslandLayoutRequest`, `IslandLayoutResult`, `IslandLayout.Calculate`, `StackSlotLayout` |
+| `FluidBar.Core.Layout` | One coordinate contract, tokens, DPI, host surfaces, squircle | `VisualRect`, `PixelRect`, `VisualPoint`, `MonitorInfo`, `HostSurface`, `HostPlacement`, `WindowPlacement`, `WindowPlacementConverter`, `LayoutTokens`, `IslandMode`, `IslandAnchor`, `ShellForm`, `CornerRadii`, `ShellGeometry`, `IslandLayoutRequest`, `IslandLayoutResult`, `IslandLayout.Calculate`, `StackSlotLayout`, `LayoutHitTarget`, `LayoutHitKind`, `ArchipelagoLayout`, `ArchipelagoLayoutResult`, `ArchipelagoSlot`, `ArchipelagoRevealPolicy`, `ArchipelagoRevealAction` |
 | `FluidBar.Core.Motion` | `(T, ζ)` springs, tokens, frame clock | `SpringParameters`, `Spring`, `SpringSet`, `MotionTokens`, `MotionDurations`, `MotionCurves`, `MotionProfile`, `ContentOpacityPolicy`, `SquashStretchPolicy`, `IFrameClock`, `ManualFrameClock`, `MotionLoop`, `SettleTimePredictor` |
 | `FluidBar.Core.Presentation` | Activity → UI-free view model | `ActivityPresenter`, `ActivityViewModel`, `IslandViewModel`, `HudViewModel`, `ActivityIconKind`, `AccentRule` |
 | `FluidBar.Core.Interaction` | Horizontal page pager (replaces the rejected left rail) | `PagePagerPolicy`, `PagerDragState`, `PagerSnapDecision`, `PagerSnapKind`, `PagerWheelPolicy`, `PagerWheelResult`, `PagerSnapMotion`, `PagerConstants` |
@@ -230,26 +230,37 @@ directly callable in tests.
 * `MonitorInfo.Create(id, workArea: PixelRect, dpi, bounds?, isPrimary)`; all physical fields
   are Win32 pixels; `Scale = Dpi/96`; `WorkAreaWidthDip/HeightDip` expose the DIP work area.
 * Exactly **one** DIP→pixel conversion exists: `WindowPlacementConverter`.
-  `ToPhysical(rect, monitor)` returns absolute pixels; `PlaceWindow(shell, monitor, padding=24)`
-  produces the fixed host placement.
-* Host window: **fixed 488×332 DIP** on every form (`ceil(488×scale)` × `ceil(332×scale)` px),
-  shell located at `ShellLocalOffset = (24,24)` inside it. Padding (24) is applied to **both**
+  `ToPhysical(rect, monitor)` returns absolute pixels; the mode-aware
+  `PlaceWindow(shell, monitor, hostSurface, form, anchor, offsetY)` is the only placement path.
+* **Host surface vs shell**: the layered window is created at the fixed per-mode `HostSurface`
+  size; the shell is still the uniform **440×284** expanded panel (or the compact pill) and lives
+  at `WindowPlacement.ShellLocalOffset` inside the host. The host owns the transparent shadow
+  bleed **and** the detached Page Archipelago strip below the shell, so its bottom padding is
+  asymmetric (24 DIP top/sides, 36 DIP below the strip).
+* Host surfaces: **float/flush 488×384 DIP**, **dock 488×444 DIP**. The legacy
+  `LayoutTokens.WindowHeight` (`332`) is retained only as the pre-archipelago shell-envelope
+  alias; it is **not** the window height any more. Use `HostSurface` /
+  `WindowPlacement.WindowSizeDip`.
+* `WindowPlacement.WindowPixel` is `ceil(width × scale)` × `ceil(height × scale)`; the origin is
+  the monitor work-area origin plus the DIP host origin × scale. Padding is applied on **both**
   axes exactly once — the v1 F-04 regression (X compensated, Y not) is covered by the layout
-  matrix and a dedicated bottom-anchor test.
+  matrix and dedicated bottom-anchor tests.
 
 ### 4.2 Tokens (`LayoutTokens`)
 
 | Group | Values |
 |---|---|
-| Expanded shell | **440 × 284 uniform for all pages**; **no rail** (superseded by the horizontal pager); content **400×252** at inset (20,16); window 488×332; padding 24 |
+| Expanded shell | **440 × 284 uniform for all pages**; **no rail** (superseded by the horizontal pager); content **400×252** at inset (20,16); shell padding 24 |
+| Host surface | **488×384** float/flush, **488×444** dock; top/side padding **24**, bottom padding **36**; float/flush bottom allowance **76** (gap 10 + strip 30 + padding 36); dock bottom allowance **136** (dock gap 8 + dock strip 52 + 10 + 30 + 36); `HostSurfaceWidth=488`, `HostSurfaceFloatHeight=384`, `HostSurfaceDockHeight=444` |
+| Page Archipelago | strip **352×30** at host-local (68,318) float/flush and (68,378) dock; 6 slots; mini **48×26**, active **72×30**, gap **8**, pitch **56**, radius **13**; track width **352**; hot zone **12**; reveal **300 ms**, hide **1200 ms** |
 | Compact | idle **132×36**, media **226×40**, HUD volume/brightness **208×40**, notification 248×36, clipboard 264×36, agent 236×36, timer 190×36, battery 208×36, lookup 480×44, lockkeys 180×36, device 240×44, bluetooth 280×44, focus 220×36, progress 236×36 |
-| Dock | strip 440×52, expanded gap 8 above the strip, grows upward |
+| Dock | strip 440×52, expanded gap 8 above the strip, grows upward; dock host surface adds the 52 strip + 8 gap (**+60 DIP**) |
 | Peek | +10 w / +6 h (dock: no shell growth — icon scale only) |
 | Stack ghosts | dy −6/−12, scale .96/.92, opacity .55/.35 (max 2) |
 | Radii | expanded 28 (dock 16, flush top 0 / bottom 22); compact h/2 capped 44 (dock 12); card 12, row 8, button 10, art 8/12 |
 | Insets/gaps | compact 12, content 16, group 20; gaps 4/8/10/16; hit min 32 (transport 36); focus ring 2/2; hairline 1 |
-| Offsets | float offsetY 12, flush 0, dock 4 from work-area bottom, dock expanded bottom = stripTop − 8 |
-| Shadow | float 0/8 blur 24 @35 %; dock 0/4 blur 12 @28 % (data only, drawn by App) |
+| Offsets | float offsetY 12, flush 0, dock host bottom 4 DIP above the work-area bottom; bottom/dock anchors are host-clamped (see §4.4) |
+| Shadow | float 0/8 blur 24 @35 %; dock 0/4 blur 12 @28 % (data only, drawn by the renderer) |
 | Hidden | 10 DIP hover strip (can be disabled), shell empty |
 | UI state | `FillOpacity` 0.96 (min 0.85), `BloomStrength` 0–2 |
 
@@ -258,36 +269,216 @@ directly callable in tests.
 ```csharp
 var request = IslandLayoutRequest.FromState(state, mode: IslandMode.Float,
     anchor: IslandAnchor.TopCenter, offsetX: 0, offsetY: double.NaN,
-    stacking: StackingStrategy.Stacked, hiddenHoverStrip: true)
+    stacking: StackingStrategy.Stacked, hiddenHoverStrip: true,
+    pagePosition: pager.PagePosition, archipelagoVisible: stripVisible)
     with { WidthOverride = animatedWidth, HeightOverride = animatedHeight }; // optional
 IslandLayoutResult result = IslandLayout.Calculate(request, monitor);
 ```
 
+`IslandLayoutRequest` additions for the archipelago: `PagePosition` (fractional pager position,
+0..5; default 0) and `ArchipelagoVisible` (default true). They never change the shell rect.
+
 `IslandLayoutResult`: `Form`, `Mode`, `Anchor`, `IsVisible`, `Shell`, `Content` (usable; expanded =
 **400×252 at (20,16) inset**, compact = shell), `Rail` (**obsolete/unused, always empty**),
 `Radii`, `Geometry`
-(`ShellGeometry`, superellipse), `Placement` (`WindowPlacement`), `StackSlots`
-(`StackSlotLayout[]`, index 0 = main, ghosts after), `HoverStrip` (hidden only),
-`ExpandDirection` (Down for float/flush, Up for dock), `AnchorPoint`, `HasRail` (always false),
-`GhostCount`.
+(`ShellGeometry`, superellipse), `Placement` (`WindowPlacement`), `HostSurface`,
+`Archipelago` (`ArchipelagoLayoutResult?`, expanded only), `BottomBand` (transparent host band
+below the expanded shell envelope; constant per mode even when compact), `StackSlots`
+(`StackSlotLayout[]`, index 0 = main, ghosts after), `HoverStrip`
+(hidden only), `ExpandDirection` (Down for float/flush, Up for dock), `AnchorPoint`, `HasRail`
+(always false), `GhostCount`, and `HitTest(x, y)` (see §4.6).
 
-`WindowPlacement`: `Shell`, `WindowVisual` (fixed 488×332 DIP), `WindowPixel`, `Scale`,
-`Padding`, `ShellLocalOffset`, `WindowSizeDip`.
+`WindowPlacement`: `Shell` (host-adjusted shell), `WindowVisual` (fixed per-mode host rect in
+DIP), `WindowPixel` (the only physical rect), `Scale`, `Padding` (24 top/side), `ShellLocalOffset`,
+`WindowSizeDip` (per-mode host size), `HostSurface`, `ArchipelagoStrip`, `DockStrip`,
+`BottomBand`, `IsClamped`, `BottomAllowance`.
 
 `ShellGeometry`: superellipse with `k = 2 + (1 − rr/m)·1.22` (`m = min(w,h)/2`), `Contains(x,y)`
 for `WM_NCHITTEST` and `SampleOutline(samplesPerQuadrant=15)` for drawing; one geometry instance
 is shared by drawing, clipping and hit-testing.
 
 Anchors accepted by the layout: `TopLeft/TopCenter/TopRight/BottomLeft/BottomCenter/BottomRight`.
-Float/flush place the lower anchors against the work-area bottom (flush bottom ignores the
-offset); dock always places the strip at the work-area bottom and anchors horizontally; expanded
-dock panels sit `stripTop − 8 − 284`. Offsets are clamped so the shell always stays inside the
-work area (window may overhang by the transparent 24 DIP padding, by design).
+Top anchors keep the shell at its configured offset; the host may overhang the work area by the
+transparent 24 DIP bleed. Bottom and dock anchors anchor the **host** (not the shell) to the work
+area so the detached strip stays on-screen; the shell is lifted by the mode's bottom allowance.
+Float/flush bottom anchors place the host bottom at `work.Height − offsetY` (flush: 0); dock
+places the host bottom at `work.Height − 4`. Relative to the host bottom, the dock strip sits
+76 DIP above it (80 DIP above the work-area bottom) and the expanded panel 136 DIP above it
+(140 DIP above the work-area bottom). Offsets are clamped so the shell always stays inside the
+work area.
 
 Test matrix: **3 modes × 6 anchors × 3 DPIs (96/144/192) × 2 stacking strategies ×
-{compact, expanded}** = 108 parameterized cases plus focused tests for peek, hidden strip,
-no-rail content rect (400×252 @20/16, `Rail` empty), clamping, squircle, fixed host size and the
-F-04 bottom-anchor regression.
+{compact, expanded}** = 108 parameterized cases, plus a **54-case archipelago matrix**
+(3 modes × 6 anchors × 3 DPIs) and focused tests for peek, hidden strip, no-rail content rect
+(400×252 @20/16, `Rail` empty), bottom allowance, dock clamp, anchor math, strip slots,
+follow offset, reveal/hide thresholds, hit-test exclusion and the F-04 bottom-anchor regression.
+
+### 4.4 Host surface geometry and anchors
+
+`HostSurface` is an immutable record with one instance per mode (`HostSurface.Float`,
+`.Flush`, `.Dock`, or `ForMode(mode)`). All rectangles below are host-local DIP.
+
+| Property | Float/flush | Dock |
+|---|---|---|
+| `Width` / `Height` | 488 / **384** | 488 / **444** |
+| `SidePadding` / `TopPadding` / `BottomPadding` | 24 / 24 / 36 | 24 / 24 / 36 |
+| `ShellEnvelopeLocal` | (24,24,440,284) | (24,24,440,284) |
+| `ShellBottomLocal` | 308 | 308 |
+| `DockStripLocal` | empty | (24,316,440,52) |
+| `ArchipelagoStripLocal` | (68,318,352,30) | (68,378,352,30) |
+| `BottomAllowance` | **76** | **136** |
+| `BottomBandLocal` | (0,308,488,76) | (0,308,488,136) |
+
+Shell local offset (`Place`):
+
+| Form / anchor | Local offset |
+|---|---|
+| float/flush, top anchors | (24, 24) — shell grows down |
+| float/flush, bottom anchors | (24, `H − BottomAllowance − shellHeight`) — shell grows up |
+| dock, expanded | (24, 24) — panel above the dock strip |
+| dock, compact/peek/closing | (24, 316) — the 440×52 strip is the shell |
+
+Horizontal local offset is anchor-aware: left anchors inset 24, right anchors leave 24 on the
+right, centre anchors centre the shell in the host. Shells wider than the padded envelope (the
+480 DIP lookup pill) are centred, so they never overflow the host.
+
+`Place(shell, work, form, anchor, offsetY)` returns a `HostPlacement` with the adjusted `Shell`,
+`WindowVisual`, `ShellLocalOffset`, `ArchipelagoStrip`, `DockStrip`, `BottomBand` and `IsClamped`.
+`PlaceHoverStrip(...)` handles the hidden state (the 10 DIP strip is pinned to the host edge).
+
+Measured examples (expanded, `PagePosition = 2.5`, 96 DPI, work area 1920×1040):
+
+| Case | Host (DIP) | Host pixel | Shell | Strip |
+|---|---|---|---|---|
+| float top-center | (716,−12,488×384) | (716,−12,488×384) | (740,12,440×284) | (784,306,352×30) |
+| float bottom-center | (716,644,488×384) | (716,644,488×384) | (740,668,440×284) | (784,962,352×30) |
+| flush top-center | (716,−24,488×384) | (716,−24,488×384) | (740,0,440×284) | (784,294,352×30) |
+| flush bottom-center | (716,656,488×384) | (716,656,488×384) | (740,680,440×284) | (784,974,352×30) |
+| dock (any anchor) | (716,592,488×444) | (716,592,488×444) | (740,616,440×284) | (784,970,352×30) |
+
+At 150 % (144 DPI, work area 1706.67×933.33) the same float top-center case is
+host `(609.33,−12,488×384)` → pixel `(2834,−18,732×576)`; dock is `(609.33,485.33,488×444)`
+→ pixel `(2834,728,732×666)`. At 200 % (192 DPI) they are `976×768` and `976×888` px.
+
+### 4.5 Detached Page Archipelago (`ArchipelagoLayout`)
+
+The archipelago is a filmstrip of six detached mini-islands that floats **outside** the expanded
+shell, in the host's transparent bottom band. It is not part of `Content` and never overlaps the
+panel.
+
+```csharp
+// The host uses the placement overload every time it recomputes the strip (pure geometry):
+ArchipelagoLayoutResult archipelago =
+    ArchipelagoLayout.Calculate(pagePosition, layout.Placement, isVisible: stripVisible);
+
+// Standalone (tests/tools): computes the expanded host placement first.
+var arch = ArchipelagoLayout.Calculate(2.5, HostSurface.ForMode(mode), monitor,
+    anchor: IslandAnchor.TopCenter, offsetY: double.NaN, isVisible: true);
+```
+
+`ArchipelagoLayoutResult`: `PagePosition` (clamped 0..5), `ActivePage` (rounded away from zero),
+`Strip` (352×30 work-area DIP), `Slots` (`ArchipelagoSlot[]`, `Page`/`Rect`/`IsActive`),
+`ActiveIndicator` (continuous 72×30 pill), `HotZone` (bottom 12 DIP of the shell), `FollowOffset`
+(active pill offset from its discrete slot, up to ±28 DIP), `HostSurface`, `IsVisible`, and
+`HitTest(x,y)` / `ContainsSlot(x,y)` / `SlotRect(page)`.
+
+Slot geometry: six slots fill the 352 DIP strip; exactly one is 72×30, the other five are 48×26
+and vertically centred. `Slots[0].X == Strip.X`, `Slots[5].Right == Strip.Right`. The active
+indicator follows the fractional pager position at `SlotPitch = 56` DIP per page, clamped to the
+strip; `ActiveIndicator.X = clamp(Strip.X + pagePosition × 56, Strip.X, Strip.Right − 72)`.
+`ActivePage` is `round(pagePosition)` (away from zero), so 2.5 activates page 3 and
+`FollowOffset = −28`.
+
+Reveal/hide thresholds are pure policy (`ArchipelagoRevealPolicy`), with host-owned timers:
+
+| Rule | Value |
+|---|---|
+| Hot zone | bottom **12 DIP** of the expanded shell (`ArchipelagoRevealPolicy.HotZone(shell)`) |
+| Reveal | pointer in hot zone for **300 ms** (`RevealDelayMs`) |
+| Hide | **1200 ms** after the last drag/wheel/pointer activity (`HideDelayMs`) |
+| Collapse | immediately hides; a running strip drag blocks auto-hide |
+| API | `ArchipelagoRevealPolicy.Evaluate(expanded, pointerInHotZone, hotZoneDwell, isVisible, isDragging, sinceLastActivity)` → `None / Show / Hide` |
+
+### 4.6 Hit-testing the host (transparent strip area)
+
+The host must return `HTCLIENT` only for the shell squircle and the six mini-island pills; every
+other point in the host surface — the 24 DIP shadow bleed, the gaps between pills, the strip
+background and the dock strip band — is `HTTRANSPARENT`. The single shared helper is
+`IslandLayoutResult.HitTest(x, y)` (work-area DIP), which returns a `LayoutHitTarget`:
+
+```csharp
+var hit = layout.HitTest(dipX, dipY);
+return hit.Kind switch
+{
+    LayoutHitKind.Shell => HTCLIENT,
+    LayoutHitKind.ArchipelagoSlot => HTCLIENT,   // hit.SlotIndex = 0..5
+    _ => HTTRANSPARENT,                          // includes BottomBand / strip gaps
+};
+```
+
+`LayoutHitKind` is `None / Shell / ArchipelagoSlot`; `LayoutHitTarget.IsClient` is the boolean
+shortcut. The archipelago is only hit-testable while `ArchipelagoVisible`/`IsVisible` is true;
+when hidden, even the pills return `None`. The shell geometry used for hit-testing is the same
+`ShellGeometry` instance used for drawing and clipping.
+
+### 4.7 Layered host + Skia renderer consumption recipe
+
+The Win32 layered host (`UpdateLayeredWindow`, 32bpp premultiplied DIB) and the Skia renderer are
+consumers of this contract; they must not re-derive geometry.
+
+```csharp
+// 1. One layout per anchor/mode/display/state change (never per animation frame).
+var request = IslandLayoutRequest.FromState(state, settings.IslandMode, placement.Anchor,
+    placement.OffsetX, placement.OffsetY, settings.Stacking,
+    hiddenHoverStrip: settings.HoverReveal,
+    pagePosition: pager.PagePosition,
+    archipelagoVisible: archipelagoReveal.IsVisible);
+var layout = IslandLayout.Calculate(request, monitor);
+
+// 2. Create/move the fixed host window once. WindowPixel is the only physical rect.
+var host = layout.HostSurface;                       // 488×384 or 488×444 DIP
+var px = layout.Placement.WindowPixel;               // e.g. (2834,728,732×666) @150 %
+// CreateWindowEx(..., px.Width, px.Height) / SetWindowPos(px) only here.
+
+// 3. Render into the DIB in window-local DIP (Skia canvas scaled by monitor.Scale):
+//    Translate work-area DIP -> window-local DIP:
+var origin = layout.Placement.WindowVisual;          // DIP host rect
+canvas.Translate((float)-origin.X, (float)-origin.Y);
+canvas.Scale((float)layout.Placement.Scale);         // if the DIB is physical pixels
+
+// 4. Draw the shell with the shared squircle geometry:
+var outline = layout.Geometry.SampleOutline(15);
+// Fill/stroke the superellipse at layout.Shell; clip content to layout.Content.
+// Content strip: page i at content.X + i*400 - snap.CurrentOffsetDip.
+
+// 5. Draw the detached strip from the same pure geometry (only when visible):
+if (layout.Archipelago is { IsVisible: true } arch)
+{
+    foreach (var slot in arch.Slots)
+    {
+        // slot.Rect is work-area DIP; draw 48×26 or 72×30 pill at slot.Rect.
+    }
+    // Active indicator (72×30) at arch.ActiveIndicator follows the pager continuously.
+}
+
+// 6. WM_NCHITTEST: client only for shell + pills, transparent everywhere else.
+var hit = layout.HitTest(clientDipX, clientDipY);
+return hit.IsClient ? HTCLIENT : HTTRANSPARENT;
+```
+
+Rules for the renderer:
+
+* The window is **never resized or moved per frame**; only `Shell`, `Content`, slot rects,
+  opacity/scale/translate are animated inside the fixed host. `WidthOverride`/`HeightOverride`
+  change the visual shell only (the anchored edge stays fixed, the window does not move).
+* `Placement.WindowVisual` and all layout rects are work-area DIP; the Skia canvas is translated
+  by `−WindowVisual.X/Y` and scaled by `Placement.Scale` when drawing into a physical DIB.
+* The transparent bottom band (`Placement.BottomBand`) and the strip background are
+  hit-test-through; do not paint an opaque scrim there.
+* Use `ArchipelagoLayout.Calculate(pagePosition, placement, isVisible)` for the per-frame active
+  pill position; it is pure and deterministic (no clock, no UI, no allocation-heavy work).
+* `SetWindowRgn` is unnecessary for a per-pixel-alpha layered host; rely on `UpdateLayeredWindow`
+  alpha plus the `HTTRANSPARENT` policy above. Region clipping is not a per-frame mechanism.
 
 ---
 
@@ -502,8 +693,9 @@ Plugin source identity should be stable (`plugin:<id>`), and plugin activities s
 ## 10. Known deviations / clarifications vs the written spec
 
 1. **Uniform expanded shell 440×284 for every page** (lead decision 2026-10-18); spec 3.1's
-   per-page heights (232/264) are superseded and no Core token exposes them. Window host stays
-   488×332.
+   per-page heights (232/264) are superseded and no Core token exposes them. The **host surface**
+   is now 488×384 float/flush and 488×444 dock (the shell is unchanged); `LayoutTokens.WindowHeight`
+   (332) is retained only as a legacy shell-envelope alias.
 2. **Compact HUD (volume/brightness) is 208×40** per lead confirmation; spec 3.1's 236×40 and
    the delegated "HUD 208×40 vs battery" ambiguity are resolved as: HUD 208×40, battery 208×36.
 3. **`Closing` settles to `Compact` (idle pill) for user-initiated collapse**; `Hidden` is only
@@ -529,6 +721,19 @@ Plugin source identity should be stable (`plugin:<id>`), and plugin activities s
    cooldown, scroll-chain **40 DIP / 120 ms**, edge resistance 0.35, drag threshold 24 DIP, flick
    velocity 0.6 DIP/ms. UI code must call `PagePagerPolicy` / `PagerWheelPolicy` /
    `PagerScrollChainPolicy` / `PagerSnapMotion` instead of re-deriving these rules.
+9. **Host surface growth + bottom/dock anchor semantics** (2026-10-18 quality-first migration):
+   the fixed host is 488×384 (float/flush) / 488×444 (dock) so the detached Page Archipelago strip
+   (gap 10 + strip 30) lives outside the 440×284 shell. Top anchors keep the shell at its
+   configured offset (the transparent 24 DIP bleed may overhang); bottom and dock anchors anchor
+   the **host** to the work area and lift the shell by the mode's bottom allowance (76 float/flush,
+   136 dock), so the strip never falls off-screen. With the host bottom 4 DIP above the work-area
+   bottom, the dock strip bottom lands 80 DIP above the work-area bottom and the expanded dock
+   panel bottom 140 DIP above it (was 4/64 in the pre-archipelago contract). The host bottom
+   padding is asymmetric: 24 DIP top/sides, 36 DIP below the strip.
+10. **The legacy 488×332/392 host tokens are superseded** by `HostSurface` /
+    `WindowPlacement.WindowSizeDip`; `LayoutTokens.WindowHeight` (332) and
+    `WindowPlacementConverter.PlaceWindow(shell, monitor, padding)` remain only for source
+    compatibility and must not be used for new host code.
 
 ---
 
@@ -698,10 +903,13 @@ contexts without content hit-testing; the expanded panel uses the scroll chain a
 ### 11.7 Layout consumption (no rail)
 
 `IslandLayoutResult.Content` for the expanded panel is **400 × 252 DIP** starting at
-`Shell.X + 20, Shell.Y + 16` (shell is still 440 × 284; window host 488 × 332). Render the six pages
-as one horizontal strip inside that 400-wide clip: page `i` occupies
-`content.X + (i × 400) − snap.CurrentOffsetDip`. There is no rail; `Rail` is obsolete/empty,
-`HasRail` is false, and `LayoutTokens.RailWidth`/`Rail*` item tokens are obsolete (unused).
+`Shell.X + 20, Shell.Y + 16` (shell is still 440 × 284; the host surface is 488 × 384 float/flush
+and 488 × 444 dock). Render the six pages as one horizontal strip inside that 400-wide clip:
+page `i` occupies `content.X + (i × 400) − snap.CurrentOffsetDip`. There is no rail; `Rail` is
+obsolete/empty, `HasRail` is false, and `LayoutTokens.RailWidth`/`Rail*` item tokens are obsolete
+(unused). The detached Page Archipelago is drawn from `IslandLayoutResult.Archipelago` /
+`Placement.ArchipelagoStrip` (outside the shell), with the active pill driven by
+`ArchipelagoLayout.Calculate(pager.PagePosition, layout.Placement, stripVisible)`; see §4.5–§4.7.
 
 ### 11.8 Tests
 
@@ -717,5 +925,9 @@ boundary-mismatch scroll, sub-threshold overscroll, <120 ms dwell, ≥40 DIP & �
 directions, reverse-cancel, immediate paging for non-scrollable, horizontal/Shift bypass,
 page-animation lock, first/last-page clamping, fresh-gesture requirement, custom page count,
 zero/NaN delta, Reset, deterministic repeats.
-The 108-case layout matrix additionally asserts the no-rail content rect and empty `Rail` for every
-mode × anchor × DPI × stacking combination. Full Core suite: **409 passed / 0 failed**.
+The 108-case layout matrix additionally asserts the no-rail content rect, empty `Rail`, per-mode
+host surface (488×384/444), host-local shell offset, bottom allowance, dock clamp and strip
+geometry for every mode × anchor × DPI × stacking combination. A 54-case archipelago matrix
+(3 modes × 6 anchors × 3 DPIs) asserts the strip stays inside the work area, the slot widths,
+the continuous active indicator and hit-test exclusion. Full Core suite:
+**472 passed / 0 failed** (409 before the host-surface/archipelago increment).

@@ -38,8 +38,19 @@ internal static partial class NativeMethods
     internal const uint WM_KEYUP = 0x0101;
     internal const uint WM_SYSKEYDOWN = 0x0104;
     internal const uint WM_SYSKEYUP = 0x0105;
+    internal const uint WM_SETCURSOR = 0x0020;
+    internal const uint WM_PAINT = 0x000F;
+    internal const uint WM_ERASEBKGND = 0x0014;
+    internal const uint WM_NCDESTROY = 0x0082;
+    internal const uint WM_MOUSEMOVE = 0x0200;
+    internal const uint WM_LBUTTONDOWN = 0x0201;
+    internal const uint WM_MOUSEWHEEL = 0x020A;
+    internal const uint WM_MOUSEHWHEEL = 0x020E;
+    internal const uint WM_CAPTURECHANGED = 0x0215;
+    internal const uint WM_MOUSELEAVE = 0x02A3;
 
     internal const int WS_POPUP = unchecked((int)0x80000000);
+    internal const int WS_EX_TOPMOST = 0x00000008;
     internal const int WS_EX_TOOLWINDOW = 0x00000080;
     internal const int WS_EX_TRANSPARENT = 0x00000020;
     internal const int WS_EX_LAYERED = 0x00080000;
@@ -48,6 +59,44 @@ internal static partial class NativeMethods
     internal const int GWL_EXSTYLE = -20;
     internal const int GWL_STYLE = -16;
     internal const int GWLP_WNDPROC = -4;
+    internal const int GWLP_USERDATA = -21;
+
+    internal const int SW_HIDE = 0;
+    internal const int SW_SHOWNOACTIVATE = 4;
+
+    internal const uint CS_DBLCLKS = 0x0008;
+
+    /// <summary><c>UpdateLayeredWindow</c> flag: use the per-pixel alpha in <c>BLENDFUNCTION</c>.</summary>
+    internal const uint ULW_ALPHA = 0x00000002;
+    internal const byte AC_SRC_OVER = 0x00;
+    internal const byte AC_SRC_ALPHA = 0x01;
+    internal const uint BI_RGB = 0x00000000;
+    internal const uint DIB_RGB_COLORS = 0x00000000;
+    internal const uint SRCCOPY = 0x00CC0020;
+
+    internal const uint TME_LEAVE = 0x00000002;
+    internal const int MK_LBUTTON = 0x0001;
+    internal const int MK_RBUTTON = 0x0002;
+    internal const int MK_SHIFT = 0x0004;
+    internal const int MK_CONTROL = 0x0008;
+    internal const int MK_MBUTTON = 0x0010;
+    internal const int MK_XBUTTON1 = 0x0020;
+    internal const int MK_XBUTTON2 = 0x0040;
+    internal const int VK_LBUTTON = 0x01;
+    internal const int VK_RBUTTON = 0x02;
+    internal const int VK_MBUTTON = 0x04;
+    internal const int VK_XBUTTON1 = 0x05;
+    internal const int VK_XBUTTON2 = 0x06;
+    internal const int VK_SHIFT = 0x10;
+    internal const int VK_CONTROL = 0x11;
+    internal const int VK_MENU = 0x12;
+
+    internal static readonly IntPtr IDC_ARROW = new(32512);
+    internal static readonly IntPtr IDC_IBEAM = new(32513);
+    internal static readonly IntPtr IDC_HAND = new(32649);
+    internal static readonly IntPtr IDC_SIZEALL = new(32646);
+    internal static readonly IntPtr IDC_SIZEWE = new(32644);
+    internal static readonly IntPtr IDC_SIZENS = new(32645);
 
     internal const int HTNOWHERE = 0;
     internal const int HTCLIENT = 1;
@@ -112,6 +161,12 @@ internal static partial class NativeMethods
     internal const uint GMEM_MOVEABLE = 0x0002;
 
     internal const int ERROR_CLASS_ALREADY_EXISTS = 1410;
+
+    /// <summary><c>CreateWaitableTimerEx</c> flag (Win10 1803+): sub-millisecond timer resolution.</summary>
+    internal const uint CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x00000002;
+    internal const uint TIMER_ALL_ACCESS = 0x1F0003;
+    internal const uint INFINITE = 0xFFFFFFFF;
+    internal const uint WAIT_OBJECT_0 = 0;
 
     internal const uint IMAGE_ICON = 1;
     internal const uint LR_LOADFROMFILE = 0x0010;
@@ -222,6 +277,100 @@ internal static partial class NativeMethods
     {
         public int X;
         public int Y;
+
+        public POINT(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SIZE
+    {
+        public int CX;
+        public int CY;
+
+        public SIZE(int cx, int cy)
+        {
+            CX = cx;
+            CY = cy;
+        }
+    }
+
+    /// <summary><c>BLENDFUNCTION</c> for <c>UpdateLayeredWindow(ULW_ALPHA)</c>; <c>Pack = 1</c> is required.</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    internal struct BLENDFUNCTION
+    {
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BITMAPINFOHEADER
+    {
+        public uint biSize;
+        public int biWidth;
+        public int biHeight;
+        public ushort biPlanes;
+        public ushort biBitCount;
+        public uint biCompression;
+        public uint biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public uint biClrUsed;
+        public uint biClrImportant;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct BITMAPINFO
+    {
+        public BITMAPINFOHEADER bmiHeader;
+        public uint bmiColors;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct TRACKMOUSEEVENT
+    {
+        public uint cbSize;
+        public uint dwFlags;
+        public IntPtr hwndTrack;
+        public uint dwHoverTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PAINTSTRUCT
+    {
+        public IntPtr hdc;
+        public bool fErase;
+        public RECT rcPaint;
+        public bool fRestore;
+        public bool fIncUpdate;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public byte[] rgbReserved;
+    }
+
+    /// <summary>
+    /// <c>UPDATELAYEREDWINDOWINFO</c> for <c>UpdateLayeredWindowIndirect</c>. Pointer fields point at
+    /// <see cref="POINT"/>/<see cref="SIZE"/>/<see cref="RECT"/>/<see cref="BLENDFUNCTION"/> values; the
+    /// host builds them on the stack so the per-frame path allocates nothing.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct UPDATELAYEREDWINDOWINFO
+    {
+        public uint cbSize;
+        public IntPtr hdcDst;
+        public IntPtr pptDst;
+        public IntPtr psize;
+        public IntPtr hdcSrc;
+        public IntPtr pptSrc;
+        public uint crKey;
+        public IntPtr pblend;
+        public uint dwFlags;
+        public IntPtr prcDirty;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -502,6 +651,58 @@ internal static partial class NativeMethods
         [DllImport(Lib, SetLastError = true)]
         internal static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport(Lib)]
+        internal static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport(Lib)]
+        internal static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr SetCapture(IntPtr hWnd);
+
+        [DllImport(Lib)]
+        internal static extern bool ReleaseCapture();
+
+        [DllImport(Lib)]
+        internal static extern IntPtr GetCapture();
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr LoadCursorW(IntPtr hInstance, IntPtr lpCursorName);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr SetCursor(IntPtr hCursor);
+
+        [DllImport(Lib)]
+        internal static extern bool ValidateRect(IntPtr hWnd, IntPtr lpRect);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr BeginPaint(IntPtr hWnd, out PAINTSTRUCT lpPaint);
+
+        [DllImport(Lib)]
+        internal static extern bool EndPaint(IntPtr hWnd, ref PAINTSTRUCT lpPaint);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool UpdateLayeredWindow(IntPtr hWnd, IntPtr hdcDst, ref POINT pptDst,
+            ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool UpdateLayeredWindowIndirect(IntPtr hWnd, ref UPDATELAYEREDWINDOWINFO pULWInfo);
+
+        [DllImport(Lib)]
+        internal static extern IntPtr GetDC(IntPtr hWnd);
+
+        [DllImport(Lib)]
+        internal static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
         [DllImport(Lib, EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
         private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
 
@@ -685,6 +886,32 @@ internal static partial class NativeMethods
 
         [DllImport(Lib, SetLastError = true)]
         internal static extern bool DeleteObject(IntPtr hObject);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr SelectObject(IntPtr hdc, IntPtr hObject);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFO pbmi, uint usage,
+            out IntPtr ppvBits, IntPtr hSection, uint offset);
+
+        [DllImport(Lib)]
+        internal static extern int GdiFlush();
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int width, int height,
+            IntPtr hdcSrc, int xSrc, int ySrc, uint rop);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr CreateSolidBrush(uint color);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern int FillRect(IntPtr hDC, ref RECT lprc, IntPtr hbr);
     }
 
     // ---------------------------------------------------------------------
@@ -737,6 +964,17 @@ internal static partial class NativeMethods
 
         [DllImport(Lib, SetLastError = true)]
         internal static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport(Lib, SetLastError = true, CharSet = CharSet.Unicode)]
+        internal static extern IntPtr CreateWaitableTimerExW(IntPtr lpTimerAttributes, string? lpTimerName,
+            uint dwFlags, uint dwDesiredAccess);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern bool SetWaitableTimer(IntPtr hTimer, ref long lpDueTime, int lPeriod,
+            IntPtr pfnCompletionRoutine, IntPtr lpArgToCompletionRoutine, bool fResume);
+
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
 
         [DllImport(Lib, SetLastError = true)]
         internal static extern IntPtr GlobalLock(IntPtr hMem);
@@ -816,6 +1054,10 @@ internal static partial class NativeMethods
     internal static class DwmApi
     {
         private const string Lib = "dwmapi.dll";
+
+        /// <summary>Blocks until the next composition frame is presented (the layered-window vsync clock).</summary>
+        [DllImport(Lib)]
+        internal static extern int DwmFlush();
 
         [DllImport(Lib)]
         internal static extern int DwmGetColorizationColor(out uint pcrColorization, [MarshalAs(UnmanagedType.Bool)] out bool pfOpaqueBlend);
