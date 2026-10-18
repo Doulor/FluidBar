@@ -1,0 +1,224 @@
+{
+  "generated": "2026-10-18T21:35:40.0245828+08:00",
+  "machine": "TX-LAPTOP",
+  "monitor": {
+    "workArea": "(0,0 2560x1600)",
+    "dpi": 144,
+    "scale": 1.5,
+    "floatSurfacePx": {
+      "width": 732,
+      "height": 576
+    },
+    "dockSurfacePx": {
+      "width": 732,
+      "height": 666
+    }
+  },
+  "checks": [
+    [
+      "PASS",
+      "host created at 150% DPI physical size",
+      "surface=732x576px expected=732x576"
+    ],
+    [
+      "PASS",
+      "pixel: corner is transparent",
+      "host-dip=(4,4) screen=(876,466) rgb=(225,29,72) baseline=(225,29,72) unchanged=True checker=True island=False"
+    ],
+    [
+      "PASS",
+      "pixel: panel centre is opaque",
+      "host-dip=(244,166) screen=(1236,709) rgb=(26,29,38) baseline=(14,165,233) unchanged=False checker=False island=True"
+    ],
+    [
+      "PASS",
+      "pixel: lane between pills is transparent",
+      "host-dip=(169,363) screen=(1124,1004) rgb=(14,165,233) baseline=(14,165,233) unchanged=True checker=True island=False"
+    ],
+    [
+      "PASS",
+      "pixel: detached pill is opaque",
+      "host-dip=(244,363) screen=(1236,1004) rgb=(31,19,29) baseline=(225,29,72) unchanged=False checker=False island=True"
+    ],
+    [
+      "PASS",
+      "pixel: bottom bleed is transparent",
+      "host-dip=(244,380) screen=(1236,1030) rgb=(14,165,233) baseline=(14,165,233) unchanged=True checker=True island=False"
+    ],
+    [
+      "PASS",
+      "pixel: right bleed is transparent",
+      "host-dip=(480,200) screen=(1590,760) rgb=(13,157,222) baseline=(14,165,233) unchanged=False checker=True island=False"
+    ],
+    [
+      "PASS",
+      "pixel: artwork tile is opaque and bright",
+      "screen=(1005,685) rgb=(236,72,153)"
+    ],
+    [
+      "PASS",
+      "click-through: transparent corner does not hit the host",
+      "WindowFromPoint(corner)=0x72047A (FluidBar.Spike.CheckerBackdrop) backdrop=0x72047A host=0x1CC0744"
+    ],
+    [
+      "PASS",
+      "click-through: panel receives the click",
+      "WindowFromPoint(panel)=0x1CC0744"
+    ],
+    [
+      "PASS",
+      "click-through: gap between detached pills does not hit the host",
+      "WindowFromPoint(gap)=0x72047A (FluidBar.Spike.CheckerBackdrop)"
+    ],
+    [
+      "PASS",
+      "click-through: detached pill receives the click",
+      "WindowFromPoint(pill)=0x1CC0744"
+    ],
+    [
+      "PASS",
+      "click-through: bottom bleed does not hit the host",
+      "WindowFromPoint(bleed)=0x72047A (FluidBar.Spike.CheckerBackdrop)"
+    ],
+    [
+      "PASS",
+      "WM_NCHITTEST policy",
+      "HT(corner)=-1 HT(panel)=1 (HTTRANSPARENT=-1, HTCLIENT=1)"
+    ],
+    [
+      "PASS",
+      "click does not activate the island",
+      "foreground before=0x1D1518 after=0x1D1518 host=0x1CC0744"
+    ],
+    [
+      "PASS",
+      "click leaves the foreground window unchanged",
+      "foreground before=0x1D1518 after=0x1D1518"
+    ],
+    [
+      "PASS",
+      "drag moves the host by the exact pointer delta",
+      "window moved (-120,-80) cursor moved (-120,-80) in 2 attempt(s); dragStarted=2 applied=26 cancelled=0 moves=60 presses=3 lastButtons=None"
+    ],
+    [
+      "PASS",
+      "drag reached the requested distance",
+      "cursor delta (-120,-80) vs requested (-120,-80) in 2 attempt(s)"
+    ],
+    [
+      "PASS",
+      "drag does not activate the island",
+      "foreground=0x1D1518 host=0x1CC0744"
+    ],
+    [
+      "PASS",
+      "full-frame updates all succeeded",
+      "fallbacks=0 lastError=0"
+    ],
+    [
+      "PASS",
+      "zero per-frame managed allocation (full frame)",
+      "5 B/frame"
+    ],
+    [
+      "PASS",
+      "dirty-rect updates all succeeded",
+      "fallbacks=0 lastError=0"
+    ],
+    [
+      "PASS",
+      "zero per-frame managed allocation (dirty)",
+      "1 B/frame"
+    ],
+    [
+      "PASS",
+      "60 fps pacing holds the target",
+      "effective=60.0 fps p99=18.03 ms"
+    ],
+    [
+      "PASS",
+      "120 fps attempt is recorded (target 8.33 ms)",
+      "effective=120.0 fps p99=20.06 ms"
+    ],
+    [
+      "PASS",
+      "idle performs no uploads and stays near zero CPU",
+      "0.00% of one core over 6026 ms with 0 CommitFrame calls"
+    ],
+    [
+      "PASS",
+      "dock surface is 488x444 DIP",
+      "surface=732x666px"
+    ],
+    [
+      "PASS",
+      "dock: corner still click-through",
+      "WindowFromPoint(corner)=0x72047A (FluidBar.Spike.CheckerBackdrop)"
+    ],
+    [
+      "PASS",
+      "no Win32 failures were counted",
+      "win32Failures=0"
+    ]
+  ],
+  "frameCostsUs": {
+    "full": {
+      "p50": 171.6,
+      "p95": 325.3,
+      "p99": 537.2,
+      "max": 745.7
+    },
+    "dirtyMerged": {
+      "p50": 145.3,
+      "p95": 308.6,
+      "p99": 473.7,
+      "max": 628.5
+    },
+    "dirtyMulti": {
+      "p50": 330.6,
+      "p95": 655.4,
+      "p99": 830.3,
+      "max": 1377.5
+    },
+    "dockFull": {
+      "p50": 221.6,
+      "p95": 1592.7,
+      "p99": 4747.8,
+      "max": 6202.5
+    }
+  },
+  "allocationBytesPerFrame": {
+    "full": 5.12,
+    "dirty": 0.96
+  },
+  "cpuPercentOfOneCore": {
+    "full": 101.63502166971243,
+    "dirty": 59.72661456169902,
+    "idle": 0
+  },
+  "pacing": {
+    "fps60": {
+      "effective": 59.98209134692685,
+      "p99Ms": 18.0289,
+      "late": 0
+    },
+    "fps120": {
+      "effective": 119.97222642958155,
+      "p99Ms": 20.057599999999997,
+      "late": 21
+    },
+    "composition": {
+      "effective": 159.41049997110684,
+      "p99Ms": 12.2134
+    }
+  },
+  "win32Failures": 0,
+  "failures": 0,
+  "evidence": [
+    "01-float-full.png",
+    "02-float-corner-zoom.png",
+    "03-float-detached-lane.png",
+    "04-after-drag.png",
+    "05-dock-full.png"
+  ]
+}

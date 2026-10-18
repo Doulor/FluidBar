@@ -275,6 +275,7 @@
     "Settings.Market.Channel": "通道",
     "Settings.Market.Refresh": "刷新",
     "Settings.Market.NoResults": "没有匹配的插件",
+    "Settings.Market.DemoCatalog": "正在显示演示目录：安装、更新和回滚已禁用。",
     "Settings.Market.Offline": "无法连接插件市场，请检查网络。",
     "Settings.Market.Verified": "已验证发布者",
     "Settings.Market.Downloads": "{count, plural, other {# 次安装}}",
@@ -377,6 +378,7 @@
     "Error.Generic": "出错了，详情见日志。"
 ,
     "Settings.Plugins.SettingsButton": "设置",
+    "Settings.Plugins.Commands": "命令",
     "plugin.media.name": "正在播放",
     "plugin.clipboard.name": "剪贴板",
     "plugin.notifications.name": "通知",

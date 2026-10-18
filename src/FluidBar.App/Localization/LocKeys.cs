@@ -620,6 +620,8 @@ public static partial class LocKeys
             public const string ConsentRequired = "Settings.Plugins.ConsentRequired";
             /// <summary><c>Settings.Plugins.SettingsButton</c></summary>
             public const string SettingsButton = "Settings.Plugins.SettingsButton";
+            /// <summary><c>Settings.Plugins.Commands</c></summary>
+            public const string Commands = "Settings.Plugins.Commands";
         }
         /// <summary>Keys in the 'Marketplace' area.</summary>
         public static class Marketplace
@@ -730,6 +732,8 @@ public static partial class LocKeys
             public const string Refresh = "Settings.Market.Refresh";
             /// <summary><c>Settings.Market.NoResults</c></summary>
             public const string NoResults = "Settings.Market.NoResults";
+            /// <summary><c>Settings.Market.DemoCatalog</c></summary>
+            public const string DemoCatalog = "Settings.Market.DemoCatalog";
             /// <summary><c>Settings.Market.Offline</c></summary>
             public const string Offline = "Settings.Market.Offline";
             /// <summary><c>Settings.Market.Verified</c></summary>

@@ -9,7 +9,6 @@ using FluidBar.App.Settings;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.Marketplace.Catalog;
-
 namespace FluidBar.App.Views.Settings;
 
 /// <summary>
@@ -80,16 +79,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     }
 
     private static IMarketplaceUiService CreateDefaultMarketplace(ILocalizer localizer)
-    {
-        var indexUrl = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_URL");
-        if (!string.IsNullOrWhiteSpace(indexUrl) && Uri.TryCreate(indexUrl, UriKind.Absolute, out var uri))
-        {
-            var client = new MarketplaceCatalogClient(new MarketplaceCatalogOptions { IndexUrl = uri });
-            return new MarketplaceServiceAdapter(localizer, "stable", client);
-        }
-
-        return new DesignMarketplaceUiService();
-    }
+        => new MarketplaceFallbackUiService(null, new DesignMarketplaceUiService(), localizer);
 
     /// <summary>Raised when a status line should be surfaced (tests/accessibility).</summary>
     public event Action<string>? StatusChanged;

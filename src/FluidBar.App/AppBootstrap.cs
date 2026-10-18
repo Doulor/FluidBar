@@ -5,11 +5,16 @@ using FluidBar.App.Diagnostics;
 using FluidBar.App.Hosting;
 using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Localization;
+using FluidBar.App.Plugins;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.App.Views.Settings;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Settings;
+using FluidBar.Marketplace.Signing;
+using FluidBar.Plugins.Builtin;
+using FluidBar.Platform.Windows.Notifications;
+using FluidBar.Sdk.Versioning;
 
 namespace FluidBar.App;
 
@@ -34,6 +39,9 @@ internal sealed class AppBootstrap
     private SkiaShellIntegration? _shell;
     private SkiaPlatformActions? _platformActions;
     private JsonUiSettingsStore? _settingsStore;
+    private PluginRuntime? _pluginRuntime;
+    private NotificationService? _pluginNotifications;
+    private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
 
     public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
     {
@@ -59,6 +67,7 @@ internal sealed class AppBootstrap
             _lifetime.Exit += (_, _) => DisposeServices();
             await StartIslandHostAsync().ConfigureAwait(true);
             await StartShellIntegrationAsync().ConfigureAwait(true);
+            await StartPluginRuntimeAsync().ConfigureAwait(true);
 
             if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE"), "1", StringComparison.Ordinal))
             {
@@ -286,8 +295,155 @@ internal sealed class AppBootstrap
             _shell = null;
         }
     }
-    private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
+    /// <summary>
+    /// Composes the plugin platform after the island host exists (plugins publish into its event hub).
+    /// Composition, discovery and loading run on the thread pool; a plugin failure never reaches the island.
+    /// </summary>
+    private async Task StartPluginRuntimeAsync()
+    {
+        if (_settings is null || _localizer is null)
+        {
+            return;
+        }
 
+        try
+        {
+            var services = CreateBuiltinPlatformServices();
+            var options = new PluginRuntimeOptions
+            {
+                PluginRootDirectory = PluginRuntimePaths.ResolveRoot(),
+                AppVersion = new SemanticVersion(2, 0, 0),
+                Localizer = _localizer,
+                Logger = new AppPluginHostLogger(_logger),
+                InstallLogger = new AppPluginInstallLogger(_logger),
+                Dispatcher = AvaloniaHostDispatcher.Instance,
+                IslandPublisherFactory = manifest => new AppPluginIslandPublisher(
+                    manifest.Id,
+                    _pluginEventAdapter,
+                    PublishPluginEvent),
+                NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
+                BuiltinServices = services,
+                Enablement = new SettingsPluginEnablementStore(_settings),
+                MarketplaceIndexUrl = ResolveMarketplaceIndexUrl(),
+                Trust = ResolveMarketplaceTrust(),
+                HostUiLocales = [_localizer.Culture, "en-US"],
+                BuiltinPackageDirectory = AppContext.BaseDirectory,
+            };
+
+            _pluginRuntime = await Task.Run(() => PluginRuntime.CreateAsync(options)).ConfigureAwait(true);
+            var report = _pluginRuntime.Report;
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.started",
+                $"Plugin runtime composed: {_pluginRuntime.Builtins.Count} built-in, " +
+                $"{report.CommunityResults.Count(result => result.Success)} community active, " +
+                $"{report.CommunityResults.Count(result => !result.Success)} community failed.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.runtime.failed",
+                "The plugin runtime could not be composed; the island keeps running without plugins.", ex);
+            _pluginRuntime = null;
+        }
+    }
+
+    /// <summary>Builds the first-party platform services from the existing island platform seam.</summary>
+    private BuiltinPlatformServices CreateBuiltinPlatformServices()
+    {
+        if (_platformActions is null)
+        {
+            return new BuiltinPlatformServices();
+        }
+
+        var services = new BuiltinPlatformServices
+        {
+            Media = _platformActions.MediaSource,
+            Clipboard = _platformActions.ClipboardSource,
+            ArtworkTempStore = _platformActions.ArtworkTempStore,
+        };
+
+        try
+        {
+            _pluginNotifications = new NotificationService(_platformActions.PlatformLogger, _platformActions.Counters);
+            services = new BuiltinPlatformServices
+            {
+                Media = _platformActions.MediaSource,
+                Clipboard = _platformActions.ClipboardSource,
+                ArtworkTempStore = _platformActions.ArtworkTempStore,
+                Notifications = _pluginNotifications,
+            };
+            _ = StartNotificationListenerAsync(_pluginNotifications);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.notifications.unavailable",
+                "The notification listener could not be created; the notifications built-in plugin stays disabled.", ex);
+        }
+
+        return services;
+    }
+
+    private async Task StartNotificationListenerAsync(NotificationService service)
+    {
+        try
+        {
+            await service.StartAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.notifications.start-failed",
+                "The notification listener did not start; the notifications built-in plugin receives no events.", ex);
+        }
+    }
+
+    /// <summary>Routes one adapted plugin event into the active island host's Core event hub.</summary>
+    private void PublishPluginEvent(FluidBar.Core.Events.IslandEvent islandEvent)
+    {
+        if (_skiaHost is not null)
+        {
+            _skiaHost.Publish(islandEvent);
+        }
+        else
+        {
+            _host?.Publish(islandEvent);
+        }
+    }
+
+    private static Uri? ResolveMarketplaceIndexUrl()
+    {
+        var configured = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_URL");
+        return !string.IsNullOrWhiteSpace(configured) && Uri.TryCreate(configured, UriKind.Absolute, out var uri)
+            ? uri
+            : null;
+    }
+
+    /// <summary>
+    /// Production trust keys are injected at build/release time; this dev hook reads them from the
+    /// environment. Without a key the signed index cannot be verified, so the marketplace falls back to the
+    /// clearly-labelled demo catalog instead of trusting an unsigned document.
+    /// </summary>
+    private MarketplaceTrustOptions ResolveMarketplaceTrust()
+    {
+        var publicKey = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_KEY");
+        var keyId = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_KEY_ID");
+        if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(keyId))
+        {
+            if (ResolveMarketplaceIndexUrl() is not null)
+            {
+                _logger.Warning(LogCategories.Plugin, "plugin.market.trust-missing",
+                    "FLUIDBAR_MARKET_URL is set without FLUIDBAR_MARKET_KEY/FLUIDBAR_MARKET_KEY_ID; the signed index cannot be verified and the demo catalog is used.");
+            }
+
+            return MarketplaceTrustOptions.Empty;
+        }
+
+        return MarketplaceTrustOptions.ForMarketplaceKeys(new TrustedKey
+        {
+            KeyId = keyId,
+            Role = SignatureRole.Marketplace,
+            PublicKeySpkiBase64 = publicKey,
+        });
+    }
+
+    private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
     private void OpenMarket() => ShowSettingsWindow(SettingsWindowSection.Marketplace);
 
     private void ShowSettingsWindow(SettingsWindowSection section)
@@ -297,7 +453,12 @@ internal sealed class AppBootstrap
             return;
         }
 
-        var window = new SettingsWindow(_settings, _localizer, section);
+        var window = new SettingsWindow(
+            _settings,
+            _localizer,
+            section,
+            _pluginRuntime?.Marketplace,
+            _pluginRuntime?.Plugins);
         window.Show();
     }
 
@@ -305,6 +466,14 @@ internal sealed class AppBootstrap
 
     private void DisposeServices()
     {
+        _pluginRuntime?.DisposeInBackground();
+        _pluginRuntime = null;
+        if (_pluginNotifications is not null)
+        {
+            _ = DisposeQuietlyAsync(_pluginNotifications);
+            _pluginNotifications = null;
+        }
+
         _skiaHost?.Dispose();
         _skiaHost = null;
         _host?.Dispose();
@@ -315,6 +484,18 @@ internal sealed class AppBootstrap
         _settings?.Dispose();
         _settingsStore?.Dispose();
         _localizer?.Dispose();
+    }
+
+    private static async Task DisposeQuietlyAsync(IAsyncDisposable disposable)
+    {
+        try
+        {
+            await disposable.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // App exit path: the process is going away; a failed service stop must not crash shutdown.
+        }
     }
 
     private void Shutdown()

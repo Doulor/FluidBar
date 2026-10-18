@@ -71,6 +71,12 @@ public sealed record MarketPlugin
 
     /// <summary>Current install state.</summary>
     public MarketInstallState State { get; init; }
+
+    /// <summary>
+    /// True when the card comes from the offline demo catalog rather than the signed marketplace index.
+    /// The UI must label it and must not offer install/update/rollback/uninstall for it.
+    /// </summary>
+    public bool IsDemo { get; init; }
 }
 
 /// <summary>Progress of one install/update/rollback operation (all stages visible, spec 6.4).</summary>
@@ -106,6 +112,15 @@ public interface IMarketplaceUiService
 
     /// <summary>Uninstalls a plugin (optionally keeping its settings).</summary>
     Task UninstallAsync(string pluginId, bool keepSettings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// True when the service is showing the clearly-labelled offline demo catalog because the signed
+    /// marketplace index could not be fetched/verified. Installs are unavailable in that mode.
+    /// </summary>
+    bool IsOfflineFallback => false;
+
+    /// <summary>Optional status line explaining the current catalog mode (localized by the view).</summary>
+    string? StatusMessage => null;
 
     /// <summary>Raised when the catalog or install states changed.</summary>
     event EventHandler? Changed;
@@ -210,6 +225,7 @@ public sealed class DesignMarketplaceUiService : IMarketplaceUiService
             Verified = true,
             VersionHistory = ["2.2.0", "2.1.3"],
             State = MarketInstallState.Installed,
+            IsDemo = true,
             Capabilities =
             [
                 new PluginCapabilityDisclosure("network", "Capability.Network.Domains", "api.github.com"),
@@ -244,7 +260,7 @@ public sealed class DesignMarketplaceUiService : IMarketplaceUiService
                 items = items.Where(p => p.Category == query.Category);
             }
 
-            return Task.FromResult<IReadOnlyList<MarketPlugin>>(items.ToList());
+            return Task.FromResult<IReadOnlyList<MarketPlugin>>(items.Select(static p => p with { IsDemo = true }).ToList());
         }
     }
 
@@ -254,7 +270,9 @@ public sealed class DesignMarketplaceUiService : IMarketplaceUiService
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            return Task.FromResult(_plugins.FirstOrDefault(p => p.Id == pluginId));
+            return Task.FromResult(_plugins.FirstOrDefault(p => p.Id == pluginId) is { } plugin
+                ? plugin with { IsDemo = true }
+                : null);
         }
     }
 

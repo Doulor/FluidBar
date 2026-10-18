@@ -75,6 +75,7 @@ internal sealed class ControllerFixture : IDisposable
     {
         var shell = IslandMetrics.ShellRect(Controller.RenderState);
         Controller.HandlePointerPressed(shell.MidX, shell.MidY);
+        Controller.HandlePointerReleased(shell.MidX, shell.MidY);
         Settle();
     }
 
@@ -192,3 +193,4 @@ internal sealed class FakeLocalizer : ILocalizer
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }
+

@@ -257,7 +257,18 @@ internal sealed class PluginSettingsStore : IPluginSettings, IDisposable
         SetValue(key, JsonSerializer.SerializeToElement(values, SerializerOptions));
     }
 
-    private void SetValue(string key, JsonElement element)
+    /// <summary>Reads a raw JSON value (generic settings-page rendering).</summary>
+    internal bool TryGetValue(string key, out JsonElement value)
+    {
+        lock (_gate)
+        {
+            EnsureLoaded();
+            return _values.TryGetValue(key, out value);
+        }
+    }
+
+    /// <summary>Writes a raw JSON value (generic settings-page rendering).</summary>
+    internal void SetValue(string key, JsonElement element)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         List<Subscription> subscriptions;

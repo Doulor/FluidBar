@@ -113,6 +113,7 @@ public sealed class SkiaIslandHostMappingTests
 
         var handled = fixture.Controller.HandlePointerPressed(compactShell.MidX, compactShell.MidY);
         Assert.True(handled);
+        fixture.Controller.HandlePointerReleased(compactShell.MidX, compactShell.MidY);
         Assert.Equal(IslandStateKind.Expanded, fixture.Controller.State.Kind);
 
         fixture.Settle();

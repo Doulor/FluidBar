@@ -123,6 +123,23 @@ public sealed class MarketplaceSectionView : StackPanel
             Children.Add(BuildFeatured(featured, foreground, secondary));
         }
 
+        if (_marketplace.IsOfflineFallback)
+        {
+            Children.Add(new Border
+            {
+                Background = new SolidColorBrush(_surfaces.Raised),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10),
+                Child = new TextBlock
+                {
+                    Text = _marketplace.StatusMessage ?? _localizer.Get(LocKeys.Settings.Market.DemoCatalog),
+                    Foreground = new SolidColorBrush(Accents.Warning),
+                    FontSize = Typography.SettingsCaptionSize,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            });
+        }
+
         if (!string.IsNullOrEmpty(_status))
         {
             Children.Add(new TextBlock
@@ -217,6 +234,12 @@ public sealed class MarketplaceSectionView : StackPanel
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
         actions.Children.Add(BuildActionButton(plugin));
+        var rollback = BuildRollbackButton(plugin);
+        if (rollback is not null)
+        {
+            actions.Children.Add(rollback);
+        }
+
         Grid.SetColumn(actions, 1);
         grid.Children.Add(actions);
         card.Child = grid;
@@ -230,11 +253,16 @@ public sealed class MarketplaceSectionView : StackPanel
             MarketInstallState.Installed => (LocKeys.Settings.Market.Uninstall, "uninstall"),
             MarketInstallState.UpdateAvailable => (LocKeys.Settings.Market.Update, "install"),
             MarketInstallState.Installing => (LocKeys.Settings.Market.Installing, "none"),
+            MarketInstallState.Disabled => (LocKeys.Settings.Market.Uninstall, "uninstall"),
             MarketInstallState.Failed => (LocKeys.Common.Retry, "install"),
             _ => (LocKeys.Settings.Market.Install, "install"),
         };
 
-        var button = new Button { Content = _localizer.Get(labelKey), IsEnabled = !_busy && action != "none" };
+        var button = new Button
+        {
+            Content = _localizer.Get(labelKey),
+            IsEnabled = !_busy && action != "none" && !plugin.IsDemo && !_marketplace.IsOfflineFallback,
+        };
         button.Click += async (_, _) =>
         {
             if (_busy)
@@ -253,6 +281,59 @@ public sealed class MarketplaceSectionView : StackPanel
                 {
                     await _marketplace.UninstallAsync(plugin.Id, keepSettings: true, CancellationToken.None);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                _status = _localizer.Get(LocKeys.Error.Install.Failed);
+            }
+            catch (Exception ex)
+            {
+                _status = _localizer.Get(LocKeys.Error.Install.Failed) + " " + ex.Message;
+            }
+            finally
+            {
+                _busy = false;
+                Refresh();
+            }
+        };
+        return button;
+    }
+
+    private Control? BuildRollbackButton(MarketPlugin plugin)
+    {
+        if (plugin.IsDemo || plugin.InstalledVersion is null || plugin.State is MarketInstallState.Installing)
+        {
+            return null;
+        }
+
+        var target = plugin.VersionHistory.FirstOrDefault(version =>
+            !string.Equals(version, plugin.InstalledVersion, StringComparison.Ordinal));
+        if (target is null)
+        {
+            return null;
+        }
+
+        var button = new Button
+        {
+            Content = _localizer.Get(LocKeys.Settings.Market.Rollback),
+            IsEnabled = !_busy && !_marketplace.IsOfflineFallback,
+        };
+        ToolTip.SetTip(button, _localizer.Format(LocKeys.Settings.Market.Latest, ("version", target)));
+        button.Click += async (_, _) =>
+        {
+            if (_busy)
+            {
+                return;
+            }
+
+            _busy = true;
+            try
+            {
+                var progress = new Progress<InstallProgress>(value =>
+                {
+                    _status = _localizer.Get(value.LocalizationKey);
+                });
+                await _marketplace.RollbackAsync(plugin.Id, target, progress, CancellationToken.None);
             }
             catch (OperationCanceledException)
             {

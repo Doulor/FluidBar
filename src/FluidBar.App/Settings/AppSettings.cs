@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -89,6 +90,28 @@ public sealed record PluginSettings
     public int CheckIntervalHours { get; init; } = 24;
 }
 
+/// <summary>
+/// Per-monitor persisted placement (spec 2.6): the anchor token and offsets written when the user
+/// drops the island on a monitor. Absent monitors use the global <see cref="AppSettings.Anchor"/>.
+/// </summary>
+public sealed record MonitorPlacementSetting
+{
+    /// <summary>Anchor token (<c>top-left</c>, <c>top-center</c>, ... <c>bottom-right</c>).</summary>
+    public string Anchor { get; init; } = "top-center";
+
+    /// <summary>Horizontal offset from the anchored edge/centre in DIP.</summary>
+    public double OffsetX { get; init; }
+
+    /// <summary>Vertical offset from the anchored edge in DIP; null selects the mode default.</summary>
+    public double? OffsetY { get; init; }
+}
+
+/// <summary>Effective placement for one monitor: its override or the global anchor.</summary>
+/// <param name="Anchor">Resolved anchor.</param>
+/// <param name="OffsetX">Horizontal offset in DIP.</param>
+/// <param name="OffsetY">Vertical offset in DIP; null selects the mode default.</param>
+public readonly record struct ResolvedMonitorPlacement(IslandAnchor Anchor, double OffsetX, double? OffsetY);
+
 /// <summary>Advanced/diagnostics settings.</summary>
 public sealed record AdvancedSettings
 {
@@ -160,6 +183,14 @@ public sealed record AppSettings
     /// <summary>Anchor token (<c>top-center</c>, ...).</summary>
     public string Anchor { get; init; } = "top-center";
 
+    /// <summary>
+    /// Per-monitor placement overrides keyed by monitor id (<c>\\.\DISPLAYn</c>), written by
+    /// drag-and-drop and restored on startup. Additive: an empty map keeps the global anchor
+    /// behaviour, so settings files written before this field parse unchanged (schema stays 2).
+    /// </summary>
+    public ImmutableDictionary<string, MonitorPlacementSetting> Placement { get; init; }
+        = ImmutableDictionary<string, MonitorPlacementSetting>.Empty;
+
     /// <summary>Stacking strategy.</summary>
     public StackingStrategySetting Stacking { get; init; } = StackingStrategySetting.Stacked;
 
@@ -217,7 +248,50 @@ public sealed record AppSettings
 
     /// <summary>Anchor derived from the anchor token.</summary>
     [JsonIgnore]
-    public IslandAnchor IslandAnchor => Anchor switch
+    public IslandAnchor IslandAnchor => ParseAnchorToken(Anchor);
+
+    /// <summary>
+    /// Resolves the effective placement for a monitor: its persisted override, or the global anchor
+    /// with zero offsets. Unknown/blank monitor ids fall back to the global anchor.
+    /// </summary>
+    /// <param name="monitorId">Monitor id (<c>\\.\DISPLAYn</c>).</param>
+    public ResolvedMonitorPlacement ResolveMonitorPlacement(string? monitorId)
+    {
+        if (monitorId is { Length: > 0 } && Placement.TryGetValue(monitorId, out var placement))
+        {
+            return new ResolvedMonitorPlacement(
+                ParseAnchorToken(placement.Anchor),
+                placement.OffsetX,
+                placement.OffsetY);
+        }
+
+        return new ResolvedMonitorPlacement(IslandAnchor, 0, null);
+    }
+
+    /// <summary>Returns a copy with the per-monitor placement for <paramref name="monitorId"/> replaced.</summary>
+    /// <param name="monitorId">Monitor id (<c>\\.\DISPLAYn</c>).</param>
+    /// <param name="anchor">Anchor the drop resolved to.</param>
+    /// <param name="offsetX">Horizontal offset in DIP.</param>
+    /// <param name="offsetY">Vertical offset in DIP; null selects the mode default.</param>
+    public AppSettings WithMonitorPlacement(string monitorId, IslandAnchor anchor, double offsetX, double? offsetY)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(monitorId);
+        return this with
+        {
+            Placement = Placement.SetItem(
+                monitorId.Trim(),
+                new MonitorPlacementSetting
+                {
+                    Anchor = FormatAnchorToken(anchor),
+                    OffsetX = offsetX,
+                    OffsetY = offsetY,
+                }),
+        };
+    }
+
+    /// <summary>Parses an anchor token; unknown/blank values fall back to <c>top-center</c>.</summary>
+    /// <param name="token">Anchor token.</param>
+    public static IslandAnchor ParseAnchorToken(string? token) => token switch
     {
         "top-left" => IslandAnchor.TopLeft,
         "top-right" => IslandAnchor.TopRight,
@@ -227,12 +301,27 @@ public sealed record AppSettings
         _ => IslandAnchor.TopCenter,
     };
 
+    /// <summary>Formats an anchor as its spec token.</summary>
+    /// <param name="anchor">Anchor to format.</param>
+    public static string FormatAnchorToken(IslandAnchor anchor) => anchor switch
+    {
+        IslandAnchor.TopLeft => "top-left",
+        IslandAnchor.TopRight => "top-right",
+        IslandAnchor.BottomLeft => "bottom-left",
+        IslandAnchor.BottomCenter => "bottom-center",
+        IslandAnchor.BottomRight => "bottom-right",
+        _ => "top-center",
+    };
+
     /// <summary>Core motion profile derived from the settings.</summary>
     public MotionProfile BuildMotionProfile(bool systemPrefersReducedMotion) => new()
     {
         ReducedMotion = ResolveReducedMotion(systemPrefersReducedMotion),
         Strength = Math.Clamp(MotionStrength, MotionProfile.MinStrength, MotionProfile.MaxStrength),
     };
+
+    /// <summary>Largest accepted per-monitor offset in DIP (guards corrupted/imported files).</summary>
+    public const double MaxPlacementOffsetDip = 100_000;
 
     /// <summary>Clamps and normalizes every value so a corrupted file can never break the UI.</summary>
     public AppSettings Normalize() => this with
@@ -253,6 +342,7 @@ public sealed record AppSettings
         Anchor = Anchor is "top-left" or "top-center" or "top-right" or "bottom-left" or "bottom-center" or "bottom-right"
             ? Anchor
             : "top-center",
+        Placement = NormalizePlacement(Placement),
         Stacking = Enum.IsDefined(Stacking) ? Stacking : StackingStrategySetting.Stacked,
         AutoCollapseMs = Math.Clamp(AutoCollapseMs, 0, 60000),
         AutoHideMs = Math.Clamp(AutoHideMs, 0, 3_600_000),
@@ -310,6 +400,7 @@ public sealed record AppSettings
                     _ => "primary",
                 },
             },
+            Placement = ToPlacementJson(Placement),
             Dock = new DockJson { HideSystemTaskbar = Dock.HideSystemTaskbar, Height = Dock.Height },
             Plugins = new PluginsJson
             {
@@ -371,6 +462,7 @@ public sealed record AppSettings
                     "follow-mouse" => DisplayTarget.FollowMouse,
                     _ => DisplayTarget.Primary,
                 },
+                Placement = ParsePlacement(document.Placement),
                 Dock = new DockSettings
                 {
                     HideSystemTaskbar = document.Dock?.HideSystemTaskbar ?? false,
@@ -411,6 +503,84 @@ public sealed record AppSettings
         "off" => ReducedMotionPreference.Off,
         _ => ReducedMotionPreference.System,
     };
+
+    private static PlacementJson? ToPlacementJson(ImmutableDictionary<string, MonitorPlacementSetting> placement)
+    {
+        if (placement.IsEmpty)
+        {
+            return null;
+        }
+
+        var monitors = new Dictionary<string, PlacementEntryJson>(placement.Count, StringComparer.Ordinal);
+        foreach (var (id, value) in placement)
+        {
+            monitors[id] = new PlacementEntryJson
+            {
+                Anchor = value.Anchor,
+                OffsetX = value.OffsetX,
+                OffsetY = value.OffsetY,
+            };
+        }
+
+        return new PlacementJson { Monitors = monitors };
+    }
+
+    private static ImmutableDictionary<string, MonitorPlacementSetting> ParsePlacement(PlacementJson? json)
+    {
+        if (json?.Monitors is not { Count: > 0 } monitors)
+        {
+            return ImmutableDictionary<string, MonitorPlacementSetting>.Empty;
+        }
+
+        var builder = ImmutableDictionary.CreateBuilder<string, MonitorPlacementSetting>(StringComparer.Ordinal);
+        foreach (var (id, entry) in monitors)
+        {
+            if (string.IsNullOrWhiteSpace(id) || entry is null)
+            {
+                continue;
+            }
+
+            builder[id.Trim()] = new MonitorPlacementSetting
+            {
+                Anchor = entry.Anchor ?? "top-center",
+                OffsetX = entry.OffsetX ?? 0,
+                OffsetY = entry.OffsetY,
+            };
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static ImmutableDictionary<string, MonitorPlacementSetting> NormalizePlacement(
+        ImmutableDictionary<string, MonitorPlacementSetting>? placement)
+    {
+        if (placement is null || placement.IsEmpty)
+        {
+            return ImmutableDictionary<string, MonitorPlacementSetting>.Empty;
+        }
+
+        var builder = ImmutableDictionary.CreateBuilder<string, MonitorPlacementSetting>(StringComparer.Ordinal);
+        foreach (var (id, value) in placement)
+        {
+            if (string.IsNullOrWhiteSpace(id) || value is null)
+            {
+                continue;
+            }
+
+            builder[id.Trim()] = value with
+            {
+                Anchor = FormatAnchorToken(ParseAnchorToken(value.Anchor)),
+                OffsetX = double.IsFinite(value.OffsetX)
+                    ? Math.Clamp(value.OffsetX, -MaxPlacementOffsetDip, MaxPlacementOffsetDip)
+                    : 0,
+                OffsetY = value.OffsetY is { } offsetY && double.IsFinite(offsetY)
+                    ? Math.Clamp(offsetY, -MaxPlacementOffsetDip, MaxPlacementOffsetDip)
+                    : null,
+            };
+        }
+
+        return builder.ToImmutable();
+    }
 }
 
 // ----- JSON DTOs (spec 8.2 field names; System.Text.Json source generation for trimming/single-file) -----
@@ -421,6 +591,7 @@ internal sealed class SettingsJson
     public GeneralJson? General { get; set; }
     public AppearanceJson? Appearance { get; set; }
     public IslandJson? Island { get; set; }
+    public PlacementJson? Placement { get; set; }
     public DockJson? Dock { get; set; }
     public PluginsJson? Plugins { get; set; }
     public AdvancedJson? Advanced { get; set; }
@@ -467,6 +638,18 @@ internal sealed class IslandJson
     public int? AutoHideMs { get; set; }
     public bool? PeekOnTrackChange { get; set; }
     public string? DisplayOn { get; set; }
+}
+
+internal sealed class PlacementJson
+{
+    public Dictionary<string, PlacementEntryJson>? Monitors { get; set; }
+}
+
+internal sealed class PlacementEntryJson
+{
+    public string? Anchor { get; set; }
+    public double? OffsetX { get; set; }
+    public double? OffsetY { get; set; }
 }
 
 internal sealed class DockJson

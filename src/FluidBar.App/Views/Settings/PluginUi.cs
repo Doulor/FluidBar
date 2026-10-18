@@ -17,7 +17,23 @@ public sealed record PluginListItem(
     string Publisher,
     bool Builtin,
     IReadOnlyList<string> CapabilityKeys,
-    bool Orphan = false);
+    bool Orphan = false)
+{
+    /// <summary>Host lifecycle state (<c>Active</c>, <c>Stopped</c>, <c>Failed</c>, <c>Unavailable</c>, <c>Invalid</c>...).</summary>
+    public string State { get; init; } = "Active";
+
+    /// <summary>Last host error (formatted string, never an exception object).</summary>
+    public string? Error { get; init; }
+
+    /// <summary>Whether the plugin is enabled by the user.</summary>
+    public bool IsEnabled { get; init; } = true;
+
+    /// <summary>True when a restart is required to finish unloading/updating.</summary>
+    public bool RestartRequired { get; init; }
+
+    /// <summary>False when the plugin cannot run on this machine (missing platform service or invalid package).</summary>
+    public bool Available { get; init; } = true;
+}
 
 /// <summary>App-facing plugin list contract (production adapter wraps FluidBar.PluginHost later).</summary>
 public interface IPluginUiService

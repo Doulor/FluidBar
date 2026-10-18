@@ -74,6 +74,13 @@ public sealed class SkiaIslandController : IDisposable
     private bool _started;
     private bool _disposed;
 
+    // Click-vs-drag: a compact press is only a candidate click; the host turns it into a window move
+    // once the pointer passes SkiaDragThreshold in screen space, and the click is committed on release.
+    private bool _clickPending;
+    private double _clickXDip;
+    private double _clickYDip;
+    private bool _windowDragActive;
+
     /// <summary>Creates the controller (call <see cref="Start"/> to begin producing content).</summary>
     /// <param name="options">Composition options.</param>
     /// <param name="dispatcher">Optional dispatcher (defaults to a UI-thread synchronization-context dispatcher).</param>
@@ -121,6 +128,14 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Raised when animation starts so the host can start its frame clock immediately.</summary>
     public event Action? FrameRequested;
 
+    /// <summary>
+    /// Raised when Core asks for the placement to be persisted (<see cref="IslandEffectKind.PersistPlacement"/>,
+    /// i.e. after a drag ends). The host owns the drop geometry: it snapshots the pending anchor/offset
+    /// before ending the drag and writes it on this callback. Fired on every environment change that
+    /// carries the effect; the host ignores it when it has no pending drop.
+    /// </summary>
+    public event Action? PlacementPersistRequested;
+
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.Current;
 
@@ -144,6 +159,12 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Whether the host started the pipeline.</summary>
     public bool IsStarted => _started;
+
+    /// <summary>Whether a compact press is waiting to resolve into a click or a window drag.</summary>
+    public bool HasPendingClick => _clickPending;
+
+    /// <summary>Whether the pointer is currently moving the island window (drag-to-move).</summary>
+    public bool IsWindowDragging => _windowDragActive;
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating || IsWaveActive();
@@ -377,7 +398,11 @@ public sealed class SkiaIslandController : IDisposable
         => Publish(IslandEvent.Retract(new ActivityKey(kind, source), sequence, TimeSpan.Zero));
 
     /// <summary>Applies Escape (collapse).</summary>
-    public void HandleEscape() => ApplyInput(IslandInput.Escape());
+    public void HandleEscape()
+    {
+        CancelPendingClick();
+        ApplyInput(IslandInput.Escape());
+    }
 
     /// <summary>Applies the toggle hotkey (expand/collapse).</summary>
     public void HandleToggleHotkey() => ApplyInput(IslandInput.ToggleHotkey());
@@ -454,6 +479,7 @@ public sealed class SkiaIslandController : IDisposable
         _pointerInHotZone = false;
         _pointerOnStrip = false;
         _hotZoneEnteredAt = null;
+        CancelPendingClick();
         var now = _time.GetLocalNow();
 
         if (_pager.IsDragging)
@@ -476,12 +502,20 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Primary button pressed at a host-local DIP point; returns whether the island handled it.</summary>
     /// <param name="xDip">Client X in DIP.</param>
     /// <param name="yDip">Client Y in DIP.</param>
+    /// <remarks>
+    /// A compact-shell press is <b>deferred</b>: it becomes a click on release only when the pointer
+    /// stayed within <see cref="SkiaDragThreshold.ThresholdDip"/>. The host calls
+    /// <see cref="BeginWindowDrag"/> once the pointer passes the (screen-space) threshold, which cancels
+    /// the pending click and moves the window instead. Dock mode disables dragging, so its press still
+    /// expands immediately.
+    /// </remarks>
     public bool HandlePointerPressed(double xDip, double yDip)
     {
         _pointerX = xDip;
         _pointerY = yDip;
         _pointerInside = true;
         _motion.SetPressed(true);
+        CancelPendingClick();
         if (!_hasRenderState)
         {
             return false;
@@ -494,6 +528,14 @@ public sealed class SkiaIslandController : IDisposable
                 if (hit.Control == IslandPageControl.PlayPause)
                 {
                     DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.MediaTogglePlay), hit.PageIndex);
+                    return true;
+                }
+
+                if (IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
+                {
+                    _clickPending = true;
+                    _clickXDip = xDip;
+                    _clickYDip = yDip;
                     return true;
                 }
 
@@ -537,17 +579,36 @@ public sealed class SkiaIslandController : IDisposable
             _pager.EndDrag(NowMs());
             InvalidateFull();
         }
+
+        // A click is committed on release. A drag that crossed the threshold already cancelled the
+        // pending click in BeginWindowDrag, and one that stayed below it is still a click.
+        if (_clickPending)
+        {
+            var isClick = !SkiaDragThreshold.Exceeds(_clickXDip, _clickYDip, xDip, yDip);
+            CancelPendingClick();
+            if (isClick)
+            {
+                ApplyInput(IslandInput.PrimaryClick());
+            }
+        }
     }
 
     /// <summary>Drag gesture started (host capture acquired).</summary>
     /// <param name="xDip">Pointer client X in DIP.</param>
     /// <param name="yDip">Pointer client Y in DIP.</param>
     /// <param name="timestampMs">Monotonic timestamp in milliseconds.</param>
-    public void HandleDragStarted(double xDip, double yDip, long timestampMs)
+    /// <returns>What the drag means: a pager drag, a window-move candidate, or nothing.</returns>
+    /// <remarks>
+    /// The expanded panel owns a horizontal pager drag. A compact/peek shell press is a
+    /// <see cref="SkiaDragKind.WindowCandidate"/>: the host measures the screen-space threshold and
+    /// calls <see cref="BeginWindowDrag"/> once it is crossed, so a click can still be committed on
+    /// release. Dock mode disables moving.
+    /// </remarks>
+    public SkiaDragKind HandleDragStarted(double xDip, double yDip, long timestampMs)
     {
         if (!_hasRenderState)
         {
-            return;
+            return SkiaDragKind.None;
         }
 
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
@@ -558,7 +619,18 @@ public sealed class SkiaIslandController : IDisposable
             _archipelago.Reveal(now);
             UpdateArchipelago(now);
             InvalidateFull();
+            return SkiaDragKind.Pager;
         }
+
+        if (_renderState.Form is ShellForm.Compact or ShellForm.Peek
+            && hit.Kind == IslandHitKind.Compact
+            && hit.Control != IslandPageControl.PlayPause
+            && IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
+        {
+            return SkiaDragKind.WindowCandidate;
+        }
+
+        return SkiaDragKind.None;
     }
 
     /// <summary>Drag gesture moved.</summary>
@@ -596,6 +668,49 @@ public sealed class SkiaIslandController : IDisposable
 
         _pager.EndDrag(timestampMs);
         InvalidateFull();
+    }
+
+    /// <summary>
+    /// Starts moving the island window: cancels the pending click, marks Core's drag state and lets the
+    /// host follow the pointer. Called once per gesture, when the screen-space threshold is crossed.
+    /// </summary>
+    /// <returns>Whether a window drag actually started (false when the state/mode does not allow it).</returns>
+    public bool BeginWindowDrag()
+    {
+        if (_windowDragActive || !_hasRenderState)
+        {
+            return false;
+        }
+
+        if (_renderState.Form is not (ShellForm.Compact or ShellForm.Peek)
+            || !IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
+        {
+            return false;
+        }
+
+        CancelPendingClick();
+        _windowDragActive = true;
+        ApplyInput(IslandInput.DragStarted());
+        return true;
+    }
+
+    /// <summary>
+    /// Ends a window-move drag: applies Core's <see cref="IslandInput.DragEnded"/>, whose
+    /// <see cref="IslandEffectKind.PersistPlacement"/> effect raises
+    /// <see cref="PlacementPersistRequested"/>. The host must snapshot the drop placement before calling.
+    /// </summary>
+    /// <returns>Whether a window drag was active.</returns>
+    public bool EndWindowDrag()
+    {
+        if (!_windowDragActive)
+        {
+            return false;
+        }
+
+        _windowDragActive = false;
+        CancelPendingClick();
+        ApplyInput(IslandInput.DragEnded());
+        return true;
     }
 
     /// <summary>Wheel/trackpad input; returns what the pager did.</summary>
@@ -750,19 +865,11 @@ public sealed class SkiaIslandController : IDisposable
                 case IslandEffectKind.UpdateTray:
                     break;
                 case IslandEffectKind.PersistPlacement:
-                    // TODO(skia-anchor-drag): the Skia host has no drag-to-move gesture, so there is
-                    // no new anchor/offset to persist yet. A correct implementation needs all three:
-                    //   1. click-vs-drag discrimination on press: a compact press currently expands
-                    //      immediately (IslandInput.PrimaryClick), so a drag can never be told apart
-                    //      from a click; defer the click to release and cancel it past the Core drag
-                    //      threshold;
-                    //   2. a host move path during the drag (LayeredWindowHost.PlacePhysical with the
-                    //      Core window origin) plus monitor hit-testing for cross-monitor drops;
-                    //   3. a per-monitor placement write. Core already models
-                    //      PlacementSettings.Monitors[monitorId] = MonitorPlacement(anchor, offsetX,
-                    //      offsetY), but IUiSettingsStore only exposes AppSettings; the adapter's
-                    //      read-modify-write preserves the Core section, so a small seam is needed.
-                    // Until then placement stays settings-driven (anchor only) and never drifts.
+                    // The host owns the drop geometry: it snapshots (monitorId, anchor, offsetX,
+                    // offsetY) from the final window origin before calling EndWindowDrag, then writes
+                    // it through SettingsController on this callback. The effect also fires on
+                    // display/settings changes, where the host simply has no pending drop to write.
+                    PlacementPersistRequested?.Invoke();
                     break;
                 case IslandEffectKind.PauseProducers:
                     _data.Stop();
@@ -932,6 +1039,9 @@ public sealed class SkiaIslandController : IDisposable
         _controller = new IslandStateController(BuildBehaviorOptions(settings), current, _dispatcher);
         _controller.Transitioned += OnTransition;
     }
+
+    /// <summary>Drops a deferred compact click (drag, leave, escape, re-press).</summary>
+    private void CancelPendingClick() => _clickPending = false;
 
     private void HandlePageControl(in IslandHitTarget hit)
     {

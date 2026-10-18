@@ -27,6 +27,14 @@ public interface IMonitorService : IPlatformMonitor<MonitorSet>
     /// <summary>Monitor containing a physical point, or the nearest monitor.</summary>
     MonitorInfo? MonitorAtPoint(int physicalX, int physicalY);
 
+    /// <summary>
+    /// Monitor under the current cursor position (<c>GetCursorPos</c> + <see cref="MonitorAtPoint"/>),
+    /// or null when the cursor cannot be queried or no monitor snapshot exists yet. This is the small
+    /// platform seam for <c>DisplayTarget.FollowMouse</c>; it never enumerates monitors and is cheap
+    /// enough to poll a few times per second.
+    /// </summary>
+    MonitorInfo? MonitorUnderCursor();
+
     /// <summary>Monitor with the largest overlap with a physical rect.</summary>
     MonitorInfo? MonitorForRect(PixelRect physicalRect);
 

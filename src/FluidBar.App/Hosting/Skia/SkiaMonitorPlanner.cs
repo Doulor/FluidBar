@@ -47,8 +47,9 @@ public sealed record SkiaMonitorPlan(
 /// <list type="bullet">
 /// <item><see cref="DisplayTarget.Primary"/> keeps exactly one window on the primary monitor.</item>
 /// <item><see cref="DisplayTarget.All"/> keeps one window per enumerated monitor.</item>
-/// <item><see cref="DisplayTarget.FollowMouse"/> falls back to the primary monitor until a pointer
-/// query seam exists (documented TODO, never a silent wrong-monitor window).</item>
+/// <item><see cref="DisplayTarget.FollowMouse"/> keeps one window on the monitor under the cursor
+/// (passed in as an id by the host's debounced cursor poll); it falls back to the primary monitor
+/// when the cursor monitor is unknown, so a failed query never produces a wrong-monitor window.</item>
 /// <item>The primary is <b>stable</b>: the OS-flagged primary wins; when no monitor is flagged the
 /// previously used primary is kept if it still exists, otherwise the first monitor is used.</item>
 /// <item>The primary is always first in <see cref="SkiaMonitorPlan.Targets"/> so
@@ -94,10 +95,15 @@ public static class SkiaMonitorPlanner
     /// <param name="monitors">Enumerated monitors (enumeration order).</param>
     /// <param name="displayOn">Display targeting setting.</param>
     /// <param name="primary">Stable primary monitor (see <see cref="ResolvePrimary"/>).</param>
+    /// <param name="cursorMonitorId">
+    /// Monitor under the cursor for <see cref="DisplayTarget.FollowMouse"/> (from the host's debounced
+    /// poll). Null/stale ids fall back to <paramref name="primary"/>; ignored by other targets.
+    /// </param>
     public static ImmutableArray<CoreMonitorInfo> ResolveTargets(
         IReadOnlyList<CoreMonitorInfo> monitors,
         DisplayTarget displayOn,
-        CoreMonitorInfo? primary)
+        CoreMonitorInfo? primary,
+        string? cursorMonitorId = null)
     {
         ArgumentNullException.ThrowIfNull(monitors);
         if (primary is null)
@@ -108,11 +114,33 @@ public static class SkiaMonitorPlanner
         return displayOn switch
         {
             DisplayTarget.All => PrimaryFirst(monitors, primary),
-            // TODO(skia-follow-mouse): FollowMouse needs a pointer query seam (cursor position ->
-            // MonitorService.MonitorAtPoint). Until that seam exists, target the primary monitor
-            // instead of guessing; see docs/rewrite/contracts/skia-host.md §8.
+            DisplayTarget.FollowMouse => ResolveFollowMouse(monitors, primary, cursorMonitorId),
             _ => [primary],
         };
+    }
+
+    /// <summary>
+    /// FollowMouse target: the cursor monitor when it is in the snapshot, else the stable primary.
+    /// A hot-unplugged cursor monitor therefore degrades to the primary instead of dropping every
+    /// window (the host re-polls on the next tick and moves the window back).
+    /// </summary>
+    private static ImmutableArray<CoreMonitorInfo> ResolveFollowMouse(
+        IReadOnlyList<CoreMonitorInfo> monitors,
+        CoreMonitorInfo primary,
+        string? cursorMonitorId)
+    {
+        if (cursorMonitorId is { Length: > 0 })
+        {
+            foreach (var monitor in monitors)
+            {
+                if (string.Equals(monitor.Id, cursorMonitorId, StringComparison.Ordinal))
+                {
+                    return [monitor];
+                }
+            }
+        }
+
+        return [primary];
     }
 
     /// <summary>Diffs the current window set against a freshly enumerated monitor snapshot.</summary>
@@ -120,17 +148,21 @@ public static class SkiaMonitorPlanner
     /// <param name="available">Monitors from the latest enumeration.</param>
     /// <param name="displayOn">Display targeting setting.</param>
     /// <param name="previousPrimaryId">Monitor id that was primary before the change, when known.</param>
+    /// <param name="cursorMonitorId">
+    /// Monitor under the cursor for <see cref="DisplayTarget.FollowMouse"/>; ignored by other targets.
+    /// </param>
     public static SkiaMonitorPlan Plan(
         IReadOnlyList<CoreMonitorInfo> current,
         IReadOnlyList<CoreMonitorInfo> available,
         DisplayTarget displayOn,
-        string? previousPrimaryId = null)
+        string? previousPrimaryId = null,
+        string? cursorMonitorId = null)
     {
         ArgumentNullException.ThrowIfNull(current);
         ArgumentNullException.ThrowIfNull(available);
 
         var primary = ResolvePrimary(available, previousPrimaryId);
-        var targets = ResolveTargets(available, displayOn, primary);
+        var targets = ResolveTargets(available, displayOn, primary, cursorMonitorId);
         if (targets.IsDefaultOrEmpty)
         {
             return new SkiaMonitorPlan([], primary, [], [.. current], [], GeometryChanged: false);

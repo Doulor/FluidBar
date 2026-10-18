@@ -145,6 +145,12 @@ public sealed record InstallRequest
 
     /// <summary>Expected plugin id (protects updates/rollbacks against a swapped package).</summary>
     public string? ExpectedPluginId { get; init; }
+
+    /// <summary>
+    /// Optional stage observer for the marketplace UI. Reports the real phases of the state machine
+    /// (<see cref="InstallPhase.Downloading"/> → Verifying → Extracting → Staged → Activating → Active).
+    /// </summary>
+    public IProgress<InstallPhase>? Progress { get; init; }
 }
 
 /// <summary>Install outcome.</summary>

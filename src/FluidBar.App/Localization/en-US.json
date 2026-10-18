@@ -275,6 +275,7 @@
     "Settings.Market.Channel": "Channel",
     "Settings.Market.Refresh": "Refresh",
     "Settings.Market.NoResults": "No plugins match your search",
+    "Settings.Market.DemoCatalog": "Showing the demo catalog: installs, updates and rollbacks are disabled.",
     "Settings.Market.Offline": "The marketplace is unreachable. Check your connection.",
     "Settings.Market.Verified": "Verified publisher",
     "Settings.Market.Downloads": "{count, plural, one {# install} other {# installs}}",
@@ -377,6 +378,7 @@
     "Error.Generic": "Something went wrong. Details are in the logs."
 ,
     "Settings.Plugins.SettingsButton": "Settings",
+    "Settings.Plugins.Commands": "Commands",
     "plugin.media.name": "Now Playing",
     "plugin.clipboard.name": "Clipboard",
     "plugin.notifications.name": "Notifications",

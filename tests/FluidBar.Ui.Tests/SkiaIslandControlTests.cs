@@ -280,7 +280,6 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.MediaCommandRequested += value => command = value;
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
-
         Click(fixture, PageLayout.MediaPlay(Page(1, fixture)));
         Assert.Equal(MediaTransportCommand.TogglePlay, command);
 
@@ -332,5 +331,10 @@ public sealed class SkiaIslandControlTests
         => IslandMetrics.PageRect(fixture.Controller.RenderState, page);
 
     private static void Click(ControllerFixture fixture, SKRect rect)
-        => fixture.Controller.HandlePointerPressed(rect.MidX, rect.MidY);
+    {
+        fixture.Controller.HandlePointerPressed(rect.MidX, rect.MidY);
+        fixture.Controller.HandlePointerReleased(rect.MidX, rect.MidY);
+    }
 }
+
+

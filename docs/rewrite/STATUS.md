@@ -1,6 +1,6 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-19 00:56（Asia/Shanghai）
+> 最后更新：2026-10-19 02:12（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
@@ -23,16 +23,16 @@
 
 | 套件 | 数量 | 状态 |
 |---|---:|---|
-| Core | 473 | ✅ |
+| Core | 491 | ✅ |
 | Platform | 382 | ✅（偶发 HWND/网络 flaky，单独运行稳定） |
 | SDK | 152 | ✅ |
-| PluginHost | 36 | ✅ |
+| PluginHost | 39 | ✅ |
 | Builtin | 23 | ✅ |
 | Integration | 31 | ✅ |
 | UI | 159 | ✅ |
 | Architecture | 11 | ✅ |
 
-构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1402 passed / 0 failed**。
+构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1423 passed / 0 failed**。
 
 ## Spike 结论
 
@@ -44,7 +44,7 @@
 
 1. **Skia 渲染器：134 tests + 20 张 golden**（紧凑 8 态、展开 home/media/notifications/clipboard/agent/widgets、dock/flush/light/transition、transient strip）；壳体描边正在改中性 hairline。
 2. **prototype2：设置面板/插件市场/3 小岛/远处页小点/切换动效已完成**（14+ 截图）；等待用户验收。
-3. **App 集成（MVP 已完成）**：`src/FluidBar.App/Hosting/Skia/` 默认启用；smoke 240 帧/0 提交失败、surface **732×576 @150%**、脏帧 129、上传 185–213µs、空闲无帧；页面控件平台 seam（媒体/音量/亮度/剪贴板/列表动作）、多显示器热插拔 + DPI + dock 放置、tray + 全局热键（含回退）均已接入。待补：FollowMouse、锚点拖拽持久化、UIA/IME、Wi-Fi/BT/Focus 服务、真实热键注入复测、双 message host 合并。
+3. **App 集成（MVP + 插件运行时）**：Skia 宿主默认启用；页面控件 seam、多显示器/DPI/dock、tray+热键、真实 PluginHost/市场适配、FollowMouse 与锚点拖拽持久化均已接入；smoke 331 帧/0 提交失败、surface 732×576 @150%。待补：UIA/IME、Wi-Fi/BT/Focus、output/queue、热键注入复测、双 message host 合并、真机多显示器/200% 验收。
 
 ## 可用版本预估（基于当前进度）
 
@@ -69,6 +69,7 @@
 2. 接入分层宿主到 App，跑真机桌面验收（透明/点击穿透/DPI/60-120fps）。
 3. 补全通知/剪贴板/Agent/小组件页面与 UIA。
 4. Release 浸泡、单文件发布、市场发布链路。
+
 
 
 

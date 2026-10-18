@@ -17,23 +17,25 @@ namespace FluidBar.App.Views.Plugins;
 /// <summary>Reads host-owned plugin setting values for generic settings-page rendering.</summary>
 public interface IPluginSettingsValues
 {
-    /// <summary>Returns a JSON value for a control key, or null when the plugin has not written it.</summary>
-    JsonElement? Get(string key);
+    /// <summary>Returns a JSON value for a plugin control key, or null when the plugin has not written it.</summary>
+    JsonElement? Get(string pluginId, string key);
 
     /// <summary>Stores a value (host-owned store; the plugin sees it through <c>IPluginSettings</c>).</summary>
-    void Set(string key, JsonElement value);
+    void Set(string pluginId, string key, JsonElement value);
 }
 
-/// <summary>In-memory value store used until the plugin host provides the real settings store.</summary>
+/// <summary>In-memory value store used by design/headless previews without a plugin host.</summary>
 public sealed class InMemoryPluginSettingsValues : IPluginSettingsValues
 {
     private readonly Dictionary<string, JsonElement> _values = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public JsonElement? Get(string key) => _values.TryGetValue(key, out var value) ? value : null;
+    public JsonElement? Get(string pluginId, string key)
+        => _values.TryGetValue(pluginId + "\u001F" + key, out var value) ? value : null;
 
     /// <inheritdoc />
-    public void Set(string key, JsonElement value) => _values[key] = value;
+    public void Set(string pluginId, string key, JsonElement value)
+        => _values[pluginId + "\u001F" + key] = value;
 }
 
 /// <summary>
@@ -58,8 +60,8 @@ public interface IPluginContributionUiService : IPluginUiService
     /// <summary>Host-owned values storage for the generic settings page controls.</summary>
     IPluginSettingsValues Values { get; }
 
-    /// <summary>Invokes a declared command by id (no-op with a diagnostic when unregistered).</summary>
-    void InvokeCommand(string commandId);
+    /// <summary>Invokes a declared command by id through the host (failure is logged, never thrown at the UI).</summary>
+    Task InvokeCommandAsync(string pluginId, string commandId);
 }
 
 /// <summary>Declarative contribution UI service over the first-party plugin catalog.</summary>
@@ -148,10 +150,11 @@ public sealed class BuiltinPluginContributionUiService : IPluginContributionUiSe
         => _descriptors.TryGetValue(pluginId, out var descriptor) ? descriptor.Capabilities : [];
 
     /// <inheritdoc />
-    public void InvokeCommand(string commandId)
+    public Task InvokeCommandAsync(string pluginId, string commandId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandId);
         LastInvokedCommand = commandId;
+        return Task.CompletedTask;
     }
 }
 
@@ -200,15 +203,17 @@ public static class LocalizedValue
 /// </summary>
 public static class PluginSettingsPageRenderer
 {
-    /// <summary>Builds one settings page.</summary>
+    /// <summary>Builds one settings page for <paramref name="pluginId"/>.</summary>
     public static Control BuildPage(
         SettingsPageContribution page,
+        string pluginId,
         ILocalizer localizer,
         IPluginSettingsValues values,
-        Action<string> invokeCommand,
+        Action<string, string> invokeCommand,
         Action<string?> openUrl)
     {
         ArgumentNullException.ThrowIfNull(page);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
         ArgumentNullException.ThrowIfNull(localizer);
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(invokeCommand);
@@ -236,7 +241,7 @@ public static class PluginSettingsPageRenderer
 
         foreach (var control in page.Controls ?? [])
         {
-            panel.Children.Add(BuildControl(control, localizer, values, invokeCommand, openUrl));
+            panel.Children.Add(BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl));
         }
 
         foreach (var group in page.Groups ?? [])
@@ -262,7 +267,7 @@ public static class PluginSettingsPageRenderer
 
             foreach (var control in group.Controls ?? [])
             {
-                groupPanel.Children.Add(BuildControl(control, localizer, values, invokeCommand, openUrl));
+                groupPanel.Children.Add(BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl));
             }
 
             panel.Children.Add(groupPanel);
@@ -272,16 +277,17 @@ public static class PluginSettingsPageRenderer
     }
 
     private static Control BuildControl(
+        string pluginId,
         SettingControlContribution control,
         ILocalizer localizer,
         IPluginSettingsValues values,
-        Action<string> invokeCommand,
+        Action<string, string> invokeCommand,
         Action<string?> openUrl)
     {
         var title = LocalizedValue.Resolve(control.Title, localizer);
         var description = LocalizedValue.Resolve(control.Description, localizer);
-        var current = values.Get(control.Key) ?? control.Default;
-        var editor = CreateEditor(control, current, values);
+        var current = values.Get(pluginId, control.Key) ?? control.Default;
+        var editor = CreateEditor(pluginId, control, current, values);
 
         if (control.Type is SettingControlType.Info or SettingControlType.Status or SettingControlType.Link)
         {
@@ -299,7 +305,7 @@ public static class PluginSettingsPageRenderer
             {
                 if (!string.IsNullOrWhiteSpace(control.Command))
                 {
-                    invokeCommand(control.Command);
+                    invokeCommand(pluginId, control.Command);
                 }
             };
             return button;
@@ -321,14 +327,14 @@ public static class PluginSettingsPageRenderer
         return grid;
     }
 
-    private static Control CreateEditor(SettingControlContribution control, JsonElement? current, IPluginSettingsValues values)
+    private static Control CreateEditor(string pluginId, SettingControlContribution control, JsonElement? current, IPluginSettingsValues values)
     {
         switch (control.Type)
         {
             case SettingControlType.Toggle:
             {
                 var toggle = new ToggleSwitch { IsChecked = ReadBool(current), OnContent = string.Empty, OffContent = string.Empty };
-                toggle.IsCheckedChanged += (_, _) => values.Set(control.Key, JsonSerializer.SerializeToElement(toggle.IsChecked == true));
+                toggle.IsCheckedChanged += (_, _) => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(toggle.IsChecked == true));
                 return toggle;
             }
 
@@ -351,7 +357,7 @@ public static class PluginSettingsPageRenderer
                 {
                     if (combo.SelectedItem is ComboBoxItem { Tag: string value })
                     {
-                        values.Set(control.Key, JsonSerializer.SerializeToElement(value));
+                        values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(value));
                     }
                 };
                 return combo;
@@ -376,7 +382,7 @@ public static class PluginSettingsPageRenderer
                     {
                         if (e.Property == Slider.ValueProperty)
                         {
-                            values.Set(control.Key, JsonSerializer.SerializeToElement(slider.Value));
+                            values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(slider.Value));
                         }
                     };
                     return slider;
@@ -387,7 +393,7 @@ public static class PluginSettingsPageRenderer
                 {
                     if (double.TryParse(box.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var parsed))
                     {
-                        values.Set(control.Key, JsonSerializer.SerializeToElement(parsed));
+                        values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(parsed));
                     }
                 };
                 return box;
@@ -404,7 +410,7 @@ public static class PluginSettingsPageRenderer
             default:
             {
                 var text = new TextBox { Text = ReadString(current) ?? string.Empty, Width = 220 };
-                text.LostFocus += (_, _) => values.Set(control.Key, JsonSerializer.SerializeToElement(text.Text ?? string.Empty));
+                text.LostFocus += (_, _) => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(text.Text ?? string.Empty));
                 return text;
             }
         }

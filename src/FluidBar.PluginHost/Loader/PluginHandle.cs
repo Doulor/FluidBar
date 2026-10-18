@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluidBar.PluginHost.Runtime;
 using FluidBar.Sdk.Manifest;
 
@@ -51,6 +52,40 @@ public sealed class PluginHandle
     public bool IsRestartRequired { get; internal set; }
 
     public bool IsDisabled => State == PluginLifecycleState.Disabled;
+
+    /// <summary>
+    /// Reads one host-owned setting value as JSON for the generic settings-page renderer. Returns
+    /// <see langword="null"/> when the plugin is not loaded or the key has not been written.
+    /// </summary>
+    public JsonElement? GetSettingValue(string key)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        return Runtime is { } runtime && runtime.Settings.TryGetValue(key, out var value) ? value : null;
+    }
+
+    /// <summary>Writes one host-owned setting value (the plugin observes it through <c>IPluginSettings</c>).</summary>
+    public bool SetSettingValue(string key, JsonElement value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        if (Runtime is not { } runtime)
+        {
+            return false;
+        }
+
+        try
+        {
+            runtime.Settings.SetValue(key, value);
+            return true;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Flushes the host-owned settings file.</summary>
+    public Task SaveSettingsAsync(CancellationToken cancellationToken = default)
+        => Runtime is { } runtime ? runtime.Settings.SaveAsync(cancellationToken).AsTask() : Task.CompletedTask;
 
     /// <summary>Diagnostics-only weak view of the plugin instance. Never cached by the App.</summary>
     internal WeakReference? PluginInstanceReference { get; set; }

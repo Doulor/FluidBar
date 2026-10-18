@@ -107,9 +107,17 @@ public sealed class MarketplaceEndToEndTests
             RequireMarketplaceSignature = true,
         });
 
-        var installOne = await installService.InstallFromFileAsync(versionOne.Artifact.PackagePath, versionOne.Signature, allowUnsigned: false);
+        var installProgress = new InlineProgress<InstallPhase>();
+        var installOne = await installService.InstallFromFileAsync(
+            versionOne.Artifact.PackagePath,
+            versionOne.Signature,
+            allowUnsigned: false,
+            progress: installProgress);
         Assert.True(installOne.Success, installOne.Message);
         Assert.Equal("1.0.0", installService.GetState("sample-minimal")!.ActiveVersion);
+        Assert.Equal(
+            [InstallPhase.Downloading, InstallPhase.Verifying, InstallPhase.Extracting, InstallPhase.Staged, InstallPhase.Activating, InstallPhase.Active],
+            installProgress.Values);
 
         var (host, _, publisher) = HostFactory.Create(pluginRoot);
         await using var hostScope = host;
@@ -123,14 +131,19 @@ public sealed class MarketplaceEndToEndTests
         // 3) Update to v2 using the signed index + client-provided signature (no network: local handler).
         var v2VersionEntry = shard.Versions!.Single(entry => entry.Version == "2.0.0");
         var v2Signature = PackageSignatureDocument.Parse(Encoding.UTF8.GetString(routes[v2VersionEntry.Artifact!.SignatureUrl]));
+        var updateProgress = new InlineProgress<InstallPhase>();
         var update = await installService.UpdateAsync(new InstallRequest
         {
             Source = new HttpPackageSource(httpClient, new Uri(v2VersionEntry.Artifact.Url)),
             Signature = v2Signature,
             ExpectedVersion = v2VersionEntry,
             ExpectedPluginId = "sample-minimal",
+            Progress = updateProgress,
         });
         Assert.True(update.Success, update.Message);
+        Assert.Equal(InstallPhase.Active, updateProgress.Values[^1]);
+        Assert.Contains(InstallPhase.Downloading, updateProgress.Values);
+        Assert.Contains(InstallPhase.Activating, updateProgress.Values);
 
         var changedFile = Path.Combine(pluginRoot, "sample-minimal", "active.json");
         Assert.Contains("2.0.0", File.ReadAllText(changedFile), StringComparison.Ordinal);
@@ -142,8 +155,10 @@ public sealed class MarketplaceEndToEndTests
         Assert.True(unloadTwo.Collected, unloadTwo.FailureReason);
 
         // 4) Rollback is a pointer switch; the old version directory is still installed.
-        var rollback = await installService.RollbackAsync("sample-minimal", "1.0.0");
+        var rollbackProgress = new InlineProgress<InstallPhase>();
+        var rollback = await installService.RollbackAsync("sample-minimal", "1.0.0", progress: rollbackProgress);
         Assert.True(rollback.Success, rollback.Message);
+        Assert.Equal([InstallPhase.Activating, InstallPhase.Active], rollbackProgress.Values);
         Assert.Equal("1.0.0", rollback.ActiveVersion);
         Assert.Contains("1.0.0", File.ReadAllText(changedFile), StringComparison.Ordinal);
 

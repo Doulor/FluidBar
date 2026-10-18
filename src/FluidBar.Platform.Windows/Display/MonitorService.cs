@@ -209,6 +209,20 @@ public sealed class MonitorService : PlatformMonitor<MonitorSet>, IMonitorServic
                ?? DisplayMetrics.SelectMonitor(set, new PixelRect(physicalX, physicalY, 1, 1));
     }
 
+    /// <summary>
+    /// Monitor under the current cursor position. Uses <c>GetCursorPos</c> (never a full
+    /// enumeration) and falls back to <see cref="MonitorAtPoint"/>'s nearest-monitor rule.
+    /// </summary>
+    public MonitorInfo? MonitorUnderCursor()
+    {
+        if (!NativeMethods.User32.GetCursorPos(out var cursor))
+        {
+            return null;
+        }
+
+        return MonitorAtPoint(cursor.X, cursor.Y);
+    }
+
     /// <summary>Monitor with the largest overlap with a physical rect.</summary>
     public MonitorInfo? MonitorForRect(PixelRect physicalRect)
     {

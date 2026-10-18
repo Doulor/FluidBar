@@ -163,14 +163,14 @@ public sealed class PluginAndMarketplaceAdapterTests
             var service = new BuiltinPluginContributionUiService(settings, localizer);
             var pages = service.SettingsPages("fluidbar-media");
             var controls = pages.SelectMany(page => (page.Controls ?? []).Concat((page.Groups ?? []).SelectMany(group => group.Controls ?? []))).ToList();
-            var content = PluginSettingsPageRenderer.BuildPage(pages[0], localizer, service.Values, service.InvokeCommand, _ => { });
+            var content = PluginSettingsPageRenderer.BuildPage(pages[0], "fluidbar-media", localizer, service.Values, (_, _) => { }, _ => { });
             Assert.NotNull(content);
             return (controls.Count, content, service);
         });
 
         Assert.True(outcome.Count > 0, "built-in media settings page should expose controls");
         Assert.NotNull(outcome.content);
-        outcome.service.InvokeCommand("media.toggle-play-pause");
+        await outcome.service.InvokeCommandAsync("fluidbar-media", "media.toggle-play-pause");
         Assert.Equal("media.toggle-play-pause", outcome.service.LastInvokedCommand);
     }
 
@@ -257,7 +257,11 @@ public sealed class PluginAndMarketplaceAdapterTests
 
         public string? GetInstalledVersion(string pluginId) => InstalledVersion;
 
-        public Task InstallAsync(string pluginId, string version, IProgress<InstallProgress> progress, CancellationToken cancellationToken)
+        public Task InstallAsync(
+            MarketplacePluginEntry entry,
+            MarketplaceVersionInfo version,
+            IProgress<InstallProgress> progress,
+            CancellationToken cancellationToken)
             => Task.CompletedTask;
 
         public Task RollbackAsync(string pluginId, string version, IProgress<InstallProgress> progress, CancellationToken cancellationToken)

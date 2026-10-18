@@ -47,7 +47,8 @@ public sealed class PluginInstallService : IDisposable
         string packagePath,
         PackageSignatureDocument? signature = null,
         bool? allowUnsigned = null,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        IProgress<InstallPhase>? progress = null) =>
         InstallAsync(
             new InstallRequest
             {
@@ -55,6 +56,7 @@ public sealed class PluginInstallService : IDisposable
                 Signature = signature,
                 AllowUnsigned = allowUnsigned ?? _options.AllowUnsignedLocalInstall,
                 IsUpdate = false,
+                Progress = progress,
             },
             cancellationToken);
 
@@ -89,7 +91,11 @@ public sealed class PluginInstallService : IDisposable
     }
 
     /// <summary>Rolls back to a retained previous version (pointer switch + host activation).</summary>
-    public async Task<RollbackResult> RollbackAsync(string pluginId, string targetVersion, CancellationToken cancellationToken = default)
+    public async Task<RollbackResult> RollbackAsync(
+        string pluginId,
+        string targetVersion,
+        CancellationToken cancellationToken = default,
+        IProgress<InstallPhase>? progress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetVersion);
@@ -136,6 +142,7 @@ public sealed class PluginInstallService : IDisposable
             }
 
             store.WriteActiveVersion(targetVersion);
+            progress?.Report(InstallPhase.Activating);
             var activation = await ActivateAsync(pluginId, manifest, targetDirectory, cancellationToken).ConfigureAwait(false);
             if (!activation.Success)
             {
@@ -159,6 +166,7 @@ public sealed class PluginInstallService : IDisposable
                 UpdatedAt = _options.TimeProvider.GetUtcNow(),
             };
             store.WriteState(updated);
+            progress?.Report(InstallPhase.Active);
             _options.Logger.Info($"Plugin '{pluginId}' rolled back from {activeVersion} to {targetVersion}.");
             return new RollbackResult(true, pluginId, targetVersion, activeVersion, "Rollback completed.");
         }
@@ -297,6 +305,7 @@ public sealed class PluginInstallService : IDisposable
         try
         {
             // 1. Download/copy to staging while hashing, bounded.
+            request.Progress?.Report(InstallPhase.Downloading);
             var download = await StagePackageAsync(request.Source, stagedPackagePath, cancellationToken).ConfigureAwait(false);
             if (!download.Success)
             {
@@ -304,6 +313,7 @@ public sealed class PluginInstallService : IDisposable
             }
 
             // 2. Verify hash + detached signature BEFORE extraction.
+            request.Progress?.Report(InstallPhase.Verifying);
             var verification = await VerifyPackageAsync(request, download.Sha256, download.Size, warnings, cancellationToken).ConfigureAwait(false);
             if (!verification.Verified)
             {
@@ -315,6 +325,7 @@ public sealed class PluginInstallService : IDisposable
             }
 
             // 3. Extract safely (zip-slip/limits/checksums) and parse/validate the manifest.
+            request.Progress?.Report(InstallPhase.Extracting);
             FbpExtractionResult extraction;
             try
             {
@@ -482,7 +493,9 @@ public sealed class PluginInstallService : IDisposable
                 Disabled = false,
             };
             store.WriteState(pendingState);
+            request.Progress?.Report(InstallPhase.Staged);
 
+            request.Progress?.Report(InstallPhase.Activating);
             var activation = await ActivateAsync(pluginId, manifest, targetDirectory, cancellationToken).ConfigureAwait(false);
             if (!activation.Success)
             {
@@ -519,6 +532,7 @@ public sealed class PluginInstallService : IDisposable
                 RetainedVersions = PruneOldVersions(store, manifest.Version),
             };
             store.WriteState(finalState);
+            request.Progress?.Report(InstallPhase.Active);
             _options.Logger.Info($"Plugin '{pluginId}' v{manifest.Version} installed and activated.");
             return new InstallResult
             {

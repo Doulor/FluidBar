@@ -1,0 +1,610 @@
+using System.Globalization;
+using HarfBuzzSharp;
+using SkiaSharp;
+
+namespace FluidBar.SkiaIslandSpike;
+
+internal enum FontRole
+{
+    Ui,
+    UiSemiBold,
+    DisplaySemiBold,
+    DisplayBold,
+    Mono,
+    MonoSemiBold,
+}
+
+internal enum TextAlign
+{
+    Left,
+    Center,
+    Right,
+}
+
+internal readonly record struct TextStyle(FontRole Role, float Size);
+
+/// <summary>One measured/laid-out string: shaped runs + cached text blobs + line metrics.</summary>
+internal sealed class TextLayout : IDisposable
+{
+    public required string Text { get; init; }
+    public required SKTextBlob[] Blobs { get; init; }
+    public required float[] Offsets { get; init; }
+    public required float Width { get; init; }
+    public required float Height { get; init; }
+    public required float Ascent { get; init; }
+    public required int GlyphCount { get; init; }
+    public required bool Trimmed { get; init; }
+    public required int RunCount { get; init; }
+
+    public void Dispose()
+    {
+        foreach (var blob in Blobs)
+        {
+            blob.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// Text stack for the island: explicit font fallback (Segoe UI Variable → Microsoft YaHei UI →
+/// Segoe UI Emoji → SKFontManager), HarfBuzz shaping for emoji clusters, LRU layout/measure cache,
+/// character-ellipsis trimming and CJK-aware line metrics.
+/// </summary>
+internal sealed class TextEngine : IDisposable
+{
+    public const int DefaultCacheCapacity = 512;
+
+    private static readonly (int Low, int High)[] EmojiRanges =
+    [
+        (0x1F000, 0x1FAFF),
+        (0x2600, 0x27BF),
+        (0x2B00, 0x2BFF),
+        (0xFE00, 0xFE0F),
+        (0x200D, 0x200D),
+        (0x1F1E6, 0x1F1FF),
+    ];
+
+    private static readonly (int Low, int High)[] CjkRanges =
+    [
+        (0x2E80, 0x2FFF),
+        (0x3000, 0x30FF),
+        (0x31F0, 0x31FF),
+        (0x3400, 0x4DBF),
+        (0x4E00, 0x9FFF),
+        (0xF900, 0xFAFF),
+        (0xFE30, 0xFE4F),
+        (0xFF00, 0xFFEF),
+        (0x20000, 0x2FA1F),
+    ];
+
+    private readonly Dictionary<(FontRole Role, float Size), SKFont> _fonts = [];
+    private readonly Dictionary<(FontRole Role, float Size), SKTypeface> _primary = [];
+    private readonly Dictionary<(SKTypeface Typeface, float Size), SKFont> _runFonts = [];
+    private readonly Dictionary<int, SKTypeface?> _fallbacks = [];
+    private readonly Dictionary<TextKey, CacheEntry> _cache = [];
+    private readonly LinkedList<TextKey> _lru = [];
+    private readonly int _capacity;
+    private readonly SKPaint _paint = new() { IsAntialias = true };
+
+    private readonly SKTypeface _ui;
+    private readonly SKTypeface _uiSemibold;
+    private readonly SKTypeface _displaySemibold;
+    private readonly SKTypeface _displayBold;
+    private readonly SKTypeface _mono;
+    private readonly SKTypeface _monoSemibold;
+    private readonly SKTypeface _cjkRegular;
+    private readonly SKTypeface _cjkSemibold;
+    private readonly SKTypeface _emoji;
+
+    private readonly Blob? _emojiBlob;
+    private readonly Face? _emojiFace;
+    private readonly Dictionary<float, HarfBuzzSharp.Font> _emojiFonts = [];
+
+    private int _hits;
+    private int _misses;
+    private int _evictions;
+    private int _measureCalls;
+    private int _trimSteps;
+    private long _glyphs;
+
+    public TextEngine(int cacheCapacity = DefaultCacheCapacity)
+    {
+        _capacity = cacheCapacity;
+        _ui = Resolve("Segoe UI Variable Text", SKFontStyleWeight.Normal, "Segoe UI");
+        _uiSemibold = Resolve("Segoe UI Variable Text", SKFontStyleWeight.SemiBold, "Segoe UI Semibold");
+        _displaySemibold = Resolve("Segoe UI Variable Display", SKFontStyleWeight.SemiBold, "Segoe UI Semibold");
+        _displayBold = Resolve("Segoe UI Variable Display", SKFontStyleWeight.Bold, "Segoe UI Bold");
+        _mono = Resolve("Cascadia Mono", SKFontStyleWeight.Normal, "Consolas");
+        _monoSemibold = Resolve("Cascadia Mono", SKFontStyleWeight.SemiBold, "Consolas");
+        _cjkRegular = Resolve("Microsoft YaHei UI", SKFontStyleWeight.Normal, "Microsoft YaHei");
+        _cjkSemibold = Resolve("Microsoft YaHei UI", SKFontStyleWeight.SemiBold, "Microsoft YaHei UI");
+        _emoji = Resolve("Segoe UI Emoji", SKFontStyleWeight.Normal, "Segoe UI Symbol");
+
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "seguiemj.ttf");
+            if (File.Exists(path))
+            {
+                _emojiBlob = Blob.FromFile(path);
+                _emojiFace = new Face(_emojiBlob, 0);
+            }
+        }
+        catch
+        {
+            _emojiBlob = null;
+            _emojiFace = null;
+        }
+    }
+
+    public int CacheCount => _cache.Count;
+    public int CacheCapacity => _capacity;
+    public int Hits => _hits;
+    public int Misses => _misses;
+    public int Evictions => _evictions;
+    public int MeasureCalls => _measureCalls;
+    public int TrimSteps => _trimSteps;
+    public long LaidOutGlyphs => _glyphs;
+
+    public long ApproxCacheBytes
+    {
+        get
+        {
+            long total = 0;
+            foreach (var entry in _cache.Values)
+            {
+                total += 160 + (entry.Layout.Text.Length * 2L) + (entry.Layout.Blobs.Length * 96L);
+            }
+
+            return total;
+        }
+    }
+
+    public float LineHeight(TextStyle style) => GetFont(style).Spacing;
+
+    public float Measure(string text, TextStyle style, float maxWidth = float.PositiveInfinity)
+        => GetLayout(text, style, maxWidth).Width;
+
+    public void Draw(
+        SKCanvas canvas,
+        string? text,
+        TextStyle style,
+        SKRect area,
+        SKColor color,
+        TextAlign align = TextAlign.Left,
+        float opacity = 1f)
+    {
+        if (string.IsNullOrEmpty(text) || area.Width <= 1 || area.Height <= 1 || opacity <= 0.01f)
+        {
+            return;
+        }
+
+        var layout = GetLayout(text, style, area.Width);
+        var x = align switch
+        {
+            TextAlign.Center => area.Left + ((area.Width - layout.Width) / 2),
+            TextAlign.Right => area.Right - layout.Width,
+            _ => area.Left,
+        };
+        var baseline = area.Top + ((area.Height - layout.Height) / 2) - layout.Ascent;
+
+        _paint.Color = opacity >= 0.999f
+            ? color
+            : color.WithAlpha((byte)Math.Clamp(color.Alpha * opacity, 0, 255));
+
+        for (var i = 0; i < layout.Blobs.Length; i++)
+        {
+            canvas.DrawText(layout.Blobs[i], x + layout.Offsets[i], baseline, _paint);
+        }
+    }
+
+    public void DrawLayout(SKCanvas canvas, TextLayout layout, SKRect area, SKColor color, TextAlign align, float opacity = 1f)
+    {
+        var x = align switch
+        {
+            TextAlign.Center => area.Left + ((area.Width - layout.Width) / 2),
+            TextAlign.Right => area.Right - layout.Width,
+            _ => area.Left,
+        };
+        var baseline = area.Top + ((area.Height - layout.Height) / 2) - layout.Ascent;
+        _paint.Color = opacity >= 0.999f
+            ? color
+            : color.WithAlpha((byte)Math.Clamp(color.Alpha * opacity, 0, 255));
+        for (var i = 0; i < layout.Blobs.Length; i++)
+        {
+            canvas.DrawText(layout.Blobs[i], x + layout.Offsets[i], baseline, _paint);
+        }
+    }
+
+    public TextLayout GetLayout(string text, TextStyle style, float maxWidth)
+    {
+        var bucket = maxWidth >= float.PositiveInfinity ? int.MaxValue : (int)MathF.Round(maxWidth * 2);
+        var key = new TextKey(text, style.Role, style.Size, bucket);
+        if (_cache.TryGetValue(key, out var entry))
+        {
+            _hits++;
+            _lru.Remove(entry.Node);
+            _lru.AddFirst(entry.Node);
+            return entry.Layout;
+        }
+
+        _misses++;
+        var layout = Build(text, style, maxWidth);
+        var node = _lru.AddFirst(key);
+        _cache[key] = new CacheEntry(layout, node);
+        if (_cache.Count > _capacity)
+        {
+            var last = _lru.Last!;
+            if (_cache.Remove(last.Value, out var evicted))
+            {
+                evicted.Layout.Dispose();
+                _evictions++;
+            }
+
+            _lru.RemoveLast();
+        }
+
+        return layout;
+    }
+
+    private TextLayout Build(string text, TextStyle style, float maxWidth)
+    {
+        var primaryFont = GetFont(style);
+        var trimmed = text;
+        var width = MeasureTextWidth(text, style, primaryFont);
+        var trimmedFlag = false;
+        if (width > maxWidth && maxWidth > 1)
+        {
+            trimmed = Trim(text, style, primaryFont, maxWidth, out width);
+            trimmedFlag = true;
+        }
+
+        var runs = Segment(trimmed, style, primaryFont);
+        var blobs = new SKTextBlob[runs.Count];
+        var offsets = new float[runs.Count];
+        var x = 0f;
+        var glyphs = 0;
+        for (var i = 0; i < runs.Count; i++)
+        {
+            var run = runs[i];
+            blobs[i] = CreateBlob(run, style, out var runWidth, out var runGlyphs);
+            offsets[i] = x;
+            x += runWidth;
+            glyphs += runGlyphs;
+        }
+
+        _glyphs += glyphs;
+        return new TextLayout
+        {
+            Text = trimmed,
+            Blobs = blobs,
+            Offsets = offsets,
+            Width = x,
+            Height = primaryFont.Spacing,
+            Ascent = primaryFont.Metrics.Ascent,
+            GlyphCount = glyphs,
+            Trimmed = trimmedFlag,
+            RunCount = runs.Count,
+        };
+    }
+
+    private string Trim(string text, TextStyle style, SKFont primaryFont, float maxWidth, out float width)
+    {
+        const string ellipsis = "…";
+        var low = 0;
+        var high = text.Length;
+        var best = string.Empty;
+        width = 0;
+        while (low <= high)
+        {
+            var mid = (low + high) / 2;
+            if (mid > 0 && mid < text.Length && char.IsHighSurrogate(text[mid - 1]))
+            {
+                mid++;
+            }
+
+            var candidate = text[..Math.Min(mid, text.Length)] + ellipsis;
+            var candidateWidth = MeasureTextWidth(candidate, style, primaryFont);
+            _trimSteps++;
+            if (candidateWidth <= maxWidth)
+            {
+                best = candidate;
+                width = candidateWidth;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        if (best.Length == 0)
+        {
+            best = ellipsis;
+            width = MeasureTextWidth(best, style, primaryFont);
+        }
+
+        return best;
+    }
+
+    private float MeasureTextWidth(string text, TextStyle style, SKFont primaryFont)
+    {
+        _measureCalls++;
+        var runs = Segment(text, style, primaryFont);
+        var width = 0f;
+        foreach (var run in runs)
+        {
+            width += MeasureRun(run, style);
+        }
+
+        return width;
+    }
+
+    private float MeasureRun(Run run, TextStyle style)
+    {
+        if (run.Shaped)
+        {
+            return ShapeEmoji(run.Text, style).Width;
+        }
+
+        return run.Font.MeasureText(run.Text);
+    }
+
+    private SKTextBlob CreateBlob(Run run, TextStyle style, out float width, out int glyphs)
+    {
+        if (run.Shaped)
+        {
+            var shaped = ShapeEmoji(run.Text, style);
+            width = shaped.Width;
+            glyphs = shaped.GlyphCount;
+            return shaped.Blob;
+        }
+
+        var blob = SKTextBlob.Create(run.Text, run.Font);
+        width = run.Font.MeasureText(run.Text);
+        glyphs = run.Text.Length;
+        if (blob is null)
+        {
+            throw new InvalidOperationException($"Skia could not create a text blob for '{run.Text}'.");
+        }
+
+        return blob;
+    }
+
+    private List<Run> Segment(string text, TextStyle style, SKFont primaryFont)
+    {
+        var runs = new List<Run>(2);
+        var start = 0;
+        SKTypeface? current = null;
+        var shaped = false;
+        for (var i = 0; i < text.Length;)
+        {
+            var cp = char.ConvertToUtf32(text, i);
+            var length = char.IsHighSurrogate(text[i]) ? 2 : 1;
+            var (typeface, isShaped) = ResolveTypeface(cp, style, primaryFont);
+            if (current is null || !ReferenceEquals(typeface, current) || isShaped != shaped)
+            {
+                if (current is not null)
+                {
+                    runs.Add(new Run(text[start..i], GetRunFont(current, style.Size), shaped));
+                }
+
+                current = typeface;
+                shaped = isShaped;
+                start = i;
+            }
+
+            i += length;
+        }
+
+        if (current is not null)
+        {
+            runs.Add(new Run(text[start..], GetRunFont(current, style.Size), shaped));
+        }
+
+        return runs;
+    }
+
+    private (SKTypeface Typeface, bool Shaped) ResolveTypeface(int cp, TextStyle style, SKFont primaryFont)
+    {
+        if (IsEmoji(cp))
+        {
+            return (_emoji, true);
+        }
+
+        if (IsCjk(cp))
+        {
+            return (style.Role is FontRole.UiSemiBold or FontRole.DisplaySemiBold or FontRole.DisplayBold
+                ? _cjkSemibold
+                : _cjkRegular, false);
+        }
+
+        if (primaryFont.ContainsGlyph(cp))
+        {
+            return (GetPrimaryTypeface(style), false);
+        }
+
+        if (!_fallbacks.TryGetValue(cp, out var fallback))
+        {
+            fallback = SKFontManager.Default.MatchCharacter(cp);
+            _fallbacks[cp] = fallback;
+        }
+
+        return (fallback ?? GetPrimaryTypeface(style), false);
+    }
+
+    private static bool IsEmoji(int cp)
+        => EmojiRanges.Any(range => cp >= range.Low && cp <= range.High);
+
+    private static bool IsCjk(int cp)
+        => CjkRanges.Any(range => cp >= range.Low && cp <= range.High);
+
+    private SKTypeface GetPrimaryTypeface(TextStyle style) => style.Role switch
+    {
+        FontRole.Ui => _ui,
+        FontRole.UiSemiBold => _uiSemibold,
+        FontRole.DisplaySemiBold => _displaySemibold,
+        FontRole.DisplayBold => _displayBold,
+        FontRole.Mono => _mono,
+        FontRole.MonoSemiBold => _monoSemibold,
+        _ => _ui,
+    };
+
+    private SKFont GetFont(TextStyle style)
+    {
+        if (_fonts.TryGetValue((style.Role, style.Size), out var font))
+        {
+            return font;
+        }
+
+        font = new SKFont(GetPrimaryTypeface(style), style.Size)
+        {
+            Edging = SKFontEdging.Antialias,
+            Subpixel = false,
+            Hinting = SKFontHinting.Normal,
+        };
+        _fonts[(style.Role, style.Size)] = font;
+        return font;
+    }
+
+    private SKFont GetRunFont(SKTypeface typeface, float size)
+    {
+        if (_runFonts.TryGetValue((typeface, size), out var font))
+        {
+            return font;
+        }
+
+        font = new SKFont(typeface, size)
+        {
+            Edging = SKFontEdging.Antialias,
+            Subpixel = false,
+            Hinting = SKFontHinting.Normal,
+        };
+        _runFonts[(typeface, size)] = font;
+        return font;
+    }
+
+    private (SKTextBlob Blob, float Width, int GlyphCount) ShapeEmoji(string text, TextStyle style)
+    {
+        if (_emojiFace is null)
+        {
+            var font = GetRunFont(_emoji, style.Size);
+            var fallback = SKTextBlob.Create(text, font)
+                ?? throw new InvalidOperationException("Emoji shaping unavailable.");
+            return (fallback, font.MeasureText(text), text.Length);
+        }
+
+        if (!_emojiFonts.TryGetValue(style.Size, out var hbFont))
+        {
+            hbFont = new HarfBuzzSharp.Font(_emojiFace);
+            hbFont.SetScale((int)(style.Size * 64), (int)(style.Size * 64));
+            _emojiFonts[style.Size] = hbFont;
+        }
+
+        using var buffer = new HarfBuzzSharp.Buffer();
+        buffer.AddUtf8(text);
+        buffer.GuessSegmentProperties();
+        hbFont.Shape(buffer);
+
+        var infos = buffer.GetGlyphInfoSpan();
+        var positions = buffer.GetGlyphPositionSpan();
+        var builder = new SKTextBlobBuilder();
+        var run = builder.AllocatePositionedRun(GetRunFont(_emoji, style.Size), infos.Length);
+        var glyphSpan = run.GetGlyphSpan();
+        var positionSpan = run.GetPositionSpan();
+        var x = 0f;
+        for (var i = 0; i < infos.Length; i++)
+        {
+            glyphSpan[i] = (ushort)infos[i].Codepoint;
+            positionSpan[i] = new SKPoint(x + (positions[i].XOffset / 64f), positions[i].YOffset / 64f);
+            x += positions[i].XAdvance / 64f;
+        }
+
+        var blob = builder.Build();
+        if (blob is null)
+        {
+            throw new InvalidOperationException("Skia could not build a shaped emoji blob.");
+        }
+
+        return (blob, x, infos.Length);
+    }
+
+    private static SKTypeface Resolve(string family, SKFontStyleWeight weight, string fallbackFamily)
+    {
+        var typeface = SKTypeface.FromFamilyName(family, weight, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+        if (typeface is null || !string.Equals(typeface.FamilyName, family, StringComparison.OrdinalIgnoreCase))
+        {
+            typeface?.Dispose();
+            typeface = SKTypeface.FromFamilyName(fallbackFamily, weight, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+        }
+
+        return typeface ?? SKTypeface.Default;
+    }
+
+    public void ResetStats()
+    {
+        _hits = 0;
+        _misses = 0;
+        _evictions = 0;
+        _measureCalls = 0;
+        _trimSteps = 0;
+        _glyphs = 0;
+    }
+
+    /// <summary>Drops every cached layout (locale/theme/DPI change) while keeping fonts and typefaces.</summary>
+    public void ClearCache()
+    {
+        foreach (var entry in _cache.Values)
+        {
+            entry.Layout.Dispose();
+        }
+
+        _cache.Clear();
+        _lru.Clear();
+        ResetStats();
+    }
+
+    public void Dispose()
+    {
+        foreach (var entry in _cache.Values)
+        {
+            entry.Layout.Dispose();
+        }
+
+        _cache.Clear();
+        _lru.Clear();
+        foreach (var font in _fonts.Values)
+        {
+            font.Dispose();
+        }
+
+        foreach (var font in _runFonts.Values)
+        {
+            font.Dispose();
+        }
+
+        foreach (var font in _emojiFonts.Values)
+        {
+            font.Dispose();
+        }
+
+        _emojiFace?.Dispose();
+        _emojiBlob?.Dispose();
+        _paint.Dispose();
+        _ui.Dispose();
+        _uiSemibold.Dispose();
+        _displaySemibold.Dispose();
+        _displayBold.Dispose();
+        _mono.Dispose();
+        _monoSemibold.Dispose();
+        _cjkRegular.Dispose();
+        _cjkSemibold.Dispose();
+        _emoji.Dispose();
+    }
+
+    private readonly record struct TextKey(string Text, FontRole Role, float Size, int MaxWidthHalf);
+
+    private sealed record CacheEntry(TextLayout Layout, LinkedListNode<TextKey> Node);
+
+    private readonly record struct Run(string Text, SKFont Font, bool Shaped);
+}

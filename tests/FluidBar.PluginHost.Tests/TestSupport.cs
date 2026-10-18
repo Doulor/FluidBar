@@ -300,8 +300,7 @@ internal sealed class RecordingPublisher : IIslandPublisher
         Events.Any(islandEvent => string.Equals(islandEvent.Title, title, StringComparison.Ordinal));
 }
 
-internal sealed class RecordingNotificationSink : INotificationSink
-{
+internal sealed class RecordingNotificationSink : INotificationSink{
     private readonly List<PluginNotification> _notifications = [];
 
     public IReadOnlyList<PluginNotification> Notifications => _notifications;
@@ -313,9 +312,18 @@ internal sealed class RecordingNotificationSink : INotificationSink
     }
 }
 
-internal static class HostFactory
+/// <summary>Synchronous progress collector (Progress&lt;T&gt; posts asynchronously and would race assertions).</summary>
+internal sealed class InlineProgress<T> : IProgress<T>
 {
-    public static (Loader.PluginHost Host, RecordingHostLogger Logger, RecordingPublisher Publisher) Create(
+    private readonly List<T> _values = [];
+
+    public IReadOnlyList<T> Values => _values;
+
+    public void Report(T value) => _values.Add(value);
+}
+
+internal static class HostFactory
+{    public static (Loader.PluginHost Host, RecordingHostLogger Logger, RecordingPublisher Publisher) Create(
         string pluginRoot,
         Func<PluginHostOptions, PluginHostOptions>? configure = null)
     {

@@ -9,6 +9,7 @@ using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
+using FluidBar.App.Views.Plugins;
 using FluidBar.Core.Layout;
 
 namespace FluidBar.App.Views.Settings;
@@ -454,16 +455,45 @@ public static class SettingsSectionBuilder
             });
             foreach (var page in contributions.SettingsPages(pluginId))
             {
-                panel.Children.Add(FluidBar.App.Views.Plugins.PluginSettingsPageRenderer.BuildPage(
+                panel.Children.Add(PluginSettingsPageRenderer.BuildPage(
                     page,
+                    pluginId,
                     ctx.Localizer,
                     contributions.Values,
-                    commandId =>
+                    (id, commandId) =>
                     {
-                        contributions.InvokeCommand(commandId);
+                        _ = contributions.InvokeCommandAsync(id, commandId);
                         ctx.ShowStatus(commandId);
                     },
                     ctx.OpenPath));
+            }
+
+            var commands = contributions.Commands(pluginId);
+            if (commands.Count > 0)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.Commands),
+                    FontSize = Typography.SettingsBodySize,
+                    FontWeight = FontWeight.SemiBold,
+                    Margin = new Thickness(0, 10, 0, 0),
+                });
+                foreach (var command in commands)
+                {
+                    var label = FluidBar.App.Views.Plugins.LocalizedValue.Resolve(command.Title, ctx.Localizer);
+                    var commandButton = new Button
+                    {
+                        Content = string.IsNullOrEmpty(label) ? command.Id : label,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                    };
+                    var commandId = command.Id;
+                    commandButton.Click += (_, _) =>
+                    {
+                        _ = contributions.InvokeCommandAsync(pluginId, commandId);
+                        ctx.ShowStatus(commandId);
+                    };
+                    panel.Children.Add(commandButton);
+                }
             }
         }
 
@@ -524,9 +554,40 @@ public static class SettingsSectionBuilder
         {
             info.Children.Add(new TextBlock
             {
-                Text = string.Join(" · ", plugin.CapabilityKeys.Select(ctx.Localizer.Get)),
+                Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.Capabilities) + ": "
+                    + string.Join(" · ", plugin.CapabilityKeys.Select(ctx.Localizer.Get)),
                 FontSize = 10,
                 Opacity = 0.55,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        info.Children.Add(new TextBlock
+        {
+            Text = plugin.State,
+            FontSize = 10,
+            Opacity = 0.75,
+        });
+
+        if (!string.IsNullOrEmpty(plugin.Error))
+        {
+            info.Children.Add(new TextBlock
+            {
+                Text = plugin.Error,
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Accents.Warning),
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        if (plugin.RestartRequired)
+        {
+            info.Children.Add(new TextBlock
+            {
+                Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.RestartRequired),
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Accents.Warning),
+                TextWrapping = TextWrapping.Wrap,
             });
         }
 
@@ -535,14 +596,19 @@ public static class SettingsSectionBuilder
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
         if (ctx.Plugins is FluidBar.App.Views.Plugins.IPluginContributionUiService contributionService
-            && contributionService.SettingsPages(plugin.Id).Count > 0)
+            && (contributionService.SettingsPages(plugin.Id).Count > 0 || contributionService.Commands(plugin.Id).Count > 0))
         {
             var settingsButton = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.Plugins.SettingsButton), Tag = plugin.Id };
             settingsButton.Click += (_, _) => showDetail(plugin.Id);
             actions.Children.Add(settingsButton);
         }
 
-        var toggle = new ToggleSwitch { IsChecked = enabled, VerticalAlignment = VerticalAlignment.Center };
+        var toggle = new ToggleSwitch
+        {
+            IsChecked = enabled,
+            IsEnabled = plugin.Available,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         toggle.IsCheckedChanged += (_, _) => _ = ctx.Plugins.SetEnabledAsync(plugin.Id, toggle.IsChecked == true, CancellationToken.None);
         actions.Children.Add(toggle);
         Grid.SetColumn(actions, 1);

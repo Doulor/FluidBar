@@ -37,6 +37,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
     private readonly ArtworkCache _artworkCache;
+    private readonly ArtworkTempStore _artworkTempStore;
     private int _started;
     private int _disposed;
 
@@ -56,9 +57,31 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         _volume = new VolumeMonitor(_platformLogger, _counters, time);
         _brightness = new BrightnessMonitor(_platformLogger, _counters, time);
         _artworkCache = new ArtworkCache();
+        _artworkTempStore = new ArtworkTempStore(
+            new ArtworkTempStoreOptions { DirectoryPath = Path.Combine(Path.GetTempPath(), "FluidBar", "art") },
+            _platformLogger,
+            time);
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
     }
+
+    /// <summary>GSMTC media source exposed to first-party plugins (same instance the island controls use).</summary>
+    public IMediaSessionSource MediaSource => _media;
+
+    /// <summary>Clipboard source exposed to first-party plugins.</summary>
+    public IClipboardSource ClipboardSource => _clipboard;
+
+    /// <summary>Bounded artwork materializer exposed to the media plugin (<c>AlbumArtPath</c>).</summary>
+    public ArtworkTempStore ArtworkTempStore => _artworkTempStore;
+
+    /// <summary>Dedicated platform message host (shared by the plugin notification listener).</summary>
+    public PlatformMessageHost MessageHost => _messageHost;
+
+    /// <summary>Diagnostics counters shared by the platform services.</summary>
+    public PlatformCounters Counters => _counters;
+
+    /// <summary>Platform logger used by the App-composed services.</summary>
+    public IPlatformLogger PlatformLogger => _platformLogger;
 
     /// <summary>
     /// Raised for actions that belong to a later App owner (notification activation/dismiss, agent
@@ -321,6 +344,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         await StopOneAsync("brightness", () => _brightness.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("volume", () => _volume.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("message-host", () => _messageHost.DisposeAsync().AsTask()).ConfigureAwait(false);
+        _artworkTempStore.Dispose();
     }
 
     private async Task StopOneAsync(string name, Func<Task> stop)

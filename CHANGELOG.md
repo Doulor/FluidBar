@@ -75,3 +75,10 @@
 ### 2026-10-19 00:58 — Release build smoke
 - `build/release/win-x64/FluidBar.exe`（framework-dependent single-file，53.5 MB）以 `FLUIDBAR_HOST=skia FLUIDBAR_SMOKE=1` 运行通过：241 帧、0 提交失败、surface 732×576 @150%、上传 164–182µs、空闲无帧。
 - 说明发布产物可正常启动分层宿主；下一步补 UIA/IME、插件运行时、Wi-Fi/BT/Focus 服务与完整验收。
+
+### 2026-10-19 02:12 — 插件运行时 + FollowMouse/锚点拖拽
+- 真实 PluginHost/Marketplace 接入 App：插件发现/加载/启用、市场浏览/安装/回滚、权限同意、插件设置页；设计态服务保留为离线回退。
+- FollowMouse 目标选择（cursor→monitor seam）与锚点拖拽持久化（click-vs-drag 阈值、吸附/写回、恢复）接入 Skia 宿主。
+- 修复插件生命周期 dispose 未走 Unloading→Unloaded；修复 App 控制测试对 deferred compact click 的假设。
+- 全量：`dotnet test FluidBar.sln -m:1` = **1423 passed / 0 failed**（Core 491, Platform 382, UI 159, Island 135, SDK 152, PluginHost 39, Builtin 23, Integration 31, Architecture 11）。
+- 生产 smoke：331 帧、0 提交失败、surface 732×576 @150%、上传 ~192µs、空闲无帧。

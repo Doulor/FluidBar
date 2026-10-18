@@ -76,10 +76,15 @@ public sealed class SkiaIslandHost : IDisposable
     private readonly UiThreadTicker _deadlineTicker;
     private readonly List<WindowEntry> _windows = [];
 
+    private const int FollowMousePollMs = 250;
+
     private PlatformMessageHost? _messageHost;
     private MonitorService? _monitorService;
     private RegionSignature _regionSignature;
     private string? _primaryMonitorId;
+    private string? _cursorMonitorId;
+    private ITimer? _followMouseTimer;
+    private PendingDrop? _pendingDrop;
     private bool _started;
     private bool _disposed;
     private bool _rendering;
@@ -112,6 +117,7 @@ public sealed class SkiaIslandHost : IDisposable
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
         _controller.StateChanged += OnStateChanged;
         _controller.PlacementRequested += OnPlacementRequested;
+        _controller.PlacementPersistRequested += OnPlacementPersistRequested;
         _controller.FrameRequested += EnsureFrameLoop;
 
         // The controller re-places on a DisplayOn change; the host additionally has to create or
@@ -189,6 +195,10 @@ public sealed class SkiaIslandHost : IDisposable
         var state = _controller.RenderState;
         var shell = IslandMetrics.ShellRect(state);
         _controller.HandlePointerPressed(shell.MidX, shell.MidY);
+
+        // The click is committed on release (click-vs-drag discrimination), so a simulation must
+        // deliver the matching release at the same point.
+        _controller.HandlePointerReleased(shell.MidX, shell.MidY);
     }
 
     /// <summary>Simulates Escape.</summary>
@@ -307,6 +317,7 @@ public sealed class SkiaIslandHost : IDisposable
 
             UpdateHitRegions(force: true);
             RenderNow(forceFull: true);
+            EnsureFollowMousePolling();
             EnsureDeadlineTicker();
             EnsureFrameLoop();
 
@@ -339,9 +350,13 @@ public sealed class SkiaIslandHost : IDisposable
         _logger.Information(LogCategories.Lifecycle, "island.skia.stop", "Stopping Skia island host.");
         _frameClock.Stop();
         _deadlineTicker.Dispose();
+        _followMouseTimer?.Dispose();
+        _followMouseTimer = null;
+        _pendingDrop = null;
         _options.Settings.Changed -= OnSettingsChanged;
         _controller.StateChanged -= OnStateChanged;
         _controller.PlacementRequested -= OnPlacementRequested;
+        _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
         _controller.Dispose();
 
@@ -427,7 +442,8 @@ public sealed class SkiaIslandHost : IDisposable
             [.. _windows.Select(static entry => entry.Monitor)],
             EnumerateCoreMonitors(set),
             settings.DisplayOn,
-            _primaryMonitorId);
+            _primaryMonitorId,
+            _cursorMonitorId);
 
         if (plan.RequiresWindowChanges)
         {
@@ -575,14 +591,36 @@ public sealed class SkiaIslandHost : IDisposable
             switch (drag.Phase)
             {
                 case LayeredDragPhase.Started:
-                    _controller.HandleDragStarted(x, y, timestamp);
+                    entry.DragKind = _controller.HandleDragStarted(x, y, timestamp);
+                    entry.DragActive = false;
+                    entry.DragOriginPx = default;
+                    entry.DragStartScreenXDip = drag.Pointer.ScreenX / SafeScale(entry.Host.Scale);
+                    entry.DragStartScreenYDip = drag.Pointer.ScreenY / SafeScale(entry.Host.Scale);
                     break;
                 case LayeredDragPhase.Moved:
-                    _controller.HandleDragMoved(x, y, timestamp);
+                    if (entry.DragKind == SkiaDragKind.Pager)
+                    {
+                        _controller.HandleDragMoved(x, y, timestamp);
+                    }
+                    else if (entry.DragKind == SkiaDragKind.WindowCandidate)
+                    {
+                        MoveWindowForDrag(entry, drag);
+                    }
+
                     break;
                 case LayeredDragPhase.Ended:
                 case LayeredDragPhase.Cancelled:
-                    _controller.HandleDragEnded(x, y, timestamp);
+                    if (entry.DragKind == SkiaDragKind.WindowCandidate && entry.DragActive)
+                    {
+                        EndWindowDrag(entry, drag.Phase == LayeredDragPhase.Cancelled);
+                    }
+                    else
+                    {
+                        _controller.HandleDragEnded(x, y, timestamp);
+                    }
+
+                    entry.DragKind = SkiaDragKind.None;
+                    entry.DragActive = false;
                     break;
             }
 
@@ -641,6 +679,215 @@ public sealed class SkiaIslandHost : IDisposable
         return SkiaIslandHitTest.Hit(_controller.RenderState, xDip, yDip).IsInteractive;
     }
 
+    // ------------------------------------------------------------------ drag-to-move
+
+    /// <summary>
+    /// Follows the pointer with the dragged window. The threshold is measured in screen DIP and only
+    /// crossed once per gesture; the window origin is captured at that moment and moved by the
+    /// cumulative screen delta, clamped to the source monitor's work area. No animation, no
+    /// per-frame work: one <c>SetWindowPos</c> per pointer move while dragging.
+    /// </summary>
+    private void MoveWindowForDrag(WindowEntry entry, in LayeredDragEvent drag)
+    {
+        var scale = SafeScale(entry.Host.Scale);
+        if (!entry.DragActive)
+        {
+            if (!SkiaDragThreshold.Exceeds(
+                    entry.DragStartScreenXDip,
+                    entry.DragStartScreenYDip,
+                    drag.Pointer.ScreenX / scale,
+                    drag.Pointer.ScreenY / scale))
+            {
+                return;
+            }
+
+            if (!_controller.BeginWindowDrag())
+            {
+                // Dock mode or a state that cannot move: swallow the gesture, never expand on drop.
+                entry.DragKind = SkiaDragKind.None;
+                return;
+            }
+
+            entry.DragActive = true;
+            entry.DragOriginPx = entry.Host.Placement.WindowPixel;
+        }
+
+        var mode = CurrentSettings().IslandMode;
+        var width = entry.Host.Placement.WindowPixel.Width;
+        var height = entry.Host.Placement.WindowPixel.Height;
+        var work = entry.Monitor.WorkArea;
+        var x = Math.Clamp(
+            entry.DragOriginPx.X + drag.DeltaX,
+            work.X,
+            Math.Max(work.X, work.Right - width));
+        var y = entry.DragOriginPx.Y;
+        if (IslandPlacementDrag.AllowsVerticalDrag(mode))
+        {
+            y = Math.Clamp(
+                entry.DragOriginPx.Y + drag.DeltaY,
+                work.Y,
+                Math.Max(work.Y, work.Bottom - height));
+        }
+
+        entry.Host.PlacePhysical(x, y);
+    }
+
+    /// <summary>
+    /// Ends a window drag. On a normal drop the final host-window rectangle is resolved into a
+    /// per-monitor anchor/offset <b>before</b> the controller applies
+    /// <see cref="IslandInput.DragEnded"/> (whose <c>PersistPlacement</c> effect writes it). A
+    /// cancelled drag restores the settings-driven placement and writes nothing.
+    /// </summary>
+    private void EndWindowDrag(WindowEntry entry, bool cancelled)
+    {
+        _pendingDrop = cancelled ? null : CapturePendingDrop(entry);
+        if (!_controller.EndWindowDrag())
+        {
+            _pendingDrop = null;
+        }
+
+        if (cancelled)
+        {
+            ApplyPlacement(entry);
+        }
+    }
+
+    /// <summary>Resolves the dropped host window into the anchor/offset persisted for its monitor.</summary>
+    private PendingDrop? CapturePendingDrop(WindowEntry entry)
+    {
+        var settings = CurrentSettings();
+        var mode = settings.IslandMode;
+        if (!IslandPlacementDrag.AllowsDrag(mode))
+        {
+            return null;
+        }
+
+        var scale = SafeScale(entry.Host.Scale);
+        var window = entry.Host.Placement.WindowPixel;
+        var work = entry.Monitor.WorkArea;
+        var windowDip = new VisualRect(
+            (window.X - work.X) / scale,
+            (window.Y - work.Y) / scale,
+            entry.Host.SurfaceSizeDip.WidthDip,
+            entry.Host.SurfaceSizeDip.HeightDip);
+        var current = settings.ResolveMonitorPlacement(entry.Monitor.Id);
+        var solved = IslandPlacementDrag.Solve(
+            windowDip,
+            entry.Monitor,
+            mode,
+            _controller.State.ContentKind,
+            current.Anchor);
+        return new PendingDrop(entry, entry.Monitor.Id, solved.Anchor, solved.OffsetX, solved.OffsetY);
+    }
+
+    /// <summary>
+    /// Writes the pending drop through the settings controller (debounced, off the UI thread) and
+    /// re-places the window once from the just-persisted placement. No-op for every other
+    /// <c>PersistPlacement</c> effect (display/settings changes carry the effect too).
+    /// </summary>
+    private void OnPlacementPersistRequested()
+    {
+        var pending = _pendingDrop;
+        _pendingDrop = null;
+        if (_disposed || pending is null || !_windows.Contains(pending.Entry))
+        {
+            return;
+        }
+
+        try
+        {
+            _options.Settings.Update(settings => settings.WithMonitorPlacement(
+                pending.MonitorId,
+                pending.Anchor,
+                pending.OffsetX,
+                pending.OffsetY));
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        // One Core placement for the new anchor/offset; the window never animates its bounds.
+        ApplyPlacement(pending.Entry);
+        _logger.Information(LogCategories.Render, "island.skia.placement-persisted",
+            "Persisted the dragged island placement for a monitor.",
+            data: new Dictionary<string, object?>
+            {
+                ["monitor"] = pending.MonitorId,
+                ["anchor"] = pending.Anchor.ToString(),
+                ["offsetX"] = pending.OffsetX,
+                ["offsetY"] = pending.OffsetY,
+            });
+    }
+
+    // ------------------------------------------------------------------ follow-mouse
+
+    /// <summary>
+    /// Starts/stops the cursor-monitor poll for <see cref="DisplayTarget.FollowMouse"/>. The timer is
+    /// created only for FollowMouse (zero work otherwise), ticks at 4 Hz off the UI thread and only
+    /// posts when the monitor actually changed. Display changes refresh the cursor monitor
+    /// immediately instead of waiting for the next tick.
+    /// </summary>
+    private void EnsureFollowMousePolling()
+    {
+        if (CurrentSettings().DisplayOn != DisplayTarget.FollowMouse)
+        {
+            _followMouseTimer?.Dispose();
+            _followMouseTimer = null;
+            _cursorMonitorId = null;
+            return;
+        }
+
+        if (_followMouseTimer is not null || _disposed || !_started)
+        {
+            return;
+        }
+
+        _cursorMonitorId = _monitorService?.MonitorUnderCursor()?.Id ?? _cursorMonitorId;
+        _followMouseTimer = _time.CreateTimer(
+            static state => ((SkiaIslandHost)state!).PollCursorMonitor(),
+            this,
+            TimeSpan.FromMilliseconds(FollowMousePollMs),
+            TimeSpan.FromMilliseconds(FollowMousePollMs));
+    }
+
+    /// <summary>Thread-pool cursor poll: cheap query, no UI work unless the monitor changed.</summary>
+    private void PollCursorMonitor()
+    {
+        if (_disposed || !_started || _controller.IsWindowDragging)
+        {
+            return;
+        }
+
+        var monitor = _monitorService?.MonitorUnderCursor();
+        var id = monitor?.Id;
+        if (id is not { Length: > 0 } || string.Equals(id, _cursorMonitorId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _cursorMonitorId = id;
+        _dispatcher.Post(() =>
+        {
+            if (_disposed || !_started)
+            {
+                return;
+            }
+
+            try
+            {
+                ApplyMonitorSet(_monitorService?.Current);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Render, "island.skia.follow-mouse-failed",
+                    "Applying a FollowMouse monitor change to the island windows failed.", ex);
+            }
+        });
+    }
+
+    private static double SafeScale(double scale) => double.IsFinite(scale) && scale > 0.1 ? scale : 1.0;
+
     // ------------------------------------------------------------------ placement
 
     private void OnPlacementRequested()
@@ -677,10 +924,15 @@ public sealed class SkiaIslandHost : IDisposable
             entry.Host.SetMonitor(platformMonitor);
         }
 
+        // Per-monitor placement (spec 2.6): a drag writes the anchor/offset for the monitor it was
+        // dropped on; monitors without an entry use the global anchor with zero offsets.
+        var placement = settings.ResolveMonitorPlacement(entry.Monitor.Id);
         var request = IslandLayoutRequest.FromState(
             _controller.State,
             mode,
-            settings.IslandAnchor,
+            placement.Anchor,
+            placement.OffsetX,
+            placement.OffsetY ?? double.NaN,
             stacking: settings.Stacking == StackingStrategySetting.Stacked ? StackingStrategy.Stacked : StackingStrategy.LatestOnly,
             hiddenHoverStrip: false,
             pagePosition: _controller.Pager.PagePosition,
@@ -1023,6 +1275,12 @@ public sealed class SkiaIslandHost : IDisposable
 
             try
             {
+                if (CurrentSettings().DisplayOn == DisplayTarget.FollowMouse)
+                {
+                    // A hot-plug can invalidate the cached cursor monitor; re-query before planning.
+                    _cursorMonitorId = _monitorService?.MonitorUnderCursor()?.Id ?? _cursorMonitorId;
+                }
+
                 ApplyMonitorSet(args.Snapshot);
             }
             catch (Exception ex)
@@ -1040,8 +1298,10 @@ public sealed class SkiaIslandHost : IDisposable
             return;
         }
 
-        // DisplayOn changed (primary <-> all): the controller already requested a re-place for the
-        // existing windows; the host must also create/dispose the per-monitor windows.
+        // DisplayOn changed (primary/all/follow-mouse): the controller already requested a re-place
+        // for the existing windows; the host must also create/dispose the per-monitor windows and
+        // start/stop the cursor poll.
+        EnsureFollowMousePolling();
         _dispatcher.Post(() =>
         {
             if (_disposed || !_started)
@@ -1096,6 +1356,14 @@ public sealed class SkiaIslandHost : IDisposable
         int Page,
         bool Animating);
 
+    /// <summary>Drop placement waiting for Core's <c>PersistPlacement</c> effect.</summary>
+    private sealed record PendingDrop(
+        WindowEntry Entry,
+        string MonitorId,
+        FluidBar.Core.Layout.IslandAnchor Anchor,
+        double OffsetX,
+        double? OffsetY);
+
     private sealed class WindowEntry : IDisposable
     {
         public WindowEntry(LayeredWindowHost host, CoreMonitorInfo monitor)
@@ -1111,6 +1379,21 @@ public sealed class SkiaIslandHost : IDisposable
         public CoreMonitorInfo Monitor { get; set; }
 
         public WindowPlacement LastPlacement { get; set; }
+
+        /// <summary>What the active drag gesture means (pager, window-move candidate, none).</summary>
+        public SkiaDragKind DragKind { get; set; }
+
+        /// <summary>Whether the threshold was crossed and the window is following the pointer.</summary>
+        public bool DragActive { get; set; }
+
+        /// <summary>Window origin (physical) captured when the drag crossed the threshold.</summary>
+        public LayeredRect DragOriginPx { get; set; }
+
+        /// <summary>Press point in screen DIP (threshold space).</summary>
+        public double DragStartScreenXDip { get; set; }
+
+        /// <summary>Press point in screen DIP (threshold space).</summary>
+        public double DragStartScreenYDip { get; set; }
 
         public uint Dpi { get; set; } = 96;
 
@@ -1148,3 +1431,4 @@ public sealed class SkiaIslandHost : IDisposable
         }
     }
 }
+
