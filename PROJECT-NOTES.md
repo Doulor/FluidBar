@@ -96,3 +96,29 @@ FluidBar 是一个 Windows 上的「灵动岛」桌面常驻组件，目标不�
 - `docs/plugin/` — 插件作者与维护者文档
 - `src/FluidBar.Core|Sdk|PluginHost|Marketplace|Platform.Windows|Plugins.Builtin|App`
 - `tests/` — 各层测试 + soak
+
+## 9. 文档维护规则（强制）
+
+文档时效性与代码同等重要。任何改动都必须同步更新对应 Markdown，**不允许留下过期文档**。
+
+| 文档 | 什么时候必须更新 |
+|---|---|
+| `PROJECT-NOTES.md`（本文件） | 产品方向、用户偏好、被否决的 UX、技术路线、协作规则发生变化时 |
+| `CHANGELOG.md` | 每次有用户可见/架构级进展时追加一条（带日期） |
+| `docs/rewrite/STATUS.md` | 每个里程碑/每次检查点更新：当前状态、测试数、进行中、阻塞、下一步、最后更新时间 |
+| `docs/rewrite/DECISIONS.md` | 任何偏离规范的决定（I/Q 条目，带日期与影响） |
+| `docs/rewrite/specs/` | 设计变更（追加修订 A1/A2…，不要悄悄改旧结论） |
+| `docs/rewrite/contracts/` | 公共 API / manifest / 布局 / 渲染契约变化 |
+| `docs/plugin/` | 插件作者流程、manifest、签名、发布方式变化 |
+| `README.md` | 构建命令、项目结构、状态、入口链接变化 |
+
+规则：
+
+1. 文档顶部或条目必须带**日期**；状态类文档（STATUS/CHANGELOG）必须写"最后更新"。
+2. 先改文档再合代码（或同一次提交内完成），PR/提交说明里写清更新了哪些文档。
+3. 删除/重命名文件时同步更新所有引用链接；`README` 与 `PROJECT-NOTES` 的链接必须可达。
+4. 用户反馈（尤其是"喜欢/不喜欢"）必须当天写入 `PROJECT-NOTES.md` 的 UX 决策表。
+5. 每次检查点由 Lead 更新 `STATUS.md` 与 `CHANGELOG.md`，并提交；不允许只改代码不改状态。
+6. 历史结论不删除，用"修订"追加；`DECISIONS.md` 记录原因与影响面。
+7. 文档里的数字（尺寸、测试数、帧耗时）必须来自实测，不能估算；过期的数字要更新或标注日期。
+
