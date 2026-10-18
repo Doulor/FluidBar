@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using FluidBar.App.Island.Expanded;
 using FluidBar.App.Rendering;
 using FluidBar.App.Theme;
 using FluidBar.Core.Layout;
@@ -84,8 +85,8 @@ public sealed class IslandShell : Panel
     /// <summary>Current visual frame (read by hit-testing/diagnostics/tests).</summary>
     public ShellFrame Frame => _frame;
 
-    /// <summary>Design size of the expanded layer (uniform 440×284).</summary>
-    public static Size ExpandedLayerSize => new(LayoutTokens.ExpandedWidth, LayoutTokens.ExpandedHeight);
+    /// <summary>Expanded layer size: 440×284 shell content + the detached archipelago band (440×336).</summary>
+    public static Size ExpandedLayerSize => new(LayoutTokens.ExpandedWidth, HostLayout.ExpandedLayerHeight);
 
     /// <summary>Design origin of the shell inside the fixed host window (DIP).</summary>
     public static Point DefaultShellOrigin => new(UiMetrics.WindowPadding, UiMetrics.WindowPadding);
@@ -178,7 +179,10 @@ public sealed class IslandShell : Panel
             && localPoint.X <= _compactLayerSize.Width && localPoint.Y <= _compactLayerSize.Height;
     }
 
-    /// <summary>Whether a host-window point (DIP) is inside the drawn squircle.</summary>
+    /// <summary>
+    /// Whether a host-window point (DIP) is inside the drawn squircle, or on the detached archipelago
+    /// strip floating below the settled expanded shell (so WM_NCHITTEST returns HTCLIENT there).
+    /// </summary>
     public bool ContainsPoint(Point windowPoint)
     {
         if (_frame.IsHidden || _frame.ShellOpacity <= 0.01)
@@ -186,17 +190,48 @@ public sealed class IslandShell : Panel
             return false;
         }
 
-        return CreateShellGeometry().Contains(windowPoint.X, windowPoint.Y);
-    }
-
-    /// <summary>Current shell geometry for the settle-time window region update.</summary>
-    public ShellGeometry CreateShellGeometry()
-    {
-        var bounds = new VisualRect(
+        var shellBounds = new VisualRect(
             _frame.OriginX,
             _frame.OriginY + _frame.NudgeOffsetY,
             _frame.Width,
             _frame.Height);
+        if (ShellGeometry.Create(shellBounds, _frame.Radii).Contains(windowPoint.X, windowPoint.Y))
+        {
+            return true;
+        }
+
+        return IsExpandedSettled
+            && _expandedLayer is ExpandedPanel panel
+            && panel.HitTestExternal(new Point(windowPoint.X - _frame.OriginX, windowPoint.Y - (_frame.OriginY + _frame.NudgeOffsetY)));
+    }
+
+    /// <summary>Whether the expanded content has fully settled (no morph in flight).</summary>
+    public bool IsExpandedSettled => !_frame.IsHidden
+        && _frame.ExpandedOpacity > 0.995
+        && _frame.CompactOpacity < 0.005;
+
+    /// <summary>Whether the detached archipelago strip is currently painted by the expanded layer.</summary>
+    public bool HasExternalOverlay => IsExpandedSettled
+        && _expandedLayer is ExpandedPanel { HasExternalOverlay: true };
+
+    /// <summary>
+    /// Current shell geometry for the settle-time window region update. When the detached archipelago
+    /// is visible, the region is extended downwards to include the floating mini-island band so the
+    /// strip can receive clicks; the per-point hit-test still makes the transparent gap click-through.
+    /// </summary>
+    public ShellGeometry CreateShellGeometry()
+    {
+        var height = _frame.Height;
+        if (HasExternalOverlay)
+        {
+            height += HostLayout.ExtraBottomDip;
+        }
+
+        var bounds = new VisualRect(
+            _frame.OriginX,
+            _frame.OriginY + _frame.NudgeOffsetY,
+            _frame.Width,
+            height);
         return ShellGeometry.Create(bounds, _frame.Radii);
     }
 
@@ -237,19 +272,32 @@ public sealed class IslandShell : Panel
 
         if (_expandedLayer is not null)
         {
-            var tx = shellCenter.X - ((ExpandedLayerSize.Width / 2) * press);
-            var ty = shellCenter.Y - ((ExpandedLayerSize.Height / 2) * press);
+            // Panel content is anchored at the shell origin; press animation scales about the shell
+            // centre (220,142 is the 440×284 panel centre inside the taller 440×336 layer).
+            const double panelCenterX = LayoutTokens.ExpandedWidth / 2;
+            const double panelCenterY = LayoutTokens.ExpandedHeight / 2;
+            var tx = shellCenter.X - (panelCenterX * press);
+            var ty = shellCenter.Y - (panelCenterY * press);
             _expandedLayer.RenderTransform = CreateLayerTransform(tx, ty, press, shellCenter);
             _expandedLayer.Opacity = Math.Clamp(frame.ExpandedOpacity * frame.ShellOpacity, 0, 1);
 
-            // Reveal the expanded layer through the animating shell rect (render-only clip update).
-            var clipWidth = frame.Width / press;
-            var clipHeight = frame.Height / press;
-            _expandedClip.Rect = new Rect(
-                (ExpandedLayerSize.Width / 2) - (clipWidth / 2),
-                (ExpandedLayerSize.Height / 2) - (clipHeight / 2),
-                Math.Max(0, clipWidth),
-                Math.Max(0, clipHeight));
+            // Mid-morph the expanded layer is revealed through the animating shell rect; once settled
+            // the whole layer (including the detached archipelago below the shell) is visible.
+            if (IsExpandedSettled)
+            {
+                _expandedClip.Rect = new Rect(0, 0, ExpandedLayerSize.Width, ExpandedLayerSize.Height);
+            }
+            else
+            {
+                var clipWidth = frame.Width / press;
+                var clipHeight = frame.Height / press;
+                _expandedClip.Rect = new Rect(
+                    panelCenterX * (1 - (1 / press)),
+                    panelCenterY * (1 - (1 / press)),
+                    Math.Max(0, clipWidth),
+                    Math.Max(0, clipHeight));
+            }
+
             _expandedLayer.Clip = _expandedClip;
         }
     }

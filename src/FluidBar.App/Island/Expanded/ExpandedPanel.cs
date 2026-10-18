@@ -1,6 +1,4 @@
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -16,19 +14,23 @@ using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
 namespace FluidBar.App.Island.Expanded;
 
 /// <summary>
-/// Expanded shell pager + Page Archipelago navigation (user-chosen variant A, 2026-10-18).
-/// The shell stays uniform 440×284 with a 20/16 DIP inset and a 400×252 page viewport; the six page
-/// controls live in a single horizontally translated strip (transform only — never resize, never
-/// per-frame layout). Overlays: title top-left, collapse chevron top-right, and the archipelago strip
-/// (no page dots) that appears on drag/wheel or bottom-hover and auto-hides after 1.2 s.
+/// Expanded shell pager + detached Page Archipelago (user-chosen variant A, revised 2026-10-18).
+/// The shell itself stays 440×284 with a 20/16 viewport; six page controls live in a translated strip
+/// (transform only). The mini-island archipelago floats BELOW the panel, outside the shell, over the
+/// desktop (440×336 content layer inside a 488×384 host window; see <see cref="HostLayout"/>).
+/// Its reveal/hide/active morph are Core springs driven by a render frame loop; no layout runs during
+/// navigation.
 /// </summary>
 public sealed class ExpandedPanel : Panel, ILocalizable
 {
     /// <summary>Expanded shell width.</summary>
     public const double PanelWidth = 440;
 
-    /// <summary>Expanded shell height.</summary>
+    /// <summary>Expanded shell height (the island itself).</summary>
     public const double PanelHeight = 284;
+
+    /// <summary>Expanded content layer height including the detached archipelago band (440×336).</summary>
+    public const double TotalHeight = HostLayout.ExpandedLayerHeight;
 
     /// <summary>Horizontal shell inset to the page viewport.</summary>
     public const double ViewportInset = 20;
@@ -36,22 +38,22 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     /// <summary>Vertical shell inset to the page viewport.</summary>
     public const double ViewportInsetY = 16;
 
-    /// <summary>Page viewport width (440 − 2×20 = 400, Core constant).</summary>
+    /// <summary>Page viewport width (400, Core constant).</summary>
     public const double ViewportWidth = 400;
 
-    /// <summary>Page viewport height (284 − 2×16 = 252, Core constant).</summary>
+    /// <summary>Page viewport height (252, Core constant).</summary>
     public const double ViewportHeight = 252;
 
-    /// <summary>Bottom hover band that reveals the archipelago (DIP).</summary>
+    /// <summary>Bottom hover band of the shell that reveals the archipelago (DIP).</summary>
     public const double BottomHoverBand = 12;
 
-    /// <summary>How far the strip drag maps to page travel (1 strip pixel ≈ 5 px page content).</summary>
+    /// <summary>How far a strip drag maps to page travel.</summary>
     public const double StripScrubFactor = 5.0;
 
     /// <summary>Incoming-page parallax translation (DIP).</summary>
     public const double ParallaxDip = 6;
 
-    /// <summary>Incoming-page scale delta (0.985 at one full page away).</summary>
+    /// <summary>Incoming-page scale delta.</summary>
     public const double ParallaxScale = 0.015;
 
     private static readonly CoreIslandPage[] PageOrder =
@@ -68,36 +70,30 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     private readonly Panel _strip = new() { ClipToBounds = false };
     private readonly PagerOverlay _overlay;
     private readonly ArchipelagoStrip _archipelago = new();
+    private readonly ArchipelagoMotion _archMotion = new();
     private readonly PagerMotion _motion;
     private readonly WheelScrollChain _wheelChain = new();
     private readonly DispatcherTimer _frameTimer;
-    private readonly DispatcherTimer _archTimer;
     private readonly List<string> _titles = [];
     private ExpandedPageContext? _context;
     private ILocalizer? _localizer;
 
-    private Point _dragOrigin;
-    private long _gestureStartTimestamp;
-    private bool _pointerCaptured;
-    private long _lastTimestamp;
-    private long _lastArchTickMs;
+    private long _lastTickMs;
     private bool _archVisible;
-    private double _archOpacity;
-    private double _laggedPageOffset;
     private long _archHideAt;
     private long? _archHoverAt;
     private bool _stripScrub;
     private double _stripOriginX;
     private int _stripPressedIsland = -1;
+    private double _previewPhase;
 
     /// <summary>Creates the pager.</summary>
     public ExpandedPanel()
     {
         Background = null;
-        ClipToBounds = true;
+        ClipToBounds = false;
         _overlay = new PagerOverlay(this);
         _motion = new PagerMotion(PageOrder.Length, ViewportWidth, initialPage: 0);
-        _laggedPageOffset = 0;
 
         foreach (var page in new IslandPageView[]
                  {
@@ -111,12 +107,10 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         Children.Add(_archipelago);
         Children.Add(_overlay);
         _frameTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(8) };
-        _frameTimer.Tick += OnFrameTick;
-        _archTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(33) };
-        _archTimer.Tick += (_, _) => TickArchipelago(Environment.TickCount64);
+        _frameTimer.Tick += (_, _) => TickArchipelago(Environment.TickCount64);
         _motion.PageChanged += index =>
         {
-            QueueLayoutStrip();
+            UpdateVisual();
             PageRequested?.Invoke(PageOrder[index]);
         };
     }
@@ -139,14 +133,29 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     /// <summary>Pager motion model (headless tests drive it directly).</summary>
     public PagerMotion Motion => _motion;
 
-    /// <summary>Archipelago strip control (headless tests query geometry/visibility).</summary>
+    /// <summary>Archipelago strip control (headless tests query geometry).</summary>
     public ArchipelagoStrip Archipelago => _archipelago;
 
-    /// <summary>Whether the archipelago strip is logically visible.</summary>
+    /// <summary>Archipelago spring motion (tests).</summary>
+    public ArchipelagoMotion ArchipelagoMotion => _archMotion;
+
+    /// <summary>Whether the archipelago is logically visible.</summary>
     public bool IsArchipelagoVisible => _archVisible;
 
-    /// <summary>Current strip opacity (fade state).</summary>
-    public double ArchipelagoOpacity => _archOpacity;
+    /// <summary>Current archipelago reveal opacity (spring-driven).</summary>
+    public double ArchipelagoOpacity => _archMotion.Opacity;
+
+    /// <summary>Current archipelago translateY (8→0 DIP).</summary>
+    public double ArchipelagoTranslateY => _archMotion.TranslateY;
+
+    /// <summary>Current archipelago scale (.96→1).</summary>
+    public double ArchipelagoScale => _archMotion.Scale;
+
+    /// <summary>Smoothed active-island page position.</summary>
+    public double ArchipelagoActivePosition => _archMotion.ActivePosition;
+
+    /// <summary>Whether the expanded layer paints the detached strip (window region/hit-test helper).</summary>
+    public bool HasExternalOverlay => _archMotion.Progress > 0.001;
 
     /// <summary>Page instance for <paramref name="page"/> (tests assert page roots are stable).</summary>
     public IslandPageView PageFor(CoreIslandPage page) => _pages[page];
@@ -175,8 +184,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         }
 
         _motion.SelectPage(IndexFor(context.SelectedPage));
-        QueueLayoutStrip();
-        UpdateArchipelago();
+        UpdateVisual();
     }
 
     /// <summary>Re-resolves every localized string (page roots retained).</summary>
@@ -195,21 +203,17 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             page.ApplyLocalization(localizer);
         }
 
-        _overlay.InvalidateVisual();
-        UpdateArchipelago();
+        UpdateVisual();
     }
 
-    /// <summary>Jumps to a page with the snap spring (archipelago/1–6/Home/End).</summary>
+    /// <summary>Jumps to a page with the snap spring (archipelago/keyboard).</summary>
     public void GoToPage(CoreIslandPage page) => SelectIndex(IndexFor(page));
 
     /// <summary>Jumps to a page index with the snap spring.</summary>
     public void SelectIndex(int index)
     {
-        if (_motion != null)
-        {
-            _motion.SelectPage(index);
-            StartFrameLoop();
-        }
+        _motion.SelectPage(index);
+        StartFrameLoop();
     }
 
     /// <summary>Handles keyboard navigation; returns whether the key was consumed.</summary>
@@ -254,94 +258,96 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         }
     }
 
-    /// <summary>Starts the snap spring loop.</summary>
+    /// <summary>Starts the render frame loop (pager snap + archipelago springs).</summary>
     public void StartFrameLoop()
     {
-        if (!_frameTimer.IsEnabled && _motion.IsAnimating)
+        _lastTickMs = Environment.TickCount64;
+        if (!_frameTimer.IsEnabled)
         {
-            _lastTimestamp = Environment.TickCount64;
             _frameTimer.Start();
         }
-
-        EnsureArchTimer();
     }
 
-    // ----- archipelago test/automation hooks (headless deterministic) -----
+    // ----- archipelago automation/tests -----
 
-    /// <summary>Reveals the archipelago strip (drag/wheel/hover path) and resets the auto-hide timer.</summary>
+    /// <summary>Reveals the detached archipelago strip (drag/wheel/hover path) and resets auto-hide.</summary>
     public void RevealArchipelago(long nowMs)
     {
-        _archVisible = true;
+        if (!_archVisible)
+        {
+            _archVisible = true;
+            _archMotion.Reveal();
+        }
+
         _archHideAt = nowMs + ArchipelagoStrip.AutoHideMs;
-        _lastArchTickMs = nowMs;
-        EnsureArchTimer();
-        UpdateArchipelago();
+        _lastTickMs = nowMs;
+        StartFrameLoop();
     }
 
-    /// <summary>Hides the archipelago strip immediately.</summary>
+    /// <summary>Hides the archipelago (spring-driven fade/translate/scale out).</summary>
     public void HideArchipelago()
     {
         _archVisible = false;
         _archHideAt = 0;
         _archHoverAt = null;
+        _archMotion.Hide();
+        StartFrameLoop();
     }
 
-    /// <summary>Advances strip lag/fade/auto-hide using an explicit timestamp (headless tests).</summary>
+    /// <summary>Steps the frame loop with an explicit timestamp (headless deterministic tests).</summary>
     public void TickArchipelago(long nowMs)
     {
-        var dt = _lastArchTickMs == 0 ? 16.0 : Math.Clamp(nowMs - _lastArchTickMs, 1, 100);
-        _lastArchTickMs = nowMs;
-        _laggedPageOffset += (_motion.PagePosition - _laggedPageOffset) * Math.Min(1.0, dt / 30.0);
+        var dt = _lastTickMs == 0 ? 16.0 : Math.Clamp(nowMs - _lastTickMs, 1, 100);
+        _lastTickMs = nowMs;
 
-        var target = _archVisible ? 1.0 : 0.0;
-        var step = dt / 120.0;
-        _archOpacity = target > _archOpacity
-            ? Math.Min(target, _archOpacity + step)
-            : Math.Max(target, _archOpacity - step);
+        if (_motion.IsAnimating)
+        {
+            _motion.Step(dt / 1000.0);
+        }
+
+        _archMotion.Follow(_motion.PagePosition, PageOrder.Length);
+        _archMotion.Step(dt / 1000.0);
+        _previewPhase += dt / 1000.0;
 
         if (_archVisible && _archHideAt > 0 && nowMs >= _archHideAt)
         {
             HideArchipelago();
         }
-        else if (!_archVisible && _archOpacity <= 0.001 && _archHoverAt is { } hover && nowMs - hover >= ArchipelagoStrip.HoverRevealMs)
+        else if (!_archVisible && _archHoverAt is { } hover && nowMs - hover >= ArchipelagoStrip.HoverRevealMs)
         {
             RevealArchipelago(nowMs);
         }
 
-        UpdateArchipelago();
-        if (!_archVisible && _archOpacity <= 0.001 && _archHoverAt is null && !_motion.IsAnimating)
+        UpdateVisual();
+        if (!_archVisible && _archMotion.IsAtRest && _archHoverAt is null && !_motion.IsAnimating)
         {
-            _archTimer.Stop();
+            _frameTimer.Stop();
         }
     }
 
-    /// <summary>Reveals the strip when the pointer rests in the bottom hover band; keeps it open on activity.</summary>
+    /// <summary>Reveals the strip when the pointer rests in the bottom band or on the strip; keeps it open.</summary>
     public void NotifyPointerMoved(Point point, long nowMs)
     {
-        if (_archipelago.Contains(point) || _archVisible)
+        if (_archVisible && _archipelago.Contains(point))
         {
             _archHoverAt = null;
-            if (_archVisible)
-            {
-                _archHideAt = nowMs + ArchipelagoStrip.AutoHideMs;
-            }
-
-            EnsureArchTimer();
+            _archHideAt = nowMs + ArchipelagoStrip.AutoHideMs;
+            StartFrameLoop();
             return;
         }
 
         if (point.Y >= PanelHeight - BottomHoverBand)
         {
             _archHoverAt ??= nowMs;
-            _lastArchTickMs = nowMs;
-            EnsureArchTimer();
+            _lastTickMs = nowMs;
+            StartFrameLoop();
             return;
         }
 
         _archHoverAt = null;
     }
 
-    /// <summary>Clicks a mini-island (revealed strip) and jumps to that page.</summary>
+    /// <summary>Clicks a mini-island and jumps to that page.</summary>
     public void ClickMiniIsland(int index)
     {
         if (index < 0 || index >= PageCount)
@@ -362,6 +368,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         _stripPressedIsland = _archipelago.HitTest(new Point(x, _archipelago.StripRect.Center.Y));
         RevealArchipelago(nowMs);
         _motion.BeginDrag(0, nowMs);
+        StartFrameLoop();
     }
 
     /// <summary>Scrubs the strip to panel-local <paramref name="x"/> (damped page travel).</summary>
@@ -372,8 +379,8 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             return;
         }
 
+        // Dragging the strip left advances pages; PagerMotion expects pointer x decreasing forward.
         var dx = x - _stripOriginX;
-        // Dragging the strip left advances pages; PagerMotion expects a pointer x whose decrease is forward.
         _motion.DragTo(dx * StripScrubFactor, nowMs);
         UpdateVisual();
     }
@@ -391,6 +398,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         {
             _motion.SnapToPage(_stripPressedIsland);
             _motion.SelectPage(_stripPressedIsland);
+            StartFrameLoop();
             return;
         }
 
@@ -411,6 +419,10 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     public WheelChainAction WheelContent(double deltaX, double deltaY, bool shiftForced, bool contentCanScrollFurther, long nowMs)
         => _wheelChain.Accumulate(deltaX, deltaY, shiftForced, contentCanScrollFurther, _motion.IsAnimating, nowMs);
 
+    /// <summary>Window-level hit-test extension: the detached strip below the shell is interactive.</summary>
+    public bool HitTestExternal(Point panelLocal)
+        => _archMotion.Progress > 0.01 && _archipelago.Contains(panelLocal);
+
     // ----- layout -----
 
     /// <inheritdoc />
@@ -422,9 +434,9 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         }
 
         _strip.Measure(new Size(ViewportWidth * PageOrder.Length, ViewportHeight));
-        _overlay.Measure(new Size(PanelWidth, PanelHeight));
-        _archipelago.Measure(new Size(PanelWidth, PanelHeight));
-        return new Size(PanelWidth, PanelHeight);
+        _overlay.Measure(new Size(PanelWidth, TotalHeight));
+        _archipelago.Measure(new Size(PanelWidth, TotalHeight));
+        return new Size(PanelWidth, TotalHeight);
     }
 
     /// <inheritdoc />
@@ -436,10 +448,10 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             _pages[PageOrder[i]].Arrange(new Rect(i * ViewportWidth, 0, ViewportWidth, ViewportHeight));
         }
 
-        _archipelago.Arrange(new Rect(0, 0, PanelWidth, PanelHeight));
-        _overlay.Arrange(new Rect(0, 0, PanelWidth, PanelHeight));
+        _archipelago.Arrange(new Rect(0, 0, PanelWidth, TotalHeight));
+        _overlay.Arrange(new Rect(0, 0, PanelWidth, TotalHeight));
         UpdateVisual();
-        return new Size(PanelWidth, PanelHeight);
+        return new Size(PanelWidth, TotalHeight);
     }
 
     // ----- input -----
@@ -472,7 +484,6 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         {
             BeginStripScrub(point.X, now);
             e.Pointer.Capture(this);
-            _pointerCaptured = true;
             e.Handled = true;
             return;
         }
@@ -482,11 +493,8 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             return;
         }
 
-        _dragOrigin = point;
-        _gestureStartTimestamp = now;
         _motion.BeginDrag(point.X, now);
         e.Pointer.Capture(this);
-        _pointerCaptured = true;
         RevealArchipelago(now);
         Cursor = new Cursor(StandardCursorType.SizeWestEast);
         e.Handled = true;
@@ -543,7 +551,6 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         var now = Environment.TickCount64;
         var moved = _motion.MovedPastClickThreshold;
         _motion.EndDrag(now);
-        UpdateVisual();
         StartFrameLoop();
         Cursor = Cursor.Default;
 
@@ -574,11 +581,9 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         else if (_motion.IsDragging)
         {
             _motion.EndDrag(Environment.TickCount64);
-            UpdateVisual();
             StartFrameLoop();
         }
 
-        _pointerCaptured = false;
         Cursor = Cursor.Default;
     }
 
@@ -611,9 +616,9 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             StartFrameLoop();
             e.Handled = true;
         }
-        else if (action is WheelChainAction.Locked or WheelChainAction.ContentScroll)
+        else if (action == WheelChainAction.Locked)
         {
-            e.Handled = action == WheelChainAction.Locked;
+            e.Handled = true;
         }
         else
         {
@@ -621,35 +626,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         }
     }
 
-    // ----- frame/visual updates -----
-
-    private void OnFrameTick(object? sender, EventArgs e)
-    {
-        var now = Environment.TickCount64;
-        var dt = Math.Clamp((now - _lastTimestamp) / 1000.0, 0.001, 0.05);
-        _lastTimestamp = now;
-        _motion.Step(dt);
-        UpdateVisual();
-        if (!_motion.IsAnimating && !_motion.IsDragging && !_archVisible)
-        {
-            _frameTimer.Stop();
-        }
-        else if (!_motion.IsAnimating && !_motion.IsDragging)
-        {
-            _frameTimer.Stop();
-        }
-    }
-
-    private void EnsureArchTimer()
-    {
-        if (_archTimer.IsEnabled)
-        {
-            return;
-        }
-
-        _lastArchTickMs = Environment.TickCount64;
-        _archTimer.Start();
-    }
+    // ----- visuals -----
 
     private void UpdateVisual()
     {
@@ -669,20 +646,9 @@ public sealed class ExpandedPanel : Panel, ILocalizable
             page.RenderTransform = new MatrixTransform(matrix);
         }
 
+        _archipelago.Update(_context, _titles, _archMotion, _previewPhase);
         _overlay.InvalidateVisual();
-        UpdateArchipelago();
     }
-
-    private void UpdateArchipelago()
-    {
-        _archipelago.Update(_context, _titles, _laggedPageOffset, _archOpacity, Environment.TickCount64);
-        if (_archVisible || _archOpacity > 0.001)
-        {
-            _archipelago.IsHitTestVisible = false;
-        }
-    }
-
-    private void QueueLayoutStrip() => UpdateVisual();
 
     private bool InViewport(Point point)
         => point.X >= ViewportInset && point.X <= ViewportInset + ViewportWidth
@@ -714,7 +680,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         Collapse,
     }
 
-    /// <summary>Draws the pager chrome: page title and collapse chevron (no dots — archipelago replaces them).</summary>
+    /// <summary>Draws the pager chrome: page title and collapse chevron (no dots; archipelago is external).</summary>
     private sealed class PagerOverlay : Control
     {
         private readonly ExpandedPanel _owner;

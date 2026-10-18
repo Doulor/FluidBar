@@ -98,20 +98,33 @@ dotnet run --project src/FluidBar.Cli -- pack --plugin plugins/samples/FluidBar.
 A contributor can do everything except publish without a signing key or maintainer involvement. `validate`/
 `pack`/`policy` are network-free; `sign` requires the CI KMS/HSM key and is not run by contributors.
 
-## CI pipeline (`\.github/workflows/marketplace.yml`)
+## CI pipeline (`.github/workflows/marketplace.yml`)
 
 | Trigger | Job | What happens |
 |---|---|---|
-| PR touching `plugins/**`, `schemas/**`, plugin-platform code or this workflow | `validate` | restore .NET 10 → build tooling + plugins Release → `dotnet test` SDK + PluginHost suites (includes the offline publish/install E2E) → JSON schemas parse → per plugin `validate` + `policy` + pack twice with identical SHA-256 → strict-manifest negative check |
-| push to `main` / `workflow_dispatch` with publish=true | `publish` (environment `marketplace-publish`, required reviewer) | build Release → pack + sign every plugin (`publish-prepare` from a protected signing-key secret) → regenerate signed `index.json` + per-plugin shards + `keys.json` → `verify-index` post-generation gate → upload packages + self-contained site artifacts → deploy GitHub Pages |
+| PR touching `plugins/**`, `schemas/**`, plugin-platform code or this workflow | `validate` | restore .NET 10 → build tooling + plugins Release (build output derived via MSBuild `TargetPath`, no hardcoded TFM path) → `dotnet test` SDK + PluginHost suites (includes the offline publish/install E2E) → JSON schemas parse → per plugin `validate` + `policy` + pack twice with identical SHA-256 → strict-manifest negative check |
+| push to `main` / `workflow_dispatch` with publish=true | `publish` (environment `marketplace-publish`, required reviewer) | fail fast on missing config → build Release → pack + sign every plugin (`publish-prepare` from a protected signing-key secret) → regenerate signed `index.json` + per-plugin shards + `keys.json` → `verify-index` post-generation gate → upload packages + self-contained site artifacts |
+| after `publish` | `deploy` (environment `github-pages`; skipped only when `MARKETPLACE_DEPLOY_PAGES=false`) | download `marketplace-site` → `actions/configure-pages` → `upload-pages-artifact` → `deploy-pages`; failure is visible (no silent fallback) |
+
+Required publish configuration (the workflow fails fast if missing): environment `marketplace-publish` with secret
+`MARKETPLACE_SIGNING_KEY_PEM`; repository/environment variables `MARKETPLACE_ARTIFACT_BASE_URL`,
+`MARKETPLACE_BASE_URL`, `MARKETPLACE_SIGNING_KEY_ID`; optional `MARKETPLACE_PLUGINS_ROOT`
+(default `plugins/samples` in this repo) and `MARKETPLACE_DEPLOY_PAGES`. No placeholder URL defaults are used in
+publish mode. Actions are pinned to full commit SHAs (tag in the trailing comment).
 
 - The index here is **generated**, never hand-edited: `fluidbar-plugin publish-prepare --plugins-root plugins/samples --artifacts artifacts/plugins --marketplace marketplace-site --key-id <id> --key-env MARKETPLACE_SIGNING_KEY_PEM`.
-- **Pages fallback:** if Pages is unavailable (forks, private mirrors, incidents), download the
-  `marketplace-site` workflow artifact and host it on any static host — the index is self-contained
-  (`index.json` + `keys.json` + `plugins/*.json`). The `marketplace-packages` artifact holds the `.fbp` files.
+- **Publishing scope:** this repository publishes the `plugins/samples/` demo/reference plugins for pipeline
+  verification; the real catalogue lives in the `fluidbar/plugins` monorepo (`plugins/<id>/`) and is published by
+  setting `MARKETPLACE_PLUGINS_ROOT=plugins` (or pointing the workflow at that checkout).
+- **Pages / artifact-only:** with Pages enabled the `deploy` job publishes the site. If Pages is intentionally
+  unavailable (forks, mirrors, incidents), set `MARKETPLACE_DEPLOY_PAGES=false`; the `marketplace-site` workflow
+  artifact is then the published output and can be hosted on any static host (the index is self-contained:
+  `index.json` + `keys.json` + `plugins/*.json`). `marketplace-packages` holds the `.fbp` files. There is no
+  silent fallback: a failing deploy when Pages is enabled fails the run.
 - No private keys in the repository: `MARKETPLACE_SIGNING_KEY_PEM` is a placeholder environment secret;
   rotation/revocation is documented in [`docs/plugin/signing-and-keys.md`](../docs/plugin/signing-and-keys.md).
-- Runbook (merge → live < 10 min, rollback, incidents): [`docs/plugin/publish-runbook.md`](../docs/plugin/publish-runbook.md).
+- Runbook (merge → live < 10 min, required variables, SHA-pinning policy, rollback, incidents):
+  [`docs/plugin/publish-runbook.md`](../docs/plugin/publish-runbook.md).
 - Review checklist: [`docs/plugin/review-checklist.md`](../docs/plugin/review-checklist.md).
 
 Local rehearsal without GitHub (also used by `MarketplaceEndToEndTests`):

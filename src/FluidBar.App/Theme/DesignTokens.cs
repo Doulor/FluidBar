@@ -178,8 +178,11 @@ public static class UiMetrics
     /// <summary>Fixed per-monitor host window width in DIP (Core <see cref="LayoutTokens.WindowWidth"/>).</summary>
     public const double WindowWidth = LayoutTokens.WindowWidth;
 
-    /// <summary>Fixed per-monitor host window height in DIP (Core <see cref="LayoutTokens.WindowHeight"/>).</summary>
-    public const double WindowHeight = LayoutTokens.WindowHeight;
+    /// <summary>Fixed per-monitor host window height in DIP: shell envelope + detached archipelago band (488×384).</summary>
+    public static double WindowHeight => HostLayout.WindowHeight;
+
+    /// <summary>Expanded content layer height (440×336: shell + archipelago band).</summary>
+    public static double ExpandedLayerHeight => HostLayout.ExpandedLayerHeight;
 
     /// <summary>Shadow/antialias bleed inside the host window on every side.</summary>
     public const double WindowPadding = LayoutTokens.WindowPadding;

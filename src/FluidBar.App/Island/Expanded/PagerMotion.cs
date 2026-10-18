@@ -18,14 +18,14 @@ public sealed class PagerMotion
     /// <summary>Page pitch in DIP (Core constant).</summary>
     public const double PagePitch = PagerConstants.PagePitchDip;
 
-    /// <summary>Pointer follow factor — stronger damping than the original 0.90 (user choice A).</summary>
-    public const double PointerDamping = 0.80;
+    /// <summary>Pointer follow factor (user re-tuning 2026-10-18: 0.85).</summary>
+    public const double PointerDamping = 0.85;
 
-    /// <summary>Snap spring period in seconds (user choice A: 0.44 s).</summary>
-    public const double SnapPeriodSeconds = 0.44;
+    /// <summary>Snap spring period in seconds (user re-tuning 2026-10-18: 0.38 s).</summary>
+    public const double SnapPeriodSeconds = 0.38;
 
-    /// <summary>Snap spring damping ratio (user choice A: 0.97, softer overshoot).</summary>
-    public const double SnapDampingRatio = 0.97;
+    /// <summary>Snap spring damping ratio (user re-tuning 2026-10-18: 0.94).</summary>
+    public const double SnapDampingRatio = 0.94;
 
     /// <summary>Wheel travel that equals one page notch (140 DIP).</summary>
     public const double WheelThresholdDip = 140;
@@ -128,7 +128,8 @@ public sealed class PagerMotion
         var dx = x - _lastDragX;
         _lastDragX = x;
         _lastDragTimestamp = timestampMs;
-        _dragVelocityDipPerMs = -((_dragVelocityDipPerMs * 0.6) + (((dx / dt) * 0.4) / 1000.0));
+        // Stronger velocity low-pass smoothing (0.75 previous / 0.25 new sample) for calmer flings.
+        _dragVelocityDipPerMs = -((_dragVelocityDipPerMs * 0.75) + (((dx / dt) * 0.25) / 1000.0));
         _accumulatedDragDip = -(x - _dragStartX);
 
         var state = PagePagerPolicy.Drag(

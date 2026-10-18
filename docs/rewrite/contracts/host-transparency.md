@@ -148,3 +148,63 @@ While collecting the app perf baseline, the published App exited during a 3-minu
 `0xE0434352` (unhandled .NET exception) after ~30 s. That is a separate UI-WIP stability item (the
 App shell currently renders design data); flagged to Lead/UI owner — do not conflate it with the
 transparency question.
+
+## 10. Update — user visually confirmed the grey is real; strategy assessment
+
+Doulor confirmed on the physical/remote session: the grey host rectangle IS visible. So the earlier
+"capture artifact" verdict is closed as **user-visible reality in this session** (ToDesk/GameViewer
+mirroring is the user's normal session): Avalonia 12 `WinUIComposition`/DirectComposition alpha is
+flattened there, while canonical Win32 `UpdateLayeredWindow` remains transparent (proven by the
+`tools/perf/layered-probe` control). The current Avalonia host is therefore unusable for this user
+environment; a fallback strategy is required.
+
+### 10.1 Avalonia 11.3.22 probe — blocked in this environment
+`dotnet restore` of Avalonia 11.3.22 **hangs/times out** here (>240 s, no packages written; only
+Avalonia 12.1.4 is in the NuGet cache; `api.nuget.org` v3 index answers HTTP 200, but the package CDN
+download of `avalonia.11.3.22.nupkg` also times out >90 s). The probe project is prepared at
+`%TEMP%\fluidbar-spikes\av11\` (same window as the spike, 11.x API `SystemDecorations.None`) and should be
+run on a machine/CI with working NuGet access. This is an **environment blocker**, not a code blocker.
+
+### 10.2 Downgrade assessment (Avalonia 12.1.4 → 11.3.x)
+Grep of the App sources finds exactly **one 12-only API family**: `WindowDecorations` (4 sites:
+`Program.cs` probe, `Hosting/IslandWindow.cs`, `Views/Market/ConsentDialog.cs`,
+`Views/Settings/SettingsWindow.cs`). `WindowTransparencyHint`, `TransparencyLevelHint`,
+`TransparencyBackgroundFallback`, `ActualTransparencyLevel`, `Win32CompositionMode` all exist in 11.x with
+the same names. Estimated change: 4 lines (`WindowDecorations.None` → `SystemDecorations.None`) + 3
+package version bumps; then retest transparency/DPI/pointer behavior. Feasibility: **high** (small,
+localized) — conditional on the 11.3 probe being transparent in this session.
+
+### 10.3 Layered-host feasibility
+- **Keep Avalonia and blit frames into a layered HWND:** technically possible (offscreen
+  `RenderTargetBitmap` → 32bpp premultiplied DIB → `UpdateLayeredWindow`) but **not recommended**:
+  Avalonia exposes no supported way to attach a `TopLevel` to a foreign HWND or to inject pointer/key
+  input into it; the hidden-window + RTB route needs unsupported internals and all input would have to be
+  hand-routed. Per frame: 732×498×4 ≈ 1.4 MB GPU→CPU readback + GDI blit + DWM update at 60 fps, no
+  vsync coupling — needs a spike and carries jank/perf risk.
+- **SkiaSharp + Win32 layered host (recommended custom fallback):** draw the island with SkiaSharp into a
+  premultiplied 32bpp BGRA DIB and call `UpdateLayeredWindow`; HWND input/hit-testing works exactly like
+  the current app (our `IslandWindowInterop.RegisterHitTest` WM_NCHITTEST/HTTRANSPARENT policy is
+  unchanged), and topmost/no-activate rules already exist. Rendering source is already custom-drawn
+  (squircle geometry, layout tokens, icons, text in `IslandShell`/`CompactSurfaces`/`ExpandedPanel`), so
+  the port is DrawingContext→SKCanvas plus text/icon asset handling; settings/marketplace windows can
+  remain normal Avalonia windows. Estimate 1–2 weeks for compact+expanded parity; CPU raster of 732×498
+  is cheap, so 60 fps should be attainable (needs a 5-minute spike to confirm `UpdateLayeredWindow` cost).
+- **WPF layered host:** also proven mechanism (WPF `AllowsTransparency=true` is `UpdateLayeredWindow`),
+  but requires porting the island drawing to WPF and a second UI stack; acceptable alternative if the
+  team prefers WPF drawing parity over SkiaSharp.
+
+**Recommendation:** first run the Avalonia 11.3.22 probe (external machine); if transparent → downgrade
+(smallest change, keeps the whole UI stack). If not → implement the SkiaSharp layered host for the island
+surface (keeps all Core/Platform architecture, replaces only the render host), keeping Avalonia for the
+settings/marketplace windows.
+
+### 10.4 Release-blocker crash found & fixed (App/WIP, not Platform)
+Published App crash after ~30 s reproduced and captured from the Windows Event Log
+(`.NET Runtime` 1026): `System.InvalidOperationException: The calling thread cannot access this object
+because a different thread owns it`, stack:
+`DesignIslandDataSource.ScheduleMinuteTick` (System.Threading.Timer) → `DesignIslandDataSource.Refresh` →
+`IslandHost.OnDataChanged` → `SyncView` → `CompactSurface.UpdateModel` → `Layoutable.InvalidateMeasure` →
+Avalonia `Dispatcher.VerifyAccess`. Fix: `IslandHost.OnDataChanged` now marshals to the UI thread
+(`Dispatcher.UIThread.Post(SyncView, Background)` when `!CheckAccess()`). Verified: rebuilt App ran 95 s
+idle with **0** `.NET Runtime` errors (before: crash at ~30 s). This protects every future platform-data
+source (volume/clock/notification events arrive on producer threads).

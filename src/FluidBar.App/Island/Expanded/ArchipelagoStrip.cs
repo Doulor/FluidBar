@@ -2,7 +2,6 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using FluidBar.App.Controls;
 using FluidBar.App.Localization;
 using FluidBar.App.State;
 using FluidBar.App.Theme;
@@ -11,16 +10,15 @@ using FluidBar.Core.Activities;
 namespace FluidBar.App.Island.Expanded;
 
 /// <summary>
-/// Page Archipelago (user-chosen navigation variant A, 2026-10-18): a floating mini-island strip that
-/// replaces the page dots. Hidden at rest; revealed by drag/wheel and by hovering the bottom 12 DIP
-/// for 300 ms; auto-hides 1.2 s after the last activity. Six 48×26 mini-islands (gap 8, radius 13),
-/// active one grows to 72×30 with the localized page name, and each carries a live micro-preview.
+/// Page Archipelago (user-chosen variant A, revised 2026-10-18): six detached mini-islands floating
+/// BELOW the expanded island over the desktop — never inside the panel, never covering content.
+/// 48×26 islands (gap 8, radius 13), active 72×30 + localized page name, live micro-previews.
+/// Motion is render-only via <see cref="ArchipelagoMotion"/> (Core springs): translateY/opacity/scale,
+/// no layout, no CSS-style transitions. Only the agent dot and media wave animate, and only while the
+/// strip is visible.
 /// </summary>
 public sealed class ArchipelagoStrip : Control
 {
-    /// <summary>Strip height (DIP).</summary>
-    public const double StripHeight = 34;
-
     /// <summary>Inactive mini-island width (DIP).</summary>
     public const double MiniWidth = 48;
 
@@ -39,10 +37,7 @@ public sealed class ArchipelagoStrip : Control
     /// <summary>Corner radius (DIP).</summary>
     public const double Radius = 13;
 
-    /// <summary>Distance from the shell bottom (DIP).</summary>
-    public const double BottomOffset = 14;
-
-    /// <summary>Reveal delay when hovering the bottom 12 DIP (ms).</summary>
+    /// <summary>Reveal delay when hovering the bottom band (ms).</summary>
     public const int HoverRevealMs = 300;
 
     /// <summary>Auto-hide delay after the last interaction (ms).</summary>
@@ -51,65 +46,61 @@ public sealed class ArchipelagoStrip : Control
     /// <summary>Total strip width including the active-island growth (DIP).</summary>
     public const double TotalWidth = (6 * MiniWidth) + (5 * Gap) + (ActiveWidth - MiniWidth);
 
-    private static readonly IconKind[] Icons =
-    [
-        IconKind.Home,
-        IconKind.Media,
-        IconKind.Bell,
-        IconKind.Clipboard,
-        IconKind.Agent,
-        IconKind.Grid,
-    ];
+    /// <summary>Strip height (DIP) — detached islands, no internal scrim.</summary>
+    public const double StripHeight = 34;
 
     private ExpandedPageContext? _context;
     private IReadOnlyList<string> _titles = [];
-    private double _pageOffset;
-    private double _visibility;
-    private long _nowMs;
+    private ArchipelagoMotion? _motion;
+    private double _previewPhase;
 
-    /// <summary>The strip rectangle in panel-local DIP.</summary>
+    /// <summary>The strip rectangle in panel-local DIP (below the expanded shell).</summary>
     public Rect StripRect
     {
         get
         {
             var width = Bounds.Width > 1 ? Bounds.Width : ExpandedPanel.PanelWidth;
-            var height = Bounds.Height > 1 ? Bounds.Height : ExpandedPanel.PanelHeight;
             var x = (width - TotalWidth) / 2;
-            var y = height - BottomOffset - StripHeight;
+            var y = ExpandedPanel.PanelHeight + HostLayout.ArchipelagoGap;
             return new Rect(x, y, TotalWidth, StripHeight);
         }
     }
 
-    /// <summary>Current visibility 0..1 (fade-in/out).</summary>
-    public double Visibility => _visibility;
+    /// <summary>Current reveal opacity (tests).</summary>
+    public double Visibility => _motion?.Opacity ?? 0;
 
-    /// <summary>Updates strip data and animation state; repaints.</summary>
+    /// <summary>Current smoothed active page position (tests).</summary>
+    public double ActivePosition => _motion?.ActivePosition ?? 0;
+
+    /// <summary>Updates strip data and motion state; repaints.</summary>
     public void Update(
         ExpandedPageContext? context,
         IReadOnlyList<string> titles,
-        double pageOffset,
-        double visibility,
-        long nowMs)
+        ArchipelagoMotion? motion,
+        double previewPhase)
     {
         _context = context;
         _titles = titles;
-        _pageOffset = pageOffset;
-        _visibility = Math.Clamp(visibility, 0, 1);
-        _nowMs = nowMs;
+        _motion = motion;
+        _previewPhase = previewPhase;
         InvalidateVisual();
     }
 
-    /// <summary>Whether a panel-local point lies inside the strip's scrim.</summary>
-    public bool Contains(Point point) => StripRect.Inflate(new Thickness(8, 4)).Contains(point);
+    /// <summary>Whether a panel-local point lies inside the floating strip area.</summary>
+    public bool Contains(Point point)
+        => (_motion?.Opacity ?? 0) > 0.01 && StripRect.Inflate(new Thickness(10, 6)).Contains(point);
 
     /// <summary>Hit-tests the mini-islands; returns the page index or -1.</summary>
     public int HitTest(Point point)
     {
-        // Visibility gating is the panel's job (it only routes strip input while the strip is shown);
-        // the strip itself must stay hittable during its fade-in so the first tap is never lost.
+        if (_motion is null)
+        {
+            return -1;
+        }
+
         for (var i = 0; i < 6; i++)
         {
-            if (IslandRect(i).Contains(point))
+            if (IslandRect(i, _motion.ActivePosition).Contains(point))
             {
                 return i;
             }
@@ -118,73 +109,89 @@ public sealed class ArchipelagoStrip : Control
         return -1;
     }
 
-    /// <summary>Island rectangle for page <paramref name="index"/> (active island uses the current offset).</summary>
-    public Rect IslandRect(int index)
+    /// <summary>Island rectangle for page <paramref name="index"/> at the smoothed active position.</summary>
+    public Rect IslandRect(int index, double activePosition)
     {
         var strip = StripRect;
-        var active = Math.Clamp((int)Math.Round(_pageOffset, MidpointRounding.AwayFromZero), 0, 5);
-        var interpolatedActiveX = strip.X + (_pageOffset * (MiniWidth + Gap));
-        var baseX = strip.X + (index * (MiniWidth + Gap));
+        var active = Math.Clamp((int)Math.Round(activePosition, MidpointRounding.AwayFromZero), 0, 5);
+        var interpolatedX = strip.X + (activePosition * (MiniWidth + Gap));
         if (index == active)
         {
             return new Rect(
-                Math.Clamp(interpolatedActiveX, strip.X, strip.Right - ActiveWidth),
+                Math.Clamp(interpolatedX, strip.X, strip.Right - ActiveWidth),
                 strip.Y + ((StripHeight - ActiveHeight) / 2),
                 ActiveWidth,
                 ActiveHeight);
         }
 
         return new Rect(
-            baseX,
+            strip.X + (index * (MiniWidth + Gap)),
             strip.Y + ((StripHeight - MiniHeight) / 2),
             MiniWidth,
             MiniHeight);
     }
 
     /// <inheritdoc />
-    protected override Size MeasureOverride(Size availableSize) => new(ExpandedPanel.PanelWidth, ExpandedPanel.PanelHeight);
+    protected override Size MeasureOverride(Size availableSize) => new(ExpandedPanel.PanelWidth, ExpandedPanel.TotalHeight);
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        if (_visibility <= 0.01 || _context is null)
+        var motion = _motion;
+        if (motion is null || motion.Opacity <= 0.001 || _context is null)
         {
             return;
         }
 
         var palette = _context.Settings.Colors;
-        using var fade = context.PushOpacity(_visibility);
         var strip = StripRect;
+        var center = new Point(strip.Center.X, strip.Center.Y);
 
-        // Subtle scrim floating above the bottom edge.
-        var scrim = strip.Inflate(new Thickness(10, 5));
-        context.DrawRectangle(
-            new SolidColorBrush(palette.Background, 0.80),
-            new Pen(new SolidColorBrush(palette.LineStrong, 0.7), 1),
-            new RoundedRect(scrim, 18));
+        using var fade = context.PushOpacity(motion.Opacity);
+        using var transform = context.PushTransform(
+            Matrix.CreateTranslation(0, motion.TranslateY)
+            * Matrix.CreateTranslation(-center.X, -center.Y)
+            * Matrix.CreateScale(motion.Scale, motion.Scale)
+            * Matrix.CreateTranslation(center.X, center.Y));
 
-        var active = Math.Clamp((int)Math.Round(_pageOffset, MidpointRounding.AwayFromZero), 0, 5);
+        var active = Math.Clamp((int)Math.Round(motion.ActivePosition, MidpointRounding.AwayFromZero), 0, 5);
         for (var i = 0; i < 6; i++)
         {
-            var rect = IslandRect(i);
-            if (i == active)
-            {
-                context.DrawRectangle(
-                    new SolidColorBrush(Accents.Fallback, 0.18),
-                    new Pen(new SolidColorBrush(Accents.Fallback, 0.55), 1),
-                    new RoundedRect(rect, Radius));
-                var name = _titles.Count > i ? _titles[i] : string.Empty;
-                DrawText(context, name, rect.Deflate(new Thickness(8, 0)), Fonts.SemiBold, 10.5,
-                    new SolidColorBrush(palette.Foreground), TextAlignment.Center);
-                continue;
-            }
-
-            context.DrawRectangle(
-                new SolidColorBrush(palette.BackgroundRaised, 0.92),
-                new Pen(new SolidColorBrush(palette.Line), 1),
-                new RoundedRect(rect, Radius));
-            DrawPreview(context, i, rect.Deflate(new Thickness(5, 3)), palette);
+            var rect = IslandRect(i, motion.ActivePosition);
+            DrawFloatingIsland(context, rect, palette, i == active, i);
         }
+    }
+
+    private void DrawFloatingIsland(DrawingContext context, Rect rect, IslandColors palette, bool active, int index)
+    {
+        // Detached-over-desktop look: soft layered shadow + glass surface (no in-panel scrim).
+        var shadowAlpha = active ? 0.32 : 0.22;
+        for (var layer = 2; layer >= 0; layer--)
+        {
+            var inflate = layer * 2.0;
+            context.DrawRectangle(
+                new SolidColorBrush(Colors.Black, shadowAlpha / (layer + 1.5)),
+                null,
+                new RoundedRect(
+                    new Rect(rect.X - inflate, rect.Y - inflate + 3, rect.Width + (inflate * 2), rect.Height + (inflate * 2)),
+                    Radius + inflate));
+        }
+
+        var surface = new SolidColorBrush(palette.Background, active ? 0.97 : 0.94);
+        var stroke = new Pen(
+            new SolidColorBrush(active ? Accents.Fallback : palette.LineStrong, active ? 0.65 : 0.9),
+            active ? 1.2 : 1);
+        context.DrawRectangle(surface, stroke, new RoundedRect(rect, active ? Radius + 1 : Radius));
+
+        if (active)
+        {
+            var name = _titles.Count > index ? _titles[index] : string.Empty;
+            DrawText(context, name, rect.Deflate(new Thickness(8, 0, 8, 0)), Fonts.SemiBold, 10.5,
+                new SolidColorBrush(Accents.Fallback), TextAlignment.Center);
+            return;
+        }
+
+        DrawPreview(context, index, rect.Deflate(new Thickness(5, 3, 5, 3)), palette);
     }
 
     private void DrawPreview(DrawingContext context, int index, Rect area, IslandColors palette)
@@ -203,15 +210,18 @@ public sealed class ArchipelagoStrip : Control
                 var art = new Rect(area.X, area.Y + 2, 16, 16);
                 context.DrawRectangle(new SolidColorBrush(Accents.Track), null, new RoundedRect(art, 4));
                 var waveX = art.Right + 4;
-                var heights = new[] { 0.5, 0.9, 0.65 };
+                var heights = new[]
+                {
+                    0.45 + (0.25 * Math.Abs(Math.Sin(_previewPhase * 2.1))),
+                    0.6 + (0.3 * Math.Abs(Math.Sin((_previewPhase * 2.6) + 1))),
+                    0.4 + (0.2 * Math.Abs(Math.Sin((_previewPhase * 1.7) + 2))),
+                };
                 for (var bar = 0; bar < 3; bar++)
                 {
                     var height = (area.Height - 6) * heights[bar];
                     context.DrawRectangle(new SolidColorBrush(Accents.Track),
                         null,
-                        new RoundedRect(
-                            new Rect(waveX + (bar * 4), area.Center.Y - (height / 2), 2, height),
-                            1));
+                        new RoundedRect(new Rect(waveX + (bar * 4), area.Center.Y - (height / 2), 2, height), 1));
                 }
 
                 break;
@@ -229,7 +239,7 @@ public sealed class ArchipelagoStrip : Control
                 break;
             case 4:
             {
-                var pulse = 0.55 + (0.45 * Math.Sin(_nowMs / 300.0));
+                var pulse = 0.55 + (0.45 * Math.Sin(_previewPhase * 3.2));
                 var center = new Point(area.Center.X, area.Center.Y);
                 context.DrawEllipse(new SolidColorBrush(Accents.Info, 0.25 + (0.2 * pulse)), null, center, 6, 6);
                 context.DrawEllipse(new SolidColorBrush(Accents.Info, 0.6 + (0.4 * pulse)), null, center, 2.6, 2.6);
@@ -238,7 +248,7 @@ public sealed class ArchipelagoStrip : Control
 
             case 5:
             {
-                var cell = 5.0;
+                const double cell = 5;
                 for (var row = 0; row < 3; row++)
                 {
                     for (var column = 0; column < 4; column++)
@@ -256,7 +266,6 @@ public sealed class ArchipelagoStrip : Control
                 break;
             }
         }
-
     }
 
     private static void DrawText(

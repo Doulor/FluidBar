@@ -1,9 +1,22 @@
 name: marketplace
 
-# Plugin marketplace CI: PR validation (validate/policy/pack determinism), and on merge/manual dispatch the
-# signed publish pipeline (pack -> sign -> regenerate index.json + shards + keys.json -> Pages or artifact).
-# No private key material is stored in the repository: the signing key comes from the protected
-# `marketplace-publish` environment secret documented in docs/plugin/signing-and-keys.md.
+# Plugin marketplace CI: PR validation (validate/policy/pack determinism), then on merge/manual dispatch the
+# signed publish pipeline (pack -> sign -> regenerate index.json + shards + keys.json) and a dedicated GitHub
+# Pages deploy job. No private key material is stored in the repository: the signing key comes from the
+# protected `marketplace-publish` environment secret documented in docs/plugin/signing-and-keys.md.
+#
+# Required configuration (all fail fast in the publish job if missing):
+#   environment `marketplace-publish` (required reviewer: Doulor)
+#     secret MARKETPLACE_SIGNING_KEY_PEM      = PKCS#8 PEM of the ECDSA P-256 marketplace key
+#   repository/environment variables
+#     MARKETPLACE_ARTIFACT_BASE_URL           = e.g. https://github.com/<org>/<repo>/releases/download
+#     MARKETPLACE_BASE_URL                    = e.g. https://marketplace.fluidbar.app
+#     MARKETPLACE_SIGNING_KEY_ID              = e.g. fluidbar-marketplace-2026
+#     MARKETPLACE_PLUGINS_ROOT                = optional, default `plugins/samples` in this repo
+#     MARKETPLACE_DEPLOY_PAGES                = set `false` for explicit artifact-only publishing
+#   environment `github-pages` (created by the deploy job; required reviewer optional)
+#
+# All actions are pinned to full commit SHAs (tag documented in the trailing comment).
 
 on:
   workflow_dispatch:
@@ -66,29 +79,38 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab # v4.3.0
         with:
           dotnet-version: "10.0.x"
 
-      - name: Restore tooling and sample plugins
+      - name: Restore tooling and plugins
+        timeout-minutes: 10
         run: |
           dotnet restore src/FluidBar.Cli/FluidBar.Cli.csproj
-          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj -File
           foreach ($project in $projects) { dotnet restore $project.FullName }
 
       - name: Build tooling and plugins (Release)
+        timeout-minutes: 10
         run: |
           dotnet build src/FluidBar.Cli -c $env:CONFIGURATION --no-restore
-          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
-          foreach ($project in $projects) { dotnet build $project.FullName -c $env:CONFIGURATION --no-restore }
+          if ($LASTEXITCODE -ne 0) { throw "CLI build failed" }
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj -File
+          foreach ($project in $projects) {
+            dotnet build $project.FullName -c $env:CONFIGURATION --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $($project.FullName)" }
+          }
 
       - name: Test plugin platform (SDK + host, includes offline publish/install E2E)
+        timeout-minutes: 15
         run: |
           dotnet test tests/FluidBar.Sdk.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=sdk-tests.trx" --results-directory artifacts/test-results
+          if ($LASTEXITCODE -ne 0) { throw "SDK tests failed" }
           dotnet test tests/FluidBar.PluginHost.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=host-tests.trx" --results-directory artifacts/test-results
+          if ($LASTEXITCODE -ne 0) { throw "PluginHost tests failed" }
 
       - name: Validate JSON Schemas parse
         run: |
@@ -98,6 +120,7 @@ jobs:
           }
 
       - name: Validate + policy + deterministic pack (all plugins)
+        timeout-minutes: 15
         run: |
           $ErrorActionPreference = "Stop"
           $dryRun = "artifacts/dry-run"
@@ -110,14 +133,21 @@ jobs:
           if (-not $pluginDirs) { throw "No plugin manifests found under plugins/." }
 
           foreach ($dir in $pluginDirs) {
-            $manifest = Get-Content (Join-Path $dir.FullName "manifest.json") -Raw | ConvertFrom-Json
-            $id = $manifest.id
-            $buildOutput = Join-Path $dir.FullName "bin/$env:CONFIGURATION/net10.0"
+            $project = Get-ChildItem $dir.FullName -Filter *.csproj -File | Select-Object -First 1
+            if (-not $project) { throw "No .csproj next to manifest in '$($dir.FullName)' (one plugin project per plugin folder)." }
+
+            # Derive the build output from MSBuild itself so a TargetFramework change cannot break CI.
+            $targetPath = dotnet msbuild $project.FullName -nologo -getProperty:TargetPath -p:Configuration=$env:CONFIGURATION
+            $targetPath = ($targetPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 1)
+            if ([string]::IsNullOrWhiteSpace($targetPath)) { throw "Could not resolve TargetPath for '$($project.FullName)'" }
+            $buildOutput = Split-Path -Parent $targetPath.Trim()
             if (-not (Test-Path (Join-Path $buildOutput "manifest.json"))) {
-              throw "Plugin '$id' was not built at '$buildOutput'. Ensure the project copies manifest.json/locales to the output."
+              throw "Plugin build output '$buildOutput' has no manifest.json. Ensure the project copies manifest.json (and locales) to the output directory."
             }
 
-            Write-Host "::group::Plugin $id"
+            $manifest = Get-Content (Join-Path $dir.FullName "manifest.json") -Raw | ConvertFrom-Json
+            $id = $manifest.id
+            Write-Host "::group::Plugin $id ($buildOutput)"
             dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- validate --plugin $buildOutput
             if ($LASTEXITCODE -ne 0) { throw "validate failed for $id" }
             dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- policy --plugin $buildOutput
@@ -128,7 +158,7 @@ jobs:
             dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- pack --plugin $buildOutput --out $first
             if ($LASTEXITCODE -ne 0) { throw "pack failed for $id" }
             dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- pack --plugin $buildOutput --out $second
-            if ($LASTEXITCODE -ne 0) { throw "pack failed for $id" }
+            if ($LASTEXITCODE -ne 0) { throw "pack failed for $id (second pass)" }
 
             $hashOne = (Get-FileHash $first -Algorithm SHA256).Hash
             $hashTwo = (Get-FileHash $second -Algorithm SHA256).Hash
@@ -137,12 +167,17 @@ jobs:
             Write-Host "::endgroup::"
           }
 
-      - name: Validate manifest strictness sample
+      - name: Validate strict manifest rejection
+        timeout-minutes: 5
         run: |
-          # A workflow-level guard that the CLI validator actually rejects unknown manifest properties.
+          $ErrorActionPreference = "Stop"
+          $project = "plugins/samples/FluidBar.Plugins.SampleMinimal/FluidBar.Plugins.SampleMinimal.csproj"
+          $targetPath = dotnet msbuild $project -nologo -getProperty:TargetPath -p:Configuration=$env:CONFIGURATION
+          $targetPath = ($targetPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Last 1)
+          $sourceOutput = Split-Path -Parent $targetPath.Trim()
           $bad = Join-Path $env:RUNNER_TEMP "bad-manifest"
           New-Item -ItemType Directory -Force -Path $bad | Out-Null
-          Copy-Item plugins/samples/FluidBar.Plugins.SampleMinimal/bin/$env:CONFIGURATION/net10.0/* $bad -Recurse -Force
+          Copy-Item (Join-Path $sourceOutput "*") $bad -Recurse -Force
           $manifestPath = Join-Path $bad "manifest.json"
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
           $manifest | Add-Member -NotePropertyName "unexpectedProperty" -NotePropertyValue "should-fail" -Force
@@ -153,7 +188,7 @@ jobs:
 
       - name: Upload validation artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: marketplace-validation
           path: |
@@ -163,7 +198,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Publish signed marketplace index
+    name: Pack, sign and generate marketplace index
     needs: validate
     if: >-
       github.event_name != 'pull_request' &&
@@ -173,64 +208,84 @@ jobs:
     environment: marketplace-publish
     permissions:
       contents: read
-      pages: write
-      id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@3951f0dfe7a07e2313ec93c75700083e2005cbab # v4.3.0
         with:
           dotnet-version: "10.0.x"
 
+      - name: Require publish configuration (variables + protected secret)
+        timeout-minutes: 2
+        env:
+          MARKETPLACE_SIGNING_KEY_PEM: ${{ secrets.MARKETPLACE_SIGNING_KEY_PEM }}
+          MARKETPLACE_ARTIFACT_BASE_URL: ${{ vars.MARKETPLACE_ARTIFACT_BASE_URL }}
+          MARKETPLACE_BASE_URL: ${{ vars.MARKETPLACE_BASE_URL }}
+          MARKETPLACE_SIGNING_KEY_ID: ${{ vars.MARKETPLACE_SIGNING_KEY_ID }}
+          MARKETPLACE_PLUGINS_ROOT: ${{ vars.MARKETPLACE_PLUGINS_ROOT }}
+        run: |
+          $missing = @()
+          foreach ($name in @('MARKETPLACE_ARTIFACT_BASE_URL', 'MARKETPLACE_BASE_URL', 'MARKETPLACE_SIGNING_KEY_ID')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += $name }
+          }
+          if ([string]::IsNullOrWhiteSpace($env:MARKETPLACE_SIGNING_KEY_PEM)) {
+            $missing += 'secret MARKETPLACE_SIGNING_KEY_PEM (environment marketplace-publish)'
+          }
+          if ($missing.Count -gt 0) {
+            throw ("Missing marketplace publish configuration: " + ($missing -join ', ') + ". See docs/plugin/publish-runbook.md.")
+          }
+          foreach ($name in @('MARKETPLACE_ARTIFACT_BASE_URL', 'MARKETPLACE_BASE_URL')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if (-not $value.StartsWith('https://')) { throw "$name must be an absolute https:// URL (got '$value')." }
+          }
+          $pluginsRoot = $env:MARKETPLACE_PLUGINS_ROOT
+          if ([string]::IsNullOrWhiteSpace($pluginsRoot)) { $pluginsRoot = 'plugins/samples' }
+          if (-not (Test-Path $pluginsRoot)) { throw "MARKETPLACE_PLUGINS_ROOT '$pluginsRoot' does not exist." }
+          "MARKETPLACE_PLUGINS_ROOT=$pluginsRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Publish configuration present (artifact host: $([Uri]$env:MARKETPLACE_ARTIFACT_BASE_URL).Host; plugin root: $pluginsRoot)."
+
       - name: Restore and build tooling + plugins (Release)
+        timeout-minutes: 10
         run: |
           dotnet restore src/FluidBar.Cli/FluidBar.Cli.csproj
           dotnet build src/FluidBar.Cli -c $env:CONFIGURATION --no-restore
-          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj
+          if ($LASTEXITCODE -ne 0) { throw "CLI build failed" }
+          $projects = Get-ChildItem plugins -Recurse -Filter *.csproj -File
           foreach ($project in $projects) {
             dotnet restore $project.FullName
             dotnet build $project.FullName -c $env:CONFIGURATION --no-restore
+            if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $($project.FullName)" }
           }
-
-      - name: Fail fast if the signing key secret is missing
-        env:
-          MARKETPLACE_SIGNING_KEY_PEM: ${{ secrets.MARKETPLACE_SIGNING_KEY_PEM }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:MARKETPLACE_SIGNING_KEY_PEM)) {
-            throw "MARKETPLACE_SIGNING_KEY_PEM is not configured for the 'marketplace-publish' environment. See docs/plugin/signing-and-keys.md."
-          }
-          Write-Host "Signing key secret detected (value not printed)."
 
       - name: Pack, sign, regenerate index + shards + keys
+        timeout-minutes: 10
         env:
           MARKETPLACE_SIGNING_KEY_PEM: ${{ secrets.MARKETPLACE_SIGNING_KEY_PEM }}
+          MARKETPLACE_ARTIFACT_BASE_URL: ${{ vars.MARKETPLACE_ARTIFACT_BASE_URL }}
+          MARKETPLACE_BASE_URL: ${{ vars.MARKETPLACE_BASE_URL }}
+          MARKETPLACE_SIGNING_KEY_ID: ${{ vars.MARKETPLACE_SIGNING_KEY_ID }}
         run: |
           $ErrorActionPreference = "Stop"
-          $keyId = "${{ vars.MARKETPLACE_SIGNING_KEY_ID }}"
-          if ([string]::IsNullOrWhiteSpace($keyId)) { $keyId = "fluidbar-marketplace-2026" }
-          $artifactBaseUrl = "${{ vars.MARKETPLACE_ARTIFACT_BASE_URL }}"
-          if ([string]::IsNullOrWhiteSpace($artifactBaseUrl)) { $artifactBaseUrl = "https://github.com/fluidbar/plugins/releases/download" }
-          $marketplaceBaseUrl = "${{ vars.MARKETPLACE_BASE_URL }}"
-          if ([string]::IsNullOrWhiteSpace($marketplaceBaseUrl)) { $marketplaceBaseUrl = "https://marketplace.fluidbar.app" }
           $channel = "${{ inputs.channel }}"
           if ([string]::IsNullOrWhiteSpace($channel)) { $channel = "stable" }
 
           dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- publish-prepare `
-            --plugins-root plugins/samples `
+            --plugins-root $env:MARKETPLACE_PLUGINS_ROOT `
             --artifacts artifacts/plugins `
             --marketplace marketplace-site `
             --key-env MARKETPLACE_SIGNING_KEY_PEM `
-            --key-id $keyId `
-            --artifact-base-url $artifactBaseUrl `
-            --marketplace-base-url $marketplaceBaseUrl `
+            --key-id $env:MARKETPLACE_SIGNING_KEY_ID `
+            --artifact-base-url $env:MARKETPLACE_ARTIFACT_BASE_URL `
+            --marketplace-base-url $env:MARKETPLACE_BASE_URL `
             --configuration $env:CONFIGURATION `
             --channel $channel `
             --source-commit "${{ github.sha }}"
           if ($LASTEXITCODE -ne 0) { throw "publish-prepare failed" }
 
-      - name: Post-generation verification (signed index + determinism)
+      - name: Post-generation verification (signed index)
+        timeout-minutes: 3
         run: |
           dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- verify-index --marketplace marketplace-site
           if ($LASTEXITCODE -ne 0) { throw "generated index failed signature verification" }
@@ -239,49 +294,80 @@ jobs:
           }
 
       - name: Upload plugin packages (workflow artifact, always available)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: marketplace-packages
           path: artifacts/plugins
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload self-contained marketplace site (fallback when Pages is unavailable)
-        uses: actions/upload-artifact@v4
+      - name: Upload self-contained marketplace site (deploy input + artifact fallback)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: marketplace-site
           path: marketplace-site
           if-no-files-found: error
           retention-days: 30
 
-      - name: Configure GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Publish summary (signing/index evidence)
+        if: always()
+        run: |
+          $lines = @(
+            "## Marketplace publish",
+            "",
+            "- Plugin packages: ``marketplace-packages`` artifact (retained 30 days).",
+            "- Signed site: ``marketplace-site`` artifact (retained 30 days) — also the input for the Pages deploy job.",
+            "- Index signature verified by ``fluidbar-plugin verify-index``.",
+            "- Signing key id: ``${{ vars.MARKETPLACE_SIGNING_KEY_ID }}`` (secret value never printed).",
+            "- Plugin root: ``$env:MARKETPLACE_PLUGINS_ROOT`` (samples are demo-only in this repository; the real monorepo publishes ``plugins/``).",
+            "",
+            "Pages deployment runs in the ``deploy`` job; if ``MARKETPLACE_DEPLOY_PAGES=false``, the site artifact is the published output."
+          )
+          $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  deploy:
+    name: Deploy marketplace site to GitHub Pages
+    needs: publish
+    # Explicit artifact-only mode: set the repository variable MARKETPLACE_DEPLOY_PAGES=false. Otherwise the
+    # deployment is expected to succeed (no silent fallback); if Pages is unavailable, the publish artifacts are
+    # still uploaded and the run fails visibly.
+    if: vars.MARKETPLACE_DEPLOY_PAGES != 'false'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Download self-contained marketplace site
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: marketplace-site
+          path: marketplace-site
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: marketplace-site
 
       - name: Deploy to GitHub Pages
-        id: deploy-pages
-        # Pages can be disabled/blocked (private mirrors, forks, incidents). The site artifact above is the
-        # documented fallback: download it and host it on any static host.
-        continue-on-error: true
-        uses: actions/deploy-pages@v4
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
 
-      - name: Publish run summary (Pages or fallback instructions)
+      - name: Deployment summary
         if: always()
         run: |
-          $deployed = "${{ steps.deploy-pages.outcome }}" -eq "success"
-          $lines = @(
-            "## Marketplace publish",
-            "",
-            "- Plugin packages: ``marketplace-packages`` workflow artifact (retained 30 days).",
-            "- Site: ``marketplace-site`` workflow artifact (retained 30 days).",
-            "- Index signature verified by ``fluidbar-plugin verify-index``.",
-            "- Signing key: ``${{ vars.MARKETPLACE_SIGNING_KEY_ID }}`` (secret value never logged)."
-          )
-          if ($deployed) {
-            $lines += "- GitHub Pages: deployed successfully."
+          if ("${{ steps.deployment.outcome }}" -eq "success") {
+            Write-Host "Pages deployed: ${{ steps.deployment.outputs.page_url }}"
+            "## Marketplace Pages deploy`n`nPublished: ${{ steps.deployment.outputs.page_url }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } else {
-            $lines += "- **GitHub Pages deploy unavailable** — download the ``marketplace-site`` artifact and host it on a static host; the index is self-contained (index.json + keys.json + plugins/*.json)."
+            Write-Host "::warning::Pages deployment failed. Set repository variable MARKETPLACE_DEPLOY_PAGES=false for explicit artifact-only publishing, or fix Pages configuration (see docs/plugin/publish-runbook.md)."
+            "## Marketplace Pages deploy`n`n**Failed** — use the ``marketplace-site`` artifact or set ``MARKETPLACE_DEPLOY_PAGES=false`` for artifact-only publishing. See docs/plugin/publish-runbook.md." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           }
-          $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          if (-not $deployed) { Write-Warning "Pages deploy did not succeed; artifact fallback is available." }

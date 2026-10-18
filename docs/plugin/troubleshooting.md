@@ -65,8 +65,10 @@ a failure kind and a stable message; per-plugin logs live under the App's log si
 | Symptom | Cause / fix |
 |---|---|
 | Publish job fails: signing key env empty | configure the `MARKETPLACE_SIGNING_KEY_PEM` environment secret (placeholder name) — see [signing-and-keys.md](signing-and-keys.md) |
-| Pages deploy fails but artifact exists | Pages is disabled/unavailable: download the `marketplace-site` workflow artifact and host it manually; the index is self-contained |
-| Validate job cannot find plugin build output | the workflow builds Release first; CLI expects `plugins/<id>/bin/Release/net10.0` with manifest/locales copied to output |
+| Publish job fails: `Missing marketplace publish configuration` | set repository/environment variables `MARKETPLACE_ARTIFACT_BASE_URL`, `MARKETPLACE_BASE_URL`, `MARKETPLACE_SIGNING_KEY_ID` (HTTPS URLs) — see [publish-runbook.md](publish-runbook.md#required-configuration-checked-by-the-publish-job) |
+| Pages deploy fails | Pages is disabled/misconfigured. Fix Pages (Settings → Pages → Source: GitHub Actions) or set repository variable `MARKETPLACE_DEPLOY_PAGES=false` for explicit artifact-only publishing; the `marketplace-site` artifact is self-contained. There is no silent fallback by design. |
+| Validate job cannot find plugin build output | the workflow derives it with `dotnet msbuild <plugin.csproj> -getProperty:TargetPath`; ensure exactly one `.csproj` sits next to `manifest.json` and the project copies `manifest.json`/`locales` to the output |
+| TFM was changed and CI broke | no hardcoded TFM path remains in the workflow/CLI; a TFM change should pass as long as the output still contains `manifest.json` |
 | Determinism check fails only in CI | don't generate files in a build target with timestamps; the CLI packs deterministically from the build output |
 
 ## Getting help

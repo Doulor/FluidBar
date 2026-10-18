@@ -133,7 +133,7 @@ public sealed class ArchipelagoTests
 
             // A tap without movement jumps to the island under the pointer.
             panel.RevealArchipelago(1_000);
-            var island = panel.Archipelago.IslandRect(1);
+            var island = panel.Archipelago.IslandRect(1, panel.Archipelago.ActivePosition);
             panel.BeginStripScrub(island.Center.X, 1_000);
             panel.EndStripScrub(1_020);
             Assert.Equal(1, panel.CurrentIndex);
@@ -259,3 +259,4 @@ public sealed class StabilityTests
         Assert.Contains("2026-10-18T19:45:00", entry);
     }
 }
+
