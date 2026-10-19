@@ -680,7 +680,7 @@ public class LayoutTests
     [InlineData(ActivityKind.Brightness, 208, 40)]
     [InlineData(ActivityKind.Notification, 248, 36)]
     [InlineData(ActivityKind.Clipboard, 264, 36)]
-    [InlineData(ActivityKind.Agent, 236, 36)]
+    [InlineData(ActivityKind.Agent, 288, 36)]
     [InlineData(ActivityKind.Timer, 190, 36)]
     [InlineData(ActivityKind.BatteryLow, 208, 36)]
     [InlineData(ActivityKind.Lookup, 480, 44)]
