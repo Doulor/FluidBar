@@ -104,6 +104,7 @@
     "Media.Next": "Next",
     "Media.Previous": "Previous",
     "Media.NoSession": "Nothing playing",
+    "Media.NoSessionHint": "Start a track to see it here.",
     "Media.UnknownTitle": "Unknown track",
     "Media.UnknownArtist": "Unknown artist",
     "Media.From": "from {app}",

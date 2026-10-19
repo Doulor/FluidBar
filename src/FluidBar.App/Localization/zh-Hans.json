@@ -104,6 +104,7 @@
     "Media.Next": "下一首",
     "Media.Previous": "上一首",
     "Media.NoSession": "没有正在播放的内容",
+    "Media.NoSessionHint": "播放任意音频后会显示在这里。",
     "Media.UnknownTitle": "未知曲目",
     "Media.UnknownArtist": "未知艺术家",
     "Media.From": "来自 {app}",

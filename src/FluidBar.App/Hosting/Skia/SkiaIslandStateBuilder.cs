@@ -90,22 +90,27 @@ public static class SkiaIslandStateBuilder
         var home = new HomePageModel
         {
             ClockText = now.ToString("HH:mm", culture),
-            DateText = now.ToString("ddd, MMM d", culture),
+            DateText = culture.TwoLetterISOLanguageName == "zh"
+                ? now.ToString("M月d日 ddd", culture)
+                : now.ToString("ddd, MMM d", culture),
             // TODO(skia-mvp): IslandContent carries no weather source yet; keep the chip hidden.
             ShowWeather = false,
             Toggles =
             [
                 new HomeToggleModel(IslandIcon.Wifi, content.NetworkName ?? "Wi-Fi", content.IsOnline),
-                new HomeToggleModel(IslandIcon.Bluetooth, "Bluetooth", false),
+                new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth), false),
                 new HomeToggleModel(IslandIcon.Moon, localizer.Get(LocKeys.Page.Home.FocusTime), content.FocusOn),
                 new HomeToggleModel(
                     IslandIcon.Moon,
-                    localizer.Get(LocKeys.Page.Home.System),
+                    localizer.Get(settings is not null && settings.Theme == AppTheme.Light
+                        ? LocKeys.Settings.Appearance.Theme.Light
+                        : LocKeys.Settings.Appearance.Theme.Dark),
                     settings is null || settings.Theme != AppTheme.Light),
             ],
             NowPlaying = new MediaSummaryModel
             {
-                Title = media?.Title,
+                // An empty card looks broken; show the honest empty state instead.
+                Title = media?.Title ?? localizer.Get(LocKeys.Media.NoSession),
                 Subtitle = artistAlbum,
                 ProgressPercent = media?.ProgressPercent ?? 0,
                 IsPlaying = media?.IsPlaying ?? false,
@@ -146,21 +151,28 @@ public static class SkiaIslandStateBuilder
             // TODO(skia-mvp): output device + queue UI are not in the renderer yet.
             QueueCount = media?.TrackCount ?? 0,
             EmptyTitle = localizer.Get(LocKeys.Media.NoSession),
+            EmptyHint = localizer.Get(LocKeys.Media.NoSessionHint),
         };
 
         var notificationsPage = new NotificationsPageModel
         {
             Items = BuildNotifications(content.Notifications),
+            EmptyTitle = localizer.Get(LocKeys.Notifications.Empty),
+            EmptyHint = localizer.Get(LocKeys.Notifications.EmptyHint),
         };
 
         var clipboardPage = new ClipboardPageModel
         {
             Items = BuildClipboard(content.Clipboard),
+            EmptyTitle = localizer.Get(LocKeys.Clipboard.Empty),
+            EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };
 
         var agentPage = new AgentPageModel
         {
             Items = BuildAgents(content.Agents),
+            EmptyTitle = localizer.Get(LocKeys.Agent.Empty),
+            EmptyHint = localizer.Get(LocKeys.Agent.EmptyHint),
         };
 
         var widgetsPage = BuildWidgets(content, localizer);

@@ -237,6 +237,8 @@ public static partial class LocKeys
         public const string Previous = "Media.Previous";
         /// <summary><c>Media.NoSession</c></summary>
         public const string NoSession = "Media.NoSession";
+        /// <summary><c>Media.NoSessionHint</c></summary>
+        public const string NoSessionHint = "Media.NoSessionHint";
         /// <summary><c>Media.UnknownTitle</c></summary>
         public const string UnknownTitle = "Media.UnknownTitle";
         /// <summary><c>Media.UnknownArtist</c></summary>
