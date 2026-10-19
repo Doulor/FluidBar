@@ -174,6 +174,7 @@ public sealed class SkiaArchipelago : IDisposable
         {
             Visible = _visible,
             Opacity = Opacity,
+            ShowIdlePreview = true,
             TranslateYDip = TranslateYDip,
             Scale = Scale,
             PagePosition = position,

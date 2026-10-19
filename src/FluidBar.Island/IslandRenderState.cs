@@ -221,6 +221,12 @@ public readonly record struct ArchipelagoState
     /// <summary>Reveal opacity 0..1 (host spring).</summary>
     public double Opacity { get; init; }
 
+    /// <summary>
+    /// Whether the host wants the always-on faint page preview (dots + current-page capsule) drawn
+    /// while the panel is expanded. Host-driven so design/golden states can keep it off.
+    /// </summary>
+    public bool ShowIdlePreview { get; init; }
+
     /// <summary>Vertical translate in DIP (host spring; 0 = settled).</summary>
     public double TranslateYDip { get; init; }
 
@@ -502,6 +508,12 @@ public sealed record MediaSummaryModel
 
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }
+
+    /// <summary>Decoded-artwork source bytes (PNG/JPEG) when the platform supplied a cover.</summary>
+    public byte[]? Artwork { get; init; }
+
+    /// <summary>Stable artwork cache key (track identity); null disables artwork caching.</summary>
+    public string? ArtworkKey { get; init; }
 }
 
 /// <summary>Expanded media page model.</summary>
@@ -545,6 +557,12 @@ public sealed record MediaPageModel
 
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }
+
+    /// <summary>Decoded-artwork source bytes (PNG/JPEG) when the platform supplied a cover.</summary>
+    public byte[]? Artwork { get; init; }
+
+    /// <summary>Stable artwork cache key (track identity); null disables artwork caching.</summary>
+    public string? ArtworkKey { get; init; }
 
     /// <summary>Output device label.</summary>
     public string? OutputName { get; init; }

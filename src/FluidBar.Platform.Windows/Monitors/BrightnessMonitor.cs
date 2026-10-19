@@ -303,8 +303,27 @@ internal sealed class WmiBrightnessProvider : IBrightnessProvider, IDisposable
                 {
                     try
                     {
-                        object? raw = instance.CurrentBrightness;
-                        return BrightnessWmiParser.Parse(raw);
+                        // SWbemObject does not expose the WMI property as a direct IDispatch member:
+                        // instance.CurrentBrightness resolves to null on every machine. The value lives
+                        // behind Properties_.Item("CurrentBrightness").Value.
+                        dynamic properties = instance.Properties_;
+                        try
+                        {
+                            dynamic property = properties.Item("CurrentBrightness");
+                            try
+                            {
+                                object? raw = property.Value;
+                                return BrightnessWmiParser.Parse(raw);
+                            }
+                            finally
+                            {
+                                ReleaseCom(property);
+                            }
+                        }
+                        finally
+                        {
+                            ReleaseCom(properties);
+                        }
                     }
                     finally
                     {

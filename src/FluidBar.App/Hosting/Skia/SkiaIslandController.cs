@@ -596,6 +596,14 @@ public sealed class SkiaIslandController : IDisposable
             return false;
         }
 
+        // A press implies the pointer is over the island. Without this the hover flag can be stale
+        // (a click delivered by the global hook may arrive without a preceding move), which armed
+        // auto-collapse under the user's cursor right after expanding.
+        if (!State.IsHovering)
+        {
+            ApplyInput(IslandInput.PointerEntered());
+        }
+
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
         switch (hit.Kind)
         {

@@ -12,6 +12,7 @@ internal sealed partial class PageRenderer : IDisposable
     private readonly TextEngine _text;
     private readonly AccentPalette _accents;
     private readonly ArtShaderCache _art;
+    private readonly ArtworkImageCache _artwork;
     private readonly NumberTextCache _numbers;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
@@ -22,11 +23,13 @@ internal sealed partial class PageRenderer : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
 
-    public PageRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art, NumberTextCache numbers)
+    public PageRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art, ArtworkImageCache artwork,
+        NumberTextCache numbers)
     {
         _text = text;
         _accents = accents;
         _art = art;
+        _artwork = artwork;
         _numbers = numbers;
     }
 
@@ -146,7 +149,8 @@ internal sealed partial class PageRenderer : IDisposable
         DrawCard(canvas, rect, 11);
 
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
-        DrawArt(canvas, new SKRect(rect.Left + 7, rect.Top + 8, rect.Left + 39, rect.Top + 40), 8, accent, large: false);
+        DrawArt(canvas, new SKRect(rect.Left + 7, rect.Top + 8, rect.Left + 39, rect.Top + 40), 8, accent, large: false,
+            media.Artwork, media.ArtworkKey);
 
         var textRight = rect.Left + 366 - 6;
         _text.Draw(canvas, media.Title, IslandType.CardTitle,
@@ -229,7 +233,7 @@ internal sealed partial class PageRenderer : IDisposable
         }
 
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
-        DrawArt(canvas, PageLayout.MediaArt(page), 14, accent, large: true);
+        DrawArt(canvas, PageLayout.MediaArt(page), 14, accent, large: true, media.Artwork, media.ArtworkKey);
 
         _text.Draw(canvas, media.Eyebrow, IslandType.MediaEyebrow, PageLayout.MediaEyebrow(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
@@ -330,8 +334,31 @@ internal sealed partial class PageRenderer : IDisposable
         canvas.DrawRoundRect(rect, radius, radius, _fill);
     }
 
-    private void DrawArt(SKCanvas canvas, SKRect rect, float radius, SKColor accent, bool large)
+    private void DrawArt(SKCanvas canvas, SKRect rect, float radius, SKColor accent, bool large,
+        byte[]? artwork = null, string? artworkKey = null)
     {
+        // Real cover art when the platform supplied bytes; otherwise the accent gradient placeholder.
+        var image = _artwork.Get(artworkKey, artwork);
+        if (image is not null && image.Width > 0 && image.Height > 0)
+        {
+            var coverScale = Math.Max(rect.Width / image.Width, rect.Height / image.Height);
+            var width = image.Width * coverScale;
+            var height = image.Height * coverScale;
+            var destination = new SKRect(
+                rect.MidX - (width / 2),
+                rect.MidY - (height / 2),
+                rect.MidX + (width / 2),
+                rect.MidY + (height / 2));
+            canvas.Save();
+            canvas.ClipRoundRect(new SKRoundRect(rect, radius, radius), SKClipOperation.Intersect, antialias: true);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(image, destination, _fill);
+            canvas.Restore();
+            return;
+        }
+
         canvas.Save();
         canvas.Translate(rect.Left, rect.Top);
         var shader = _art.Get(accent, _theme.ArtEnd, large);

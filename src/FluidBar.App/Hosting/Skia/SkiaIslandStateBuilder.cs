@@ -110,6 +110,8 @@ public static class SkiaIslandStateBuilder
                 ProgressPercent = media?.ProgressPercent ?? 0,
                 IsPlaying = media?.IsPlaying ?? false,
                 AccentHex = media?.AccentHex,
+                Artwork = media?.Artwork,
+                ArtworkKey = media?.ArtworkKey,
             },
             // Real platform levels; unknown renders an em dash instead of a demo number.
             Volume = content.VolumePercent ?? 0,
@@ -137,6 +139,8 @@ public static class SkiaIslandStateBuilder
             ProgressPercent = media?.ProgressPercent ?? 0,
             IsPlaying = media?.IsPlaying ?? false,
             AccentHex = media?.AccentHex,
+            Artwork = media?.Artwork,
+            ArtworkKey = media?.ArtworkKey,
             // TODO(skia-mvp): output device + queue UI are not in the renderer yet.
             QueueCount = media?.TrackCount ?? 0,
             EmptyTitle = localizer.Get(LocKeys.Media.NoSession),

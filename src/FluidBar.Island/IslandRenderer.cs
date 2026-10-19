@@ -55,6 +55,7 @@ public sealed class IslandRenderer : IDisposable
     private readonly bool _ownsText;
     private readonly AccentPalette _accents = new();
     private readonly ArtShaderCache _art;
+    private readonly ArtworkImageCache _artwork;
     private readonly NumberTextCache _numbers = new();
     private readonly SquirclePathCache _paths;
     private readonly ShadowCache _shadows;
@@ -92,10 +93,11 @@ public sealed class IslandRenderer : IDisposable
         _ownsText = textEngine is null;
         _text = textEngine ?? new TextEngine(_options.TextCacheCapacity);
         _art = new ArtShaderCache();
+        _artwork = new ArtworkImageCache();
         _paths = new SquirclePathCache(_options.PathCacheCapacity);
         _shadows = new ShadowCache(_options.ShadowCacheCapacity);
         _compact = new CompactRenderer(_text, _accents, _art, _numbers);
-        _pages = new PageRenderer(_text, _accents, _art, _numbers);
+        _pages = new PageRenderer(_text, _accents, _art, _artwork, _numbers);
         _strip = new TransientStripRenderer(_text);
     }
 
@@ -641,6 +643,7 @@ public sealed class IslandRenderer : IDisposable
         _paths.Dispose();
         _shadows.Dispose();
         _art.Dispose();
+        _artwork.Dispose();
         _compact.Dispose();
         _pages.Dispose();
         _strip.Dispose();

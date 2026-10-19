@@ -1,3 +1,4 @@
+using FluidBar.Core.Layout;
 using FluidBar.Island;
 using SkiaSharp;
 
@@ -40,6 +41,43 @@ public sealed class ExpandedPageTests
                     $"page {pageIndex}: transparent band at ({dipX:0},{dipY:0}) with alpha {pixel.Alpha}");
             }
         }
+    }
+
+    [Fact]
+    public void MediaPage_DrawsTheRealCoverArt_WhenBytesAreProvided()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var content = IslandTestFixtures.Content() with
+        {
+            Media = IslandTestFixtures.Content().Media with
+            {
+                Artwork = SolidPng(new SKColor(220, 30, 40)),
+                ArtworkKey = "cover-test",
+            },
+        };
+        var state = IslandRenderState.Expanded(IslandMode.Float, PagerRenderState.At(1), content,
+            IslandTestFixtures.Theme);
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+
+        var art = PageLayout.MediaArt(IslandMetrics.PageRect(state, 1));
+        var pixel = bitmap.GetPixel(
+            (int)Math.Round(art.MidX * IslandTestFixtures.Scale),
+            (int)Math.Round(art.MidY * IslandTestFixtures.Scale));
+        Assert.True(pixel.Red > 180 && pixel.Green < 90 && pixel.Blue < 90,
+            $"expected the red cover art, got R={pixel.Red} G={pixel.Green} B={pixel.Blue}");
+    }
+
+    private static byte[] SolidPng(SKColor color)
+    {
+        using var bitmap = new SKBitmap(8, 8);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(color);
+        }
+
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     [Theory]

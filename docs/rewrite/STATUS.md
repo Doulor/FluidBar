@@ -51,7 +51,9 @@
 - 首页音量/亮度改为真实数据（未知显示 "—"）；`MonitorService` 枚举前强制 PMv2 线程上下文。
 - 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `D5A02A4D…992E`；真实鼠标回归通过（冷启动 3s 首点、展开、悬停 6s 保持、移开 2.6s 自动收起、chevron 收起、翻页、真实音量）。
 - 鼠标钩子自愈（独立消息线程 + 1s 看门狗重装）+ 首帧后才安装；60s 连续 6 轮点击回归全通过。
-- 全量测试 **1483 passed / 0 failed**（Core 495）。
+- 全量测试 **1484 passed / 0 failed**（Core 495 · Island 136）。
+- **岛下方常驻淡点预览 + 胶片条错峰淡入/换页脉冲**；**真实亮度**（WMI 属性读取修复，本机 50 可读可写）；**媒体封面/进度插值/1Hz 刷新/歌词**（浏览器媒体已用 Edge Media Session 实测）。
+- 最新 Release：`build/release/win-x64/FluidBar.exe` SHA256 `8E4094DE…1A65`。
 - 待验证：真实鼠标下的剪贴板行复制、媒体控件、开关点击、托盘右键菜单、UIA 树刷新、多显示器/200%。
 
 ## 进行中

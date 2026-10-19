@@ -40,6 +40,80 @@ internal sealed class AccentPalette
     public void Clear() => _colors.Clear();
 }
 
+/// <summary>
+/// Bounded cache of decoded cover art keyed by track identity. Bytes arrive with the media snapshot;
+/// decoding happens once per track (not per frame) and the cache is cleared when it overflows.
+/// </summary>
+internal sealed class ArtworkImageCache : IDisposable
+{
+    private readonly Dictionary<string, SKImage> _images = new(StringComparer.Ordinal);
+    private readonly int _capacity;
+
+    public ArtworkImageCache(int capacity = 4)
+    {
+        _capacity = capacity;
+    }
+
+    public int Count => _images.Count;
+
+    /// <summary>Returns the decoded cover for a key, decoding <paramref name="data"/> on first use.</summary>
+    public SKImage? Get(string? key, byte[]? data)
+    {
+        if (string.IsNullOrEmpty(key) || data is null || data.Length == 0)
+        {
+            return null;
+        }
+
+        if (_images.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        SKImage? image = null;
+        try
+        {
+            using var bitmap = SKBitmap.Decode(data);
+            if (bitmap is not null)
+            {
+                image = SKImage.FromBitmap(bitmap);
+            }
+        }
+        catch (Exception)
+        {
+            // Undecodable cover: fall back to the gradient placeholder.
+            return null;
+        }
+
+        if (image is null)
+        {
+            return null;
+        }
+
+        if (_images.Count >= _capacity)
+        {
+            foreach (var old in _images.Values)
+            {
+                old.Dispose();
+            }
+
+            _images.Clear();
+        }
+
+        _images[key] = image;
+        return image;
+    }
+
+    public void Dispose()
+    {
+        foreach (var image in _images.Values)
+        {
+            image.Dispose();
+        }
+
+        _images.Clear();
+    }
+}
+
 /// <summary>Bounded cache of artwork gradient shaders keyed by accent/end colour.</summary>
 internal sealed class ArtShaderCache : IDisposable
 {

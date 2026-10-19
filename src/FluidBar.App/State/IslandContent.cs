@@ -36,6 +36,12 @@ public sealed record MediaSessionData
     /// <summary>Artwork-derived accent hex.</summary>
     public string? AccentHex { get; init; }
 
+    /// <summary>Raw cover-art bytes (PNG/JPEG) from the platform artwork cache, or null.</summary>
+    public byte[]? Artwork { get; init; }
+
+    /// <summary>Stable key for the artwork (track identity); null when no cover is available.</summary>
+    public string? ArtworkKey { get; init; }
+
     /// <summary>Current lyric line.</summary>
     public string? LyricLine { get; init; }
 

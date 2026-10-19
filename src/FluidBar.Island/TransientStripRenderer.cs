@@ -126,18 +126,39 @@ internal sealed class TransientStripRenderer : IDisposable
         }
     }
 
-    /// <summary>Draws the strip for a state (outside the shell clip).</summary>
+    /// <summary>
+    /// Draws the page indicator below the shell (outside the shell clip): the always-on faint dot
+    /// preview (current page as a capsule) plus, while revealed, the transient 3-island filmstrip.
+    /// </summary>
     public void Draw(SKCanvas canvas, in IslandRenderState state, SKRect shell)
     {
         var arch = state.Archipelago;
-        if (!arch.Visible || arch.Opacity <= 0.01)
+        var reveal = (float)Math.Clamp(arch.Opacity, 0, 1);
+        var expanded = state.Form == ShellForm.Expanded;
+        if (!expanded && (!arch.Visible || reveal <= 0.01f))
+        {
+            return;
+        }
+
+        _theme = state.Theme;
+        if (expanded && arch.ShowIdlePreview)
+        {
+            DrawIdlePreview(canvas, state, shell, reveal);
+        }
+
+        if (!arch.Visible || reveal <= 0.01f)
         {
             return;
         }
 
         Update(state, shell);
-        _theme = state.Theme;
-        _opacity = (float)Math.Clamp(arch.Opacity, 0, 1);
+        _opacity = reveal;
+
+        // Staggered reveal: the current island leads, the neighbours follow with a short outward
+        // slide so the strip reads as one element opening up rather than three islands popping.
+        var currentAlpha = Math.Min(1f, reveal * 1.5f);
+        var neighbourAlpha = Math.Max(0f, Math.Min(1f, (reveal - 0.35f) * 1.54f));
+        var neighbourOffset = (1f - reveal) * 3f;
 
         canvas.Save();
         var scale = (float)Math.Clamp(arch.Scale, 0.5, 1.5);
@@ -149,19 +170,60 @@ internal sealed class TransientStripRenderer : IDisposable
             canvas.Translate(-_strip.MidX, -_strip.MidY);
         }
 
-        DrawDots(canvas);
-        if (_page > 0)
+        DrawDots(canvas, neighbourAlpha);
+        if (_page > 0 && neighbourAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _prev, _page - 1);
+            DrawNeighbour(canvas, _prev, _page - 1, neighbourAlpha, -neighbourOffset);
         }
 
-        if (_page < PagerConstants.PageCount - 1)
+        if (_page < PagerConstants.PageCount - 1 && neighbourAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _next, _page + 1);
+            DrawNeighbour(canvas, _next, _page + 1, neighbourAlpha, neighbourOffset);
         }
 
-        DrawCurrent(canvas);
+        DrawCurrent(canvas, state, currentAlpha);
         canvas.Restore();
+    }
+
+    /// <summary>
+    /// Always-on page preview: one faint dot per page at its relative position with the current page
+    /// drawn as a slightly larger capsule. It cross-fades out while the filmstrip is revealed so the
+    /// two indicators never compete.
+    /// </summary>
+    private void DrawIdlePreview(SKCanvas canvas, in IslandRenderState state, SKRect shell, float reveal)
+    {
+        // The preview leads the cross-fade: gone by the time the filmstrip is half revealed.
+        var alpha = Math.Clamp(1f - (reveal * 2.5f), 0, 1);
+        if (alpha <= 0.02f)
+        {
+            return;
+        }
+
+        var top = (float)HostSurface.ForMode(state.Mode).ArchipelagoTopLocal;
+        var centerY = top + ((float)IslandMetrics.StripHeight / 2f);
+        const float pitch = 14f;
+        const float dotSize = 4f;
+        const float capsuleWidth = 14f;
+        var count = PagerConstants.PageCount;
+        var position = double.IsFinite(state.Pager.PagePosition)
+            ? Math.Clamp(state.Pager.PagePosition, 0, count - 1)
+            : 0;
+        var firstX = shell.MidX - (((count - 1) * pitch) / 2f);
+
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(_theme.ForegroundSecondary, 0.20f * alpha);
+        for (var page = 0; page < count; page++)
+        {
+            canvas.DrawCircle(firstX + (page * pitch), centerY, dotSize / 2f, _fill);
+        }
+
+        var indicatorX = firstX + ((float)position * pitch);
+        var radius = dotSize / 2f;
+        _fill.Color = Alpha(_theme.Foreground, 0.52f * alpha);
+        canvas.DrawRoundRect(
+            new SKRect(indicatorX - (capsuleWidth / 2f), centerY - radius,
+                indicatorX + (capsuleWidth / 2f), centerY + radius),
+            radius, radius, _fill);
     }
 
     /// <summary>Hit-tests the strip; returns None when hidden or outside every pill/dot.</summary>
@@ -216,10 +278,10 @@ internal sealed class TransientStripRenderer : IDisposable
         return default;
     }
 
-    private void DrawDots(SKCanvas canvas)
+    private void DrawDots(SKCanvas canvas, float alpha)
     {
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.ForegroundSecondary, 0.45f * _opacity);
+        _fill.Color = Alpha(_theme.ForegroundSecondary, 0.45f * alpha);
         for (var i = 0; i < _leftDots; i++)
         {
             canvas.DrawCircle(_dotsLeft[i].MidX, _dotsLeft[i].MidY, (float)IslandMetrics.DotSize / 2, _fill);
@@ -231,22 +293,41 @@ internal sealed class TransientStripRenderer : IDisposable
         }
     }
 
-    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page)
+    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha, float offsetX)
     {
-        DrawIsland(canvas, rect, active: false);
-        IconSet.Draw(canvas, IconFor(page), rect.Deflate(7),
-            Alpha(_theme.ForegroundSecondary, 0.90f * _opacity), _icon);
+        var shifted = new SKRect(rect.Left + offsetX, rect.Top, rect.Right + offsetX, rect.Bottom);
+        DrawIsland(canvas, shifted, active: false, alpha);
+        IconSet.Draw(canvas, IconFor(page), shifted.Deflate(7),
+            Alpha(_theme.ForegroundSecondary, 0.90f * alpha), _icon);
     }
 
-    private void DrawCurrent(SKCanvas canvas)
+    private void DrawCurrent(SKCanvas canvas, in IslandRenderState state, float alpha)
     {
-        DrawIsland(canvas, _current, active: true);
+        // Page-change pulse: the rounded page flips at 0.5 of the pager travel, so scaling by the
+        // fractional distance gives a pop exactly when the card changes and settles to 1 at rest.
+        var pagePosition = double.IsFinite(state.Pager.PagePosition)
+            ? Math.Clamp(state.Pager.PagePosition, 0, PagerConstants.PageCount - 1)
+            : _page;
+        var pulse = (float)Math.Clamp(Math.Abs(pagePosition - _page) / 0.5, 0, 1);
+        var scale = 1f + (0.06f * pulse);
+
+        canvas.Save();
+        if (pulse > 0.001f)
+        {
+            canvas.Translate(_current.MidX, _current.MidY);
+            canvas.Scale(scale, scale);
+            canvas.Translate(-_current.MidX, -_current.MidY);
+        }
+
+        DrawIsland(canvas, _current, active: true, alpha);
+        var labelAlpha = alpha * (1f - (0.35f * pulse));
         var labelArea = new SKRect(_current.Left + 22, _current.Top, _current.Right - 7, _current.Bottom);
         _text.Draw(canvas, _label, IslandType.MiniLabel, labelArea,
-            Alpha(_theme.Accent, _opacity), TextAlign.Left, _opacity);
+            Alpha(_theme.Accent, labelAlpha), TextAlign.Left, labelAlpha);
+        canvas.Restore();
     }
 
-    private void DrawIsland(SKCanvas canvas, SKRect rect, bool active)
+    private void DrawIsland(SKCanvas canvas, SKRect rect, bool active, float alpha)
     {
         var radius = rect.Height / 2;
         var shadowAlpha = active ? 0.32f : 0.22f;
@@ -255,23 +336,23 @@ internal sealed class TransientStripRenderer : IDisposable
             var inflate = layer * 2f;
             var shadow = new SKRect(rect.Left - inflate, rect.Top - inflate + 3, rect.Right + inflate, rect.Bottom + inflate + 3);
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = new SKColor(0, 0, 0, (byte)Math.Clamp((shadowAlpha / (layer + 1.5f)) * 255 * _opacity, 0, 255));
+            _fill.Color = new SKColor(0, 0, 0, (byte)Math.Clamp((shadowAlpha / (layer + 1.5f)) * 255 * alpha, 0, 255));
             canvas.DrawRoundRect(shadow, radius + inflate, radius + inflate, _fill);
         }
 
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.Background, (active ? 0.97f : 0.94f) * _opacity);
+        _fill.Color = Alpha(_theme.Background, (active ? 0.97f : 0.94f) * alpha);
         canvas.DrawRoundRect(rect, radius, radius, _fill);
 
         _stroke.Style = SKPaintStyle.Stroke;
         _stroke.StrokeWidth = active ? 1.2f : 1f;
-        _stroke.Color = Alpha(active ? _theme.Accent : _theme.LineStrong, (active ? 0.65f : 0.90f) * _opacity);
+        _stroke.Color = Alpha(active ? _theme.Accent : _theme.LineStrong, (active ? 0.65f : 0.90f) * alpha);
         canvas.DrawRoundRect(rect, radius, radius, _stroke);
 
         if (active)
         {
             IconSet.Draw(canvas, IconFor(_page), new SKRect(rect.Left + 7, rect.MidY - 5.5f, rect.Left + 18, rect.MidY + 5.5f),
-                Alpha(_theme.Accent, 0.72f * _opacity), _icon);
+                Alpha(_theme.Accent, 0.72f * alpha), _icon);
         }
     }
 

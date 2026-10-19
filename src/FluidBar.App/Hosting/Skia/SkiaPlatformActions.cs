@@ -7,6 +7,7 @@ using FluidBar.Platform.Windows.CoreIntegration;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Focus;
 using FluidBar.Platform.Windows.Media;
+using FluidBar.Platform.Windows.Media.Lyrics;
 using FluidBar.Platform.Windows.Monitors;
 using FluidBar.Platform.Windows.Radios;
 using FluidBar.Platform.Windows.Threading;
@@ -47,7 +48,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly IFocusAssistService _focus;
     private readonly ArtworkCache _artworkCache;
     private readonly ArtworkTempStore _artworkTempStore;
+    private readonly HttpClient _lyricsHttp;
+    private readonly LyricsCache _lyricsCache;
+    private readonly LyricsService _lyrics;
     private ITimer? _clockTimer;
+    private ITimer? _mediaTick;
+    private LyricsDocument? _lyricsDocument;
+    private string _lyricsTrackKey = string.Empty;
     private int _started;
     private int _disposed;
 
@@ -89,6 +96,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             time);
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
+        _lyricsHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _lyricsCache = new LyricsCache(timeProvider: time, counters: _counters);
+        _lyrics = new LyricsService(
+            new ILyricsProvider[]
+            {
+                new NeteaseLyricsProvider(_lyricsHttp, _platformLogger),
+                new KugouLyricsProvider(_lyricsHttp, _platformLogger),
+            },
+            _lyricsCache,
+            _platformLogger,
+            _counters);
+
         _media.SnapshotChanged += OnSnapshotChanged;
         _clipboard.SnapshotChanged += OnSnapshotChanged;
         _battery.SnapshotChanged += OnSnapshotChanged;
@@ -203,15 +222,154 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     }
 
     private void OnSnapshotChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
-        => Changed?.Invoke(this, EventArgs.Empty);
+    {
+        EnsureLyricsForCurrentSession();
+        EnsureMediaTick();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Starts (or stops) the 1 Hz media refresh. While a session is playing the progress bar and the
+    /// lyric line must advance without a platform event, so the island re-renders once per second;
+    /// with no playing session the timer does not exist (zero idle cost).
+    /// </summary>
+    private void EnsureMediaTick()
+    {
+        var media = _media.Current;
+        var playing = media is { IsEmpty: false, IsPlaying: true };
+        if (playing)
+        {
+            _mediaTick ??= _time.CreateTimer(
+                static state => ((SkiaPlatformActions)state!).OnMediaTick(),
+                this,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
+            return;
+        }
+
+        _mediaTick?.Dispose();
+        _mediaTick = null;
+    }
+
+    private void OnMediaTick()
+    {
+        if (Volatile.Read(ref _disposed) != 0 || Volatile.Read(ref _started) == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.actions.media-tick-failed",
+                "Refreshing the island media progress failed.", ex);
+        }
+
+        EnsureMediaTick();
+    }
+
+    /// <summary>Kicks a lyrics lookup when the track changed (single-flight, cached, failure-silent).</summary>
+    private void EnsureLyricsForCurrentSession()
+    {
+        var media = _media.Current;
+        if (media is null || media.IsEmpty || string.IsNullOrWhiteSpace(media.TrackKey))
+        {
+            _lyricsDocument = null;
+            _lyricsTrackKey = string.Empty;
+            return;
+        }
+
+        if (string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lyricsTrackKey = media.TrackKey;
+        _lyricsDocument = null;
+        if (string.IsNullOrWhiteSpace(media.Title) || string.IsNullOrWhiteSpace(media.Artist))
+        {
+            return;
+        }
+
+        _lyrics.CancelPending(media.TrackKey);
+        _ = LoadLyricsAsync(media);
+    }
+
+    private async Task LoadLyricsAsync(MediaSnapshot media)
+    {
+        try
+        {
+            var document = await _lyrics.GetLyricsAsync(
+                new LyricsQuery(media.Title, media.Artist, media.Duration, media.TrackKey)).ConfigureAwait(false);
+            if (document is not { IsEmpty: false }
+                || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lyricsDocument = document;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // Lyrics are a nicety: a provider outage must never surface as a broken island.
+            _logger.Debug(LogCategories.Platform, "island.actions.lyrics-failed",
+                "Lyrics lookup failed for the current track: " + ex.Message);
+        }
+    }
+
+    private (string? Current, string? Next) ResolveLyrics(MediaSnapshot media, TimeSpan position)
+    {
+        var document = _lyricsDocument;
+        if (document is null || document.IsEmpty
+            || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
+        {
+            return (null, null);
+        }
+
+        var current = document.LineAt(position);
+        var next = document.NextLine(position);
+        return (current?.Text, next?.Text);
+    }
 
     private MediaSessionData MapMedia(MediaSnapshot media)
     {
         var duration = media.Duration > TimeSpan.Zero ? media.Duration : TimeSpan.Zero;
-        var position = media.Position > duration ? duration : media.Position;
+
+        // Interpolate from the last sampled position: the platform layer has no frame clock, so
+        // between GSMTC events the position only advances because we add the elapsed wall time.
+        var position = media.Position;
+        if (media.IsPlaying && media.PositionUpdatedAtUtc > DateTimeOffset.MinValue)
+        {
+            var elapsed = _time.GetUtcNow() - media.PositionUpdatedAtUtc;
+            if (elapsed > TimeSpan.Zero && elapsed < TimeSpan.FromHours(1))
+            {
+                position += elapsed;
+            }
+        }
+
+        if (position < TimeSpan.Zero)
+        {
+            position = TimeSpan.Zero;
+        }
+
+        if (duration > TimeSpan.Zero && position > duration)
+        {
+            position = duration;
+        }
+
         var progress = duration.TotalMilliseconds > 0
             ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
             : 0;
+
+        var artwork = _artworkCache.TryGet(media.TrackKey, out var artworkEntry) && artworkEntry is not null
+            ? artworkEntry.Data
+            : null;
+        var (lyricLine, nextLyricLine) = ResolveLyrics(media, position);
+
         return new MediaSessionData
         {
             Title = media.Title,
@@ -222,6 +380,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             PositionText = FormatTime(position),
             DurationText = FormatTime(duration),
             IsPlaying = media.IsPlaying,
+            Artwork = artwork,
+            ArtworkKey = artwork is null ? null : media.TrackKey,
+            LyricLine = lyricLine,
+            NextLyricLine = nextLyricLine,
             TrackIndex = 0,
             TrackCount = 0,
         };
@@ -634,6 +796,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StopOneAsync("message-host", () => _messageHost.DisposeAsync().AsTask()).ConfigureAwait(false);
         _clockTimer?.Dispose();
         _clockTimer = null;
+        _mediaTick?.Dispose();
+        _mediaTick = null;
+        await StopOneAsync("lyrics", () => _lyrics.DisposeAsync().AsTask()).ConfigureAwait(false);
+        _lyricsHttp.Dispose();
+        _artworkCache.Dispose();
         _artworkTempStore.Dispose();
     }
 
