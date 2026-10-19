@@ -85,7 +85,7 @@ public sealed class MarketplaceSectionView : StackPanel
             }
         };
 
-        var category = new ComboBox { Width = 150, SelectedIndex = 0 };
+        var category = new ComboBox { Width = 150 };
         var categories = new (string Token, string Key)[]
         {
             ("all", LocKeys.Settings.Market.Category.All),
@@ -100,6 +100,7 @@ public sealed class MarketplaceSectionView : StackPanel
             category.Items.Add(new ComboBoxItem { Content = _localizer.Get(key), Tag = token });
         }
 
+        category.SelectedIndex = 0;
         category.SelectionChanged += (_, _) =>
         {
             if (category.SelectedItem is ComboBoxItem { Tag: string token })

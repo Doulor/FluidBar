@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -575,6 +576,175 @@ internal static class SettingsWidgets
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };
+
+    /// <summary>Monospace path field (prototype <c>.path-field</c>).</summary>
+    public static Control PathField(string path, IBrush field, IBrush hairline, IBrush secondary, IBrush tertiary)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(new SettingsGlyph
+        {
+            Kind = IconKind.Folder,
+            Brush = tertiary,
+            Width = 12,
+            Height = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = path,
+            FontFamily = Fonts.Mono,
+            FontSize = 9.5,
+            Foreground = secondary,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        return new Border
+        {
+            Height = 34,
+            Padding = new Thickness(10, 0, 10, 0),
+            CornerRadius = new CornerRadius(7),
+            Background = field,
+            BorderBrush = hairline,
+            BorderThickness = new Thickness(1),
+            Child = row,
+        };
+    }
+
+    /// <summary>Small action chip (prototype <c>.small-action</c>, optional danger tone).</summary>
+    public static Control SmallAction(string label, IconKind icon, bool danger, Action clicked, IBrush raised,
+        IBrush raisedHover, IBrush hairline, IBrush secondary, IBrush foreground)
+    {
+        var dangerBrush = new SolidColorBrush(Color.Parse("#E06A62"));
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+        content.Children.Add(new SettingsGlyph
+        {
+            Kind = icon,
+            Brush = danger ? dangerBrush : secondary,
+            Width = 11,
+            Height = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 9.5,
+            Foreground = danger ? dangerBrush : secondary,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var chip = new Border
+        {
+            Height = 30,
+            Padding = new Thickness(10, 0, 10, 0),
+            CornerRadius = new CornerRadius(7),
+            Background = raised,
+            BorderBrush = danger ? new SolidColorBrush(Color.FromArgb(51, 255, 69, 58)) : hairline,
+            BorderThickness = new Thickness(1),
+            Child = content,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        chip.PointerEntered += (_, _) => chip.Background = raisedHover;
+        chip.PointerExited += (_, _) => chip.Background = raised;
+        chip.PointerPressed += (_, e) =>
+        {
+            clicked();
+            e.Handled = true;
+        };
+        return chip;
+    }
+
+    /// <summary>Centred app mark for the About pane (prototype <c>.about-mark</c>).</summary>
+    public static Control AboutMark(Color accent, Color glyph)
+    {
+        var host = new Grid { Width = 72, Height = 72 };
+        host.Children.Add(new Border
+        {
+            Width = 72,
+            Height = 72,
+            CornerRadius = new CornerRadius(20),
+            Background = new SolidColorBrush(Color.Parse("#070709")),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            Child = new Ellipse
+            {
+                Width = 40,
+                Height = 40,
+                Fill = new SolidColorBrush(accent, 0.4),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -10, -10),
+            },
+        });
+        host.Children.Add(new SettingsGlyph
+        {
+            Kind = IconKind.Agent,
+            Brush = new SolidColorBrush(glyph),
+            Width = 34,
+            Height = 34,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return host;
+    }
+
+    /// <summary>Pill action button (prototype <c>.about-btn</c>).</summary>
+    public static Control PillAction(string label, IconKind icon, Action clicked, IBrush raised, IBrush raisedHover,
+        IBrush hairline, IBrush secondary, IBrush foreground)
+    {
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+        content.Children.Add(new SettingsGlyph
+        {
+            Kind = icon,
+            Brush = secondary,
+            Width = 11,
+            Height = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        content.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 10.5,
+            Foreground = foreground,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var chip = new Border
+        {
+            Height = 32,
+            Padding = new Thickness(12, 0, 12, 0),
+            CornerRadius = new CornerRadius(7),
+            Background = raised,
+            BorderBrush = hairline,
+            BorderThickness = new Thickness(1),
+            Child = content,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        chip.PointerEntered += (_, _) => chip.Background = raisedHover;
+        chip.PointerExited += (_, _) => chip.Background = raised;
+        chip.PointerPressed += (_, e) =>
+        {
+            clicked();
+            e.Handled = true;
+        };
+        return chip;
+    }
+
+    /// <summary>Contributor chip (prototype <c>.contrib</c>).</summary>
+    public static Control ContributorChip(string name, Color dot, IBrush raised, IBrush hairline, IBrush secondary)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(new Ellipse { Width = 5, Height = 5, Fill = new SolidColorBrush(dot), VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = name, FontSize = 9.5, Foreground = secondary, VerticalAlignment = VerticalAlignment.Center });
+        return new Border
+        {
+            Height = 24,
+            Padding = new Thickness(10, 0, 10, 0),
+            CornerRadius = new CornerRadius(12),
+            Background = raised,
+            BorderBrush = hairline,
+            BorderThickness = new Thickness(1),
+            Child = row,
+        };
+    }
 
     /// <summary>Muted footer note with the prototype's top hairline.</summary>
     public static Control FooterNote(string text, IBrush tertiary, IBrush hairline)

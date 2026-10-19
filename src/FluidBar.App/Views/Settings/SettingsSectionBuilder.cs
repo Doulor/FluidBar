@@ -844,56 +844,112 @@ public static class SettingsSectionBuilder
             ctx.ShowStatus(text);
         }
 
-        var scope = new ComboBox { Width = 220 };
-        scope.Items.Add(new ComboBoxItem { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetAppearance), Tag = "appearance" });
-        scope.Items.Add(new ComboBoxItem { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetPluginsAndCaches), Tag = "plugins" });
-        scope.Items.Add(new ComboBoxItem { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetEverything), Tag = "all" });
-        scope.SelectedIndex = 0;
-        var confirm = new TextBox { Watermark = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmPlaceholder), Width = 180 };
-        var resetButton = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), IsEnabled = false };
-        confirm.TextChanged += (_, _) => resetButton.IsEnabled = string.Equals(confirm.Text, "RESET", StringComparison.Ordinal);
-        resetButton.Click += (_, _) =>
+        var brushes = Palette(ctx);
+        var scope = new SegmentedControl
         {
-            if (!resetButton.IsEnabled)
-            {
-                return;
-            }
+            ControlWidth = 240,
+            Fill = brushes.Raised,
+            Hairline = brushes.Line,
+            ActiveFill = brushes.Active,
+            ActiveForeground = brushes.ActiveForeground,
+            InactiveForeground = brushes.Secondary,
+        };
+        scope.SetItems(
+        [
+            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetAppearance), "appearance"),
+            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetPluginsAndCaches), "plugins"),
+            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetEverything), "all"),
+        ], "appearance");
+        var confirm = new TextBox
+        {
+            Watermark = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmPlaceholder),
+            Width = 180,
+            FontFamily = Fonts.Mono,
+            FontSize = 11,
+        };
+        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.Title), null);
+        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.Advanced.DataFolder), brushes.Tertiary));
+        panel.Children.Add(SettingsWidgets.PathField(appData, brushes.Raised, brushes.Line, brushes.Secondary, brushes.Tertiary));
 
-            var selected = scope.SelectedItem is ComboBoxItem { Tag: string token } ? token : "appearance";
-            var defaults = AppSettings.Default with
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder),
+            IconKind.Folder, false, () => ctx.OpenPath(appData), brushes.Raised, brushes.RaisedHover, brushes.Line,
+            brushes.Secondary, brushes.Foreground));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs),
+            IconKind.Document, false, () => ctx.OpenPath(Path.Combine(localData, "logs")), brushes.Raised,
+            brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export),
+            IconKind.Download, false, () => _ = ExportAsync(), brushes.Raised, brushes.RaisedHover, brushes.Line,
+            brushes.Secondary, brushes.Foreground));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import),
+            IconKind.Rollback, false, () => _ = ImportAsync(), brushes.Raised, brushes.RaisedHover, brushes.Line,
+            brushes.Secondary, brushes.Foreground));
+        panel.Children.Add(actions);
+
+        panel.Children.Add(SettingsWidgets.Group(brushes.Line, topBorder: true,
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats), null, settings.Advanced.FrameStats,
+                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { FrameStats = value } })),
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.CrashGuard), null, settings.Advanced.CrashGuard,
+                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
+                ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
+                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } }))));
+
+        var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), IconKind.Warning,
+            true, () =>
             {
-                Language = settings.Language,
-                Theme = settings.Theme,
-                Advanced = settings.Advanced with { SafeMode = selected == "all" ? false : settings.Advanced.SafeMode },
-            };
-            ctx.Settings.Replace(defaults);
-            SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
+                if (!string.Equals(confirm.Text, "RESET", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var defaults = scope.SelectedValue switch
+                {
+                    "plugins" => settings with
+                    {
+                        Plugins = AppSettings.Default.Plugins with { Channel = settings.Plugins.Channel },
+                    },
+                    "all" => AppSettings.Default with { Language = settings.Language, Theme = settings.Theme },
+                    _ => settings with
+                    {
+                        Theme = AppSettings.Default.Theme,
+                        Material = AppSettings.Default.Material,
+                        Palette = AppSettings.Default.Palette,
+                        AccentMode = AppSettings.Default.AccentMode,
+                        AccentFallback = AppSettings.Default.AccentFallback,
+                        FillOpacity = AppSettings.Default.FillOpacity,
+                        FontScale = AppSettings.Default.FontScale,
+                        ReducedMotion = AppSettings.Default.ReducedMotion,
+                        MotionStrength = AppSettings.Default.MotionStrength,
+                    },
+                };
+                ctx.Settings.Replace(defaults);
+                SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
+            }, brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground);
+        resetChip.Opacity = 0.45;
+        resetChip.IsHitTestVisible = false;
+        confirm.TextChanged += (_, _) =>
+        {
+            var armed = string.Equals(confirm.Text, "RESET", StringComparison.Ordinal);
+            resetChip.Opacity = armed ? 1 : 0.45;
+            resetChip.IsHitTestVisible = armed;
         };
 
-        var exportButton = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.Export) };
-        exportButton.Click += (_, _) => _ = ExportAsync();
-        var importButton = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.Advanced.Import) };
-        importButton.Click += (_, _) => _ = ImportAsync();
-
-        return Section(
-            ctx.Localizer.Get(LocKeys.Settings.Advanced.Title),
-            null,
-            ButtonRow(ctx.Localizer.Get(LocKeys.Settings.Advanced.DataFolder), appData, ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder),
-                () => ctx.OpenPath(appData)),
-            ButtonRow(ctx.Localizer.Get(LocKeys.Settings.Advanced.Logs), Path.Combine(localData, "logs"), ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs),
-                () => ctx.OpenPath(Path.Combine(localData, "logs"))),
-            Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export), null, exportButton),
-            Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import), null, importButton),
-            ToggleRow(ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats), null, settings.Advanced.FrameStats,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { FrameStats = value } })),
-            ToggleRow(ctx.Localizer.Get(LocKeys.Settings.Advanced.CrashGuard), null, settings.Advanced.CrashGuard,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
-            ToggleRow(ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode), ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } })),
-            Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmBody), scope),
-            Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmPlaceholder), null, confirm),
-            Row(null, null, resetButton),
-            status);
+        var resetRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        resetRow.Children.Add(confirm);
+        resetRow.Children.Add(resetChip);
+        panel.Children.Add(SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset),
+            ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmBody), scope, brushes.Foreground, brushes.Tertiary, brushes.Line));
+        panel.Children.Add(new Border
+        {
+            BorderBrush = brushes.Line,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(0, 0, 0, 12),
+            Child = resetRow,
+        });
+        panel.Children.Add(status);
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+        return panel;
 
         async Task ExportAsync()
         {
@@ -963,66 +1019,85 @@ public static class SettingsSectionBuilder
         var assembly = typeof(AppSettings).Assembly;
         var version = assembly.GetName().Version?.ToString(3) ?? "2.0.0";
         var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? version;
-        var updates = new TextBlock { FontSize = Typography.SettingsCaptionSize, Foreground = new SolidColorBrush(Accents.Success) };
-        var check = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates) };
-        check.Click += (_, _) => updates.Text = ctx.Localizer.Get(LocKeys.Settings.About.UpToDate);
-
-        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var website = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.About.Website) };
-        website.Click += (_, _) => ctx.OpenPath("https://fluidbar.app");
-        var source = new Button { Content = ctx.Localizer.Get(LocKeys.Settings.About.SourceCode) };
-        source.Click += (_, _) => ctx.OpenPath("https://github.com/Doulor/FluidBar");
-        links.Children.Add(website);
-        links.Children.Add(source);
-
-        var mark = new Border
+        var brushes = Palette(ctx);
+        var settings = ctx.Settings.Current;
+        var accent = Accents.ParseOrDefault(settings.AccentFallback, Accents.Fallback);
+        var updates = new TextBlock
         {
-            Width = 56,
-            Height = 56,
-            CornerRadius = new CornerRadius(16),
-            Background = new SolidColorBrush(Color.Parse("#08080A")),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            Child = new MarkGlyph(),
+            FontSize = 9.5,
+            Foreground = new SolidColorBrush(Accents.Success),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 8, 0, 0),
         };
 
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
-        header.Children.Add(mark);
-        var title = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        title.Children.Add(new TextBlock
+        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.About.Title), null);
+        var pane = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+        pane.Children.Add(SettingsWidgets.AboutMark(accent, Colors.White));
+        pane.Children.Add(new TextBlock
         {
             Text = "FluidBar",
-            FontFamily = Fonts.DisplaySemiBold.FontFamily,
-            FontSize = 20,
+            FontFamily = Fonts.Display,
+            FontSize = 23,
             FontWeight = FontWeight.SemiBold,
+            Foreground = brushes.Foreground,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 14, 0, 0),
         });
-        title.Children.Add(new TextBlock
+        pane.Children.Add(new TextBlock
         {
             Text = ctx.Localizer.Format(LocKeys.Settings.About.Version, ("version", version)),
-            FontSize = Typography.SettingsCaptionSize,
-            Opacity = 0.7,
+            FontSize = 10,
+            Foreground = brushes.Tertiary,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 3, 0, 0),
         });
-        title.Children.Add(new TextBlock
+        pane.Children.Add(new TextBlock
         {
             Text = ctx.Localizer.Format(LocKeys.Settings.About.Build, ("build", informational)),
-            FontSize = 10,
-            Opacity = 0.5,
+            FontSize = 9,
+            Foreground = brushes.Tertiary,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 2, 0, 0),
         });
-        header.Children.Add(title);
 
-        return Section(
-            ctx.Localizer.Get(LocKeys.Settings.About.Title),
-            null,
-            header,
-            Row(ctx.Localizer.Get(LocKeys.Settings.About.License), null, check),
-            updates,
-            Row(ctx.Localizer.Get(LocKeys.Settings.About.Contributors), "Doulor", new TextBlock
-            {
-                Text = "MIT · 2026",
-                FontSize = Typography.SettingsCaptionSize,
-                Opacity = 0.7,
-            }),
-            Row(ctx.Localizer.Get(LocKeys.Settings.About.Acknowledgments), null, links));
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 7,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 16, 0, 0),
+        };
+        actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates),
+            IconKind.Download, () => updates.Text = ctx.Localizer.Get(LocKeys.Settings.About.UpToDate),
+            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+        actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.Website),
+            IconKind.ExternalLink, () => ctx.OpenPath("https://fluidbar.app"),
+            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+        actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode),
+            IconKind.ExternalLink, () => ctx.OpenPath("https://github.com/Doulor/FluidBar"),
+            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+        pane.Children.Add(actions);
+        pane.Children.Add(updates);
+
+        pane.Children.Add(new TextBlock
+        {
+            Text = "MIT · 2026",
+            FontSize = 9.5,
+            Foreground = brushes.Tertiary,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 18, 0, 0),
+        });
+
+        var contributors = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        contributors.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.About.Contributors), brushes.Tertiary));
+        var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };
+        chips.Children.Add(SettingsWidgets.ContributorChip("Doulor", accent, brushes.Raised, brushes.Line, brushes.Secondary));
+        contributors.Children.Add(chips);
+        pane.Children.Add(contributors);
+
+        panel.Children.Add(pane);
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+        return panel;
     }
 
     /// <summary>Draws the app mark glyph (vector, no emoji/bitmap).</summary>
