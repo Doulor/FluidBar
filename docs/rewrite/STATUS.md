@@ -35,6 +35,15 @@
 构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
 （Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
+## 2026-10-20 07:45 检查点（验收 + 空态打磨，本轮终态）
+
+- **独立验收**：冷启动不误弹旧胶囊、媒体四键真机生效、小岛条远点跳 01/06、9 项设置重启保持、市场提交→上架→安装→下载+1→评分跨进程回读一致；六页 + 设置七页全走查通过，**0 阻断缺陷**。报告 `build/reports/acceptance/ACCEPTANCE.md`。
+- **空态打磨**：媒体页无输出/无队列改为轻量本地化占位（不再有孤立图标与空槽）、无歌词改为「暂无歌词」卡片（不再留 56 DIP 空洞，进度条位置不变）、队列标签本地化；任务卡空态/损坏文案改为友好中英文（保留文件名可发现性）。16 种空态组合全部覆盖测试。
+- 测试：**1993 passed / 0 failed**（Core 567 · Platform 558 · Ui 285 · Island 284 · Sdk 167 · PluginHost 39 · Integration 31 · Builtin 23 · Architecture 11）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `13519B57CD399CF814D8CCF2BA93157476F6B0148D0D3C5A459AAC675F6E77AB`。
+
+剩余（环境或产品决策阻塞）：托盘图标锁屏下无彩色证据；1.6 字号首屏需滚动（改 440×284 契约）；酷狗未缓存封面的歌为渐变占位；市场线上插件无评级字段。
+
 ## 2026-10-20 07:10 检查点（小组件收尾，本轮终态）
 
 - 天气条件文案本地化（9 个条件键 + 复数键）、灵动岛设置页新增「天气城市」输入框（留空自动，实测 beijing → 真实北京天气）、任务卡支持最多 8 行并显示「还有 N 项」、三档字号复查无溢出。
