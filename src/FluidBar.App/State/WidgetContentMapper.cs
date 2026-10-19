@@ -87,18 +87,24 @@ public static class WidgetContentMapper
             ResolveGlyph(snapshot));
     }
 
-    /// <summary>Maps a task snapshot to card rows (empty rows + hint when the file is missing/invalid/empty).</summary>
+    /// <summary>
+    /// Maps a task snapshot to card rows. The empty states are friendly and discoverable ("No tasks yet ·
+    /// add them in tasks.json") instead of the old "Unavailable · tasks.json" diagnostic line.
+    /// </summary>
     /// <param name="snapshot">Task snapshot (null before the service produced one).</param>
-    /// <param name="localizer">Localizer for the unavailable caption.</param>
-    /// <param name="filePath">Path used for the hint when the snapshot carries none.</param>
+    /// <param name="localizer">Localizer for the empty caption.</param>
+    /// <param name="filePath">Path used for the caption when the snapshot carries none.</param>
     public static WidgetTaskView MapTasks(TaskListSnapshot? snapshot, ILocalizer? localizer = null, string? filePath = null)
     {
         if (snapshot is null || snapshot.Count == 0)
         {
-            var unavailable = localizer?.Get(LocKeys.Settings.Plugins.StateUnavailable) ?? "Unavailable";
             var path = string.IsNullOrEmpty(snapshot?.FilePath) ? filePath : snapshot!.FilePath;
             var name = string.IsNullOrEmpty(path) ? "tasks.json" : Path.GetFileName(path);
-            return new WidgetTaskView([], $"{unavailable} · {name}", 0);
+            var invalid = snapshot?.Status == TaskListStatus.Invalid;
+            var key = invalid ? LocKeys.Page.Widgets.TasksInvalid : LocKeys.Page.Widgets.TasksEmpty;
+            var hint = localizer?.Format(key, ("file", name))
+                ?? (invalid ? $"{name} needs a fix" : $"No tasks · edit {name}");
+            return new WidgetTaskView([], hint, 0);
         }
 
         var total = snapshot!.Count;

@@ -71,6 +71,11 @@ internal static class Program
             // Keep the UI-thread continuation: SettingsWindow must be constructed on the Avalonia thread.
             await PersistenceAsync(output, evidence);
             await CaptureSettingsAsync(output, evidence);
+            foreach (var culture in new[] { "zh-Hans", "en-US" })
+            {
+                evidence.Add("ui.island-media", IslandMediaEvidence.Capture(output, culture));
+            }
+
             status = 0;
         }
         catch (Exception exception)

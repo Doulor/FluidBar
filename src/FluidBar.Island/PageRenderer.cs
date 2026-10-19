@@ -275,10 +275,13 @@ internal sealed partial class PageRenderer : IDisposable
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
 
         // The lyric card only makes sense when a lyric line exists; an empty card with just the
-        // "Next" label looked broken for video sessions without lyrics.
-        if (!string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine))
+        // "Next" label looked broken for video sessions without lyrics. Without any lyric the band
+        // still occupies the approved geometry, so a light caption keeps it intentional instead of a
+        // blank gap between the title block and the seek row.
+        var hasLyrics = !string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine);
+        var lyricCard = PageMetricsLayout.MediaLyricCard(page, m);
+        if (hasLyrics)
         {
-            var lyricCard = PageMetricsLayout.MediaLyricCard(page, m);
             DrawCard(canvas, lyricCard, 10);
             var lyricTop = lyricCard.Top + 7;
             var lyricBottom = lyricTop + 14 + m.LineGrow(IslandType.Lyric);
@@ -293,6 +296,15 @@ internal sealed partial class PageRenderer : IDisposable
             _text.Draw(canvas, media.NextLyricLine, IslandType.LyricNext,
                 new SKRect(lyricCard.Left + 42, nextTop, lyricCard.Right - 10, nextBottom),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
+        else if (!string.IsNullOrWhiteSpace(media.NoLyricsText))
+        {
+            DrawCard(canvas, lyricCard, 10);
+            var captionHeight = 12 + m.LineGrow(IslandType.MediaEyebrow);
+            var captionTop = lyricCard.MidY - (captionHeight / 2);
+            _text.Draw(canvas, media.NoLyricsText, IslandType.MediaEyebrow,
+                new SKRect(lyricCard.Left + 10, captionTop, lyricCard.Right - 10, captionTop + captionHeight),
+                _theme.ForegroundTertiary, TextAlign.Left, 0.8f * _opacity);
         }
 
         // Window-title fallback sources have no track length; the player still reports the position,
@@ -329,31 +341,44 @@ internal sealed partial class PageRenderer : IDisposable
 
         DrawTransport(canvas, media, page);
 
-        // The output label only exists for sources that expose an audio endpoint; drawing the bare
-        // speaker glyph without it left an orphan icon floating in the transport row.
-        if (!string.IsNullOrWhiteSpace(media.OutputName))
+        // Output/queue always own the right side of the transport row. When the source has no endpoint
+        // or no queue, a light localized placeholder keeps the row balanced: leaving the slots blank read
+        // as a half-rendered page.
+        var output = PageMetricsLayout.MediaOutput(page, m);
+        var hasOutput = !string.IsNullOrWhiteSpace(media.OutputName);
+        var outputText = hasOutput ? media.OutputName : media.OutputPlaceholder;
+        if (!string.IsNullOrWhiteSpace(outputText))
         {
-            var output = PageMetricsLayout.MediaOutput(page, m);
+            // The glyph only ever appears with a label next to it (never an orphan icon).
             IconSet.Draw(canvas, IconKind.Speaker,
                 new SKRect(output.Left + 4, output.MidY - 6, output.Left + 16, output.MidY + 6),
                 Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-            _text.Draw(canvas, media.OutputName, IslandType.Output,
-                new SKRect(output.Left + 20, output.Top, output.Left + 70, output.Bottom), _theme.ForegroundTertiary,
-                TextAlign.Left, _opacity);
+            _text.Draw(canvas, outputText, IslandType.Output,
+                new SKRect(output.Left + 20, output.Top, output.Left + 70, output.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Left, (hasOutput ? 1f : 0.8f) * _opacity);
         }
 
+        var queue = PageMetricsLayout.MediaQueue(page, m);
         if (media.QueueCount > 0)
         {
-            var queue = PageMetricsLayout.MediaQueue(page, m);
             IconSet.Draw(canvas, IconKind.Queue,
                 new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
                 Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-            _text.Draw(canvas, "Queue", IslandType.Output,
+            _text.Draw(canvas, media.QueueLabel ?? "Queue", IslandType.Output,
                 new SKRect(queue.Left + 20, queue.Top, queue.Left + 52, queue.Bottom), _theme.ForegroundTertiary,
                 TextAlign.Left, _opacity);
             _text.Draw(canvas, _numbers.Number(media.QueueCount), IslandType.Output,
                 new SKRect(queue.Left + 52, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
                 TextAlign.Right, _opacity);
+        }
+        else if (!string.IsNullOrWhiteSpace(media.QueuePlaceholder))
+        {
+            IconSet.Draw(canvas, IconKind.Queue,
+                new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
+                Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+            _text.Draw(canvas, media.QueuePlaceholder, IslandType.Output,
+                new SKRect(queue.Left + 20, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
+                TextAlign.Left, 0.8f * _opacity);
         }
     }
 

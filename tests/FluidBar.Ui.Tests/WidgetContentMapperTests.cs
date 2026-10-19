@@ -119,7 +119,7 @@ public sealed class WidgetContentMapperTests
     }
 
     [Fact]
-    public void MapTasks_MissingOrEmptyFile_ShowsTheExplicitHintWithTheFileName()
+    public void MapTasks_MissingOrEmptyFile_ShowsTheFriendlyDiscoverableHint()
     {
         var missing = new TaskListSnapshot([], TaskListStatus.Missing,
             @"C:\Users\me\AppData\Roaming\FluidBar\tasks.json", "task file not found");
@@ -129,10 +129,41 @@ public sealed class WidgetContentMapperTests
         Assert.Empty(hint.Tasks);
         Assert.NotNull(hint.EmptyHint);
         Assert.Contains("tasks.json", hint.EmptyHint!, StringComparison.Ordinal);
+        Assert.Equal("No tasks · edit tasks.json", hint.EmptyHint);
+        Assert.DoesNotContain("Unavailable", hint.EmptyHint!, StringComparison.Ordinal);
 
         var empty = WidgetContentMapper.MapTasks(new TaskListSnapshot([], TaskListStatus.Ok,
             @"C:\Users\me\AppData\Roaming\FluidBar\tasks.json", null));
-        Assert.NotNull(empty.EmptyHint);
+        Assert.Equal("No tasks · edit tasks.json", empty.EmptyHint);
+    }
+
+    [Fact]
+    public void MapTasks_InvalidFile_ExplainsTheProblemInsteadOfSayingUnavailable()
+    {
+        var invalid = new TaskListSnapshot([], TaskListStatus.Invalid,
+            @"C:\Users\me\AppData\Roaming\FluidBar\tasks.json", "invalid json");
+
+        var view = WidgetContentMapper.MapTasks(invalid);
+
+        Assert.Equal("tasks.json needs a fix", view.EmptyHint);
+        Assert.DoesNotContain("Unavailable", view.EmptyHint!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MapTasks_EmptyStates_UseTheLocalizedCatalog()
+    {
+        var hints = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            var path = @"C:\Users\me\AppData\Roaming\FluidBar\tasks.json";
+            return (
+                Empty: WidgetContentMapper.MapTasks(new TaskListSnapshot([], TaskListStatus.Missing, path, null), localizer).EmptyHint,
+                Invalid: WidgetContentMapper.MapTasks(new TaskListSnapshot([], TaskListStatus.Invalid, path, null), localizer).EmptyHint);
+        });
+
+        Assert.Equal("暂无任务 · 编辑 tasks.json", hints.Empty);
+        Assert.Equal("任务文件有误 · 检查 tasks.json", hints.Invalid);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
 
     [Fact]
@@ -142,6 +173,7 @@ public sealed class WidgetContentMapperTests
 
         Assert.Empty(view.Tasks);
         Assert.NotNull(view.EmptyHint);
+        Assert.Equal("No tasks · edit tasks.json", view.EmptyHint);
     }
 
     [Fact]

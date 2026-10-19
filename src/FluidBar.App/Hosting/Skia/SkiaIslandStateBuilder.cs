@@ -156,8 +156,13 @@ public static class SkiaIslandStateBuilder
             AccentHex = media?.AccentHex,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
-            // TODO(skia-mvp): output device + queue UI are not in the renderer yet.
+            // The source rarely exposes an endpoint/queue, so the slots carry light localized placeholders
+            // instead of staying blank (a blank transport slot read as a broken render).
             QueueCount = media?.TrackCount ?? 0,
+            QueueLabel = localizer.Get(LocKeys.Page.Media.QueueLabel),
+            OutputPlaceholder = localizer.Get(LocKeys.Page.Media.OutputNone),
+            QueuePlaceholder = localizer.Get(LocKeys.Page.Media.QueueNone),
+            NoLyricsText = localizer.Get(LocKeys.Page.Media.NoLyrics),
             EmptyTitle = localizer.Get(LocKeys.Media.NoSession),
             EmptyHint = localizer.Get(LocKeys.Media.NoSessionHint),
         };

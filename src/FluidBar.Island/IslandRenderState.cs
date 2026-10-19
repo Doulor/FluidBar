@@ -647,8 +647,20 @@ public sealed record MediaPageModel
     /// <summary>Output device label.</summary>
     public string? OutputName { get; init; }
 
-    /// <summary>Queue count (0 hides the queue label).</summary>
+    /// <summary>Queue count (0 shows the light "no queue" placeholder instead of a count).</summary>
     public int QueueCount { get; init; }
+
+    /// <summary>Light localized placeholder for the output slot when the source exposes no endpoint.</summary>
+    public string? OutputPlaceholder { get; init; }
+
+    /// <summary>Light localized placeholder for the queue slot when the source exposes no queue.</summary>
+    public string? QueuePlaceholder { get; init; }
+
+    /// <summary>Short localized queue label ("Queue" / "队列").</summary>
+    public string? QueueLabel { get; init; }
+
+    /// <summary>Light caption inside the lyric card when the source has no lyric line.</summary>
+    public string? NoLyricsText { get; init; }
 
     /// <summary>Empty-state title (no session).</summary>
     public string? EmptyTitle { get; init; }

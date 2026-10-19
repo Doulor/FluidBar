@@ -392,6 +392,14 @@ public static partial class LocKeys
             public const string Output = "Page.Media.Output";
             /// <summary><c>Page.Media.Queue</c></summary>
             public const string Queue = "Page.Media.Queue";
+            /// <summary><c>Page.Media.QueueLabel</c></summary>
+            public const string QueueLabel = "Page.Media.QueueLabel";
+            /// <summary><c>Page.Media.OutputNone</c></summary>
+            public const string OutputNone = "Page.Media.OutputNone";
+            /// <summary><c>Page.Media.QueueNone</c></summary>
+            public const string QueueNone = "Page.Media.QueueNone";
+            /// <summary><c>Page.Media.NoLyrics</c></summary>
+            public const string NoLyrics = "Page.Media.NoLyrics";
         }
         /// <summary>Keys in the 'Notifications' area.</summary>
         public static class Notifications
@@ -430,6 +438,10 @@ public static partial class LocKeys
             public const string AddTask = "Page.Widgets.AddTask";
             /// <summary><c>Page.Widgets.TasksMore</c></summary>
             public const string TasksMore = "Page.Widgets.TasksMore";
+            /// <summary><c>Page.Widgets.TasksEmpty</c></summary>
+            public const string TasksEmpty = "Page.Widgets.TasksEmpty";
+            /// <summary><c>Page.Widgets.TasksInvalid</c></summary>
+            public const string TasksInvalid = "Page.Widgets.TasksInvalid";
             /// <summary>Weather condition labels for the widgets card.</summary>
             public static class Weather
             {
