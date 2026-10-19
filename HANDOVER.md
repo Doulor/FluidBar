@@ -292,6 +292,14 @@ rendernow exit
 - 媒体播放/seek、音量/亮度/主题、通知/Agent/任务等控件需要逐个真实点击验证。
 - 通知/Agent/任务目前是**空态**（不伪造），这是有意的；不要为了“看起来丰富”再塞演示数据。
 
+### 7.5 2026-10-20 进展（本轮新增）
+
+- **代理插件已接通平台服务**：`SkiaPlatformActions` 现在自建 `AgentInboxWatcher`（`%APPDATA%\FluidBar\agent-events`）+ `AgentHookInstaller`，`InstalledPlugins` 不再把代理插件判为「不可用」；代理页读取收件箱并映射成行（名字/状态/时间/详情）。
+- **三种代理**：Claude Code、Codex、DeepSeek Harness（`AgentKind.DeepSeek`，识别 `deepseek` / `deepseek-harness` / `dsh` / `harness`）。
+- **待验证**：真实钩子端到端（写一条事件 JSON → 岛上出现 → 时间/状态正确）；`AgentHookInstaller` 只在设置页显式同意后才写 `~/.claude/settings.json`。
+- **小胶囊媒体**：封面与进度已改读媒体快照；`HasTimeline=false` 不画进度条（此前的「永远 0」就是空轨道）。
+- **未完成**：插件市场/关于页与原型逐项比对、岛体展开收起曲线与幽灵胶囊、媒体插件真机回归。
+
 ### 7.4 动画/帧循环
 
 - 当前 `OnStateChanged` 里 `SnapMotion()` + `RenderNow(forceFull:true)` 是为了绕开“状态变了但画面不动”的临时方案；动画被牺牲。
