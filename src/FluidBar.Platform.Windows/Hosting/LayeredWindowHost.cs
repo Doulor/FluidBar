@@ -66,7 +66,6 @@ public sealed partial class LayeredWindowHost : IDisposable
     private bool _visible;
     private bool _frameOpen;
     private bool _needsFullFrame = true;
-    private bool _geometryDirty = true;
     private bool _trackingLeave;
     private bool _dragging;
     private bool _pointerInside;
@@ -238,7 +237,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         _pacer = new LayeredFramePacer(_options.Pacing, _options.TargetFramesPerSecond);
         _created = true;
         _needsFullFrame = true;
-        _geometryDirty = true;
         _placement = new LayeredHostPlacement(
             new LayeredRect(0, 0, sizePx.Width, sizePx.Height), sizePx, surfaceSize, _scale,
             OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(mode), _scale));
@@ -386,7 +384,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         ThrowIfNotCreated();
         var rect = new LayeredRect(xPx, yPx, _placement.WindowPixel.Width, _placement.WindowPixel.Height);
         ApplyWindowRect(rect);
-        _geometryDirty = true;
         _placement = _placement with { WindowPixel = rect };
         UpdateUiaGeometry();
         return _placement;
@@ -414,7 +411,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         _placement = new LayeredHostPlacement(rect, sizePx, surfaceSize, _scale,
             OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(mode), _scale));
         _needsFullFrame = true;
-        _geometryDirty = true;
         _pacer?.Reset();
         UpdateUiaGeometry();
         return _placement;
@@ -446,7 +442,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         _placement = new LayeredHostPlacement(rect, sizePx, LayeredSurfaceSize.ForMode(_mode), scale,
             OffsetToPixels(LayeredSurfaceSize.ShellLocalOffset(_mode), scale));
         _needsFullFrame = true;
-        _geometryDirty = true;
         _pacer?.Reset();
         UpdateUiaGeometry();
         return _placement;
@@ -643,7 +638,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         if (ok)
         {
             _needsFullFrame = false;
-            _geometryDirty = false;
             ReassertTopmostIfDue();
             if (_options.LogFrames)
             {
@@ -694,18 +688,19 @@ public sealed partial class LayeredWindowHost : IDisposable
             dwFlags = NativeMethods.ULW_ALPHA,
         };
 
-        if (_options.UseExplicitUpdateGeometry || _geometryDirty)
+        // Always pass the destination point and size explicitly. On this Windows build (10.0.26200)
+        // an indirect update with pptDst/psize = NULL returns TRUE but leaves the layered surface
+        // unchanged, so only the first frame (which happened to carry explicit geometry) ever reached
+        // the screen. One GetWindowRect per frame is negligible next to the DIB upload.
+        if (!NativeMethods.User32.GetWindowRect(_hwnd, out var windowRect))
         {
-            if (!NativeMethods.User32.GetWindowRect(_hwnd, out var windowRect))
-            {
-                return (false, Marshal.GetLastWin32Error(), false);
-            }
-
-            destination = new NativeMethods.POINT(windowRect.Left, windowRect.Top);
-            size = new NativeMethods.SIZE(windowRect.Width, windowRect.Height);
-            info.pptDst = (IntPtr)(&destination);
-            info.psize = (IntPtr)(&size);
+            return (false, Marshal.GetLastWin32Error(), false);
         }
+
+        destination = new NativeMethods.POINT(windowRect.Left, windowRect.Top);
+        size = new NativeMethods.SIZE(windowRect.Width, windowRect.Height);
+        info.pptDst = (IntPtr)(&destination);
+        info.psize = (IntPtr)(&size);
 
         if (dirty is { } rect)
         {
@@ -721,7 +716,6 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         if (NativeMethods.User32.UpdateLayeredWindowIndirect(_hwnd, ref info))
         {
-            _geometryDirty = false;
             return (true, 0, false);
         }
 
@@ -738,7 +732,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         if (NativeMethods.User32.UpdateLayeredWindow(_hwnd, _screenDc, ref fallbackDestination, ref fallbackSize,
                 surface.Hdc, ref source, 0, ref blend, NativeMethods.ULW_ALPHA))
         {
-            _geometryDirty = false;
             return (true, 0, true);
         }
 
@@ -766,7 +759,6 @@ public sealed partial class LayeredWindowHost : IDisposable
         _monitor = monitor;
         ApplyWindowRect(windowRect);
         _needsFullFrame = true;
-        _geometryDirty = true;
         _placement = new LayeredHostPlacement(windowRect, sizePx, surfaceSize, scale,
             OffsetToPixels(offsetDip, scale));
         UpdateUiaGeometry();

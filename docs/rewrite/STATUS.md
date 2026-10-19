@@ -1,11 +1,11 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-19 03:02（Asia/Shanghai）
+> 最后更新：2026-10-19 16:40（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
 
-渲染底座与渲染器 spike 均已 GO，正在把岛从 Avalonia 迁到 **Win32 分层宿主 + SkiaSharp**；干净原型 `docs/rewrite/prototype2` 已包含设置面板与插件市场。
+**渲染提交根因已修复**：分层窗口在“隐式几何”更新下返回成功但不刷新（只有首帧上屏），导致展开/翻页全部不可见；现在每次提交都显式传 `pptDst`/`psize`，真实鼠标点击 → 弹簧展开 → 面板可见、悬停不收起、移开 2.6s 后收起、点击穿透恢复。
 
 ## 里程碑
 
@@ -32,13 +32,25 @@
 | UI | 184 | ✅ |
 | Architecture | 11 | ✅ |
 
-构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1475 passed / 0 failed**。
+构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1482 passed / 0 failed**
+（Core 494 · Platform 409 · SDK 152 · UI 188 · Island 135 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
 ## Spike 结论
 
 - **分层宿主**：`UpdateLayeredWindow` 全帧 0.06–0.16ms / 脏矩形 0.08–0.10ms；60/120fps pacing 通过；透明、点击穿透、不抢焦点、拖拽 PASS。宿主表面 float 488×384 / dock 488×444 DIP。
 - **Skia 渲染器**：展开 0.55–0.61ms / p99 0.85ms；紧凑 0.46ms；脏矩形 0.157ms；120fps 约 9.8× 余量；fidelity IoU 0.9986 / 1.0000。
 - **Avalonia 透明**：11.3.22 与 12.1.4 在本机均失败（灰矩形），弃用为岛宿主；仅保留设置/市场窗口。
+
+## 2026-10-19 16:40 检查点（可用性修复）
+
+- 修复 **分层提交 bug**（唯一阻塞）：`UpdateLayeredWindowIndirect` 隐式几何返回 TRUE 但不更新表面；改为一律显式几何，删除 `UseExplicitUpdateGeometry` / `_geometryDirty`。
+- 恢复**弹簧动画**（不再在状态变化时 SnapMotion）与**点击穿透**（钩子命中矩形回到 shell + 2 DIP）。
+- **悬停不自动收起**：展开态 hover 清除 auto-collapse deadline，指针离开后重新武装；钩子新增 `PointerLeft`。
+- 修复**紧凑药丸宽度/内容不一致**（活动结束残留 ContentKind）与**空闲时钟不走字**（分钟边界 ITimer）。
+- 清理全部临时调试日志。
+- 首页音量/亮度改为真实数据（未知显示 "—"）；`MonitorService` 枚举前强制 PMv2 线程上下文。
+- 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `1DE62352…31BAA`；真实鼠标回归通过（展开/悬停保持/chevron 收起/翻页/真实音量）。
+- 待验证：真实鼠标下的剪贴板行复制、媒体控件、开关点击、托盘右键菜单、UIA 树刷新、多显示器/200%。
 
 ## 进行中
 

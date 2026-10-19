@@ -172,9 +172,9 @@ internal sealed partial class PageRenderer : IDisposable
         IconSet.Draw(canvas, home.IsMuted ? IconKind.VolumeMute : IconKind.Volume,
             new SKRect(rect.Left + 10, rect.Top + 12.5f, rect.Left + 23, rect.Top + 25.5f),
             Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-        DrawTrack(canvas, PageLayout.HomeVolumeTrack(page), home.Volume / 100.0,
-            home.IsMuted ? _theme.ForegroundTertiary : _theme.Foreground, _theme.LineStrong);
-        _text.Draw(canvas, _numbers.Number(home.Volume), IslandType.SliderValue,
+        DrawTrack(canvas, PageLayout.HomeVolumeTrack(page), home.HasVolume ? home.Volume / 100.0 : 0,
+            home.IsMuted || !home.HasVolume ? _theme.ForegroundTertiary : _theme.Foreground, _theme.LineStrong);
+        _text.Draw(canvas, home.HasVolume ? _numbers.Number(home.Volume) : "—", IslandType.SliderValue,
             new SKRect(rect.Left + 145, rect.Top + 13, rect.Left + 167, rect.Top + 25), _theme.ForegroundTertiary,
             TextAlign.Right, _opacity);
 
@@ -185,9 +185,9 @@ internal sealed partial class PageRenderer : IDisposable
         IconSet.Draw(canvas, IconKind.Brightness,
             new SKRect(rect.Left + 210, rect.Top + 12.5f, rect.Left + 223, rect.Top + 25.5f),
             Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-        DrawTrack(canvas, PageLayout.HomeBrightnessTrack(page), home.Brightness / 100.0,
-            _theme.Foreground, _theme.LineStrong);
-        _text.Draw(canvas, _numbers.Number(home.Brightness), IslandType.SliderValue,
+        DrawTrack(canvas, PageLayout.HomeBrightnessTrack(page), home.HasBrightness ? home.Brightness / 100.0 : 0,
+            home.HasBrightness ? _theme.Foreground : _theme.ForegroundTertiary, _theme.LineStrong);
+        _text.Draw(canvas, home.HasBrightness ? _numbers.Number(home.Brightness) : "—", IslandType.SliderValue,
             new SKRect(rect.Left + 345, rect.Top + 13, rect.Left + 367, rect.Top + 25), _theme.ForegroundTertiary,
             TextAlign.Right, _opacity);
     }

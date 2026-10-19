@@ -367,5 +367,26 @@ public sealed class SkiaIslandHostMappingTests
         Assert.Equal(LayoutTokens.DockStripHeight, fixture.Controller.RenderState.ShellHeight, 1);
     }
 
+    [Fact]
+    public void HomePage_UsesRealVolumeAndBrightness_AndFlagsUnknownLevels()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Data.Update(content => content with
+        {
+            VolumePercent = 37,
+            IsMuted = true,
+            BrightnessPercent = null,
+        });
+        fixture.Settle();
+
+        var home = fixture.Controller.RenderState.Pages.Home;
+        Assert.Equal(37, home.Volume);
+        Assert.True(home.HasVolume);
+        Assert.True(home.IsMuted);
+        // Unknown brightness must not surface a demo number.
+        Assert.Equal(0, home.Brightness);
+        Assert.False(home.HasBrightness);
+    }
+
     private const double PagerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelNotchDip;
 }

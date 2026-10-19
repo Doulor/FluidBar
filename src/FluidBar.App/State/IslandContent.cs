@@ -156,6 +156,15 @@ public sealed record IslandContent
     /// <summary>Whether focus assist is on.</summary>
     public bool FocusOn { get; init; }
 
+    /// <summary>System output volume 0..100, or null when no audio endpoint is available.</summary>
+    public int? VolumePercent { get; init; }
+
+    /// <summary>Whether the system output volume is muted.</summary>
+    public bool IsMuted { get; init; }
+
+    /// <summary>Display brightness 0..100, or null when the platform cannot control it.</summary>
+    public int? BrightnessPercent { get; init; }
+
     /// <summary>Localized input method label (e.g. EN / 中).</summary>
     public string? InputMethod { get; init; }
 
@@ -394,6 +403,11 @@ public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
             NetworkName = "Home Wi-Fi",
             IsOnline = true,
             FocusOn = false,
+            // Design-time levels only: the production source maps the real WASAPI/DDC-CI monitors and
+            // reports null when they are unavailable (the renderer then draws an em dash).
+            VolumePercent = 62,
+            IsMuted = false,
+            BrightnessPercent = 78,
             InputMethod = "EN",
             Media = media,
             Notifications = notifications,

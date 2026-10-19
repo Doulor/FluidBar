@@ -389,12 +389,74 @@ public class IslandStateMachineTests
         {
             Kind = IslandStateKind.Expanded,
             ActivityCount = added.State.ActivityCount,
+            ContentKind = ActivityKind.Notification,
         };
         var cleared = ActivityScheduler.Clear(added.State);
         var transition = Reduce(expanded, FromUpdate(cleared));
 
         Assert.Equal(IslandStateKind.Closing, transition.State.Kind);
         Assert.Equal(IslandTransitionReason.ActivityEnded, transition.Reason);
+
+        // The ended activity must not survive the close: a stale ContentKind made the next compact
+        // pill keep the activity's width while showing idle content.
+        Assert.Null(transition.State.ContentKind);
+        Assert.Equal(0, transition.State.ActivityCount);
+
+        var settled = Reduce(transition.State, IslandInput.CloseSettled());
+        Assert.Equal(IslandStateKind.Compact, settled.State.Kind);
+        Assert.Null(settled.State.ContentKind);
+    }
+
+    [Fact]
+    public void Expanded_PointerEntered_SuspendsAutoCollapse()
+    {
+        var expanded = IslandState.Hidden with
+        {
+            Kind = IslandStateKind.Expanded,
+            ActivityCount = 1,
+            AutoCollapseDeadline = TestData.Now.AddSeconds(1),
+        };
+
+        var transition = Reduce(expanded, IslandInput.PointerEntered());
+
+        Assert.Equal(IslandStateKind.Expanded, transition.State.Kind);
+        Assert.True(transition.State.IsHovering);
+        Assert.Null(transition.State.AutoCollapseDeadline);
+    }
+
+    [Fact]
+    public void Expanded_PointerLeft_ReArmsAutoCollapse()
+    {
+        var expanded = IslandState.Hidden with
+        {
+            Kind = IslandStateKind.Expanded,
+            ActivityCount = 1,
+            IsHovering = true,
+            AutoCollapseDeadline = null,
+        };
+
+        var transition = Reduce(expanded, IslandInput.PointerLeft());
+
+        Assert.Equal(IslandStateKind.Expanded, transition.State.Kind);
+        Assert.False(transition.State.IsHovering);
+        Assert.Equal(TestData.Now.AddMilliseconds(Defaults.AutoCollapseMs), transition.State.AutoCollapseDeadline);
+    }
+
+    [Fact]
+    public void PrimaryClick_FromHoveredCompact_DoesNotArmAutoCollapse()
+    {
+        var compact = IslandState.Hidden with
+        {
+            Kind = IslandStateKind.Compact,
+            ActivityCount = 1,
+            ContentKind = ActivityKind.Clipboard,
+            IsHovering = true,
+        };
+
+        var transition = Reduce(compact, IslandInput.PrimaryClick());
+
+        Assert.Equal(IslandStateKind.Expanded, transition.State.Kind);
+        Assert.Null(transition.State.AutoCollapseDeadline);
     }
 
     [Fact]

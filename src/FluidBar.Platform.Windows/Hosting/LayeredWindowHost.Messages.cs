@@ -357,7 +357,6 @@ public sealed partial class LayeredWindowHost
             _scale = scale;
             RebuildSurface(sizePx);
             _needsFullFrame = true;
-            _geometryDirty = true;
             _pacer?.Reset();
             notification = new LayeredDpiChange(oldDpi, dpiX, oldScale, _scale, sizePx);
         }

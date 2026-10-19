@@ -142,6 +142,28 @@ public sealed class MonitorService : PlatformMonitor<MonitorSet>, IMonitorServic
 
     private MonitorSet EnumerateMonitors()
     {
+        // EnumDisplayMonitors/GetMonitorInfo/GetDpiForMonitor are virtualized by the calling thread's
+        // DPI awareness context: from an unaware thread they report a 96 DPI, 1/scale-sized desktop.
+        // The monitor snapshot must always be physical, whichever thread refreshes it (startup, the
+        // platform message thread, WM_DISPLAYCHANGE), otherwise the island surface is built at the
+        // wrong scale.
+        var previousContext = NativeMethods.User32.SetThreadDpiAwarenessContext(
+            NativeMethods.User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        try
+        {
+            return EnumerateMonitorsCore();
+        }
+        finally
+        {
+            if (previousContext != IntPtr.Zero)
+            {
+                NativeMethods.User32.SetThreadDpiAwarenessContext(previousContext);
+            }
+        }
+    }
+
+    private MonitorSet EnumerateMonitorsCore()
+    {
         var builder = ImmutableArray.CreateBuilder<MonitorInfo>();
         var index = 0;
         var enumDelegate = new NativeMethods.MonitorEnumProc((IntPtr hMonitor, IntPtr hdc, ref NativeMethods.RECT rect,

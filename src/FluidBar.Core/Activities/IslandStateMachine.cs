@@ -145,7 +145,9 @@ public static class IslandStateMachine
             {
                 if (!hasActivities)
                 {
-                    return StartClosing(state, options, now, IslandStateKind.Compact,
+                    // Close from the cleared base state: otherwise ContentKind/ActivityCount survive the
+                    // close and the next compact pill keeps the ended activity's width with idle content.
+                    return StartClosing(baseState, options, now, IslandStateKind.Compact,
                         IslandTransitionReason.ActivityEnded,
                         Effect(IslandEffectKind.Retarget, IslandEffectData.Collapse),
                         Effect(IslandEffectKind.UpdateContent),
@@ -208,7 +210,9 @@ public static class IslandStateMachine
                 return Transition(state, state with { IsHovering = true, LeaveDeadline = null }, IslandTransitionReason.HoverIntentArmed);
 
             case IslandStateKind.Expanded:
-                return Transition(state, state with { IsHovering = true }, IslandTransitionReason.NoChange);
+                // Hovering the open panel suspends auto-collapse; leaving re-arms it (see PointerLeft).
+                return Transition(state, state with { IsHovering = true, AutoCollapseDeadline = null },
+                    IslandTransitionReason.NoChange);
 
             case IslandStateKind.Closing:
                 return Defer(state, IslandInput.PointerEntered(), options);
@@ -234,7 +238,13 @@ public static class IslandStateMachine
                 }, IslandTransitionReason.LeaveArmed);
 
             case IslandStateKind.Expanded:
-                return Transition(state, state with { IsHovering = false }, IslandTransitionReason.NoChange);
+                return Transition(state, state with
+                {
+                    IsHovering = false,
+                    AutoCollapseDeadline = options.AutoCollapseMs > 0
+                        ? now.AddMilliseconds(options.AutoCollapseMs)
+                        : null,
+                }, IslandTransitionReason.LeaveArmed);
 
             case IslandStateKind.Closing:
                 return Defer(state, IslandInput.PointerLeft(), options);
@@ -688,7 +698,12 @@ public static class IslandStateMachine
             LeaveDeadline = null,
             PeekDwellDeadline = null,
             AutoHideDeadline = null,
-            AutoCollapseDeadline = options.AutoCollapseMs > 0 ? now.AddMilliseconds(options.AutoCollapseMs) : null,
+            // Auto-collapse only ever runs while the pointer is away: expanding from a hovered pill
+            // (the normal click path) must not close the panel under the user's cursor. The deadline
+            // is armed by PointerLeft once the pointer actually leaves the panel.
+            AutoCollapseDeadline = options.AutoCollapseMs > 0 && !state.IsHovering
+                ? now.AddMilliseconds(options.AutoCollapseMs)
+                : null,
             DeferredInputs = [],
         };
 

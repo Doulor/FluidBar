@@ -1,10 +1,10 @@
 # FluidBar v2 接手文档（Handover）
 
-> 更新时间：2026-10-19 16:10（Asia/Shanghai）
+> 更新时间：2026-10-19 16:40（Asia/Shanghai）
 > 仓库：`D:\build\GitLocal\FluidBar`
 > 分支：`v2/rebuild`
-> HEAD：`890ac45 feat(input): consume island clicks with a low-level mouse hook instead of layered hit-testing`
-> 结论先写：**当前版本仍不可用，不要对外声称完成。** 数据假问题已修，输入已改全局鼠标钩子；最后阻塞是“状态已 Expanded，但分层窗口画面仍停在紧凑药丸”。
+> HEAD：见 `git log -1`（本次修复尚未提交，工作区含渲染提交/输入/动画/状态机改动）
+> 结论先写：**渲染阻塞已解决**——分层窗口在“隐式几何”下 `UpdateLayeredWindowIndirect` 返回 TRUE 但不刷新；现在一律显式传几何，真实鼠标点击可看到弹簧展开、悬停保持、移开自动收起、岛外点击穿透。下一步是页面控件真实回归、托盘右键、UIA 刷新与发布。
 
 ---
 
@@ -162,7 +162,16 @@ $env:FLUIDBAR_HOST='avalonia'
 
 ---
 
-## 5. 当前唯一阻塞：状态 Expanded，画面不展开
+## 5. 【已解决 2026-10-19 16:40】状态 Expanded，画面不展开
+
+> **根因（已用独立 Win32 实验复现）**：`UpdateLayeredWindowIndirect` 在 `pptDst = psize = NULL`
+> （隐式几何）时返回 TRUE，但分层表面**完全不更新**。宿主只在首帧显式传几何（`_geometryDirty=true`），
+> 所以只有开机第一帧上屏，之后所有提交“成功但不可见”。
+> **修复**：`LayeredWindowHost.TryUpdate` 每次提交都显式传 `pptDst`/`psize`（每帧一次
+> `GetWindowRect`）；删除 `UseExplicitUpdateGeometry` 与 `_geometryDirty`。
+> 同时恢复了弹簧动画（`OnStateChanged` 不再 SnapMotion）、点击穿透（钩子矩形回到 shell + 2 DIP）、
+> 悬停不自动收起（Core + 钩子 `PointerLeft`）、紧凑宽度/内容一致性与分钟时钟。
+> 下面的原始记录保留作历史。
 
 ### 现象
 
@@ -231,7 +240,12 @@ rendernow exit
 
 ---
 
-## 6. 当前未提交的调试代码（接手后先决定保留/删除）
+## 6. 【已清理 2026-10-19 16:40】临时调试代码
+
+上一轮加的 `fluidbar-trace.log` / `fluidbar-hook.log` 写入点、`SkiaIslandHost.Trace()` helper 已全部删除；
+`git diff` 里不应再出现 `%TEMP%` 调试写入。原始说明保留在下方。
+
+### 原始记录
 
 `git status`：
 
@@ -293,13 +307,14 @@ rendernow exit
 
 ## 8. 接手后的建议顺序（P0 → P3）
 
-1. **P0 修渲染提交**：按 §5 的步骤定位 `CommitFrame`/`Updated`/`FullFrame`/damage，确保 Expanded 状态真正上传到 DIB。
-2. **P0 真实回归**：解锁桌面 → 启动 → 真实鼠标点击药丸 → 截图确认展开；再点剪贴板行 → `Get-Clipboard` 确认写入。
-3. **P1 恢复 click-through**：钩子矩形从整个 host 改回 shell（`IslandMetrics.ShellRect` + placement/scale），并验证岛外点击能穿透。
-4. **P1 托盘菜单**：真实右键托盘图标，必要时改自绘 popup。
-5. **P2 UIA**：展开后树/焦点/Invoke 可用。
-6. **P2 动画/帧循环**：恢复弹簧动画，`frames` 持续增长。
-7. **P3 清理调试日志 + 更新文档/CHANGELOG/STATUS + 重新发布**。
+1. ~~P0 修渲染提交~~ ✅ 已完成（每次提交显式几何；见 §5）。
+2. ~~P0 真实回归：点击展开~~ ✅ 已完成（弹簧展开、悬停保持、移开 2.6s 收起、点击穿透）。
+3. **P0 发布**：全量测试（1481 passed）→ `tools/release/publish.ps1` → 真实桌面跑 Release 产物。
+4. **P1 页面控件真实回归**：剪贴板行复制（`Get-Clipboard` 校验）、媒体播放/seek、音量/亮度、Wi-Fi/蓝牙开关、主题切换、Esc/chevron 收起。
+5. **P1 托盘右键菜单**：真实右键托盘图标，必要时改自绘 popup。
+6. **P2 UIA**：展开后树/焦点/Invoke 可用（`SkiaIslandUiaSource` 刷新时机）。
+7. **P2 多显示器 / 200% 真机验收**。
+8. **P3 文档已在本次检查点更新；后续每次改动继续同步。**
 
 ---
 
@@ -310,7 +325,7 @@ rendernow exit
 - 锁屏证据：`build/reports/skia-host-smoke/hook-click-crop.png`（Windows 锁屏）
 - 冒烟日志：`%TEMP%\fluidbar-smoke.log`
 - 冒烟截图：`%TEMP%\fluidbar-evidence\*.png`
-- 调试日志：`%TEMP%\fluidbar-hook.log`、`%TEMP%\fluidbar-trace.log`
+- ~~调试日志：`%TEMP%\fluidbar-hook.log`、`%TEMP%\fluidbar-trace.log`~~（2026-10-19 16:40 已移除写入点）
 
 ---
 

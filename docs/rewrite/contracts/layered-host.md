@@ -157,10 +157,14 @@ else — bleed, corners, the lane between pills — is `HTTRANSPARENT`.
 ### 3.5 Options (`LayeredHostOptions`)
 
 `WindowTitle`, `MergeDirtyRects` (default true), `MaxDirtyRects` (16), `MinDirtyAreaPixels`,
-`UseExplicitUpdateGeometry` (default false: rely on the window's current geometry; the host falls back
-to the canonical explicit `UpdateLayeredWindow` automatically), `ReassertTopmost` (true),
-`TopmostReassertInterval` (1 s), `EnableDrag` (true), `EnableWheel` (true), `DefaultCursor`,
-`Pacing` (`Composition`), `TargetFramesPerSecond` (60), `LogFrames` (false).
+`ReassertTopmost` (true), `TopmostReassertInterval` (1 s), `EnableDrag` (true), `EnableWheel` (true),
+`DefaultCursor`, `Pacing` (`Composition`), `TargetFramesPerSecond` (60), `LogFrames` (false).
+
+**Always explicit geometry (2026-10-19).** `CommitFrame` now passes `pptDst` + `psize` on every
+`UpdateLayeredWindowIndirect` call (one `GetWindowRect` per frame). On Windows 10.0.26200 an indirect
+update with `pptDst = psize = NULL` returns **TRUE but leaves the layered surface unchanged**, which
+silently froze every frame after the first. The former `UseExplicitUpdateGeometry` option is gone:
+there is no correct implicit path on that build.
 
 ## 4. Frame path (DIB + dirty strategy)
 

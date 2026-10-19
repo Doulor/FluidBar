@@ -24,6 +24,7 @@ public sealed class IslandMouseHook : IDisposable
     private readonly List<Rect> _regions = [];
     private HookProc? _proc;
     private IntPtr _hook;
+    private bool _inside;
     private int _disposed;
 
     /// <summary>Creates the hook; call <see cref="StartAsync"/> once.</summary>
@@ -43,8 +44,18 @@ public sealed class IslandMouseHook : IDisposable
     /// <summary>Pointer moved inside an island rectangle.</summary>
     public event Action<float, float>? PointerMoved;
 
+    /// <summary>
+    /// Pointer moved from inside an island rectangle to outside it. The hook is the only input path
+    /// that sees the pointer leave a layered island (the window itself may never receive
+    /// <c>WM_MOUSELEAVE</c> when hit-testing is unreliable), so hover/auto-collapse depends on it.
+    /// </summary>
+    public event Action? PointerLeft;
+
     /// <summary>Wheel notch (+up / -down) inside an island rectangle.</summary>
     public event Action<int>? Wheel;
+
+    /// <summary>True when the hook is installed.</summary>
+    public bool IsInstalled => _hook != IntPtr.Zero;
 
     /// <summary>Installs the hook on the platform message thread.</summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)
@@ -108,11 +119,19 @@ public sealed class IslandMouseHook : IDisposable
         var data = Marshal.PtrToStructure<MsllHookStruct>(lParam);
         var x = data.pt.X;
         var y = data.pt.Y;
-        if (!Contains(x, y))
+        var inside = Contains(x, y);
+        if (!inside)
         {
+            if (_inside)
+            {
+                _inside = false;
+                PointerLeft?.Invoke();
+            }
+
             return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
         }
 
+        _inside = true;
         switch ((int)wParam)
         {
             case WmLButtonDown:
@@ -186,4 +205,3 @@ public sealed class IslandMouseHook : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandleW(string? moduleName);
 }
-

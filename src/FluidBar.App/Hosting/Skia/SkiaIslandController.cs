@@ -521,7 +521,7 @@ public sealed class SkiaIslandController : IDisposable
         if (!_pointerInside)
         {
             _pointerInside = true;
-            if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+            if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded)
             {
                 ApplyInput(IslandInput.PointerEntered());
             }
@@ -566,7 +566,7 @@ public sealed class SkiaIslandController : IDisposable
         _pager.Reset();
         _motion.SetPressed(false);
 
-        if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+        if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded)
         {
             ApplyInput(IslandInput.PointerLeft());
         }
@@ -991,7 +991,10 @@ public sealed class SkiaIslandController : IDisposable
     {
         var settings = _settings.Current;
         var mode = settings.IslandMode;
-        var compactKind = State.ContentKind ?? viewModel.Primary?.Kind;
+        // Derive the compact size from the same source the compact model is built from
+        // (SkiaIslandStateBuilder.BuildCompact), so the shell width can never disagree with the
+        // content: a stale Core ContentKind used to leave a wide pill showing the idle clock.
+        var compactKind = viewModel.Primary?.Kind;
         var compactSize = LayoutTokens.CompactSize(compactKind, mode);
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
@@ -1399,5 +1402,3 @@ public sealed class SkiaIslandController : IDisposable
         return new VisualRect(left, top, right - left, bottom - top);
     }
 }
-
-

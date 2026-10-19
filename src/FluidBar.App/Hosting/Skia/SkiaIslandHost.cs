@@ -267,7 +267,7 @@ public sealed class SkiaIslandHost : IDisposable
                 $"hwnd=0x{host.Handle:X} monitor={entry.Monitor.Id} primary={entry.Monitor.IsPrimary} " +
                 $"work={entry.Monitor.WorkArea} dpi={entry.Monitor.Dpi} scale={host.Scale:0.00} mode={host.Mode} " +
                 $"surface={host.SurfaceSizePx.Width}x{host.SurfaceSizePx.Height}px visible={host.IsVisible} " +
-                $"window={placement.WindowPixel} hitRects={host.HitRegion.InteractiveRectCount} " +
+                $"window={placement.WindowPixel} hitRects={host.HitRegion.InteractiveRectCount} hook={_mouseHook?.IsInstalled} " +
                 $"frames={entry.Frames} dirty={entry.DirtyFrames}");
         }
 
@@ -414,6 +414,7 @@ public sealed class SkiaIslandHost : IDisposable
         _mouseHook.PointerPressed += OnHookPointerPressed;
         _mouseHook.PointerReleased += OnHookPointerReleased;
         _mouseHook.PointerMoved += OnHookPointerMoved;
+        _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
         await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
     }
@@ -627,6 +628,7 @@ public sealed class SkiaIslandHost : IDisposable
                     else if (entry.DragKind == SkiaDragKind.WindowCandidate)
                     {
                         MoveWindowForDrag(entry, drag);
+                        UpdateHitRegions(force: true);
                     }
 
                     break;
@@ -1143,6 +1145,21 @@ public sealed class SkiaIslandHost : IDisposable
         });
     }
 
+    private void OnHookPointerLeft()
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _controller.HandlePointerLeft();
+            EnsureDeadlineTicker();
+            EnsureFrameLoop();
+        });
+    }
+
     private void OnStateChanged()
     {
         if (_disposed)
@@ -1150,9 +1167,11 @@ public sealed class SkiaIslandHost : IDisposable
             return;
         }
 
+        // Never snap the springs here: shell expand/collapse and the pager are spring-driven and the
+        // frame loop below animates them. The snap was a workaround for the layered-update bug (see
+        // LayeredWindowHost.TryUpdate) and turned every transition into an instant jump.
         UpdateHitRegions(force: false);
         RefreshAccessibility();
-        _controller.SnapMotion();
         EnsureDeadlineTicker();
         EnsureFrameLoop();
         RenderNow(forceFull: true);
@@ -1328,14 +1347,18 @@ public sealed class SkiaIslandHost : IDisposable
                 continue;
             }
 
+            // Consume clicks only over the island shell (never the whole host surface): the
+            // transparent bleed must stay click-through. A 2 DIP slack absorbs edge rounding so the
+            // pill stays easy to hit at any DPI.
             var shell = IslandMetrics.ShellRect(state);
             var placement = entry.Host.Placement.WindowPixel;
-            var scale = entry.Host.Scale;
+            var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+            const double slackDip = 2;
             hookRects.Add(new IslandMouseHook.Rect(
-                placement.X + shell.Left * scale,
-                placement.Y + shell.Top * scale,
-                placement.X + (shell.Left + shell.Width) * scale,
-                placement.Y + (shell.Top + shell.Height) * scale));
+                placement.X + (shell.Left - slackDip) * scale,
+                placement.Y + (shell.Top - slackDip) * scale,
+                placement.X + (shell.Right + slackDip) * scale,
+                placement.Y + (shell.Bottom + slackDip) * scale));
         }
 
         _mouseHook?.SetRegions(hookRects);
@@ -1564,10 +1587,3 @@ public sealed class SkiaIslandHost : IDisposable
         }
     }
 }
-
-
-
-
-
-
-

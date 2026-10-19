@@ -12,7 +12,7 @@ FluidBar 2.0 是从零重写的 Windows 灵动岛：默认 iOS 风格小岛，�
 
 ## 运行
 
-- 发布产物：`build/release/win-x64/FluidBar.exe`（framework-dependent single-file，56.5 MB，SHA256 `EF06BF3D…8BE82`）；压缩包 `build/release/FluidBar-win-x64.zip`（47 MB）
+- 发布产物：`build/release/win-x64/FluidBar.exe`（framework-dependent single-file，56.5 MB，SHA256 `1DE62352DA64E7179F3AFA7A0A485DB39678813A285458642F115FA29C431BAA`，2026-10-19 17:05 重新发布）
 - 或从源码：`dotnet run --project src/FluidBar.App`（开发） / `tools/release/publish.ps1`
 - 默认宿主：Win32 分层窗口 + Skia（`FLUIDBAR_HOST=skia` 强制；`avalonia` 回退旧宿主）
 - 设置/市场：托盘菜单或 `Ctrl+Alt+S`（若被占用回退 `Ctrl+Alt+Shift+S`）
@@ -48,9 +48,10 @@ FluidBar 2.0 是从零重写的 Windows 灵动岛：默认 iOS 风格小岛，�
 ## 验证
 
 - `dotnet build FluidBar.sln` = 0 errors
-- `dotnet test FluidBar.sln -m:1` = **1475 passed / 0 failed**
-  - Core 491 · Platform 409 · UI 184 · Island 135 · SDK 152 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11
-- 生产 smoke（`FLUIDBAR_SMOKE=1 FLUIDBAR_HOST=skia`）：surface 732×576 @150%，200+ 帧、0 提交失败、上传 ~110–220 µs、空闲无帧
+- `dotnet test FluidBar.sln -m:1` = **1482 passed / 0 failed**
+  - Core 494 · Platform 409 · UI 188 · Island 135 · SDK 152 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11
+- 生产 smoke（`FLUIDBAR_SMOKE=1 FLUIDBAR_HOST=skia`）：surface 732×576 @150%，200+ 帧、0 提交失败、上传 ~280–560 µs、空闲无帧
+- 真实鼠标回归（2026-10-19 17:05，DPI-aware 取证）：点击药丸 → 弹簧展开 660×424；悬停 4s 保持展开；点 chevron → 收起 196×52；滚轮翻页；首页真实音量/电量
 - Release 发布 smoke 通过（`build/release/win-x64/FluidBar.exe`）
 
 ## 已知限制（非阻塞）

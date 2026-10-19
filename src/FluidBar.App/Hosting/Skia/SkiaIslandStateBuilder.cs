@@ -111,10 +111,12 @@ public static class SkiaIslandStateBuilder
                 IsPlaying = media?.IsPlaying ?? false,
                 AccentHex = media?.AccentHex,
             },
-            // TODO(skia-mvp): wire platform volume/brightness monitors; IslandContent has no level yet.
-            Volume = 62,
-            Brightness = 78,
-            IsMuted = false,
+            // Real platform levels; unknown renders an em dash instead of a demo number.
+            Volume = content.VolumePercent ?? 0,
+            HasVolume = content.VolumePercent is not null,
+            Brightness = content.BrightnessPercent ?? 0,
+            HasBrightness = content.BrightnessPercent is not null,
+            IsMuted = content.IsMuted,
             BatteryPercent = content.BatteryPercent ?? 0,
             IsCharging = content.IsCharging,
             BatteryStatus = content.IsCharging ? localizer.Get(LocKeys.Common.Charging) : null,

@@ -463,13 +463,6 @@ public sealed class LayeredHostOptions
     /// <summary>Upload dirty rectangles below this pixel area as part of the merged box only.</summary>
     public long MinDirtyAreaPixels { get; init; }
 
-    /// <summary>
-    /// Pass the window position/size explicitly on every update. When false the update relies on the
-    /// window's current geometry (no per-frame positioning work); the host falls back to the explicit
-    /// form automatically if the implicit call is rejected.
-    /// </summary>
-    public bool UseExplicitUpdateGeometry { get; init; }
-
     /// <summary>Re-assert <c>HWND_TOPMOST</c> on the policy-gated cadence.</summary>
     public bool ReassertTopmost { get; init; } = true;
 

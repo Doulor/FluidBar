@@ -727,6 +727,12 @@ internal static partial class NativeMethods
         [DllImport(Lib, SetLastError = true)]
         internal static extern bool UpdateLayeredWindowIndirect(IntPtr hWnd, ref UPDATELAYEREDWINDOWINFO pULWInfo);
 
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
+        /// <summary><c>DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2</c> (-4).</summary>
+        internal static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new(-4);
+
         [DllImport(Lib)]
         internal static extern IntPtr GetDC(IntPtr hWnd);
 

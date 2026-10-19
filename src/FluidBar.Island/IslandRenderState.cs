@@ -448,8 +448,14 @@ public sealed record HomePageModel
     /// <summary>Volume level 0..100.</summary>
     public int Volume { get; init; } = 62;
 
+    /// <summary>Whether a real volume level is known (false renders an em dash, not a fake value).</summary>
+    public bool HasVolume { get; init; } = true;
+
     /// <summary>Brightness level 0..100.</summary>
     public int Brightness { get; init; } = 78;
+
+    /// <summary>Whether a real brightness level is known (false renders an em dash).</summary>
+    public bool HasBrightness { get; init; } = true;
 
     /// <summary>Whether the volume is muted.</summary>
     public bool IsMuted { get; init; }

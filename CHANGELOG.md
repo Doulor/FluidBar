@@ -119,3 +119,21 @@
 - 修复：调整构造顺序；`SkiaPlatformActions` 实现 `IIslandDataSource`，`Snapshot()` 映射真实剪贴板历史、GSMTC 媒体、电池/充电/专注状态；通知/Agent/任务不再伪造，返回空列表。
 - 剪贴板行复制改为按索引取**完整文本**（不再复制渲染预览）；媒体播放/seek/音量/亮度/主题继续走真实平台服务。
 - 验证：`actions created` 日志确认真实数据源已启用；1478 tests（PluginHost 偶发 flaky）；Release 构建通过。
+
+### 2026-10-19 16:40 — 修复“状态已展开但画面停在紧凑药丸”（渲染提交根因）
+- **根因（已用独立 Win32 实验复现）**：`UpdateLayeredWindowIndirect` 在 `pptDst = psize = NULL`（隐式几何）时返回 TRUE 但**分层表面完全不更新**。宿主只在首帧（`_geometryDirty` 为真）显式传几何，所以只有开机第一帧真正上屏；之后展开/翻页/收起的提交全部“成功但不可见”。
+- 修复：`LayeredWindowHost.TryUpdate` 每次提交都显式传 `pptDst`/`psize`（每帧一次 `GetWindowRect`，相对 DIB 上传可忽略）；删除失效的 `UseExplicitUpdateGeometry` 选项与 `_geometryDirty` 死状态。
+- 恢复弹簧动画：`OnStateChanged` 不再 `SnapMotion()`，展开/收起走 Core 弹簧；实测点击后连续 4 帧可见尺寸增长（132 → 中态 → 440×284）。
+- 恢复点击穿透：`IslandMouseHook` 命中矩形从整个 488×384 宿主改回 shell 矩形（+2 DIP 容差），透明 bleed 区域点击回到下方窗口（`WindowFromPoint` 验证）。
+- 悬停不再被自动收起打断：Core `EnterExpanded` 在指针悬停时不武装 `AutoCollapseDeadline`；展开态 `PointerEntered` 清除、`PointerLeft` 重新武装；钩子新增 `PointerLeft` 事件（分层窗口可能收不到 `WM_MOUSELEAVE`），控制器把展开态纳入 hover 派发。
+- 修复紧凑药丸“宽度与内容不一致”：活动在展开态结束时，Core 现在从清空后的 baseState 进入 Closing（`ContentKind`/`ActivityCount` 不再残留）；App `BuildTarget` 与 `BuildCompact` 统一用 view model 的活动类型取宽度。
+- 空闲时钟恢复走字：`SkiaPlatformActions` 增加对齐到分钟边界的 `ITimer`，每分钟 raise `Changed`（此前只有媒体/剪贴板/电池变化才会重绘，药丸时间会冻在首次绘制那一刻）。
+- 清理上一轮遗留的全部临时日志（`fluidbar-trace.log` / `fluidbar-hook.log` 写入点、`Trace()` helper）。
+- 测试：Core 494（+3 状态机回归）、UI 188（+1 音量/亮度映射）；`dotnet build FluidBar.sln` 0 错误。
+
+### 2026-10-19 17:05 — 真实音量/亮度 + 物理显示器枚举 + 最终发布
+- 首页音量/亮度不再写死演示值（62/78）：`IslandContent` 新增 `VolumePercent`/`IsMuted`/`BrightnessPercent`，`SkiaPlatformActions` 映射真实 WASAPI 音量与 DDC/CI 亮度并订阅其变化；未知时渲染 "—" 且轨道归零（不伪造数字）。设计态 `DesignIslandDataSource` 保留 62/78 供预览/测试。
+- `MonitorService` 枚举前显式 `SetThreadDpiAwarenessContext(PMv2)`：显示器枚举不再受调用线程 DPI 上下文影响（线程池线程/消息线程下曾可能拿到 96 DPI 的虚拟化工作区）。
+- 全量测试 **1482 passed / 0 failed**（Core 494 · Platform 409 · SDK 152 · UI 188 · Island 135 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
+- 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `1DE62352DA64E7179F3AFA7A0A485DB39678813A285458642F115FA29C431BAA`。
+- 真实鼠标回归（DPI-aware 取证脚本）：窗口 732×576 @150% → 点击药丸弹簧展开 660×424 → 悬停 4s 保持 → 点右上 chevron 收起 196×52；首页显示真实音量 60 / 亮度 "—" / 电量 99% 充电 / Wi-Fi 开。

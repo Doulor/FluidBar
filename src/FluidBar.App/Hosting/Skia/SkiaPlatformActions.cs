@@ -47,6 +47,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly IFocusAssistService _focus;
     private readonly ArtworkCache _artworkCache;
     private readonly ArtworkTempStore _artworkTempStore;
+    private ITimer? _clockTimer;
     private int _started;
     private int _disposed;
 
@@ -91,6 +92,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _media.SnapshotChanged += OnSnapshotChanged;
         _clipboard.SnapshotChanged += OnSnapshotChanged;
         _battery.SnapshotChanged += OnSnapshotChanged;
+        _volume.SnapshotChanged += OnSnapshotChanged;
+        _brightness.SnapshotChanged += OnSnapshotChanged;
 
         var toggles = quickToggles ?? IslandQuickToggleServices.CreateDefault(_platformLogger, _counters, time);
         _wifi = toggles.Wifi;
@@ -169,6 +172,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var battery = _battery.Current;
         var focus = _focus.Current;
         var media = _media.Current;
+        var volume = _volume.Current;
+        var brightness = _brightness.Current;
         var clipboard = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
         return new IslandContent
         {
@@ -176,6 +181,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             BatteryPercent = battery is { HasBattery: true } ? battery.Percent : null,
             IsCharging = battery?.IsCharging ?? false,
             FocusOn = focus?.IsActive ?? false,
+            VolumePercent = volume is { HasDevice: true } ? volume.Percent : null,
+            IsMuted = volume?.IsMuted ?? false,
+            BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = clipboard.Take(8).Select(MapClipboard).ToImmutableArray(),
             Notifications = [],
@@ -273,6 +281,54 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("focus-assist", () => _focus.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
+        ScheduleClockTick();
+    }
+
+    /// <summary>
+    /// Arms the minute boundary tick that refreshes the idle clock. Nothing else raises
+    /// <see cref="Changed"/> while the island is idle, so without it the compact pill keeps the time
+    /// it was first painted with.
+    /// </summary>
+    private void ScheduleClockTick()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        var now = _time.GetLocalNow();
+        var delay = TimeSpan.FromSeconds(60 - now.Second) - TimeSpan.FromMilliseconds(now.Millisecond);
+        if (delay < TimeSpan.FromSeconds(1))
+        {
+            delay = TimeSpan.FromSeconds(1);
+        }
+
+        _clockTimer?.Dispose();
+        _clockTimer = _time.CreateTimer(
+            static state => ((SkiaPlatformActions)state!).OnClockTick(),
+            this,
+            delay,
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnClockTick()
+    {
+        if (Volatile.Read(ref _disposed) != 0 || Volatile.Read(ref _started) == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.actions.clock-tick-failed",
+                "Refreshing the island clock failed.", ex);
+        }
+
+        ScheduleClockTick();
     }
 
     /// <inheritdoc />
@@ -576,6 +632,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StopOneAsync("volume", () => _volume.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("battery", () => _battery.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("message-host", () => _messageHost.DisposeAsync().AsTask()).ConfigureAwait(false);
+        _clockTimer?.Dispose();
+        _clockTimer = null;
         _artworkTempStore.Dispose();
     }
 
