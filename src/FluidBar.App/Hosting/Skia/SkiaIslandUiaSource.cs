@@ -27,6 +27,9 @@ public static class SkiaIslandUiaElementIds
     /// <summary>Collapse chevron.</summary>
     public const string Collapse = "island.collapse";
 
+    /// <summary>Settings gear in the expanded header (opens the settings window).</summary>
+    public const string Settings = "island.settings";
+
     /// <summary>Transient page-strip group (mini-islands and dots).</summary>
     public const string Strip = "island.strip";
 
@@ -304,7 +307,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     {
         var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
         var page = Math.Clamp(state.PageIndex, 0, PagerConstants.PageCount - 1);
-        var children = new List<UiaElementSnapshot>(4)
+        var children = new List<UiaElementSnapshot>(5)
         {
             Node(
                 SkiaIslandUiaElementIds.Collapse,
@@ -314,6 +317,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 UiaPatternKind.Invoke,
                 new UiaElementState { IsFocusable = true },
                 help: L("Island.Accessibility.CollapseHelp", "Collapse the island to the compact pill.")),
+            Node(
+                SkiaIslandUiaElementIds.Settings,
+                UiaElementRole.Button,
+                L("Page.Home.OpenSettings", "Settings"),
+                ToRect(PageLayout.SettingsRect(content)),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true },
+                help: L("Island.Accessibility.OpenSettingsHelp",
+                    "Open the FluidBar settings window.")),
             BuildPages(state, page),
             BuildPageControls(state, page),
         };
@@ -826,13 +838,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 strip.Next, F("Island.Accessibility.NextPage", "Next page: {0}", state.Pages.Title(page + 1))));
         }
 
+        // Every dot of a cluster targets the same (farthest) page, so the ids are de-duplicated by
+        // ordinal and the bounds are the exact dot hit rectangle the pointer path uses.
         for (var i = 0; i < strip.DotsLeft.Length; i++)
         {
             var target = strip.LeftDotPage(i);
             if (target >= 0)
             {
-                children.Add(StripButton($"island.strip.dot.left.{target}", state.Pages.Title(target),
-                    Inflate(strip.DotsLeft[i], (float)(IslandMetrics.DotHitSize - IslandMetrics.DotSize) / 2),
+                children.Add(StripButton($"island.strip.dot.left.{target}.{i}", state.Pages.Title(target),
+                    IslandStripLayout.DotHitRect(strip.DotsLeft[i]),
                     F("Island.Accessibility.PageDot", "Page {0}: {1}", target + 1, state.Pages.Title(target))));
             }
         }
@@ -842,8 +856,8 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             var target = strip.RightDotPage(i);
             if (target < PagerConstants.PageCount)
             {
-                children.Add(StripButton($"island.strip.dot.right.{target}", state.Pages.Title(target),
-                    Inflate(strip.DotsRight[i], (float)(IslandMetrics.DotHitSize - IslandMetrics.DotSize) / 2),
+                children.Add(StripButton($"island.strip.dot.right.{target}.{i}", state.Pages.Title(target),
+                    IslandStripLayout.DotHitRect(strip.DotsRight[i]),
                     F("Island.Accessibility.PageDot", "Page {0}: {1}", target + 1, state.Pages.Title(target))));
             }
         }
@@ -890,6 +904,12 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         if (string.Equals(id, SkiaIslandUiaElementIds.Collapse, StringComparison.Ordinal))
         {
             _controller.HandleEscape();
+            return;
+        }
+
+        if (string.Equals(id, SkiaIslandUiaElementIds.Settings, StringComparison.Ordinal))
+        {
+            _controller.RequestSettings();
             return;
         }
 
@@ -1192,6 +1212,19 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             help: L("Island.Accessibility.SliderHelp",
                 "Use the arrow keys or the RangeValue pattern to change the value."));
 
+    /// <summary>
+    /// Resolves the bounds a page tab reports inside the revealed strip.
+    /// <para>
+    /// The rail paints one target per neighbour and a <b>cluster</b> of far-page dots on each side.
+    /// Every dot of a cluster jumps to the farthest page in its direction (prototype2), so a far tab
+    /// has no painted element of its own and the two pages between it and the neighbour used to
+    /// report an empty rectangle and an <c>Offscreen</c> state. A far tab now maps to the dot at its
+    /// ordinal position in its cluster (nearest page ↔ nearest dot, clamped to the outermost dot for
+    /// overflow pages), i.e. to the real hit rectangle of the element that represents its direction.
+    /// SelectionItem/Invoke still selects the exact page, so the tab is reachable both by touch/click
+    /// (jumps to the far page, exactly like clicking the dot) and by screen-reader activation.
+    /// </para>
+    /// </summary>
     private static UiaRect TabBounds(in SkiaStripGeometry strip, int page, bool visible)
     {
         if (!visible)
@@ -1214,33 +1247,19 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return ToRect(strip.Next);
         }
 
-        for (var i = 0; i < strip.DotsLeft.Length; i++)
-        {
-            if (strip.LeftDotPage(i) == page)
-            {
-                return ToRect(Inflate(strip.DotsLeft[i], (float)(IslandMetrics.DotHitSize - IslandMetrics.DotSize) / 2));
-            }
-        }
-
-        for (var i = 0; i < strip.DotsRight.Length; i++)
-        {
-            if (strip.RightDotPage(i) == page)
-            {
-                return ToRect(Inflate(strip.DotsRight[i], (float)(IslandMetrics.DotHitSize - IslandMetrics.DotSize) / 2));
-            }
-        }
-
-        return UiaRect.Empty;
+        return page < strip.Page - 1
+            ? ToRect(DotHitBounds(strip.DotsLeft, strip.Page - page - 2))
+            : ToRect(DotHitBounds(strip.DotsRight, page - strip.Page - 2));
     }
+
+    /// <summary>Hit rectangle of the dot at an ordinal position (the outermost dot absorbs overflow).</summary>
+    private static SKRect DotHitBounds(SKRect[] dots, int index)
+        => dots.Length == 0
+            ? SKRect.Empty
+            : IslandStripLayout.DotHitRect(dots[Math.Clamp(index, 0, dots.Length - 1)]);
 
     private static SKRect CompactPlayRect(SKRect shell)
         => new(shell.Right - 34, shell.Top + 7, shell.Right - 8, shell.Top + 33);
-
-    private static SKRect Inflate(SKRect rect, float amount)
-    {
-        rect.Inflate(amount, amount);
-        return rect;
-    }
 
     private static SKRect InflateVertical(SKRect rect, float amount)
         => new(rect.Left, rect.Top - amount, rect.Right, rect.Bottom + amount);

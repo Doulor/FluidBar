@@ -122,6 +122,8 @@ public static partial class LocKeys
             public const string PageHiddenHelp = "Island.Accessibility.PageHiddenHelp";
             /// <summary><c>Island.Accessibility.CollapseHelp</c></summary>
             public const string CollapseHelp = "Island.Accessibility.CollapseHelp";
+            /// <summary><c>Island.Accessibility.OpenSettingsHelp</c></summary>
+            public const string OpenSettingsHelp = "Island.Accessibility.OpenSettingsHelp";
             /// <summary><c>Island.Accessibility.CompactPlayHelp</c></summary>
             public const string CompactPlayHelp = "Island.Accessibility.CompactPlayHelp";
             /// <summary><c>Island.Accessibility.ToggleHelp</c></summary>
@@ -932,6 +934,30 @@ public static partial class LocKeys
             public const string Docs = "Settings.About.Docs";
             /// <summary><c>Settings.About.Feedback</c></summary>
             public const string Feedback = "Settings.About.Feedback";
+            /// <summary>Keys in the 'Update' area (real updater states).</summary>
+            public static class Update
+            {
+                /// <summary><c>Settings.About.Update.Checking</c></summary>
+                public const string Checking = "Settings.About.Update.Checking";
+                /// <summary><c>Settings.About.Update.Available</c></summary>
+                public const string Available = "Settings.About.Update.Available";
+                /// <summary><c>Settings.About.Update.Downloading</c></summary>
+                public const string Downloading = "Settings.About.Update.Downloading";
+                /// <summary><c>Settings.About.Update.Ready</c></summary>
+                public const string Ready = "Settings.About.Update.Ready";
+                /// <summary><c>Settings.About.Update.RestartRequired</c></summary>
+                public const string RestartRequired = "Settings.About.Update.RestartRequired";
+                /// <summary><c>Settings.About.Update.Failed</c></summary>
+                public const string Failed = "Settings.About.Update.Failed";
+                /// <summary><c>Settings.About.Update.Download</c></summary>
+                public const string Download = "Settings.About.Update.Download";
+                /// <summary><c>Settings.About.Update.Install</c></summary>
+                public const string Install = "Settings.About.Update.Install";
+                /// <summary><c>Settings.About.Update.Discard</c></summary>
+                public const string Discard = "Settings.About.Update.Discard";
+                /// <summary><c>Settings.About.Update.Feed</c></summary>
+                public const string Feed = "Settings.About.Update.Feed";
+            }
         }
         /// <summary>Keys in the 'Market' area.</summary>
         public static class Market

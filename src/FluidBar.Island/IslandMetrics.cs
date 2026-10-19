@@ -350,11 +350,19 @@ public static class PageLayout
     /// <summary>Collapse chevron hit rectangle (content-local DIP).</summary>
     public static SKRect CollapseRect(SKRect content) => new(content.Right - 24, content.Top - 4, content.Right, content.Top + 20);
 
+    /// <summary>
+    /// Settings gear hit rectangle (content-local DIP), immediately left of the collapse chevron.
+    /// The prototype ships no in-island entry, so the header carries the standard gear affordance;
+    /// paint and hit-test share this rectangle and the UIA button at
+    /// <c>SkiaIslandUiaElementIds.Settings</c> uses the same bounds.
+    /// </summary>
+    public static SKRect SettingsRect(SKRect content) => new(content.Right - 52, content.Top - 4, content.Right - 28, content.Top + 20);
+
     /// <summary>Page number rectangle (content-local DIP).</summary>
     public static SKRect PageNumberRect(SKRect content) => new(content.Left, content.Top - 4, content.Left + 18, content.Top + 12);
 
-    /// <summary>Page title rectangle (content-local DIP).</summary>
-    public static SKRect PageTitleRect(SKRect content) => new(content.Left + 22, content.Top - 4, content.Right - 30, content.Top + 12);
+    /// <summary>Page title rectangle (content-local DIP); stops before the settings gear.</summary>
+    public static SKRect PageTitleRect(SKRect content) => new(content.Left + 22, content.Top - 4, content.Right - 56, content.Top + 12);
 
     // ---- home -----------------------------------------------------------------------------
 

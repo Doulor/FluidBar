@@ -235,6 +235,11 @@ public sealed class IslandRenderer : IDisposable
                 return new IslandHitTarget(IslandHitKind.Collapse, state.PageIndex);
             }
 
+            if (PageLayout.SettingsRect(content).Contains(x, y))
+            {
+                return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
+            }
+
             if (ContainsShell(state, shell, x, y))
             {
                 var page = PageUnder(state, content, x);

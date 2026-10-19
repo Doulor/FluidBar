@@ -48,6 +48,13 @@ internal sealed partial class PageRenderer : IDisposable
             _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
             _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+
+        // The island had no in-island route to the settings window (only the global hotkey, which
+        // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
+        // gear next to the collapse chevron on every page; the same rectangle is the click target and
+        // the UI Automation button, so pointer and screen-reader users find one control, not two.
+        IconSet.Draw(canvas, IconKind.Settings, PageLayout.SettingsRect(content).Deflate(5.5f),
+            Alpha(_theme.ForegroundSecondary, _opacity), _icon);
         IconSet.Draw(canvas, IconKind.ChevronDown, PageLayout.CollapseRect(content).Deflate(5),
             Alpha(_theme.ForegroundSecondary, _opacity), _icon);
     }

@@ -24,7 +24,7 @@ public sealed class LayeredHostTests
         // The surface must be wide enough for the 440 DIP shell plus 24 DIP bleed on both sides.
         Assert.Equal(LayeredSurfaceSize.PanelWidth + (2 * LayeredSurfaceSize.Padding), floatSize.WidthDip);
 
-        // Float: 24 bleed + 284 panel + 10 gap + 30 archipelago + 36 bottom bleed (Core composition).
+        // Float: 24 bleed + 284 panel + 8 gap + 32 archipelago + 36 bottom bleed (Core composition).
         Assert.Equal(
             LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight + LayeredSurfaceSize.ArchipelagoGap
                 + LayeredSurfaceSize.ArchipelagoStripHeight + LayeredSurfaceSize.BottomPadding,
@@ -32,7 +32,7 @@ public sealed class LayeredHostTests
         Assert.Equal(LayeredSurfaceSize.DetachedLaneHeight,
             LayeredSurfaceSize.ArchipelagoGap + LayeredSurfaceSize.ArchipelagoStripHeight + LayeredSurfaceSize.BottomPadding);
 
-        // Dock: 24 bleed + 284 panel + 8 gap + 52 strip + 10 gap + 30 archipelago + 36 bottom bleed.
+        // Dock: 24 bleed + 284 panel + 8 gap + 52 strip + 8 gap + 32 archipelago + 36 bottom bleed.
         Assert.Equal(
             LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight + LayeredSurfaceSize.DockGap
                 + LayeredSurfaceSize.DockStripHeight + LayeredSurfaceSize.ArchipelagoGap
@@ -88,7 +88,7 @@ public sealed class LayeredHostTests
         Assert.Equal(new VisualPoint(24, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
 
         // Core dock composition keeps the panel at the top (24..308); the dock strip lives below
-        // it (316..368) and the archipelago strip below that (378..408). The host must not shift
+        // it (316..368) and the archipelago strip below that (376..408). The host must not shift
         // the window for dock mode; Core's WindowPixel is authoritative.
         var dockOffset = LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock);
         Assert.Equal(24, dockOffset.X);
@@ -108,12 +108,12 @@ public sealed class LayeredHostTests
         Assert.Equal(new VisualPoint(24, 24),
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float, ShellForm.Compact));
 
-        // Local rects the renderer paints in dock mode: panel 24..308, strip 316..368, arch 378..408.
+        // Local rects the renderer paints in dock mode: panel 24..308, strip 316..368, arch 376..408.
         Assert.Equal(24, LayeredSurfaceSize.Padding);
         Assert.Equal(308, LayeredSurfaceSize.Padding + LayeredSurfaceSize.PanelHeight);
         Assert.Equal(316, LayeredSurfaceSize.DockStripTop);
         Assert.Equal(368, LayeredSurfaceSize.DockStripTop + LayeredSurfaceSize.DockStripHeight);
-        Assert.Equal(378, LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock));
+        Assert.Equal(376, LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock));
         Assert.Equal(408, LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock) + LayeredSurfaceSize.ArchipelagoStripHeight);
     }
 
@@ -134,13 +134,16 @@ public sealed class LayeredHostTests
         Assert.Equal(LayeredSurfaceSize.DockStripTop, dockSurface.DockStripTopLocal);
         Assert.Equal(LayeredSurfaceSize.DockStripHeight, dockSurface.DockStripLocal.Height);
         // Core owns the prototype2 rail band (8 DIP gap, 32 DIP strip): float 316, dock 376. The
-        // LayeredSurfaceSize copy of those two lane constants is a pre-prototype snapshot that no
-        // runtime path reads (the window size composes to the same 384/444), so it is not compared.
+        // LayeredSurfaceSize copy of those two lane constants is now synced to Core as well; the
+        // surface heights still compose to the same 384/444.
         Assert.Equal(316, floatSurface.ArchipelagoTopLocal, 1e-9);
         Assert.Equal(376, dockSurface.ArchipelagoTopLocal, 1e-9);
         Assert.Equal(32, dockSurface.ArchipelagoStripLocal.Height, 1e-9);
         Assert.Equal(32, floatSurface.ArchipelagoStripLocal.Height, 1e-9);
-        Assert.Equal(LayeredSurfaceSize.ArchipelagoStripHeight, 30);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Float), floatSurface.ArchipelagoTopLocal, 1e-9);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock), dockSurface.ArchipelagoTopLocal, 1e-9);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoStripHeight, 32);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoGap, 8);
     }
 
     [Theory]

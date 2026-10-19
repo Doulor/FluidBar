@@ -1,7 +1,9 @@
 using FluidBar.App.Hosting.Skia;
+using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
 using FluidBar.Platform.Windows.Accessibility;
+using SkiaSharp;
 
 namespace FluidBar.Ui.Tests;
 
@@ -79,6 +81,75 @@ public sealed class SkiaIslandUiaTests
         Assert.NotNull(brightness);
         Assert.Equal(78.0, brightness!.State.RangeValue);
         Assert.Equal(4, body!.Children.Count(child => child.Id.StartsWith("island.page.0.toggle.", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void ExpandedSnapshot_ExposesTheSettingsGearOnEveryPage()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.ExpandAndSettle();
+
+        foreach (var page in new[] { 0, 1, 5 })
+        {
+            fixture.GoToPage(page);
+            var settings = source.BuildSnapshot().Find(SkiaIslandUiaElementIds.Settings);
+
+            Assert.NotNull(settings);
+            Assert.Equal(UiaElementRole.Button, settings!.Role);
+            Assert.Equal(UiaPatternKind.Invoke, settings.Patterns);
+            Assert.True(settings.State.IsFocusable);
+            Assert.False(settings.State.IsOffscreen);
+            Assert.False(string.IsNullOrWhiteSpace(settings.Name));
+            Assert.False(string.IsNullOrWhiteSpace(settings.HelpText));
+
+            var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(fixture.Controller.RenderState));
+            var gear = PageLayout.SettingsRect(content);
+            Assert.Equal(new UiaRect(gear.Left, gear.Top, gear.Width, gear.Height), settings.BoundsDip);
+        }
+    }
+
+    [Fact]
+    public void SettingsGear_InvokeRaisesTheSettingsRequestWithoutLeavingTheIsland()
+    {
+        var (fixture, source, actions) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        var requested = 0;
+        fixture.Controller.SettingsRequested += () => requested++;
+        var page = fixture.Controller.RenderState.PageIndex;
+
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, SkiaIslandUiaElementIds.Settings));
+
+        Assert.Equal(1, requested);
+        Assert.Empty(actions.Calls);
+        Assert.Equal(page, fixture.Controller.RenderState.PageIndex);
+        Assert.Equal(UiaExpandCollapseState.Expanded, source.BuildSnapshot().State.ExpandCollapse);
+    }
+
+    [Fact]
+    public void Keyboard_TabReachesTheSettingsGear_AndEnterOpensSettings()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.ExpandAndSettle();
+        source.NotifyWindowFocus(true);
+        var requested = 0;
+        fixture.Controller.SettingsRequested += () => requested++;
+
+        Assert.True(source.HandleKey(UiaKeyCommand.Tab));
+        Assert.Equal(SkiaIslandUiaElementIds.Root, source.FocusedElementId);
+        Assert.True(source.HandleKey(UiaKeyCommand.Tab));
+        Assert.Equal(SkiaIslandUiaElementIds.Collapse, source.FocusedElementId);
+        Assert.True(source.HandleKey(UiaKeyCommand.Tab));
+        Assert.Equal(SkiaIslandUiaElementIds.Settings, source.FocusedElementId);
+
+        Assert.True(source.HandleKey(UiaKeyCommand.Enter));
+        Assert.Equal(1, requested);
     }
 
     [Fact]
@@ -295,6 +366,89 @@ public sealed class SkiaIslandUiaTests
     }
 
     [Fact]
+    public void RevealedStrip_GivesEveryPageTabOnScreenBoundsAndKeepsThemSelectable()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(3);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.RunToRest();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        Assert.Equal(3, strip.Page);
+        Assert.Equal(2, strip.DotsLeft.Length);  // pages 0..1 form the far-left cluster
+        Assert.Equal(1, strip.DotsRight.Length); // page 5 is the far-right cluster
+
+        var root = source.BuildSnapshot();
+        for (var page = 0; page < PagerConstants.PageCount; page++)
+        {
+            var tab = root.Find(SkiaIslandUiaElementIds.Page(page));
+            Assert.NotNull(tab);
+            Assert.False(tab!.State.IsOffscreen, $"page {page} tab should be on screen while the strip is revealed");
+            Assert.False(tab.BoundsDip.IsEmpty, $"page {page} tab should report a bounding rectangle");
+            Assert.True(tab.BoundsDip.Width > 0 && tab.BoundsDip.Height > 0, $"page {page} tab has a degenerate rectangle");
+        }
+
+        // A far tab reports the dot that represents its direction: nearest page ↔ nearest dot.
+        Assert.Equal(ToUia(SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState).Current),
+            root.Find(SkiaIslandUiaElementIds.Page(3))!.BoundsDip);
+        Assert.Equal(ToUia(SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState).Previous),
+            root.Find(SkiaIslandUiaElementIds.Page(2))!.BoundsDip);
+        Assert.Equal(ToUia(SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState).Next),
+            root.Find(SkiaIslandUiaElementIds.Page(4))!.BoundsDip);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[0])),
+            root.Find(SkiaIslandUiaElementIds.Page(1))!.BoundsDip);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[1])),
+            root.Find(SkiaIslandUiaElementIds.Page(0))!.BoundsDip);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsRight[0])),
+            root.Find(SkiaIslandUiaElementIds.Page(5))!.BoundsDip);
+
+        // Being on screen also means Select routes to the exact page, not to the cluster target.
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Select, SkiaIslandUiaElementIds.Page(0)));
+        fixture.RunToRest();
+        Assert.Equal(0, fixture.Controller.RenderState.PageIndex);
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Select, SkiaIslandUiaElementIds.Page(5)));
+        fixture.RunToRest();
+        Assert.Equal(5, fixture.Controller.RenderState.PageIndex);
+    }
+
+    [Fact]
+    public void OverflowingCluster_ClampsFarTabsIntoTheOutermostDot()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(5);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.RunToRest();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        Assert.Equal(5, strip.Page);
+        Assert.Equal(3, strip.DotsLeft.Length); // pages 0..3 are four far pages behind three dots
+        Assert.Empty(strip.DotsRight);
+
+        var root = source.BuildSnapshot();
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[0])),
+            root.Find(SkiaIslandUiaElementIds.Page(3))!.BoundsDip);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[1])),
+            root.Find(SkiaIslandUiaElementIds.Page(2))!.BoundsDip);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[2])),
+            root.Find(SkiaIslandUiaElementIds.Page(1))!.BoundsDip);
+
+        // The page hidden behind the overflow dot still gets a real rectangle and stays selectable.
+        var hidden = root.Find(SkiaIslandUiaElementIds.Page(0))!;
+        Assert.False(hidden.State.IsOffscreen);
+        Assert.Equal(ToUia(IslandStripLayout.DotHitRect(strip.DotsLeft[2])), hidden.BoundsDip);
+
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Select, SkiaIslandUiaElementIds.Page(2)));
+        fixture.RunToRest();
+        Assert.Equal(2, fixture.Controller.RenderState.PageIndex);
+    }
+
+    [Fact]
     public void NotificationRowsAndDismiss_DispatchTheRowActions()
     {
         var (fixture, source, actions) = Create();
@@ -406,4 +560,10 @@ public sealed class SkiaIslandUiaTests
         Assert.Empty(root.Children);
         Assert.Equal(UiaExpandCollapseState.Collapsed, root.State.ExpandCollapse);
     }
+
+    /// <summary>Converts a strip rectangle to the DIP rectangle the snapshot reports.</summary>
+    private static UiaRect ToUia(SKRect rect)
+        => rect.Width <= 0 || rect.Height <= 0
+            ? UiaRect.Empty
+            : new UiaRect(rect.Left, rect.Top, rect.Width, rect.Height);
 }

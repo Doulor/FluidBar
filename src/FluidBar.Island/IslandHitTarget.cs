@@ -24,6 +24,9 @@ public enum IslandHitKind
     /// <summary>Collapse chevron.</summary>
     Collapse,
 
+    /// <summary>Settings gear in the expanded header (opens the settings window).</summary>
+    Settings,
+
     /// <summary>A detached mini-island slot (prev/current/next); <see cref="IslandHitTarget.PageIndex"/> is the page.</summary>
     RailSlot,
 
@@ -105,9 +108,10 @@ public readonly record struct IslandHitTarget(
     /// <summary>Whether the point hit an actionable region (the title overlay is informational).</summary>
     public bool IsInteractive => Kind is not (IslandHitKind.None or IslandHitKind.Title);
 
-    /// <summary>Whether the hit is inside the shell (shell/page/compact/collapse/title).</summary>
+    /// <summary>Whether the hit is inside the shell (shell/page/compact/collapse/settings/title).</summary>
     public bool IsShell => Kind is IslandHitKind.Shell or IslandHitKind.Compact or IslandHitKind.Page
-        or IslandHitKind.PageControl or IslandHitKind.Title or IslandHitKind.Collapse;
+        or IslandHitKind.PageControl or IslandHitKind.Title or IslandHitKind.Collapse
+        or IslandHitKind.Settings;
 
     /// <summary>Whether the hit is on the detached strip (mini-island or dot).</summary>
     public bool IsDetached => Kind is IslandHitKind.RailSlot or IslandHitKind.DotLeft or IslandHitKind.DotRight;

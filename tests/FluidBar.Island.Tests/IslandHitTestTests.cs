@@ -1,4 +1,5 @@
 using FluidBar.Core.Activities;
+using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
 using SkiaSharp;
@@ -96,6 +97,36 @@ public sealed class IslandHitTestTests
 
         Assert.Equal(IslandHitKind.None, Hit(state, 10, 10).Kind);
         Assert.True(content.Width > 0);
+    }
+
+    [Fact]
+    public void Expanded_header_settings_gear_is_its_own_hit_target()
+    {
+        var state = IslandTestFixtures.Expanded(0);
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
+        var gear = PageLayout.SettingsRect(content);
+
+        var hit = Hit(state, gear.MidX, gear.MidY);
+        Assert.Equal(IslandHitKind.Settings, hit.Kind);
+        Assert.True(hit.IsInteractive);
+        Assert.True(hit.IsShell);
+
+        // The gear, the chevron and the title must not overlap: each header element stays reachable.
+        Assert.False(PageLayout.CollapseRect(content).Contains(gear.MidX, gear.MidY));
+        Assert.False(PageLayout.PageTitleRect(content).Contains(gear.MidX, gear.MidY));
+        Assert.False(gear.Contains(PageLayout.CollapseRect(content).MidX, PageLayout.CollapseRect(content).MidY));
+
+        var title = PageLayout.PageTitleRect(content);
+        Assert.Equal(IslandHitKind.Title, Hit(state, title.MidX, title.MidY).Kind);
+        var chevron = PageLayout.CollapseRect(content);
+        Assert.Equal(IslandHitKind.Collapse, Hit(state, chevron.MidX, chevron.MidY).Kind);
+
+        // Every expanded page carries the same entry.
+        for (var page = 0; page < PagerConstants.PageCount; page++)
+        {
+            var pageState = IslandTestFixtures.Expanded(page);
+            Assert.Equal(IslandHitKind.Settings, Hit(pageState, gear.MidX, gear.MidY).Kind);
+        }
     }
 
     [Fact]

@@ -57,8 +57,8 @@ public readonly record struct LayeredPixelSize(int Width, int Height)
 /// The two fixed per-mode host surfaces (DIP). Both are 488 DIP wide (440 shell + 2x24 bleed) and
 /// follow Core's <see cref="FluidBar.Core.Layout.HostSurface"/> composition exactly:
 /// <list type="bullet">
-/// <item>Float 488x384 = 24 bleed + 284 panel + 10 gap + 30 archipelago strip + 36 bottom bleed.</item>
-/// <item>Dock 488x444 = 24 bleed + 284 panel + 8 gap + 52 dock strip + 10 gap + 30 archipelago strip + 36 bottom bleed.</item>
+/// <item>Float 488x384 = 24 bleed + 284 panel + 8 gap + 32 archipelago strip + 36 bottom bleed.</item>
+/// <item>Dock 488x444 = 24 bleed + 284 panel + 8 gap + 52 dock strip + 8 gap + 32 archipelago strip + 36 bottom bleed.</item>
 /// </list>
 /// In dock mode the strip sits <b>below</b> the panel (Core's composition), so the expanded panel is
 /// always at (24,24) in both modes and only the compact dock shell is anchored at the strip top
@@ -71,10 +71,10 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Host surface width for both modes (DIP).</summary>
     public const double Width = 488;
 
-    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 10 gap + 30 strip + 36 bleed.</summary>
+    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 8 gap + 32 strip + 36 bleed.</summary>
     public const double FloatHeight = 384;
 
-    /// <summary>Dock surface height (DIP): 24 + 284 panel + 8 gap + 52 strip + 10 gap + 30 strip + 36 bleed.</summary>
+    /// <summary>Dock surface height (DIP): 24 + 284 panel + 8 gap + 52 strip + 8 gap + 32 strip + 36 bleed.</summary>
     public const double DockHeight = 444;
 
     /// <summary>Bleed around the shell for the soft shadow/antialiasing (DIP).</summary>
@@ -92,11 +92,11 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Gap between the dock strip and the panel above it (DIP).</summary>
     public const double DockGap = 8;
 
-    /// <summary>Gap between the shell/dock strip and the archipelago strip (DIP).</summary>
-    public const double ArchipelagoGap = 10;
+    /// <summary>Gap between the shell/dock strip and the archipelago strip (DIP); matches Core's <c>LayoutTokens.ArchipelagoGap</c>.</summary>
+    public const double ArchipelagoGap = 8;
 
-    /// <summary>Archipelago strip envelope height (DIP).</summary>
-    public const double ArchipelagoStripHeight = 30;
+    /// <summary>Archipelago strip envelope height (DIP); matches Core's <c>LayoutTokens.ArchipelagoStripHeight</c>.</summary>
+    public const double ArchipelagoStripHeight = 32;
 
     /// <summary>Transparent bottom bleed below the archipelago strip (DIP).</summary>
     public const double BottomPadding = 36;
@@ -104,10 +104,10 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Dock strip top inside the surface (24 + 284 + 8 = 316); matches Core's <c>DockStripTopLocal</c>.</summary>
     public const double DockStripTop = Padding + PanelHeight + DockGap;
 
-    /// <summary>Transparent band below the expanded panel in float mode (10 + 30 + 36 = 76 DIP).</summary>
+    /// <summary>Transparent band below the expanded panel in float mode (8 + 32 + 36 = 76 DIP).</summary>
     public const double DetachedLaneHeight = ArchipelagoGap + ArchipelagoStripHeight + BottomPadding;
 
-    /// <summary>Transparent band below the expanded panel in dock mode (8 + 52 + 10 + 30 + 36 = 136 DIP).</summary>
+    /// <summary>Transparent band below the expanded panel in dock mode (8 + 52 + 8 + 32 + 36 = 136 DIP).</summary>
     public const double DockBottomAllowance = DockHeight - Padding - PanelHeight;
 
     /// <summary>Float surface size (488x384 DIP).</summary>
@@ -120,7 +120,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     public static LayeredSurfaceSize ForMode(LayeredHostMode mode)
         => mode == LayeredHostMode.Dock ? Dock : Float;
 
-    /// <summary>Archipelago strip top inside the surface (318 float, 378 dock), matching Core.</summary>
+    /// <summary>Archipelago strip top inside the surface (316 float, 376 dock), matching Core.</summary>
     public static double ArchipelagoTop(LayeredHostMode mode) => mode == LayeredHostMode.Dock
         ? DockStripTop + DockStripHeight + ArchipelagoGap
         : Padding + PanelHeight + ArchipelagoGap;
