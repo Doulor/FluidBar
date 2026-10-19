@@ -271,8 +271,8 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         // The first ShowWindow call of a process is overridden by STARTUPINFO (a console-launched
         // WinExe can start hidden), so force visibility with SWP_SHOWWINDOW as well.
-        if (!NativeMethods.User32.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER
+        if (!NativeMethods.User32.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE
                 | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW))
         {
             _counters.IncrementWin32Failures();

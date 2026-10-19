@@ -106,3 +106,10 @@
 ### 2026-10-19 12:35 — 最终发布校验
 - 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `DA422BA5…37362`；发布 smoke 420 帧、0 提交失败、surface 732×576 @150%、上传 ~273µs。
 - 全量 1477 tests 绿；热键可在设置中编辑并实时重注册。
+
+### 2026-10-19 13:45 — 可用性热修（顶层窗口 / 托盘菜单 / 点击）
+- **根因 1**：`LayeredWindowHost.Show()` 使用 `SWP_NOZORDER`，岛窗口虽带 `WS_EX_TOPMOST` 但没有真正进入 topmost 带；其他窗口可能盖在上面，导致点击落不到岛、视觉却仍可见。现在 `Show()` 用 `SetWindowPos(HWND_TOPMOST, ...)` 强制置顶。
+- **根因 2**：托盘菜单使用 message-only HWND，`TrackPopupMenu` 无法在 `HWND_MESSAGE` 上显示；托盘窗口改为 `PlatformWindowKind.HiddenTopLevel`，右键菜单可正常弹出。
+- 紧凑岛改为**按下即展开**（拖动移动作为次级手势），避免 click-vs-drag 让单击感觉无响应；命中区域保留 8 DIP 防御性 padding。
+- 测试：1478 passed / 0 failed；Release smoke 330 帧/0 失败。
+- 注意：如果桌面上还有旧版 FluidBar 进程/自启动项，请先全部退出再运行新 exe。

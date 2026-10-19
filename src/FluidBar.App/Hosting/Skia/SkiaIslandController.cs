@@ -606,14 +606,8 @@ public sealed class SkiaIslandController : IDisposable
                     return true;
                 }
 
-                if (IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
-                {
-                    _clickPending = true;
-                    _clickXDip = xDip;
-                    _clickYDip = yDip;
-                    return true;
-                }
-
+                // Expand on press: the compact pill is the primary affordance. Drag-to-move is a
+                // secondary gesture; it must never make a normal click feel unresponsive.
                 ApplyInput(IslandInput.PrimaryClick());
                 return true;
 
@@ -1398,3 +1392,4 @@ public sealed class SkiaIslandController : IDisposable
         return new VisualRect(left, top, right - left, bottom - top);
     }
 }
+

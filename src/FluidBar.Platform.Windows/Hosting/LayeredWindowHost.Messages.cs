@@ -201,9 +201,29 @@ public sealed partial class LayeredWindowHost
             return NativeMethods.HTTRANSPARENT;
         }
 
-        return _hitRegion.IsInteractivePixels(point.X, point.Y, _scale)
-            ? NativeMethods.HTCLIENT
-            : NativeMethods.HTTRANSPARENT;
+        if (_hitRegion.IsInteractivePixels(point.X, point.Y, _scale))
+        {
+            return NativeMethods.HTCLIENT;
+        }
+
+        // Defensive fallback: if the shell/region and the visual disagree by a few DIP (DPI or
+        // layout races), keep a small padded band around the shell clickable instead of dropping
+        // the click through to the window below. The transparent bleed far from the shell stays
+        // click-through.
+        if (_hitRegion.Shell is { } shell && _scale > 0)
+        {
+            var dipX = point.X / _scale;
+            var dipY = point.Y / _scale;
+            var bounds = shell.Bounds;
+            const double padding = 8;
+            if (dipX >= bounds.X - padding && dipX <= bounds.Right + padding
+                && dipY >= bounds.Y - padding && dipY <= bounds.Bottom + padding)
+            {
+                return NativeMethods.HTCLIENT;
+            }
+        }
+
+        return NativeMethods.HTTRANSPARENT;
     }
 
     private IntPtr OnSetCursor(IntPtr wParam, IntPtr lParam)
@@ -516,3 +536,6 @@ public sealed partial class LayeredWindowHost
 
     private static int ScreenY(IntPtr lParam) => unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
 }
+
+
+

@@ -580,7 +580,10 @@ public sealed class SkiaIslandHost : IDisposable
             EnsureDeadlineTicker();
             EnsureFrameLoop();
         };
-        host.PointerReleased += pointer => _controller.HandlePointerReleased(pointer.ClientXDip, pointer.ClientYDip);
+        host.PointerReleased += pointer =>
+        {
+            _controller.HandlePointerReleased(pointer.ClientXDip, pointer.ClientYDip);
+        };
         host.PointerWheel += wheel =>
         {
             // One Win32 notch (120) equals one 140 DIP Core wheel notch; wheel-down advances a page.
@@ -1471,4 +1474,9 @@ public sealed class SkiaIslandHost : IDisposable
         }
     }
 }
+
+
+
+
+
 

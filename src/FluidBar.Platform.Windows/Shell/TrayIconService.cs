@@ -90,7 +90,7 @@ public sealed class TrayIconService : IAsyncDisposable
         }
 
         _toolTip = Truncate(options.ToolTip, MaxToolTipLength);
-        var window = await _host.CreateWindowAsync("tray", PlatformWindowKind.MessageOnly,
+        var window = await _host.CreateWindowAsync("tray", PlatformWindowKind.HiddenTopLevel,
             OnWindowMessage, cancellationToken).ConfigureAwait(false);
 
         try
@@ -464,3 +464,4 @@ internal static class Shell32Interop
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     internal static extern bool Shell_NotifyIconW(uint dwMessage, ref NativeMethods.NOTIFYICONDATAW lpData);
 }
+
