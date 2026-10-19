@@ -31,6 +31,12 @@ public sealed record SkiaIslandHostOptions
     /// <summary>Injected time source (deadlines, wheel cooldowns).</summary>
     public TimeProvider? TimeProvider { get; init; }
 
+    /// <summary>
+    /// Resolved Windows appearance (theme / reduced motion / accent) used by the "follow system" settings.
+    /// Defaults to the cached platform probe; tests inject a mutable snapshot.
+    /// </summary>
+    public Func<SystemAppearanceSnapshot>? AppearanceSnapshot { get; init; }
+
     /// <summary>Whether to reveal the island on startup (settings can disable it).</summary>
     public bool StartVisible { get; init; } = true;
 

@@ -350,6 +350,31 @@ public static class LayoutTokens
     public static VisualSize CompactSize(Activities.ActivityKind? kind, IslandMode mode)
         => mode == IslandMode.Dock ? new VisualSize(DockStripWidth, DockStripHeight) : CompactSize(kind);
 
+    /// <summary>Minimum supported island font scale (settings → appearance).</summary>
+    public const double MinFontScale = 0.8;
+
+    /// <summary>Maximum supported island font scale (settings → appearance).</summary>
+    public const double MaxFontScale = 1.6;
+
+    /// <summary>
+    /// Font-scale aware compact size: the prototype token is multiplied by the clamped scale and capped
+    /// at the expanded width/height, so the pill grows with its wider text (no truncation or overlap)
+    /// while still fitting the fixed 488 DIP host surface. Scale 1.0 returns the token unchanged.
+    /// </summary>
+    /// <param name="kind">Activity kind (null = idle).</param>
+    /// <param name="mode">Presentation mode.</param>
+    /// <param name="fontScale">Island font scale (0.8–1.6).</param>
+    public static VisualSize CompactSizeFor(Activities.ActivityKind? kind, IslandMode mode, double fontScale)
+    {
+        var size = CompactSize(kind, mode);
+        var scale = double.IsFinite(fontScale) ? Math.Clamp(fontScale, MinFontScale, MaxFontScale) : 1.0;
+        return Math.Abs(scale - 1.0) < 1e-9
+            ? size
+            : new VisualSize(
+                Math.Min(ExpandedWidth, Math.Round(size.Width * scale, 2)),
+                Math.Min(ExpandedHeight, Math.Round(size.Height * scale, 2)));
+    }
+
     /// <summary>Expanded size; uniform for every page (lead decision).</summary>
     public static VisualSize ExpandedSize() => new(ExpandedWidth, ExpandedHeight);
 

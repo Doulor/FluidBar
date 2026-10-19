@@ -142,18 +142,28 @@ public static class SkiaIslandHitTest
         out int index)
     {
         var pages = state.Pages;
-        return page switch
+        var metrics = FontScaleMetrics.From(state.FontScale);
+        var count = page switch
         {
-            2 => PageLayout.HitTest(page, pageRect, x, y, out index,
-                (float)pages.Notifications.ScrollOffset, pages.Notifications.Items?.Count ?? 0),
-            3 => PageLayout.HitTest(page, pageRect, x, y, out index,
-                (float)pages.Clipboard.ScrollOffset, pages.Clipboard.Items?.Count ?? 0),
-            4 => PageLayout.HitTest(page, pageRect, x, y, out index,
-                (float)pages.Agent.ScrollOffset, pages.Agent.Items?.Count ?? 0),
-            5 => PageLayout.HitTest(page, pageRect, x, y, out index,
-                0, pages.Widgets.Tasks?.Count ?? 0),
-            _ => PageLayout.HitTest(page, pageRect, x, y, out index),
+            0 => 4,
+            1 => 1,
+            2 => pages.Notifications.Items?.Count ?? 0,
+            3 => pages.Clipboard.Items?.Count ?? 0,
+            4 => pages.Agent.Items?.Count ?? 0,
+            5 => pages.Widgets.Tasks?.Count ?? 0,
+            _ => 0,
         };
+        var scroll = page switch
+        {
+            0 => (float)pages.Home.ScrollOffset,
+            1 => (float)pages.Media.ScrollOffset,
+            2 => (float)pages.Notifications.ScrollOffset,
+            3 => (float)pages.Clipboard.ScrollOffset,
+            4 => (float)pages.Agent.ScrollOffset,
+            5 => (float)pages.Widgets.ScrollOffset,
+            _ => 0f,
+        };
+        return PageMetricsLayout.HitTest(page, pageRect, x, y, metrics, scroll, count, out index);
     }
 
     private static IslandHitTarget HitStrip(in IslandRenderState state, SKRect shell, float x, float y)

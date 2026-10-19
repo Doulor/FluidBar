@@ -94,6 +94,13 @@ public readonly record struct IslandRenderState
     /// <summary>Continuous pager position, committed page and gesture flags.</summary>
     public PagerRenderState Pager { get; init; }
 
+    /// <summary>
+    /// Island font scale from settings → appearance (0.8–1.6; 1.0 = the approved prototype sizes).
+    /// Renderers scale every text style through <see cref="ScaledText"/> and grow their containers by
+    /// the measured line-height delta so text never overflows or overlaps.
+    /// </summary>
+    public double FontScale { get; init; } = 1.0;
+
     /// <summary>Compact activity; null renders the idle pill.</summary>
     public CompactActivity? Compact { get; init; }
 
@@ -137,9 +144,10 @@ public readonly record struct IslandRenderState
         IslandTheme theme,
         PagerRenderState pager = default,
         ArchipelagoState archipelago = default,
-        ShellForm form = ShellForm.Compact)
+        ShellForm form = ShellForm.Compact,
+        double fontScale = 1.0)
     {
-        var size = LayoutTokens.CompactSize(activity?.Kind, mode);
+        var size = LayoutTokens.CompactSizeFor(activity?.Kind, mode, fontScale);
         var radii = LayoutTokens.RadiiFor(form, mode, size.Height);
         var host = HostSurface.ForMode(mode);
         var origin = mode == IslandMode.Dock
@@ -158,6 +166,7 @@ public readonly record struct IslandRenderState
             Pages = ExpandedPageContent.Empty,
             Theme = theme,
             Archipelago = archipelago,
+            FontScale = fontScale,
         };
     }
 
@@ -167,7 +176,8 @@ public readonly record struct IslandRenderState
         PagerRenderState pager,
         ExpandedPageContent pages,
         IslandTheme theme,
-        ArchipelagoState archipelago = default)
+        ArchipelagoState archipelago = default,
+        double fontScale = 1.0)
     {
         var host = HostSurface.ForMode(mode);
         return new IslandRenderState
@@ -183,6 +193,7 @@ public readonly record struct IslandRenderState
             Pages = pages,
             Theme = theme,
             Archipelago = archipelago,
+            FontScale = fontScale,
         };
     }
 
@@ -487,6 +498,9 @@ public sealed record ExpandedPageContent
 /// <summary>Home page (control center) model.</summary>
 public sealed record HomePageModel
 {
+    /// <summary>Vertical scroll offset in DIP (content can exceed the 232 DIP body at large font scales).</summary>
+    public double ScrollOffset { get; init; }
+
     /// <summary>Clock text (HH:mm).</summary>
     public string? ClockText { get; init; }
 
@@ -579,6 +593,9 @@ public sealed record MediaSummaryModel
 /// <summary>Expanded media page model.</summary>
 public sealed record MediaPageModel
 {
+    /// <summary>Vertical scroll offset in DIP (content can exceed the 232 DIP body at large font scales).</summary>
+    public double ScrollOffset { get; init; }
+
     /// <summary>Whether a media session exists; false draws the empty state.</summary>
     public bool HasSession { get; init; } = true;
 
@@ -814,6 +831,9 @@ public sealed record AgentItemModel
 /// <summary>Expanded widgets page (page 5): month calendar, weather, system stats and a task list.</summary>
 public sealed record WidgetsPageModel
 {
+    /// <summary>Vertical scroll offset in DIP (widgets content can exceed the 232 DIP body at large scales).</summary>
+    public double ScrollOffset { get; init; }
+
     /// <summary>Calendar month title ("October 2026").</summary>
     public string? CalendarMonthTitle { get; init; }
 

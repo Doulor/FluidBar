@@ -41,7 +41,8 @@ internal sealed class ControllerFixture : IDisposable
     public static ControllerFixture Create(
         AppSettings? settings = null,
         IIslandPlatformActions? actions = null,
-        RecordingAppLogger? logger = null)
+        RecordingAppLogger? logger = null,
+        Func<SystemAppearanceSnapshot>? appearance = null)
     {
         var time = new FakeTimeProvider();
         var localizer = new FakeLocalizer();
@@ -58,6 +59,7 @@ internal sealed class ControllerFixture : IDisposable
             TimeProvider = time,
             PlatformActions = actions,
             TargetFrameRate = 120,
+            AppearanceSnapshot = appearance,
         });
         controller.Start();
         return new ControllerFixture(controller, settingsController, data, time, recording);

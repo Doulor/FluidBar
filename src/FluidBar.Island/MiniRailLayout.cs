@@ -70,12 +70,26 @@ public static class MiniRailLayout
     /// <param name="label">Short page label.</param>
     public static float LabelWidth(string? label) => MiniRailText.LabelWidth(label);
 
+    /// <summary>Locale label width at a font scale (same faces the rail paints, scaled).</summary>
+    /// <param name="label">Short page label.</param>
+    /// <param name="fontScale">Island font scale (0.8–1.6).</param>
+    public static float LabelWidth(string? label, double fontScale) => MiniRailText.LabelWidth(label, fontScale);
+
     /// <summary>
     /// Prototype capsule width for one label: `round(64 + max(0, ceil(labelW) − 20) × 1.1)`,
     /// clamped to 64..104 DIP. Measured sizes: 主页/媒体/通知 64, 剪贴板/小组件 73, Agent 70.
     /// </summary>
     /// <param name="label">Short page label.</param>
     public static float CapsuleWidth(string? label) => MiniRailText.CapsuleWidth(label);
+
+    /// <summary>
+    /// The same capsule contract with the label measured at <paramref name="fontScale"/>:
+    /// <c>round(64 + max(0, ceil(labelW × scale) − 20) × 1.1)</c> clamped to 64..104 DIP. Because the
+    /// width and the painted label share one measurement, text can never leave the capsule.
+    /// </summary>
+    /// <param name="label">Short page label.</param>
+    /// <param name="fontScale">Island font scale (0.8–1.6).</param>
+    public static float CapsuleWidth(string? label, double fontScale) => MiniRailText.CapsuleWidth(label, fontScale);
 
     /// <summary>
     /// Current capsule width at a continuous pager position: the prototype morphs the capsule between
@@ -85,11 +99,18 @@ public static class MiniRailLayout
     /// <param name="pagePosition">Continuous pager position (0..5).</param>
     /// <param name="pages">Expanded page content that owns the localized short labels (may be null).</param>
     public static float CapsuleWidthAt(double pagePosition, ExpandedPageContent? pages)
+        => CapsuleWidthAt(pagePosition, pages, 1.0);
+
+    /// <summary>Capsule width at a continuous pager position and font scale.</summary>
+    /// <param name="pagePosition">Continuous pager position (0..5).</param>
+    /// <param name="pages">Expanded page content that owns the localized short labels (may be null).</param>
+    /// <param name="fontScale">Island font scale (0.8–1.6).</param>
+    public static float CapsuleWidthAt(double pagePosition, ExpandedPageContent? pages, double fontScale)
     {
         const int lastPage = PagerConstants.PageCount - 1;
         var position = Position(pagePosition);
         var lower = (int)Math.Floor(position);
-        var lowerWidth = CapsuleWidth(Label(pages, lower));
+        var lowerWidth = CapsuleWidth(Label(pages, lower), fontScale);
         if (lower >= lastPage)
         {
             return lowerWidth;
@@ -101,7 +122,7 @@ public static class MiniRailLayout
             return lowerWidth;
         }
 
-        var upperWidth = CapsuleWidth(Label(pages, lower + 1));
+        var upperWidth = CapsuleWidth(Label(pages, lower + 1), fontScale);
         if (Math.Abs(upperWidth - lowerWidth) < 0.0001f)
         {
             return lowerWidth;
@@ -130,7 +151,7 @@ public static class MiniRailLayout
         var arch = state.Archipelago;
         var position = Position(double.IsFinite(arch.PagePosition) ? arch.PagePosition : state.Pager.PagePosition);
         var page = PageAt(position);
-        var capsule = CapsuleWidthAt(position, state.Pages);
+        var capsule = CapsuleWidthAt(position, state.Pages, state.FontScale);
         var leftDots = arch.ResolvedFarLeftDots;
         var rightDots = arch.ResolvedFarRightDots;
         var leftWide = arch.ResolvedFarLeftOverflow;
@@ -231,21 +252,30 @@ public static class MiniRailLayout
 /// </summary>
 public static class MiniRailText
 {
-    private static readonly ConcurrentDictionary<string, float> WidthCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<(string Label, float Scale), float> WidthCache = new();
+    private static readonly ConcurrentDictionary<float, Fonts> ScaledFonts = new();
     private static readonly Lazy<Fonts> SharedFonts = new(CreateFonts, LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>Measured label width in DIP (0 for an empty label).</summary>
     /// <param name="label">Short page label.</param>
-    public static float LabelWidth(string? label)
+    public static float LabelWidth(string? label) => LabelWidth(label, 1.0);
+
+    /// <summary>Measured label width in DIP at a font scale (clamped to 0.8–1.6).</summary>
+    /// <param name="label">Short page label.</param>
+    /// <param name="fontScale">Island font scale.</param>
+    public static float LabelWidth(string? label, double fontScale)
     {
         if (string.IsNullOrEmpty(label))
         {
             return 0;
         }
 
-        return WidthCache.GetOrAdd(label, static text =>
+        var scale = (float)Math.Clamp(double.IsFinite(fontScale) ? fontScale : 1.0, 0.8, 1.6);
+        scale = MathF.Round(scale, 3);
+        return WidthCache.GetOrAdd((label, scale), static key =>
         {
-            var fonts = SharedFonts.Value;
+            var (text, s) = key;
+            var fonts = Math.Abs(s - 1f) < 1e-6f ? SharedFonts.Value : ScaledFonts.GetOrAdd(s, CreateScaledFonts);
             var width = 0f;
             var runStart = 0;
             var runIsCjk = IsCjk(char.ConvertToUtf32(text, 0));
@@ -266,8 +296,8 @@ public static class MiniRailText
             var runWidth = width + MeasureRun(text[runStart..], runIsCjk, fonts);
 
             // The prototype label is `letter-spacing: 0.01em`: the browser reports the trailing
-            // advance too, so the measured width carries one 0.09 DIP gap per character.
-            var spacing = (float)(IslandMetrics.MiniLabelSize * IslandMetrics.MiniLabelLetterSpacingEm);
+            // advance too, so the measured width carries one spacing step (scaled) per character.
+            var spacing = (float)(IslandMetrics.MiniLabelSize * s * IslandMetrics.MiniLabelLetterSpacingEm);
             return runWidth + (text.Length * spacing);
         });
     }
@@ -276,9 +306,17 @@ public static class MiniRailText
     /// Prototype capsule width: `round(64 + max(0, ceil(labelW) − 20) × 1.1)` clamped to 64..104 DIP.
     /// </summary>
     /// <param name="label">Short page label.</param>
-    public static float CapsuleWidth(string? label)
+    public static float CapsuleWidth(string? label) => CapsuleWidth(label, 1.0);
+
+    /// <summary>
+    /// The same capsule contract with the label measured at a font scale, so the capsule always grows
+    /// with the painted label and the text can never leave it.
+    /// </summary>
+    /// <param name="label">Short page label.</param>
+    /// <param name="fontScale">Island font scale.</param>
+    public static float CapsuleWidth(string? label, double fontScale)
     {
-        var width = LabelWidth(label);
+        var width = LabelWidth(label, fontScale);
         var grown = IslandMetrics.MiniCurrentBaseWidth
             + (Math.Max(0f, MathF.Ceiling(width) - 20f) * 1.1f);
         return Math.Clamp(
@@ -309,6 +347,27 @@ public static class MiniRailText
                 Hinting = SKFontHinting.None,
             },
             new SKFont(cjk, (float)IslandMetrics.MiniLabelSize)
+            {
+                Edging = SKFontEdging.Antialias,
+                Subpixel = true,
+                Hinting = SKFontHinting.None,
+            });
+    }
+
+    private static Fonts CreateScaledFonts(float scale)
+    {
+        var baseFonts = SharedFonts.Value;
+        var size = (float)IslandMetrics.MiniLabelSize * scale;
+        return new Fonts(
+            baseFonts.Ui,
+            baseFonts.Cjk,
+            new SKFont(baseFonts.Ui, size)
+            {
+                Edging = SKFontEdging.Antialias,
+                Subpixel = true,
+                Hinting = SKFontHinting.None,
+            },
+            new SKFont(baseFonts.Cjk, size)
             {
                 Edging = SKFontEdging.Antialias,
                 Subpixel = true,

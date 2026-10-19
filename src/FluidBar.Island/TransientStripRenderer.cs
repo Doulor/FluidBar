@@ -25,7 +25,7 @@ internal sealed class TransientStripRenderer : IDisposable
     /// <summary>Glass fill of the mini islands: prototype `rgba(26, 26, 31, .72)`.</summary>
     private static readonly SKColor Glass = new(26, 26, 31, 184);
 
-    private readonly TextEngine _text;
+    private readonly ScaledText _text;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _icon = new() { IsAntialias = true };
     private readonly SKPaint _shadow = new() { IsAntialias = true };
@@ -39,7 +39,7 @@ internal sealed class TransientStripRenderer : IDisposable
 
     public TransientStripRenderer(TextEngine text)
     {
-        _text = text;
+        _text = new ScaledText(text);
     }
 
     /// <summary>Current rail envelope in host-local DIP (diagnostics/tests).</summary>
@@ -92,6 +92,7 @@ internal sealed class TransientStripRenderer : IDisposable
             return;
         }
 
+        _text.SetScale(state.FontScale);
         Update(state, shell);
 
         canvas.Save();

@@ -12,6 +12,8 @@ using FluidBar.Island;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Display;
 using FluidBar.Platform.Windows.Hosting;
+using FluidBar.Platform.Windows.Monitors;
+using FluidBar.Platform.Windows.Shell;
 using FluidBar.Platform.Windows.Threading;
 using SkiaSharp;
 using CoreMonitorInfo = FluidBar.Core.Layout.MonitorInfo;
@@ -81,6 +83,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
+    private SystemThemeMonitor? _themeMonitor;
     private PlatformMessageHost? _mouseHookHost;
     private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
@@ -395,6 +398,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _monitorService = null;
         }
 
+        if (_themeMonitor is not null)
+        {
+            _themeMonitor.SnapshotChanged -= OnSystemThemeChanged;
+            _ = _themeMonitor.DisposeAsync();
+            _themeMonitor = null;
+        }
+
         if (_mouseHook is not null)
         {
             _mouseHook.Dispose();
@@ -416,6 +426,34 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     // ------------------------------------------------------------------ composition
 
+    private void OnSystemThemeChanged(object? sender, SnapshotEventArgs<SystemThemeSnapshot> e)
+    {
+        try
+        {
+            // Refresh the cached probe the App's SystemAppearanceSnapshot.FromWindows() reads, then
+            // re-map theme/accent/reduced-motion on the UI thread. Never throws into the monitor.
+            SystemAppearanceProbe.Refresh(_platformLogger);
+            _dispatcher.Post(() =>
+            {
+                try
+                {
+                    _controller.RefreshSystemAppearance();
+                    EnsureFrameLoop();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(LogCategories.Settings, "island.appearance-apply-failed",
+                        "A live system-appearance snapshot could not be applied.", ex);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "island.appearance-refresh-failed",
+                "The live system-appearance change could not be processed.", ex);
+        }
+    }
+
     private AppSettings CurrentSettings() => _options.Settings.Current;
 
     private async Task EnsureMonitorsAsync(CancellationToken cancellationToken)
@@ -430,6 +468,21 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _monitorService = new MonitorService(_messageHost, _platformLogger, _platformCounters, _time);
         await _monitorService.StartAsync(cancellationToken).ConfigureAwait(true);
         _monitorService.MonitorsChanged += OnMonitorsChanged;
+
+        // Live follow-system appearance: WM_SETTINGCHANGE + registry watchers on the Personalize/DWM
+        // keys. The monitor publishes change-only snapshots on the thread pool; applying them is
+        // best-effort — a failure is logged and the current theme/motion stays in place.
+        _themeMonitor = new SystemThemeMonitor(_messageHost, _platformLogger, _platformCounters, _time);
+        _themeMonitor.SnapshotChanged += OnSystemThemeChanged;
+        try
+        {
+            await _themeMonitor.StartAsync(cancellationToken).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.theme-monitor-failed",
+                "The live system-theme monitor could not start; follow-system values stay at their startup snapshot.", ex);
+        }
 
         // The mouse hook gets its own message thread: a WH_MOUSE_LL callback must return within the
         // Windows hook timeout, so it must never queue behind clipboard/display work on the shared

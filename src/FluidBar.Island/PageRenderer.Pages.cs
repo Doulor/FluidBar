@@ -29,19 +29,18 @@ internal sealed partial class PageRenderer
             return;
         }
 
+        var m = _metrics;
+        var rowHeight = PageMetricsLayout.NotificationRowHeight(m);
         var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(
-            model.ScrollOffset,
-            count,
-            PageLayout.NotificationRowHeight,
-            PageLayout.NotificationRowGap);
-        var first = PageLayout.FirstVisibleRow(scroll, PageLayout.NotificationRowHeight, PageLayout.NotificationRowGap);
+        var maxScroll = Math.Max(0, (count * (rowHeight + 4)) - 4 - PageMetricsLayout.BodyHeight);
+        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
+        var first = rowHeight + 4 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 4));
 
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = first; i < count; i++)
         {
-            var row = PageLayout.NotificationRow(page, i, scroll);
+            var row = PageMetricsLayout.NotificationRow(page, i, scroll, m);
             if (row.Top >= body.Bottom)
             {
                 break;
@@ -66,6 +65,10 @@ internal sealed partial class PageRenderer
         var hovered = index == model.HoverIndex;
         DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
 
+        // The row grows with the font scale; keep the 1.0 content block centred inside it.
+        var dy = (row.Height - 40f) / 2;
+        canvas.Save();
+        canvas.Translate(0, dy);
         var accent = _accents.Get(item.AccentHex, _theme.Info);
         var glyph = new SKRect(row.Left + 10, row.Top + 7, row.Left + 36, row.Top + 33);
         _fill.Style = SKPaintStyle.Fill;
@@ -142,6 +145,8 @@ internal sealed partial class PageRenderer
             canvas.DrawRoundRect(chip, 8, 8, _fill);
             _text.Draw(canvas, item.VerificationCode, IslandType.Chip, chip, _theme.Info, TextAlign.Center, _opacity);
         }
+
+        canvas.Restore();
     }
 
     // ---------------------------------------------------------------- clipboard
@@ -161,19 +166,18 @@ internal sealed partial class PageRenderer
             return;
         }
 
+        var m = _metrics;
+        var rowHeight = PageMetricsLayout.ClipboardRowHeight(m);
         var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(
-            model.ScrollOffset,
-            count,
-            PageLayout.ClipboardRowHeight,
-            PageLayout.ClipboardRowGap);
-        var first = PageLayout.FirstVisibleRow(scroll, PageLayout.ClipboardRowHeight, PageLayout.ClipboardRowGap);
+        var maxScroll = Math.Max(0, (count * (rowHeight + 6)) - 6 - PageMetricsLayout.BodyHeight);
+        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
+        var first = rowHeight + 6 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 6));
 
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = first; i < count; i++)
         {
-            var row = PageLayout.ClipboardRow(page, i, scroll);
+            var row = PageMetricsLayout.ClipboardRow(page, i, scroll, m);
             if (row.Top >= body.Bottom)
             {
                 break;
@@ -205,6 +209,9 @@ internal sealed partial class PageRenderer
             canvas.DrawRoundRect(row, PageLayout.ListRowRadius, PageLayout.ListRowRadius, _fill);
         }
 
+        var dy = (row.Height - 48f) / 2;
+        canvas.Save();
+        canvas.Translate(0, dy);
         var tone = ClipboardTone(item.Kind);
         var badge = new SKRect(row.Left + 10, row.Top + 12, row.Left + 34, row.Top + 36);
         _fill.Style = SKPaintStyle.Fill;
@@ -293,6 +300,8 @@ internal sealed partial class PageRenderer
             copy.Deflate(5.5f),
             Alpha(copied ? _theme.Accent : _theme.ForegroundTertiary, _opacity),
             _icon);
+
+        canvas.Restore();
     }
 
     private SKColor ClipboardTone(ClipboardContentKind kind) => kind switch
@@ -328,15 +337,18 @@ internal sealed partial class PageRenderer
             return;
         }
 
+        var m = _metrics;
+        var rowHeight = PageMetricsLayout.AgentRowHeight(m);
         var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(model.ScrollOffset, count, PageLayout.AgentRowHeight, PageLayout.AgentRowGap);
-        var first = PageLayout.FirstVisibleRow(scroll, PageLayout.AgentRowHeight, PageLayout.AgentRowGap);
+        var maxScroll = Math.Max(0, (count * (rowHeight + 6)) - 6 - PageMetricsLayout.BodyHeight);
+        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
+        var first = rowHeight + 6 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 6));
 
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = first; i < count; i++)
         {
-            var row = PageLayout.AgentRow(page, i, scroll);
+            var row = PageMetricsLayout.AgentRow(page, i, scroll, m);
             if (row.Top >= body.Bottom)
             {
                 break;
@@ -356,6 +368,9 @@ internal sealed partial class PageRenderer
         var hovered = index == model.HoverIndex;
         DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
 
+        var dy = (row.Height - 48f) / 2;
+        canvas.Save();
+        canvas.Translate(0, dy);
         var tone = Tone(item.Tone);
         var stateCenter = new SKPoint(row.Left + 20, row.Top + 24);
         _fill.Style = SKPaintStyle.Fill;
@@ -466,6 +481,8 @@ internal sealed partial class PageRenderer
                     _fill);
             }
         }
+
+        canvas.Restore();
     }
 
     // ------------------------------------------------------------------ widgets
@@ -582,7 +599,8 @@ internal sealed partial class PageRenderer
 
     private void DrawWidgetWeather(SKCanvas canvas, WidgetsPageModel model, SKRect page)
     {
-        var card = PageLayout.WidgetsWeather(page);
+        var m = _metrics;
+        var card = PageMetricsLayout.WidgetsWeather(page, m);
         DrawCard(canvas, card, 11);
         IconSet.Draw(
             canvas,
@@ -599,19 +617,23 @@ internal sealed partial class PageRenderer
             return;
         }
 
+        var tempTop = card.Top + 6;
+        var tempHeight = 22 + m.LineGrow(IslandType.WidgetTemp);
         _text.Draw(
             canvas,
             model.WeatherTemp,
             IslandType.WidgetTemp,
-            new SKRect(card.Left + 36, card.Top + 6, card.Left + 96, card.Top + 28),
+            new SKRect(card.Left + 36, tempTop, card.Left + 96, tempTop + tempHeight),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
+        var conditionTop = card.Top + 29 + m.LineGrow(IslandType.WidgetTemp);
         _text.Draw(
             canvas,
             model.WeatherCondition,
             IslandType.WidgetDesc,
-            new SKRect(card.Left + 36, card.Top + 29, card.Right - 64, card.Top + 43),
+            new SKRect(card.Left + 36, conditionTop, card.Right - 64,
+                conditionTop + 14 + m.LineGrow(IslandType.WidgetDesc)),
             _theme.ForegroundTertiary,
             TextAlign.Left,
             _opacity);
@@ -619,7 +641,8 @@ internal sealed partial class PageRenderer
             canvas,
             model.WeatherHighLow,
             IslandType.WidgetMetaStrong,
-            new SKRect(card.Right - 60, card.Top + 9, card.Right - 10, card.Top + 23),
+            new SKRect(card.Right - 60, card.Top + 9, card.Right - 10,
+                card.Top + 9 + 14 + m.LineGrow(IslandType.WidgetMetaStrong)),
             _theme.ForegroundSecondary,
             TextAlign.Right,
             _opacity);
@@ -627,7 +650,8 @@ internal sealed partial class PageRenderer
             canvas,
             model.WeatherWind,
             IslandType.WidgetMeta,
-            new SKRect(card.Right - 60, card.Top + 25, card.Right - 10, card.Top + 39),
+            new SKRect(card.Right - 60, card.Top + 25 + m.LineGrow(IslandType.WidgetMetaStrong), card.Right - 10,
+                card.Top + 25 + m.LineGrow(IslandType.WidgetMetaStrong) + 14 + m.LineGrow(IslandType.WidgetMeta)),
             _theme.ForegroundTertiary,
             TextAlign.Right,
             _opacity);
@@ -635,7 +659,8 @@ internal sealed partial class PageRenderer
 
     private void DrawWidgetStats(SKCanvas canvas, WidgetsPageModel model, SKRect page)
     {
-        var card = PageLayout.WidgetsStats(page);
+        var m = _metrics;
+        var card = PageMetricsLayout.WidgetsStats(page, m);
         DrawCard(canvas, card, 11);
         var stats = model.Stats;
         var count = stats is null ? 0 : Math.Min(3, stats.Count);
@@ -647,17 +672,21 @@ internal sealed partial class PageRenderer
         for (var i = 0; i < count; i++)
         {
             var stat = stats![i];
-            var top = card.Top + 10 + (i * 20);
+            // Three stat rows must stay inside the fixed 74 DIP card at every font scale.
+            var pitch = Math.Min(20 + _metrics.LineGrow(IslandType.StatLabel), 24f);
+            var rowHeight = 14 + m.LineGrow(IslandType.StatLabel);
+            var top = card.Top + 10 + (i * pitch);
+            var labelWidth = 34 + (2 * m.LineGrow(IslandType.StatLabel));
             _text.Draw(
                 canvas,
                 stat.Label,
                 IslandType.StatLabel,
-                new SKRect(card.Left + 10, top, card.Left + 44, top + 14),
+                new SKRect(card.Left + 10, top, card.Left + 10 + labelWidth, top + rowHeight),
                 _theme.ForegroundTertiary,
                 TextAlign.Left,
                 _opacity);
 
-            var track = new SKRect(card.Left + 48, top + 5, card.Right - 42, top + 8);
+            var track = new SKRect(card.Left + 14 + labelWidth, top + 5, card.Right - 42, top + 8);
             _fill.Style = SKPaintStyle.Fill;
             _fill.Color = Alpha(SKColors.White, 0.09f * _opacity);
             canvas.DrawRoundRect(track, 1.5f, 1.5f, _fill);
@@ -676,7 +705,7 @@ internal sealed partial class PageRenderer
                 canvas,
                 _numbers.Percent(stat.Value),
                 IslandType.StatValue,
-                new SKRect(card.Right - 38, top, card.Right - 10, top + 14),
+                new SKRect(card.Right - 38, top, card.Right - 10, top + rowHeight),
                 _theme.ForegroundSecondary,
                 TextAlign.Right,
                 _opacity);
@@ -685,13 +714,14 @@ internal sealed partial class PageRenderer
 
     private void DrawWidgetTasks(SKCanvas canvas, WidgetsPageModel model, SKRect page)
     {
-        var card = PageLayout.WidgetsNotes(page);
+        var card = PageMetricsLayout.WidgetsNotes(page, _metrics);
         DrawCard(canvas, card, 11);
+        var headHeight = 14 + _metrics.LineGrow(IslandType.NotesHead);
         _text.Draw(
             canvas,
             model.TasksTitle,
             IslandType.NotesHead,
-            new SKRect(card.Left + 10, card.Top + 7, card.Right - 80, card.Top + 21),
+            new SKRect(card.Left + 10, card.Top + 7, card.Right - 80, card.Top + 7 + headHeight),
             _theme.ForegroundSecondary,
             TextAlign.Left,
             _opacity);
@@ -699,7 +729,8 @@ internal sealed partial class PageRenderer
             canvas,
             model.TasksProgressText,
             IslandType.WidgetMeta,
-            new SKRect(card.Right - 78, card.Top + 8, card.Right - 10, card.Top + 20),
+            new SKRect(card.Right - 78, card.Top + 8, card.Right - 10,
+                card.Top + 8 + 12 + _metrics.LineGrow(IslandType.WidgetMeta)),
             _theme.ForegroundTertiary,
             TextAlign.Right,
             _opacity);
@@ -717,7 +748,7 @@ internal sealed partial class PageRenderer
         for (var i = 0; i < count; i++)
         {
             var task = tasks![i];
-            var row = PageLayout.WidgetsTaskRow(page, i);
+            var row = PageMetricsLayout.WidgetsTaskRow(page, i, _metrics);
             if (i == model.SelectedIndex || i == model.HoverIndex)
             {
                 _fill.Style = SKPaintStyle.Fill;

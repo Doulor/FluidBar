@@ -38,6 +38,25 @@ internal static class IslandTestFixtures
         "24-rail-page3-clipboard",
         "25-rail-page4-agent",
         "26-rail-page5-widgets",
+        "30-compact-notification-fs08",
+        "31-compact-notification-fs12",
+        "32-compact-notification-fs16",
+        "40-expanded-home-fs08",
+        "41-expanded-home-fs12",
+        "42-expanded-home-fs16",
+        "43-expanded-media-fs08",
+        "44-expanded-media-fs12",
+        "45-expanded-media-fs16",
+        "46-expanded-notifications-fs08",
+        "47-expanded-notifications-fs12",
+        "48-expanded-notifications-fs16",
+        "49-expanded-clipboard-fs16",
+        "50-expanded-widgets-fs08",
+        "51-expanded-widgets-fs12",
+        "52-expanded-widgets-fs16",
+        "60-expanded-home-fs16-scrolled",
+        "61-expanded-media-fs16-scrolled",
+        "62-expanded-widgets-fs16-scrolled",
     ];
 
     /// <summary>Short rail labels exactly as the shipped zh-Hans catalog renders them.</summary>
@@ -345,8 +364,65 @@ internal static class IslandTestFixtures
         "24-rail-page3-clipboard" => RailState(3),
         "25-rail-page4-agent" => RailState(4),
         "26-rail-page5-widgets" => RailState(5),
+        "30-compact-notification-fs08" => WithFontScale(Notification(), 0.8),
+        "31-compact-notification-fs12" => WithFontScale(Notification(), 1.2),
+        "32-compact-notification-fs16" => WithFontScale(Notification(), 1.6),
+        "40-expanded-home-fs08" => WithFontScale(Expanded(0), 0.8),
+        "41-expanded-home-fs12" => WithFontScale(Expanded(0), 1.2),
+        "42-expanded-home-fs16" => WithFontScale(Expanded(0), 1.6),
+        "43-expanded-media-fs08" => WithFontScale(Expanded(1), 0.8),
+        "44-expanded-media-fs12" => WithFontScale(Expanded(1), 1.2),
+        "45-expanded-media-fs16" => WithFontScale(Expanded(1), 1.6),
+        "46-expanded-notifications-fs08" => WithFontScale(Expanded(2), 0.8),
+        "47-expanded-notifications-fs12" => WithFontScale(Expanded(2), 1.2),
+        "48-expanded-notifications-fs16" => WithFontScale(Expanded(2), 1.6),
+        "49-expanded-clipboard-fs16" => WithFontScale(Expanded(3), 1.6),
+        "50-expanded-widgets-fs08" => WithFontScale(Expanded(5), 0.8),
+        "51-expanded-widgets-fs12" => WithFontScale(Expanded(5), 1.2),
+        "52-expanded-widgets-fs16" => WithFontScale(Expanded(5), 1.6),
+        "60-expanded-home-fs16-scrolled" => WithPageScroll(WithFontScale(Expanded(0), 1.6), 0, 9999),
+        "61-expanded-media-fs16-scrolled" => WithPageScroll(WithFontScale(Expanded(1), 1.6), 1, 9999),
+        "62-expanded-widgets-fs16-scrolled" => WithPageScroll(WithFontScale(Expanded(5), 1.6), 5, 9999),
         _ => Expanded(0),
     };
+
+    /// <summary>Sets a page scroll offset (the renderer clamps it against the metric content extent).</summary>
+    public static IslandRenderState WithPageScroll(IslandRenderState state, int page, double offset)
+    {
+        var pages = state.Pages;
+        pages = page switch
+        {
+            0 => pages with { Home = pages.Home with { ScrollOffset = offset } },
+            1 => pages with { Media = pages.Media with { ScrollOffset = offset } },
+            2 => pages with { Notifications = pages.Notifications with { ScrollOffset = offset } },
+            3 => pages with { Clipboard = pages.Clipboard with { ScrollOffset = offset } },
+            4 => pages with { Agent = pages.Agent with { ScrollOffset = offset } },
+            5 => pages with { Widgets = pages.Widgets with { ScrollOffset = offset } },
+            _ => pages,
+        };
+        return state with { Pages = pages };
+    }
+
+    /// <summary>
+    /// Applies a font scale to a fixture state: expanded shells keep their size, compact pills use the
+    /// same font-scale aware size policy the controller applies so the golden matches the runtime.
+    /// </summary>
+    public static IslandRenderState WithFontScale(IslandRenderState state, double fontScale)
+    {
+        if (state.Form == ShellForm.Expanded || state.Form == ShellForm.Hidden)
+        {
+            return state with { FontScale = fontScale };
+        }
+
+        var size = LayoutTokens.CompactSizeFor(state.Compact?.Kind, state.Mode, fontScale);
+        return state with
+        {
+            FontScale = fontScale,
+            ShellWidth = size.Width,
+            ShellHeight = size.Height,
+            ShellRadii = LayoutTokens.RadiiFor(state.Form, state.Mode, size.Height),
+        };
+    }
 
     private static CalendarDayModel[] October2026()
     {

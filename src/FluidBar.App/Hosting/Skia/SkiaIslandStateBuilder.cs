@@ -360,6 +360,7 @@ public static class SkiaIslandStateBuilder
             .Append(settings.Theme).Append('|').Append(settings.Material).Append('|')
             .Append(settings.Palette).Append('|').Append(settings.AccentMode).Append('|')
             .Append(settings.AccentFallback).Append('|').Append(settings.FillOpacity.ToString("0.###", CultureInfo.InvariantCulture)).Append('|')
+            .Append(settings.FontScale.ToString("0.###", CultureInfo.InvariantCulture)).Append('|')
             .Append(settings.Stacking).Append('|')
             .Append(island.StateKind).Append('|').Append(island.Page).Append('|')
             .Append(primary?.Kind.ToString() ?? "idle").Append('|')

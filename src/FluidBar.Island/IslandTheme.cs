@@ -185,8 +185,11 @@ public sealed record IslandTheme
             return fallback;
         }
 
+        // 6 digits = RRGGBB (opaque); 8 digits = AARRGGBB (the App stores accent fallbacks that way).
+        // The old 8-digit branch read it as RRGGBBAA, which shifted every translucent-normalised accent
+        // one byte (e.g. "#FF4CC9F0" rendered as RGB(FF,4C,C9) instead of RGB(4C,C9,F0)).
         return text.Length == 6
             ? new SKColor((byte)(value >> 16), (byte)(value >> 8), (byte)value)
-            : new SKColor((byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
+            : new SKColor((byte)(value >> 16), (byte)(value >> 8), (byte)value, (byte)(value >> 24));
     }
 }

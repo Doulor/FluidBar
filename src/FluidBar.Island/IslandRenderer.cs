@@ -241,14 +241,17 @@ public sealed class IslandRenderer : IDisposable
             {
                 var page = PageUnder(state, content, x);
                 var pageRect = IslandMetrics.PageRect(state, page);
-                var control = PageLayout.HitTest(
+                var metrics = FontScaleMetrics.From(state.FontScale);
+                var pageScroll = PageScrollOffset(state, page, metrics, pageRect);
+                var control = PageMetricsLayout.HitTest(
                     page,
                     pageRect,
                     x,
                     y,
-                    out var index,
-                    PageScrollOffset(state, page),
-                    PageItemCount(state, page));
+                    metrics,
+                    pageScroll,
+                    PageItemCount(state, page),
+                    out var index);
                 if (control != IslandPageControl.None)
                 {
                     return new IslandHitTarget(IslandHitKind.PageControl, page, control, index);
@@ -497,7 +500,30 @@ public sealed class IslandRenderer : IDisposable
 
             canvas.Save();
             canvas.ClipRect(pageRect);
-            _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
+            if (page is 0 or 1 or 5)
+            {
+                // Home/media/widgets overflow the 232 DIP body at large font scales: the page scrolls
+                // inside that body (the wheel host writes the model offset, clamped by the metric layout).
+                var metrics = FontScaleMetrics.From(state.FontScale);
+                var scroll = page switch
+                {
+                    0 => state.Pages.Home.ScrollOffset,
+                    1 => state.Pages.Media.ScrollOffset,
+                    _ => state.Pages.Widgets.ScrollOffset,
+                };
+                var clamped = PageMetricsLayout.ClampScroll(pageRect, page, scroll, metrics);
+                var body = PageMetricsLayout.Body(pageRect);
+                canvas.Save();
+                canvas.ClipRect(body);
+                canvas.Translate(0, -(float)clamped);
+                _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
+                canvas.Restore();
+            }
+            else
+            {
+                _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
+            }
+
             canvas.Restore();
         }
 
@@ -541,14 +567,17 @@ public sealed class IslandRenderer : IDisposable
     private static bool IsMediaPlay(in IslandRenderState state, SKRect shell, float x, float y)
         => x >= shell.Right - 34 && x < shell.Right - 8 && y >= shell.Top + 7 && y < shell.Top + 33;
 
-    private static float PageScrollOffset(in IslandRenderState state, int page)
+    private static float PageScrollOffset(in IslandRenderState state, int page, in FontScaleMetrics metrics, SKRect pageRect)
     {
         var pages = state.Pages ?? ExpandedPageContent.Empty;
         return page switch
         {
+            0 => PageMetricsLayout.ClampScroll(pageRect, 0, pages.Home.ScrollOffset, metrics),
+            1 => PageMetricsLayout.ClampScroll(pageRect, 1, pages.Media.ScrollOffset, metrics),
             2 => (float)pages.Notifications.ScrollOffset,
             3 => (float)pages.Clipboard.ScrollOffset,
             4 => (float)pages.Agent.ScrollOffset,
+            5 => PageMetricsLayout.ClampScroll(pageRect, 5, pages.Widgets.ScrollOffset, metrics),
             _ => 0f,
         };
     }
@@ -558,6 +587,8 @@ public sealed class IslandRenderer : IDisposable
         var pages = state.Pages ?? ExpandedPageContent.Empty;
         return page switch
         {
+            0 => 4,
+            1 => 1,
             2 => pages.Notifications.Items?.Count ?? 0,
             3 => pages.Clipboard.Items?.Count ?? 0,
             4 => pages.Agent.Items?.Count ?? 0,

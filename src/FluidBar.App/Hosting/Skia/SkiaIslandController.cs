@@ -5,6 +5,7 @@ using FluidBar.Core;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Events;
+using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 using FluidBar.Core.Presentation;
@@ -42,6 +43,8 @@ public sealed class SkiaIslandController : IDisposable
     private readonly SkiaHostDispatcher _dispatcher;
     private readonly EventHub _hub;
     private readonly ActivityScheduler _scheduler = new();
+    private readonly Func<SystemAppearanceSnapshot> _appearance;
+    private readonly double[] _pageScroll = new double[PagerConstants.PageCount];
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
@@ -109,13 +112,15 @@ public sealed class SkiaIslandController : IDisposable
         _logger = options.Logger ?? new Diagnostics.TraceAppLogger();
         _dispatcher = dispatcher ?? new SkiaHostDispatcher();
         _platformActions = options.PlatformActions;
+        _appearance = options.AppearanceSnapshot ?? SystemAppearanceSnapshot.FromWindows;
 
         _hub = new EventHub(logger: _logger, dispatcher: _dispatcher);
         _controller = CreateController(_settings.Current);
         _controller.Transitioned += OnTransition;
         _hub.Subscribe(OnIslandEvent);
 
-        var profile = _settings.Current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(_settings.Current));
+        var profile = _settings.Current.BuildMotionProfile(
+            SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
         _pager = new SkiaPager((int)State.Page);
         _pager.PageChanged += OnPagerPageChanged;
@@ -924,7 +929,32 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var now = _time.GetLocalNow();
-        var outcome = _pager.Wheel(deltaDip, horizontal, shift, now, contentScrollable: false);
+
+        // Vertical scrolling first: a page whose content is taller than the 232 DIP body (large font
+        // scales) consumes the wheel until it reaches an edge; only then does the pager turn the page.
+        if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
+        {
+            var page = (int)State.Page;
+            var max = MaxScrollForPage(page);
+            if (max > 0.5)
+            {
+                var current = _pageScroll[page];
+                var target = Math.Clamp(current + deltaDip, 0, max);
+                if (Math.Abs(target - current) > 0.01)
+                {
+                    _pageScroll[page] = target;
+                    _pages = ApplyPageScroll(_pages);
+                    BuildRenderState();
+                    InvalidateFull();
+                    _archipelago.Reveal(now);
+                    UpdateArchipelago(now);
+                    return new SkiaWheelOutcome(true, false, page, true, false);
+                }
+            }
+        }
+
+        var outcome = _pager.Wheel(deltaDip, horizontal, shift, now,
+            contentScrollable: MaxScrollForPage((int)State.Page) > 0.5);
         if (outcome.Paged || outcome.Consumed)
         {
             _archipelago.Reveal(now);
@@ -933,6 +963,32 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// Re-resolves the follow-system appearance (Windows theme / reduced motion / accent) after a live
+    /// <c>WM_SETTINGCHANGE</c>. Explicit user settings are unaffected; only "system" values change.
+    /// Never throws: a failure is logged and the current appearance stays in place.
+    /// </summary>
+    public void RefreshSystemAppearance()
+    {
+        try
+        {
+            var settings = _settings.Current;
+            var appearance = _appearance();
+            _theme = SkiaIslandThemeMapper.Map(settings, appearance);
+            var profile = settings.BuildMotionProfile(
+                SkiaIslandThemeMapper.ReducedMotion(settings, appearance));
+            _motion.UpdateProfile(profile);
+            BuildRenderState();
+            InvalidateFull();
+            StateChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "island.appearance-refresh-failed",
+                "A live system-appearance change could not be applied; keeping the current theme/motion.", ex);
+        }
     }
 
     /// <summary>Display/DPI change: snap springs and repaint everything.</summary>
@@ -1105,10 +1161,10 @@ public sealed class SkiaIslandController : IDisposable
 
         var peeked = State.Kind == IslandStateKind.Peek;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked);
-        _pages = ApplyCopyFeedback(
+        _pages = ApplyPageScroll(ApplyCopyFeedback(
             SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
-            _time.GetLocalNow());
-        _theme = SkiaIslandThemeMapper.Map(settings);
+            _time.GetLocalNow()));
+        _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
         _motion.SetTarget(BuildTarget(viewModel));
         BuildRenderState();
 
@@ -1130,7 +1186,7 @@ public sealed class SkiaIslandController : IDisposable
         // (SkiaIslandStateBuilder.BuildCompact), so the shell width can never disagree with the
         // content: a stale Core ContentKind used to leave a wide pill showing the idle clock.
         var compactKind = viewModel.Primary?.Kind;
-        var compactSize = LayoutTokens.CompactSize(compactKind, mode);
+        var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
             : 0;
@@ -1207,8 +1263,9 @@ public sealed class SkiaIslandController : IDisposable
             service.SetCulture(current.Language);
         }
 
-        var previousProfile = previous.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(previous));
-        var currentProfile = current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(current));
+        var appearance = _appearance();
+        var previousProfile = previous.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(previous, appearance));
+        var currentProfile = current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(current, appearance));
         if (previousProfile != currentProfile)
         {
             _motion.UpdateProfile(currentProfile);
@@ -1398,6 +1455,66 @@ public sealed class SkiaIslandController : IDisposable
             });
     }
 
+    // ------------------------------------------------------------------ page scroll
+
+    /// <summary>
+    /// Persists the vertical scroll offset of every expanded page. The page models are rebuilt from the
+    /// data source on each sync, so the offset lives in the controller and is re-applied here (clamped
+    /// against the font-scale aware content extent / row metrics).
+    /// </summary>
+    private ExpandedPageContent ApplyPageScroll(ExpandedPageContent pages)
+    {
+        var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
+        var pageRect = MetricPageRect();
+        var max0 = PageMetricsLayout.MaxScroll(pageRect, 0, metrics);
+        var max1 = PageMetricsLayout.MaxScroll(pageRect, 1, metrics);
+        var max2 = ListMaxScroll(pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4);
+        var max3 = ListMaxScroll(pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6);
+        var max4 = ListMaxScroll(pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6);
+        var max5 = PageMetricsLayout.MaxScroll(pageRect, 5, metrics);
+        _pageScroll[0] = Math.Clamp(_pageScroll[0], 0, max0);
+        _pageScroll[1] = Math.Clamp(_pageScroll[1], 0, max1);
+        _pageScroll[2] = Math.Clamp(_pageScroll[2], 0, max2);
+        _pageScroll[3] = Math.Clamp(_pageScroll[3], 0, max3);
+        _pageScroll[4] = Math.Clamp(_pageScroll[4], 0, max4);
+        _pageScroll[5] = Math.Clamp(_pageScroll[5], 0, max5);
+
+        return pages with
+        {
+            Home = pages.Home with { ScrollOffset = _pageScroll[0] },
+            Media = pages.Media with { ScrollOffset = _pageScroll[1] },
+            Notifications = pages.Notifications with { ScrollOffset = _pageScroll[2] },
+            Clipboard = pages.Clipboard with { ScrollOffset = _pageScroll[3] },
+            Agent = pages.Agent with { ScrollOffset = _pageScroll[4] },
+            Widgets = pages.Widgets with { ScrollOffset = _pageScroll[5] },
+        };
+    }
+
+    /// <summary>Scrollable list content height minus the 232 DIP body, 0 when every row fits.</summary>
+    private static double ListMaxScroll(int count, double rowHeight, double gap)
+        => count <= 0 ? 0 : Math.Max(0, (count * (rowHeight + gap)) - gap - PageMetricsLayout.BodyHeight);
+
+    /// <summary>A page rect with the expanded content size (vertical extents do not depend on x/shell).</summary>
+    private static SkiaSharp.SKRect MetricPageRect() => new(
+        0, (float)IslandMetrics.ContentTop,
+        (float)(IslandMetrics.ContentLeft + IslandMetrics.ContentWidth),
+        (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));
+
+    private double MaxScrollForPage(int page)
+    {
+        var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
+        return page switch
+        {
+            0 => PageMetricsLayout.MaxScroll(MetricPageRect(), 0, metrics),
+            1 => PageMetricsLayout.MaxScroll(MetricPageRect(), 1, metrics),
+            2 => ListMaxScroll(_pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
+            3 => ListMaxScroll(_pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
+            4 => ListMaxScroll(_pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
+            5 => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics),
+            _ => 0,
+        };
+    }
+
     // ------------------------------------------------------------------ render state
 
     private void BuildRenderState()
@@ -1425,6 +1542,7 @@ public sealed class SkiaIslandController : IDisposable
             NudgeOffsetY = _motion.NudgeOffsetY,
             PressScale = _motion.PressScale,
             GhostCount = expanded ? 0 : _motion.Target.GhostCount,
+            FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,
             Pages = _pages,

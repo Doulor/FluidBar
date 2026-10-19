@@ -11,7 +11,7 @@ namespace FluidBar.Island;
 /// </summary>
 internal sealed class CompactRenderer : IDisposable
 {
-    private readonly TextEngine _text;
+    private readonly ScaledText _text;
     private readonly AccentPalette _accents;
     private readonly ArtShaderCache _art;
     private readonly ArtworkImageCache _artwork;
@@ -32,7 +32,7 @@ internal sealed class CompactRenderer : IDisposable
     public CompactRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art,
         ArtworkImageCache artwork, NumberTextCache numbers)
     {
-        _text = text;
+        _text = new ScaledText(text);
         _accents = accents;
         _art = art;
         _artwork = artwork;
@@ -47,6 +47,7 @@ internal sealed class CompactRenderer : IDisposable
     {
         _theme = state.Theme;
         _opacity = Math.Clamp(opacity, 0, 1);
+        _text.SetScale(state.FontScale);
         _phase = state.MotionPhase;
         _reduced = state.ReducedMotion;
         if (_opacity <= 0.01f)

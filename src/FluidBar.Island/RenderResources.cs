@@ -172,7 +172,9 @@ internal sealed class ArtShaderCache : IDisposable
 /// <summary>Bounded 0..100 integer-to-string cache so percentage labels never allocate per frame.</summary>
 internal sealed class NumberTextCache
 {
-    private readonly Dictionary<int, string> _text = [];
+    // Keyed by (value, isPercent): the old single int key let Percent(12) poison Number(12) so the
+    // calendar day "12" could be painted as "12%" after the battery showed 12 % (renderer-wide cache).
+    private readonly Dictionary<(int Value, bool Percent), string> _text = [];
     private readonly int _capacity;
 
     public NumberTextCache(int capacity = 128)
@@ -183,7 +185,7 @@ internal sealed class NumberTextCache
     public string Percent(int value)
     {
         var clamped = Math.Clamp(value, 0, 100);
-        if (_text.TryGetValue(clamped, out var cached))
+        if (_text.TryGetValue((clamped, true), out var cached))
         {
             return cached;
         }
@@ -194,13 +196,13 @@ internal sealed class NumberTextCache
         }
 
         var text = clamped.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
-        _text[clamped] = text;
+        _text[(clamped, true)] = text;
         return text;
     }
 
     public string Number(int value)
     {
-        if (_text.TryGetValue(value, out var cached))
+        if (_text.TryGetValue((value, false), out var cached))
         {
             return cached;
         }
@@ -211,7 +213,7 @@ internal sealed class NumberTextCache
         }
 
         var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        _text[value] = text;
+        _text[(value, false)] = text;
         return text;
     }
 }

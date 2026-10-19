@@ -1,0 +1,551 @@
+using SkiaSharp;
+
+namespace FluidBar.Island;
+
+/// <summary>
+/// Font-scale aware geometry for the expanded pages. Every function reduces to the exact prototype
+/// 1.0 rectangle when <see cref="FontScaleMetrics.One"/> is passed (the golden images and hit targets
+/// stay pixel-identical), and grows the text-bearing containers by the measured line-height delta at
+/// larger scales. Drawing, hit-testing and UI Automation all consume these rectangles so a painted
+/// control and its click target can never drift.
+/// </summary>
+public static class PageMetricsLayout
+{
+    /// <summary>Page body top inside a page rect (title gutter; 28 DIP at every scale).</summary>
+    public const float BodyTop = 28;
+
+    /// <summary>Expanded body height available below the title gutter (232 DIP).</summary>
+    public const float BodyHeight = 232;
+
+    // ---------------------------------------------------------------- home
+
+    /// <summary>Home clock rectangle (grows with the clock line height).</summary>
+    public static SKRect HomeClock(SKRect page, in FontScaleMetrics metrics) => new(
+        page.Left, page.Top + BodyTop, page.Left + 172,
+        page.Top + BodyTop + 34 + metrics.LineGrow(IslandType.Clock));
+
+    /// <summary>Home date rectangle (stacked below the clock).</summary>
+    public static SKRect HomeDate(SKRect page, in FontScaleMetrics metrics)
+    {
+        var clock = HomeClock(page, metrics);
+        return new SKRect(page.Left, clock.Bottom, page.Left + 172, clock.Bottom + 12 + metrics.LineGrow(IslandType.Date));
+    }
+
+    /// <summary>Home weather chip rectangle (top-right of the first row).</summary>
+    public static SKRect HomeWeather(SKRect page, in FontScaleMetrics metrics) => new(
+        page.Left + 300, page.Top + BodyTop, page.Left + 400,
+        page.Top + BodyTop + 34 + metrics.LineGrow(IslandType.WeatherTemp) + metrics.LineGrow(IslandType.WeatherCondition));
+
+    /// <summary>Home quick-toggle rectangle for an index (0..3).</summary>
+    public static SKRect HomeToggle(SKRect page, int index, in FontScaleMetrics metrics)
+    {
+        const float gap = 6f;
+        var width = (400f - (gap * 3)) / 4f;
+        var left = page.Left + (index * (width + gap));
+        var top = HomeDate(page, metrics).Bottom;
+        return new SKRect(left, top, left + width, top + 38 + metrics.LineGrow(IslandType.Toggle));
+    }
+
+    /// <summary>Home now-playing card rectangle.</summary>
+    public static SKRect HomeMediaCard(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = HomeToggle(page, 0, metrics).Bottom + 8;
+        var height = 48 + metrics.LineGrow(IslandType.CardTitle) + metrics.LineGrow(IslandType.CardSubtitle);
+        return new SKRect(page.Left, top, page.Left + 400, top + height);
+    }
+
+    /// <summary>Home now-playing play/pause button (vertically centred in the card).</summary>
+    public static SKRect HomeMediaPlay(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = HomeMediaCard(page, metrics);
+        return new SKRect(card.Left + 366, card.MidY - 13, card.Left + 392, card.MidY + 13);
+    }
+
+    /// <summary>Home media progress track (bottom edge of the card).</summary>
+    public static SKRect HomeMediaProgress(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = HomeMediaCard(page, metrics);
+        return new SKRect(card.Left + 7, card.Bottom - 2, card.Right - 7, card.Bottom);
+    }
+
+    /// <summary>Home sliders card rectangle (below the media card).</summary>
+    public static SKRect HomeSliders(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = HomeMediaCard(page, metrics).Bottom + 8;
+        return new SKRect(page.Left, top, page.Left + 400, top + 38 + metrics.LineGrow(IslandType.SliderValue));
+    }
+
+    /// <summary>Home volume track (centred in the sliders card).</summary>
+    public static SKRect HomeVolumeTrack(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = HomeSliders(page, metrics);
+        return new SKRect(card.Left + 29, card.MidY - 1.5f, card.Left + 140, card.MidY + 1.5f);
+    }
+
+    /// <summary>Home brightness track (centred in the sliders card).</summary>
+    public static SKRect HomeBrightnessTrack(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = HomeSliders(page, metrics);
+        return new SKRect(card.Left + 229, card.MidY - 1.5f, card.Left + 340, card.MidY + 1.5f);
+    }
+
+    /// <summary>Home battery row rectangle (below the sliders card).</summary>
+    public static SKRect HomeBattery(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = HomeSliders(page, metrics).Bottom + 8;
+        return new SKRect(page.Left, top, page.Left + 400, top + 18 + metrics.LineGrow(IslandType.BatteryLine));
+    }
+
+    /// <summary>Home content height below the title gutter (0 at the approved 1.0 scale).</summary>
+    public static float HomeContentExtent(SKRect page, in FontScaleMetrics metrics)
+        => HomeBattery(page, metrics).Bottom - (page.Top + BodyTop);
+
+    // ---------------------------------------------------------------- media
+
+    /// <summary>Media artwork rectangle (92×92, fixed).</summary>
+    public static SKRect MediaArt(SKRect page) => new(page.Left, page.Top + BodyTop, page.Left + 92, page.Top + 120);
+
+    /// <summary>Media eyebrow rectangle.</summary>
+    public static SKRect MediaEyebrow(SKRect page, in FontScaleMetrics metrics) => new(
+        page.Left + 106, page.Top + 30, page.Left + 376,
+        page.Top + 30 + 10 + metrics.LineGrow(IslandType.MediaEyebrow));
+
+    /// <summary>Media title rectangle (below the eyebrow).</summary>
+    public static SKRect MediaTitle(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = MediaEyebrow(page, metrics).Bottom + 2;
+        return new SKRect(page.Left + 106, top, page.Left + 376, top + 26 + metrics.LineGrow(IslandType.MediaTitle));
+    }
+
+    /// <summary>Media artist rectangle.</summary>
+    public static SKRect MediaArtist(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = MediaTitle(page, metrics).Bottom;
+        return new SKRect(page.Left + 106, top, page.Left + 376, top + 14 + metrics.LineGrow(IslandType.MediaArtist));
+    }
+
+    /// <summary>Media album rectangle.</summary>
+    public static SKRect MediaAlbum(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = MediaArtist(page, metrics).Bottom + 2;
+        return new SKRect(page.Left + 106, top, page.Left + 376, top + 12 + metrics.LineGrow(IslandType.MediaAlbum));
+    }
+
+    /// <summary>Bottom of the artwork/title block: whichever of the artwork or the text stack is taller.</summary>
+    public static float MediaTopBottom(SKRect page, in FontScaleMetrics metrics)
+        => Math.Max(page.Top + 120, MediaAlbum(page, metrics).Bottom);
+
+    /// <summary>Media position/duration time column width (30 DIP at 1.0, grows with the time line).</summary>
+    public static float MediaSeekTimeWidth(in FontScaleMetrics metrics)
+        => 30 + (metrics.LineGrow(IslandType.SeekTime) * 1.5f);
+
+    /// <summary>Media lyric card rectangle (inner padding absorbs part of the line growth).</summary>
+    public static SKRect MediaLyricCard(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = MediaTopBottom(page, metrics) + 8;
+        var content = 7 + 14 + 3 + 12 + 4
+            + metrics.LineGrow(IslandType.Lyric) + metrics.LineGrow(IslandType.LyricNext);
+        var height = Math.Max(46, content);
+        return new SKRect(page.Left, top, page.Left + 400, top + height);
+    }
+
+    /// <summary>Media seek row rectangle.</summary>
+    public static SKRect MediaSeekRow(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = MediaLyricCard(page, metrics).Bottom + 10;
+        return new SKRect(page.Left, top, page.Left + 400, top + 22 + metrics.LineGrow(IslandType.SeekTime));
+    }
+
+    /// <summary>Media seek track (centred between the two time labels).</summary>
+    public static SKRect MediaSeekTrack(SKRect page, in FontScaleMetrics metrics)
+    {
+        var row = MediaSeekRow(page, metrics);
+        var time = MediaSeekTimeWidth(metrics);
+        return new SKRect(page.Left + 9 + time, row.MidY - 1.5f, page.Right - 9 - time, row.MidY + 1.5f);
+    }
+
+    /// <summary>Vertical offset applied to the transport row (0 at the approved scale).</summary>
+    public static float TransportOffset(SKRect page, in FontScaleMetrics metrics)
+        => (MediaSeekRow(page, metrics).Bottom + 16) - (page.Top + 222);
+
+    /// <summary>Media previous-track hit rectangle.</summary>
+    public static SKRect MediaPrevious(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left, page.Top + 219 + dy, page.Left + 28, page.Top + 247 + dy);
+    }
+
+    /// <summary>Media play/pause hit rectangle.</summary>
+    public static SKRect MediaPlay(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left + 31, page.Top + 218 + dy, page.Left + 61, page.Top + 248 + dy);
+    }
+
+    /// <summary>Media next-track hit rectangle.</summary>
+    public static SKRect MediaNext(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left + 64, page.Top + 219 + dy, page.Left + 92, page.Top + 247 + dy);
+    }
+
+    /// <summary>Media output button rectangle.</summary>
+    public static SKRect MediaOutput(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left + 250, page.Top + 220 + dy, page.Left + 320, page.Top + 246 + dy);
+    }
+
+    /// <summary>Media queue button rectangle.</summary>
+    public static SKRect MediaQueue(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left + 326, page.Top + 220 + dy, page.Left + 400, page.Top + 246 + dy);
+    }
+
+    /// <summary>Media content height below the title gutter.</summary>
+    public static float MediaContentExtent(SKRect page, in FontScaleMetrics metrics)
+        => MediaSeekRow(page, metrics).Bottom + 16 + 38 - (page.Top + BodyTop);
+
+    // ---------------------------------------------------------------- lists
+
+    /// <summary>Notification row height (40 at 1.0; grows with the two text lines).</summary>
+    public static float NotificationRowHeight(in FontScaleMetrics metrics)
+        => 40 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowBody);
+
+    /// <summary>Clipboard row height (48 at 1.0).</summary>
+    public static float ClipboardRowHeight(in FontScaleMetrics metrics)
+        => 48 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowMeta);
+
+    /// <summary>Agent row height (48 at 1.0).</summary>
+    public static float AgentRowHeight(in FontScaleMetrics metrics)
+        => 48 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowMeta);
+
+    /// <summary>Notification row rectangle for an index at a scroll offset.</summary>
+    public static SKRect NotificationRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var top = page.Top + BodyTop + (index * (NotificationRowHeight(metrics) + 4)) - scrollOffset;
+        return new SKRect(page.Left + 16, top, page.Right - 16, top + NotificationRowHeight(metrics));
+    }
+
+    /// <summary>Notification dismiss button (vertically centred in the row).</summary>
+    public static SKRect NotificationDismiss(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = NotificationRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 30, row.MidY - 10, row.Right - 10, row.MidY + 10);
+    }
+
+    /// <summary>Notification verification-code chip.</summary>
+    public static SKRect NotificationCodeChip(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = NotificationRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 98, row.Bottom - 19, row.Right - 38, row.Bottom - 3);
+    }
+
+    /// <summary>Clipboard row rectangle for an index at a scroll offset.</summary>
+    public static SKRect ClipboardRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var top = page.Top + BodyTop + (index * (ClipboardRowHeight(metrics) + 6)) - scrollOffset;
+        return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight(metrics));
+    }
+
+    /// <summary>Clipboard pin button (vertically centred in the row).</summary>
+    public static SKRect ClipboardPin(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = ClipboardRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 58, row.MidY - 11, row.Right - 36, row.MidY + 11);
+    }
+
+    /// <summary>Clipboard copy button (vertically centred in the row).</summary>
+    public static SKRect ClipboardCopy(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = ClipboardRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 34, row.MidY - 11, row.Right - 12, row.MidY + 11);
+    }
+
+    /// <summary>Agent row rectangle for an index at a scroll offset.</summary>
+    public static SKRect AgentRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var top = page.Top + BodyTop + (index * (AgentRowHeight(metrics) + 6)) - scrollOffset;
+        return new SKRect(page.Left + 16, top, page.Right - 16, top + AgentRowHeight(metrics));
+    }
+
+    // ---------------------------------------------------------------- widgets
+
+    /// <summary>Widgets weather card (right column, grows with the temperature/condition lines).</summary>
+    public static SKRect WidgetsWeather(SKRect page, in FontScaleMetrics metrics)
+    {
+        var height = Math.Max(54, 8 + 18 + metrics.LineGrow(IslandType.WidgetTemp)
+            + 14 + metrics.LineGrow(IslandType.WidgetDesc) + 6);
+        return new SKRect(page.Left + 224, page.Top + 28, page.Right - 16, page.Top + 28 + (float)height);
+    }
+
+    /// <summary>Widgets stats card (three rows; grows with the stat label pitch).</summary>
+    public static SKRect WidgetsStats(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = WidgetsWeather(page, metrics).Bottom + 6;
+        var pitch = Math.Min(20 + metrics.LineGrow(IslandType.StatLabel), 24f);
+        var height = 10 + (2 * pitch) + 14 + metrics.LineGrow(IslandType.StatLabel) + 10;
+        return new SKRect(page.Left + 224, top, page.Right - 16, top + Math.Max(74, height));
+    }
+
+    /// <summary>Widgets tasks card (right column; grows with the task row pitch).</summary>
+    public static SKRect WidgetsNotes(SKRect page, in FontScaleMetrics metrics)
+    {
+        var top = WidgetsStats(page, metrics).Bottom + 6;
+        var pitch = 15 + metrics.LineGrow(IslandType.TaskLabel);
+        var content = 7 + 14 + metrics.LineGrow(IslandType.NotesHead) + 10 + (3 * pitch) - pitch + (15 + metrics.LineGrow(IslandType.TaskLabel)) + 4;
+        return new SKRect(page.Left + 224, top, page.Right - 16, top + Math.Max(92, content));
+    }
+
+    /// <summary>Widgets task row rectangle; the pitch follows the task line height and the card top.</summary>
+    public static SKRect WidgetsTaskRow(SKRect page, int index, in FontScaleMetrics metrics)
+    {
+        var card = WidgetsNotes(page, metrics);
+        var pitch = 15 + metrics.LineGrow(IslandType.TaskLabel);
+        var top = card.Top + 24 + (index * pitch);
+        return new SKRect(card.Left + 10, top, card.Right - 10, top + pitch);
+    }
+
+    /// <summary>Height of the taller widgets column (the calendar stays 232 DIP; the right column grows).</summary>
+    public static float WidgetsContentExtent(SKRect page, in FontScaleMetrics metrics)
+        => Math.Max(BodyHeight, WidgetsNotes(page, metrics).Bottom - (page.Top + BodyTop));
+
+    // ---------------------------------------------------------------- extents
+
+    /// <summary>Scroll extent of a page's body content (DIP below the title gutter).</summary>
+    public static float ContentExtent(SKRect page, int pageIndex, in FontScaleMetrics metrics)
+    {
+        switch (pageIndex)
+        {
+            case 0:
+                return HomeContentExtent(page, metrics);
+            case 1:
+                return MediaContentExtent(page, metrics);
+            case 2:
+            case 3:
+            case 4:
+                return BodyHeight; // list pages clamp their own model scroll offset
+            case 5:
+                return WidgetsContentExtent(page, metrics);
+            default:
+                return BodyHeight;
+        }
+    }
+
+    /// <summary>Maximum scroll offset for a page (0 when the content fits the body).</summary>
+    public static float MaxScroll(SKRect page, int pageIndex, in FontScaleMetrics metrics)
+        => Math.Max(0, ContentExtent(page, pageIndex, metrics) - BodyHeight);
+
+    /// <summary>Clamps a page scroll offset.</summary>
+    public static float ClampScroll(SKRect page, int pageIndex, double offset, in FontScaleMetrics metrics)
+    {
+        var max = MaxScroll(page, pageIndex, metrics);
+        var value = double.IsFinite(offset) ? (float)offset : 0;
+        return Math.Clamp(value, 0, max);
+    }
+
+    /// <summary>Clamps a list scroll offset against the metric row height.</summary>
+    private static float ClampListScroll(int count, float rowHeight, float gap, float scrollOffset)
+    {
+        var max = Math.Max(0, (count * (rowHeight + gap)) - gap - BodyHeight);
+        var value = float.IsFinite(scrollOffset) ? scrollOffset : 0;
+        return Math.Clamp(value, 0, max);
+    }
+
+    /// <summary>Body rectangle of a page (title gutter excluded) at any font scale.</summary>
+    public static SKRect Body(SKRect page) => new(page.Left, page.Top + BodyTop, page.Right, page.Bottom);
+
+    /// <summary>
+    /// Hit-tests an expanded page's controls with the font-scale aware rectangles, the per-page scroll
+    /// offset and the row count, so painted rows and click targets never drift.
+    /// </summary>
+    public static IslandPageControl HitTest(
+        int page, SKRect pageRect, float x, float y, in FontScaleMetrics metrics, float scrollOffset, int itemCount, out int index)
+    {
+        index = -1;
+        var scrolled = page is 0 or 1 or 5
+            ? new SKRect(pageRect.Left, pageRect.Top - scrollOffset, pageRect.Right, pageRect.Bottom - scrollOffset)
+            : pageRect;
+
+        switch (page)
+        {
+            case 0:
+                if (HomeMediaPlay(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.PlayPause;
+                }
+
+                if (HomeMediaCard(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.MediaCard;
+                }
+
+                for (var i = 0; i < 4; i++)
+                {
+                    if (HomeToggle(scrolled, i, metrics).Contains(x, y))
+                    {
+                        index = i;
+                        return IslandPageControl.QuickToggle;
+                    }
+                }
+
+                if (HomeVolumeTrack(scrolled, metrics).InflateY(8).Contains(x, y))
+                {
+                    return IslandPageControl.VolumeSlider;
+                }
+
+                if (HomeBrightnessTrack(scrolled, metrics).InflateY(8).Contains(x, y))
+                {
+                    return IslandPageControl.BrightnessSlider;
+                }
+
+                return IslandPageControl.None;
+            case 1:
+                if (MediaPlay(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.PlayPause;
+                }
+
+                if (MediaPrevious(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.Previous;
+                }
+
+                if (MediaNext(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.Next;
+                }
+
+                if (MediaSeekRow(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.Seek;
+                }
+
+                if (MediaOutput(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.Output;
+                }
+
+                if (MediaQueue(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.Queue;
+                }
+
+                return IslandPageControl.None;
+            case 2:
+                {
+                    var body = Body(pageRect);
+                    if (!body.Contains(x, y))
+                    {
+                        return IslandPageControl.None;
+                    }
+
+                    var count = Math.Clamp(itemCount, 0, 64);
+                    var scroll = ClampListScroll(count, NotificationRowHeight(metrics), 4, scrollOffset);
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (NotificationDismiss(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Dismiss;
+                        }
+                    }
+
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (NotificationRow(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Row;
+                        }
+                    }
+
+                    return IslandPageControl.Scroll;
+                }
+
+            case 3:
+                {
+                    var body = Body(pageRect);
+                    if (!body.Contains(x, y))
+                    {
+                        return IslandPageControl.None;
+                    }
+
+                    var count = Math.Clamp(itemCount, 0, 64);
+                    var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), 6, scrollOffset);
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (ClipboardPin(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Pin;
+                        }
+
+                        if (ClipboardCopy(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Copy;
+                        }
+                    }
+
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (ClipboardRow(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Row;
+                        }
+                    }
+
+                    return IslandPageControl.Scroll;
+                }
+
+            case 4:
+                {
+                    var body = Body(pageRect);
+                    if (!body.Contains(x, y))
+                    {
+                        return IslandPageControl.None;
+                    }
+
+                    var count = Math.Clamp(itemCount, 0, 64);
+                    var scroll = ClampListScroll(count, AgentRowHeight(metrics), 6, scrollOffset);
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (AgentRow(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Row;
+                        }
+                    }
+
+                    return IslandPageControl.Scroll;
+                }
+
+            case 5:
+                if (PageLayout.WidgetsCalendarNav(scrolled, previous: true).Contains(x, y))
+                {
+                    return IslandPageControl.CalendarPrevious;
+                }
+
+                if (PageLayout.WidgetsCalendarNav(scrolled, previous: false).Contains(x, y))
+                {
+                    return IslandPageControl.CalendarNext;
+                }
+
+                for (var i = 0; i < Math.Clamp(itemCount, 0, 3); i++)
+                {
+                    if (WidgetsTaskRow(scrolled, i, metrics).Contains(x, y))
+                    {
+                        index = i;
+                        return IslandPageControl.TaskToggle;
+                    }
+                }
+
+                return IslandPageControl.None;
+            default:
+                return IslandPageControl.None;
+        }
+    }
+}
