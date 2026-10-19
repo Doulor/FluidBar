@@ -384,18 +384,17 @@ public static class SettingsSectionBuilder
         }
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Title),
-            ctx.Localizer.Get(LocKeys.Settings.Appearance.PreviewHint),
+            ctx.Localizer.Get(LocKeys.Settings.Appearance.Subtitle),
             SettingsWidgets.Group(brushes.Line, topBorder: true,
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Title), null,
                     [
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.System), "system"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Dark), "dark"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Light), "light"),
                     ],
-                    settings.Theme switch { AppTheme.Dark => "dark", AppTheme.Light => "light", _ => "system" },
+                    settings.Theme == AppTheme.Light ? "light" : "dark",
                     value => ctx.Settings.Update(s => s with
                     {
-                        Theme = value switch { "dark" => AppTheme.Dark, "light" => AppTheme.Light, _ => AppTheme.System },
+                        Theme = value == "light" ? AppTheme.Light : AppTheme.Dark,
                     })),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.AcrylicUnavailable),
@@ -408,53 +407,14 @@ public static class SettingsSectionBuilder
                     {
                         Material = value == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
                     })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel), null,
-                    [
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
-                    ],
-                    settings.Palette,
-                    value => ctx.Settings.Update(s => s with { Palette = value })),
                 SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title), null, swatches,
                     brushes.Foreground, brushes.Tertiary, brushes.Line),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
                     value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),
-                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork), null,
-                    settings.AccentMode == "artwork",
-                    value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacity), null,
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
-                    value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value })),
-                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
-                    0.8, 1.6, 0.05, settings.FontScale,
-                    value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.Title), null,
-                    [
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.System), "system"),
-                        (ctx.Localizer.Get(LocKeys.Common.On), "on"),
-                        (ctx.Localizer.Get(LocKeys.Common.Off), "off"),
-                    ],
-                    settings.ReducedMotion switch
-                    {
-                        ReducedMotionPreference.On => "on",
-                        ReducedMotionPreference.Off => "off",
-                        _ => "system",
-                    },
-                    value => ctx.Settings.Update(s => s with
-                    {
-                        ReducedMotion = value switch
-                        {
-                            "on" => ReducedMotionPreference.On,
-                            "off" => ReducedMotionPreference.Off,
-                            _ => ReducedMotionPreference.System,
-                        },
-                    })),
-                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.MotionStrength), null,
-                    0.5, 1.5, 0.05, settings.MotionStrength,
-                    value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { MotionStrength = value }))));
+                    value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }))));
 
         panel.Children.Add(new TextBlock
         {
@@ -895,6 +855,13 @@ public static class SettingsSectionBuilder
             ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
                 ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
                 value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } })),
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystem),
+                ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystemHint),
+                settings.Theme == AppTheme.System,
+                value => ctx.Settings.Update(s => s with
+                {
+                    Theme = value ? AppTheme.System : (s.Theme == AppTheme.System ? AppTheme.Dark : s.Theme),
+                })),
             ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystem),
                 ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystemHint),
                 string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase),
@@ -924,7 +891,46 @@ public static class SettingsSectionBuilder
                     OffHairline = brushes.LineStrong,
                     OffKnob = brushes.Secondary,
                 },
-                brushes.Foreground, brushes.Tertiary, brushes.Line)));
+                brushes.Foreground, brushes.Tertiary, brushes.Line),
+            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel), null,
+                [
+                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
+                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
+                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
+                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
+                ],
+                settings.Palette,
+                value => ctx.Settings.Update(s => s with { Palette = value })),
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork), null,
+                settings.AccentMode == "artwork",
+                value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
+            SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
+                0.8, 1.6, 0.05, settings.FontScale,
+                value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })),
+            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.Title), null,
+                [
+                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.System), "system"),
+                    (ctx.Localizer.Get(LocKeys.Common.On), "on"),
+                    (ctx.Localizer.Get(LocKeys.Common.Off), "off"),
+                ],
+                settings.ReducedMotion switch
+                {
+                    ReducedMotionPreference.On => "on",
+                    ReducedMotionPreference.Off => "off",
+                    _ => "system",
+                },
+                value => ctx.Settings.Update(s => s with
+                {
+                    ReducedMotion = value switch
+                    {
+                        "on" => ReducedMotionPreference.On,
+                        "off" => ReducedMotionPreference.Off,
+                        _ => ReducedMotionPreference.System,
+                    },
+                })),
+            SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.MotionStrength), null,
+                0.5, 1.5, 0.05, settings.MotionStrength,
+                value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { MotionStrength = value }))));
 
         var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), IconKind.Warning,
             true, () =>

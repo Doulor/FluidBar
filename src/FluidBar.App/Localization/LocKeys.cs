@@ -522,6 +522,8 @@ public static partial class LocKeys
             public const string Preview = "Settings.Appearance.Preview";
             /// <summary><c>Settings.Appearance.PreviewHint</c></summary>
             public const string PreviewHint = "Settings.Appearance.PreviewHint";
+        /// <summary><c>Settings.Appearance.Subtitle</c></summary>
+        public const string Subtitle = "Settings.Appearance.Subtitle";
             /// <summary><c>Settings.Appearance.PanelRadius</c></summary>
             public const string PanelRadius = "Settings.Appearance.PanelRadius";
             /// <summary><c>Settings.Appearance.PanelRadiusHint</c></summary>
@@ -738,6 +740,10 @@ public static partial class LocKeys
             public const string SafeMode = "Settings.Advanced.SafeMode";
             /// <summary><c>Settings.Advanced.SafeModeHint</c></summary>
             public const string SafeModeHint = "Settings.Advanced.SafeModeHint";
+        /// <summary><c>Settings.Advanced.ThemeFollowSystem</c></summary>
+        public const string ThemeFollowSystem = "Settings.Advanced.ThemeFollowSystem";
+        /// <summary><c>Settings.Advanced.ThemeFollowSystemHint</c></summary>
+        public const string ThemeFollowSystemHint = "Settings.Advanced.ThemeFollowSystemHint";
         /// <summary><c>Settings.Advanced.LanguageFollowSystem</c></summary>
         public const string LanguageFollowSystem = "Settings.Advanced.LanguageFollowSystem";
         /// <summary><c>Settings.Advanced.LanguageFollowSystemHint</c></summary>
