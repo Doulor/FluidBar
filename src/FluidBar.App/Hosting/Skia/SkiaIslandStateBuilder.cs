@@ -38,6 +38,12 @@ public static class SkiaIslandStateBuilder
 
         var kind = island.Primary?.Kind ?? ActivityKind.Idle;
         var model = IslandPresenter.ToCompact(island, content, localizer, peeked);
+        // The activity payload carries no artwork and a possibly stale progress; the media snapshot
+        // has both, so the compact pill mirrors what the media page shows.
+        var media = kind == ActivityKind.Media ? IslandPresenter.ResolveMedia(content, island) : null;
+        var progress = kind == ActivityKind.Media && media is not null
+            ? (media.HasTimeline ? media.ProgressPercent : -1)
+            : model.ProgressPercent ?? -1;
         var unread = kind == ActivityKind.Notification ? Math.Max(0, content.UnreadCount) : 0;
         return new CompactActivity(kind, new CompactModel
         {
@@ -58,8 +64,10 @@ public static class SkiaIslandStateBuilder
             IsActive = model.IsActive,
             IsMuted = model.IsMuted,
             IsCharging = model.IsCharging,
-            ProgressPercent = model.ProgressPercent ?? -1,
-            AccentHex = model.AccentHex,
+            ProgressPercent = progress,
+            AccentHex = model.AccentHex ?? media?.AccentHex,
+            Artwork = media?.Artwork,
+            ArtworkKey = media?.ArtworkKey,
             Icon = MapIcon(model.Icon),
             Status = MapTone(model.Tone),
         });

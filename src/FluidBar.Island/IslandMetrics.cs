@@ -62,17 +62,17 @@ public static class IslandMetrics
     /// <summary>Compact trailing chip height (20 DIP).</summary>
     public const double CompactChipHeight = 20;
 
-    /// <summary>Detached previous/next mini-island width (40 DIP, prototype capsule).</summary>
-    public const double MiniNeighbourWidth = 40;
+    /// <summary>Detached previous/next mini-island width (26 DIP, prototype).</summary>
+    public const double MiniNeighbourWidth = 26;
 
-    /// <summary>Detached previous/next mini-island height (24 DIP).</summary>
-    public const double MiniNeighbourHeight = 24;
+    /// <summary>Detached previous/next mini-island height (26 DIP, prototype).</summary>
+    public const double MiniNeighbourHeight = 26;
 
-    /// <summary>Detached current mini-island width (76 DIP; fits the short page label).</summary>
-    public const double MiniCurrentWidth = 76;
+    /// <summary>Detached current mini-island width (73 DIP, prototype label capsule).</summary>
+    public const double MiniCurrentWidth = 73;
 
-    /// <summary>Detached current mini-island height (24 DIP).</summary>
-    public const double MiniCurrentHeight = 24;
+    /// <summary>Detached current mini-island height (28 DIP, prototype).</summary>
+    public const double MiniCurrentHeight = 28;
 
     /// <summary>Gap between detached islands (8 DIP).</summary>
     public const double MiniGap = 8;

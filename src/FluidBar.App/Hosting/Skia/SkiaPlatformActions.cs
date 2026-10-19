@@ -1,7 +1,10 @@
+using FluidBar.App.Island;
+using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.Core.Diagnostics;
 using System.Collections.Immutable;
+using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Clipboard;
 using FluidBar.Platform.Windows.CoreIntegration;
 using FluidBar.Platform.Windows.Diagnostics;
@@ -33,6 +36,7 @@ namespace FluidBar.App.Hosting.Skia;
 public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSource, IAsyncDisposable
 {
     private readonly SettingsController _settings;
+    private readonly ILocalizer? _localizer;
     private readonly TimeProvider _time;
     private readonly IAppLogger _logger;
     private readonly IPlatformLogger _platformLogger;
@@ -43,6 +47,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly BrightnessMonitor _brightness;
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
+    private readonly AgentInboxWatcher _agentInbox;
+    private readonly AgentHookInstaller _agentHooks;
     private readonly IRadioToggleService _wifi;
     private readonly IRadioToggleService _bluetooth;
     private readonly IFocusAssistService _focus;
@@ -62,8 +68,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <param name="settings">Live App settings (theme quick toggle + persistence).</param>
     /// <param name="logger">App logger for control/service failures.</param>
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
-    public SkiaPlatformActions(SettingsController settings, IAppLogger? logger = null, TimeProvider? timeProvider = null)
-        : this(settings, logger, timeProvider, quickToggles: null)
+    public SkiaPlatformActions(SettingsController settings, IAppLogger? logger = null, TimeProvider? timeProvider = null,
+        ILocalizer? localizer = null)
+        : this(settings, logger, timeProvider, quickToggles: null, localizer)
     {
     }
 
@@ -76,9 +83,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
     /// <param name="quickToggles">Quick-toggle services, or null to build the production ones.</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger, TimeProvider? timeProvider,
-        IslandQuickToggleServices? quickToggles)
+        IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _localizer = localizer;
         _logger = logger ?? NullAppLogger.Instance;
         _platformLogger = new AppLoggerPlatformAdapter(_logger);
         _counters = new PlatformCounters();
@@ -96,6 +104,22 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             time);
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
+
+        // Agent inbox: hook scripts drop one JSON file per Claude Code / Codex event here. Read-only
+        // watcher (no polling); the hook installer only writes when the user runs the consent command.
+        var dataDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar");
+        var inboxDirectory = Path.Combine(dataDirectory, "agent-events");
+        _agentInbox = new AgentInboxWatcher(new AgentInboxOptions { InboxDirectory = inboxDirectory },
+            _platformLogger, _counters, time);
+        _agentHooks = new AgentHookInstaller(new HookInstallOptions
+        {
+            SettingsFilePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "settings.json"),
+            HookCommand = BuildAgentHookCommand(inboxDirectory),
+            BackupDirectory = Path.Combine(dataDirectory, "backups", "agent-hooks"),
+        }, _platformLogger);
+        _agentInbox.SnapshotChanged += OnSnapshotChanged;
         _lyricsHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _lyricsCache = new LyricsCache(timeProvider: time, counters: _counters);
         _lyrics = new LyricsService(
@@ -125,6 +149,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Clipboard source exposed to first-party plugins.</summary>
     public IClipboardSource ClipboardSource => _clipboard;
+
+    /// <summary>Agent event inbox exposed to first-party plugins (Claude Code / Codex hooks).</summary>
+    public IAgentInboxSource AgentInboxSource => _agentInbox;
+
+    /// <summary>Consent-gated agent hook installer exposed to first-party plugins.</summary>
+    public IAgentHookInstaller AgentHookInstaller => _agentHooks;
 
     /// <summary>Bounded artwork materializer exposed to the media plugin (<c>AlbumArtPath</c>).</summary>
     public ArtworkTempStore ArtworkTempStore => _artworkTempStore;
@@ -206,7 +236,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = clipboard.Take(8).Select(MapClipboard).ToImmutableArray(),
             Notifications = [],
-            Agents = [],
+            Agents = MapAgents(_agentInbox.Current),
             Tasks = [],
             UnreadCount = 0,
         };
@@ -477,6 +507,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("focus-assist", () => _focus.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
         ScheduleClockTick();
     }
 
@@ -723,6 +754,63 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         return IslandActionResult.Handled;
     }
 
+    /// <summary>Maps the bounded agent inbox snapshot into island page rows (newest first).</summary>
+    private ImmutableArray<AgentItemData> MapAgents(AgentEventSnapshot? snapshot)
+    {
+        if (snapshot is null || snapshot.Recent.IsEmpty)
+        {
+            return ImmutableArray<AgentItemData>.Empty;
+        }
+
+        var builder = ImmutableArray.CreateBuilder<AgentItemData>(Math.Min(8, snapshot.Recent.Length));
+        foreach (var entry in snapshot.Recent)
+        {
+            if (builder.Count >= 8)
+            {
+                break;
+            }
+
+            builder.Add(new AgentItemData
+            {
+                Name = string.IsNullOrWhiteSpace(entry.Title) ? AgentDisplayName(entry.Agent) : entry.Title,
+                StatusText = entry.Kind switch
+                {
+                    AgentEventKind.Completed => Localized(LocKeys.Agent.Completed, "Completed"),
+                    AgentEventKind.Failed => Localized(LocKeys.Agent.Failed, "Failed"),
+                    AgentEventKind.WaitingForInput => Localized(LocKeys.Agent.Waiting, "Waiting"),
+                    _ => Localized(LocKeys.Agent.Running, "Running"),
+                },
+                Tone = entry.Kind switch
+                {
+                    AgentEventKind.Completed => StatusTone.Success,
+                    AgentEventKind.Failed => StatusTone.Danger,
+                    AgentEventKind.WaitingForInput => StatusTone.Warning,
+                    _ => StatusTone.Info,
+                },
+                TimeText = string.Empty,
+                Detail = entry.Message,
+            });
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static string AgentDisplayName(AgentKind agent) => agent switch
+    {
+        AgentKind.Claude => "Claude Code",
+        AgentKind.Codex => "Codex",
+        _ => "Agent",
+    };
+
+    private string Localized(string key, string fallback) => _localizer?.Get(key) ?? fallback;
+
+    /// <summary>
+    /// PowerShell hook command written by the explicit installer: it appends one JSON event file to the
+    /// inbox so the island can show the agent session without any polling.
+    /// </summary>
+    private static string BuildAgentHookCommand(string inboxDirectory)
+        => "pwsh -NoProfile -Command \"$j=@{schemaVersion=1;agent='claude-code';event='Stop';title='Claude Code';timestamp=(Get-Date).ToString('o')}|ConvertTo-Json -Compress;Set-Content -LiteralPath (Join-Path '" + inboxDirectory + "' ('claude-'+[guid]::NewGuid().ToString('N')+'.json')) -Value $j\"";
+
     private IslandActionResult CopyClipboard(in IslandPlatformAction action)
     {
         var text = action.Text;
@@ -820,6 +908,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
         await StopOneAsync("media", () => _media.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("focus-assist", () => _focus.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-radio", () => _bluetooth.DisposeAsync().AsTask()).ConfigureAwait(false);

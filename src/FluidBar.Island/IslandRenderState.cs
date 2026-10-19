@@ -344,6 +344,12 @@ public sealed record CompactModel
     /// <summary>Optional accent colour hex for the activity icon/artwork.</summary>
     public string? AccentHex { get; init; }
 
+    /// <summary>Cover art bytes for the compact media pill (null = gradient placeholder).</summary>
+    public byte[]? Artwork { get; init; }
+
+    /// <summary>Stable cache key for <see cref="Artwork"/>.</summary>
+    public string? ArtworkKey { get; init; }
+
     /// <summary>Optional leading icon override.</summary>
     public IconKind? Icon { get; init; }
 

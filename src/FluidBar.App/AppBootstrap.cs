@@ -98,7 +98,7 @@ internal sealed class AppBootstrap
 
         try
         {
-            var actions = new SkiaPlatformActions(_settings, _logger);
+            var actions = new SkiaPlatformActions(_settings, _logger, localizer: _localizer);
             actions.StartInBackground();
             return actions;
         }
@@ -404,6 +404,8 @@ internal sealed class AppBootstrap
             Media = _platformActions.MediaSource,
             Clipboard = _platformActions.ClipboardSource,
             ArtworkTempStore = _platformActions.ArtworkTempStore,
+            AgentInbox = _platformActions.AgentInboxSource,
+            AgentHookInstaller = _platformActions.AgentHookInstaller,
         };
 
         try
@@ -414,6 +416,8 @@ internal sealed class AppBootstrap
                 Media = _platformActions.MediaSource,
                 Clipboard = _platformActions.ClipboardSource,
                 ArtworkTempStore = _platformActions.ArtworkTempStore,
+                AgentInbox = _platformActions.AgentInboxSource,
+                AgentHookInstaller = _platformActions.AgentHookInstaller,
                 Notifications = _pluginNotifications,
             };
             _ = StartNotificationListenerAsync(_pluginNotifications);

@@ -15,7 +15,7 @@ internal sealed class TransientStripRenderer : IDisposable
 {
     private const int MaxDots = IslandMetrics.MaxDotsPerSide;
     private const float DotPitch = (float)(IslandMetrics.DotSize + IslandMetrics.DotGap);
-    private const float BlockGap = 8f;
+    private const float BlockGap = 7f;
 
     private readonly TextEngine _text;
     private readonly SKPaint _fill = new() { IsAntialias = true };

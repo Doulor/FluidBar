@@ -14,6 +14,7 @@ internal sealed class CompactRenderer : IDisposable
     private readonly TextEngine _text;
     private readonly AccentPalette _accents;
     private readonly ArtShaderCache _art;
+    private readonly ArtworkImageCache _artwork;
     private readonly NumberTextCache _numbers;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
@@ -28,11 +29,13 @@ internal sealed class CompactRenderer : IDisposable
     private static readonly float[] ActiveWave = [0.35f, 0.7f, 1f, 0.6f, 0.4f];
     private static readonly float[] IdleWave = [0.3f, 0.5f, 0.4f, 0.55f, 0.35f];
 
-    public CompactRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art, NumberTextCache numbers)
+    public CompactRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art,
+        ArtworkImageCache artwork, NumberTextCache numbers)
     {
         _text = text;
         _accents = accents;
         _art = art;
+        _artwork = artwork;
         _numbers = numbers;
     }
 
@@ -107,7 +110,7 @@ internal sealed class CompactRenderer : IDisposable
     {
         var accent = _accents.Get(model.AccentHex, _theme.TrackAccent);
         var art = new SKRect(8, (height - 28) / 2, 36, (height + 28) / 2);
-        DrawArt(canvas, art, 8, accent);
+        DrawArt(canvas, art, 8, accent, model.Artwork, model.ArtworkKey);
 
         var textWidth = Math.Max(0, width - 44 - 8 - 26 - 8 - 22);
         var titleArea = new SKRect(44, 6, 44 + textWidth, 22);
@@ -121,8 +124,12 @@ internal sealed class CompactRenderer : IDisposable
         var play = new SKRect(width - 34, 7, width - 8, 33);
         DrawIcon(canvas, model.IsActive ? IconKind.Pause : IconKind.Play, play.Deflate(4), _theme.Foreground);
 
-        var track = new SKRect(8, height - 2, width - 8, height);
-        DrawTrack(canvas, track, model.ProgressPercent < 0 ? 0 : model.ProgressPercent / 100.0, accent, _theme.HudTrack);
+        // No timeline = no bar at all (an always-empty 0 % bar read as a stuck progress).
+        if (model.ProgressPercent >= 0)
+        {
+            var track = new SKRect(8, height - 2, width - 8, height);
+            DrawTrack(canvas, track, Math.Clamp(model.ProgressPercent / 100.0, 0, 1), accent, _theme.HudTrack);
+        }
     }
 
     // ------------------------------------------------------------------- hud
@@ -367,8 +374,29 @@ internal sealed class CompactRenderer : IDisposable
     private void DrawIcon(SKCanvas canvas, IconKind kind, SKRect area, SKColor color)
         => IconSet.Draw(canvas, kind, area, Alpha(color, _opacity), _icon);
 
-    private void DrawArt(SKCanvas canvas, SKRect rect, float radius, SKColor accent)
+    private void DrawArt(SKCanvas canvas, SKRect rect, float radius, SKColor accent,
+        byte[]? artwork = null, string? artworkKey = null)
     {
+        // Real cover art when the platform supplied bytes; otherwise the accent gradient placeholder.
+        var image = _artwork.Get(artworkKey, artwork);
+        if (image is not null && image.Width > 0 && image.Height > 0)
+        {
+            var coverScale = Math.Max(rect.Width / image.Width, rect.Height / image.Height);
+            var width = image.Width * coverScale;
+            var height = image.Height * coverScale;
+            var destination = new SKRect(
+                rect.MidX - (width / 2), rect.MidY - (height / 2),
+                rect.MidX + (width / 2), rect.MidY + (height / 2));
+            canvas.Save();
+            canvas.ClipRoundRect(new SKRoundRect(rect, radius, radius), SKClipOperation.Intersect, antialias: true);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(image, destination, _fill);
+            canvas.Restore();
+            return;
+        }
+
         canvas.Save();
         canvas.Translate(rect.Left, rect.Top);
         var size = rect.Width;

@@ -96,7 +96,7 @@ public sealed class IslandRenderer : IDisposable
         _artwork = new ArtworkImageCache();
         _paths = new SquirclePathCache(_options.PathCacheCapacity);
         _shadows = new ShadowCache(_options.ShadowCacheCapacity);
-        _compact = new CompactRenderer(_text, _accents, _art, _numbers);
+        _compact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
         _pages = new PageRenderer(_text, _accents, _art, _artwork, _numbers);
         _strip = new TransientStripRenderer(_text);
     }

@@ -111,7 +111,7 @@ public static class SkiaIslandHitTest
         var rightDots = arch.ResolvedFarRightDots;
 
         const float dotPitch = (float)(IslandMetrics.DotSize + IslandMetrics.DotGap);
-        const float blockGap = 8f;
+        const float blockGap = 7f;
         var leftBlock = leftDots > 0 ? (leftDots * dotPitch) - (float)IslandMetrics.DotGap : 0;
         var rightBlock = rightDots > 0 ? (rightDots * dotPitch) - (float)IslandMetrics.DotGap : 0;
         var islands = (float)((IslandMetrics.MiniNeighbourWidth * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
