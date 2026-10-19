@@ -441,6 +441,12 @@ public static partial class LocKeys
     {
         /// <summary><c>Settings.Title</c></summary>
         public const string Title = "Settings.Title";
+        /// <summary><c>Settings.NavKicker</c></summary>
+        public const string NavKicker = "Settings.NavKicker";
+        /// <summary><c>Settings.VersionLine</c></summary>
+        public const string VersionLine = "Settings.VersionLine";
+        /// <summary><c>Settings.FooterNote</c></summary>
+        public const string FooterNote = "Settings.FooterNote";
         /// <summary>Keys in the 'General' area.</summary>
         public static class General
         {
@@ -510,6 +516,10 @@ public static partial class LocKeys
             public const string Preview = "Settings.Appearance.Preview";
             /// <summary><c>Settings.Appearance.PreviewHint</c></summary>
             public const string PreviewHint = "Settings.Appearance.PreviewHint";
+            /// <summary><c>Settings.Appearance.PreviewLabel</c></summary>
+            public const string PreviewLabel = "Settings.Appearance.PreviewLabel";
+            /// <summary><c>Settings.Appearance.LiveHint</c></summary>
+            public const string LiveHint = "Settings.Appearance.LiveHint";
             /// <summary>Keys in the 'Theme' area.</summary>
             public static class Theme
             {
@@ -570,6 +580,8 @@ public static partial class LocKeys
         /// <summary>Keys in the 'Island' area.</summary>
         public static class Island
         {
+            /// <summary><c>Settings.Island.Description</c></summary>
+            public const string Description = "Settings.Island.Description";
             /// <summary><c>Settings.Island.Title</c></summary>
             public const string Title = "Settings.Island.Title";
             /// <summary><c>Settings.Island.HoverPeek</c></summary>
@@ -668,6 +680,10 @@ public static partial class LocKeys
             public const string Orphan = "Settings.Plugins.Orphan";
             /// <summary><c>Settings.Plugins.OrphanHint</c></summary>
             public const string OrphanHint = "Settings.Plugins.OrphanHint";
+            /// <summary><c>Settings.Plugins.StateDisabled</c></summary>
+            public const string StateDisabled = "Settings.Plugins.StateDisabled";
+            /// <summary><c>Settings.Plugins.StateUnavailable</c></summary>
+            public const string StateUnavailable = "Settings.Plugins.StateUnavailable";
             /// <summary><c>Settings.Plugins.RestartRequired</c></summary>
             public const string RestartRequired = "Settings.Plugins.RestartRequired";
             /// <summary><c>Settings.Plugins.ConsentRequired</c></summary>

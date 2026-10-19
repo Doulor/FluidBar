@@ -81,7 +81,7 @@ public sealed record DockSettings
 public sealed record PluginSettings
 {
     /// <summary>Enabled plugin ids (built-in + community).</summary>
-    public IReadOnlyList<string> Enabled { get; init; } = ["builtin.media", "builtin.clipboard", "builtin.notifications", "builtin.agent"];
+    public IReadOnlyList<string> Enabled { get; init; } = ["fluidbar-media", "fluidbar-clipboard", "fluidbar-notifications", "fluidbar-agent"];
 
     /// <summary>Marketplace update channel.</summary>
     public string Channel { get; init; } = "stable";
@@ -333,6 +333,41 @@ public sealed record AppSettings
     public const double MaxPlacementOffsetDip = 100_000;
 
     /// <summary>Clamps and normalizes every value so a corrupted file can never break the UI.</summary>
+    /// <summary>Design-time plugin ids written by early builds, mapped to the runtime ids.</summary>
+    private static readonly Dictionary<string, string> LegacyPluginIds = new(StringComparer.Ordinal)
+    {
+        ["builtin.media"] = "fluidbar-media",
+        ["builtin.clipboard"] = "fluidbar-clipboard",
+        ["builtin.notifications"] = "fluidbar-notifications",
+        ["builtin.agent"] = "fluidbar-agent",
+        ["builtin.devices"] = "fluidbar-devices",
+    };
+
+    private static IReadOnlyList<string> NormalizePluginIds(IReadOnlyList<string> ids)
+    {
+        // Keep the same instance when nothing is legacy: record equality drives change detection.
+        var legacy = false;
+        foreach (var id in ids)
+        {
+            if (LegacyPluginIds.ContainsKey(id))
+            {
+                legacy = true;
+                break;
+            }
+        }
+
+        if (!legacy)
+        {
+            return ids;
+        }
+
+        return ids
+            .Select(static id => LegacyPluginIds.TryGetValue(id, out var mapped) ? mapped : id)
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
     public AppSettings Normalize() => this with
     {
         SchemaVersion = 2,
@@ -361,6 +396,8 @@ public sealed record AppSettings
         DisplayOn = Enum.IsDefined(DisplayOn) ? DisplayOn : DisplayTarget.Primary,
         Plugins = Plugins with
         {
+            // Early builds stored design-time ids ("builtin.media"); the runtime uses "fluidbar-media".
+            Enabled = NormalizePluginIds(Plugins.Enabled),
             Channel = Plugins.Channel is "stable" or "beta" ? Plugins.Channel : "stable",
             CheckIntervalHours = Math.Clamp(Plugins.CheckIntervalHours, 1, 168),
         },

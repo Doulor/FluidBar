@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using FluidBar.App.Diagnostics;
@@ -498,15 +499,39 @@ internal sealed class AppBootstrap
             return;
         }
 
+        // One window: a hotkey press while it is already open switches section and re-focuses it.
+        if (_settingsWindow is { } existing)
+        {
+            existing.ShowSection(section);
+            BringToFront(existing);
+            return;
+        }
+
         var window = new SettingsWindow(
             _settings,
             _localizer,
             section,
             _pluginRuntime?.Marketplace,
             _pluginRuntime?.Plugins);
+        window.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow = window;
         window.Show();
+        BringToFront(window);
     }
 
+    /// <summary>
+    /// Raises the window above the foreground app. The island runs without a foreground window, so
+    /// Windows refuses a plain Activate/SetForegroundWindow; a brief Topmost toggle is the reliable
+    /// way to bring a background process's window to the front.
+    /// </summary>
+    private static void BringToFront(Window window)
+    {
+        window.Activate();
+        window.Topmost = true;
+        Dispatcher.UIThread.Post(() => window.Topmost = false, DispatcherPriority.Background);
+    }
+
+    private SettingsWindow? _settingsWindow;
     private bool _shutdownStarted;
 
     private void DisposeServices()

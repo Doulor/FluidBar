@@ -186,9 +186,13 @@
     "Page.Widgets.AddTask": "Add task",
 
     "Settings.Title": "Settings",
+    "Settings.NavKicker": "Preferences",
+    "Settings.VersionLine": "Windows desktop",
+    "Settings.FooterNote": "Interactive prototype · not a release build",
     "Settings.General.Title": "General",
     "Settings.Appearance.Title": "Appearance",
     "Settings.Island.Title": "Island",
+    "Settings.Island.Description": "Default form, anchor and auto-collapse behaviour.",
     "Settings.Plugins.Title": "Plugins",
     "Settings.Marketplace.Title": "Marketplace",
     "Settings.Advanced.Title": "Advanced",
@@ -238,6 +242,8 @@
     "Settings.Appearance.MotionStrength": "Motion strength",
     "Settings.Appearance.Preview": "Preview",
     "Settings.Appearance.PreviewHint": "Changes update the island live.",
+    "Settings.Appearance.PreviewLabel": "Island preview",
+    "Settings.Appearance.LiveHint": "Changes apply to the island immediately.",
 
     "Settings.Island.Mode.Title": "Mode",
     "Settings.Island.Mode.Float": "Floating island",
@@ -277,6 +283,8 @@
     "Settings.Plugins.Empty": "No plugins installed",
     "Settings.Plugins.Orphan": "Missing plugin",
     "Settings.Plugins.OrphanHint": "Enabled in settings but not installed — remove or reinstall.",
+    "Settings.Plugins.StateDisabled": "Disabled",
+    "Settings.Plugins.StateUnavailable": "Unavailable",
     "Settings.Plugins.RestartRequired": "Restart FluidBar to finish unloading.",
     "Settings.Plugins.ConsentRequired": "This plugin needs your consent to run.",
 

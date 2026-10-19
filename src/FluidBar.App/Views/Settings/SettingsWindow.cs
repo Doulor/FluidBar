@@ -9,12 +9,14 @@ using FluidBar.App.Settings;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.Marketplace.Catalog;
+
 namespace FluidBar.App.Views.Settings;
 
 /// <summary>
-/// Settings window (900×620 custom chrome, seven sections). Every change is applied live through
-/// <see cref="SettingsController"/>; the island host listens to the same controller. Language and theme
-/// switches repaint/re-build the window without restarting the app (spec 8, S8).
+/// Settings window (900×620 custom chrome, seven sections) matching the interactive prototype
+/// (docs/rewrite/prototype2): 50 DIP title bar, 208 DIP nav with kicker/counts/version, 30/24 pane
+/// padding, hairline setting rows and prototype controls. Every change applies live through
+/// <see cref="SettingsController"/>; language and theme switches rebuild the window without a restart.
 /// </summary>
 public sealed class SettingsWindow : Window, ILocalizable
 {
@@ -37,7 +39,10 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly StackPanel _nav = new() { Spacing = 2 };
     private readonly ScrollViewer _content = new();
     private readonly TextBlock _titleText = new();
+    private readonly TextBlock _subText = new();
     private readonly List<Button> _navButtons = [];
+    private readonly Dictionary<SettingsWindowSection, TextBlock> _navCounts = [];
+    private readonly Border _shell;
     private SettingsWindowSection _section;
     private IslandPreview? _preview;
     private string? _status;
@@ -70,12 +75,23 @@ public sealed class SettingsWindow : Window, ILocalizable
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         WindowDecorations = WindowDecorations.None;
         Title = localizer.Get(LocKeys.Settings.Title);
-        Background = new SolidColorBrush(settings.Current.Surfaces.Window);
-        Content = BuildLayout();
+        Background = Brushes.Transparent;
+        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+
+        _shell = new Border
+        {
+            CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius),
+            BorderThickness = new Thickness(1),
+            ClipToBounds = true,
+            Child = BuildLayout(),
+        };
+        ApplyChrome();
+        Content = _shell;
 
         _settings.Changed += OnSettingsChanged;
         _localizer.Changed += OnLocalizerChanged;
         RebuildContent();
+        _ = RefreshNavCountsAsync();
     }
 
     private static IMarketplaceUiService CreateDefaultMarketplace(ILocalizer localizer)
@@ -119,6 +135,20 @@ public sealed class SettingsWindow : Window, ILocalizable
     }
 
     /// <inheritdoc />
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        // Rounded corners need a transparent window; when the platform refuses it, fall back to a
+        // square opaque window instead of leaving black corner triangles.
+        if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        {
+            _shell.CornerRadius = new CornerRadius(0);
+            Background = new SolidColorBrush(WindowBackground());
+        }
+    }
+
+    /// <inheritdoc />
     protected override void OnClosed(EventArgs e)
     {
         _settings.Changed -= OnSettingsChanged;
@@ -126,94 +156,262 @@ public sealed class SettingsWindow : Window, ILocalizable
         base.OnClosed(e);
     }
 
+    private void ApplyChrome()
+    {
+        _shell.Background = new SolidColorBrush(WindowBackground());
+        _shell.BorderBrush = new SolidColorBrush(_settings.Current.Surfaces.LineStrong);
+    }
+
+    private Color WindowBackground()
+        => _settings.Current.Surfaces.Window;
+
     private Control BuildLayout()
     {
+        var root = new Grid { RowDefinitions = new RowDefinitions("50,*") };
+        root.Children.Add(BuildTitleBar());
+
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions($"{SettingsMetrics.NavWidth},*") };
+        body.Children.Add(BuildNav());
+        body.Children.Add(BuildPane());
+        Grid.SetRow(body, 1);
+        root.Children.Add(body);
+        return root;
+    }
+
+    private Control BuildTitleBar()
+    {
         var surfaces = _settings.Current.Surfaces;
-        var root = new Grid { RowDefinitions = new RowDefinitions("48,*") };
-
-        // Title bar: app name, section title, drag surface, close button.
-        var titleBar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Background = new SolidColorBrush(surfaces.Surface) };
-        _titleText.Text = _localizer.Get(LocKeys.Settings.Title);
-        _titleText.FontFamily = Fonts.DisplaySemiBold.FontFamily;
-        _titleText.FontSize = 13;
-        _titleText.FontWeight = FontWeight.SemiBold;
-        _titleText.VerticalAlignment = VerticalAlignment.Center;
-        _titleText.Margin = new Thickness(20, 0, 0, 0);
-        Grid.SetColumn(_titleText, 0);
-        titleBar.Children.Add(_titleText);
-
-        var dragArea = new Border { Background = Brushes.Transparent };
-        dragArea.PointerPressed += (_, e) =>
+        var bar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"),
+            Height = SettingsMetrics.TitleBarHeight,
+            Background = new SolidColorBrush(WindowBackground()),
+        };
+        bar.PointerPressed += (_, e) =>
         {
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 BeginMoveDrag(e);
             }
         };
-        Grid.SetColumn(dragArea, 1);
-        titleBar.Children.Add(dragArea);
 
-        var close = new Button
+        var mark = new Border
         {
-            Content = "✕",
+            Width = 24,
+            Height = 24,
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(Color.Parse("#070709")),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(18, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new IslandMark(),
+        };
+        Grid.SetColumn(mark, 0);
+        bar.Children.Add(mark);
+
+        _titleText.Text = _localizer.Get(LocKeys.Settings.Title);
+        _titleText.FontFamily = Fonts.Ui;
+        _titleText.FontSize = 13;
+        _titleText.FontWeight = FontWeight.SemiBold;
+        _titleText.Foreground = new SolidColorBrush(surfaces.Foreground);
+        _titleText.VerticalAlignment = VerticalAlignment.Center;
+        _titleText.Margin = new Thickness(10, 0, 0, 0);
+        Grid.SetColumn(_titleText, 1);
+        bar.Children.Add(_titleText);
+
+        _subText.Text = "FLUIDBAR 2.0";
+        _subText.FontSize = 9;
+        _subText.Foreground = new SolidColorBrush(surfaces.ForegroundTertiary);
+        _subText.VerticalAlignment = VerticalAlignment.Center;
+        _subText.Margin = new Thickness(9, 0, 0, 0);
+        Grid.SetColumn(_subText, 2);
+        bar.Children.Add(_subText);
+
+        var close = new Border
+        {
+            Width = 32,
+            Height = 32,
+            CornerRadius = new CornerRadius(8),
             Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Width = 46,
-            Height = 34,
-            Margin = new Thickness(0, 7, 8, 0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Child = new TextBlock
+            {
+                Text = "\u2715",
+                FontSize = 13,
+                Foreground = new SolidColorBrush(surfaces.ForegroundSecondary),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
         };
-        close.Click += (_, _) => Close();
-        Grid.SetColumn(close, 2);
-        titleBar.Children.Add(close);
-        Grid.SetRow(titleBar, 0);
-        root.Children.Add(titleBar);
+        close.PointerEntered += (_, _) => close.Background = new SolidColorBrush(Color.FromArgb(209, 255, 69, 58));
+        close.PointerExited += (_, _) => close.Background = Brushes.Transparent;
+        close.PointerPressed += (_, _) => Close();
+        Grid.SetColumn(close, 4);
+        bar.Children.Add(close);
 
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("200,*") };
-        var navHost = new Border
+        return new Border
         {
-            Background = new SolidColorBrush(surfaces.Surface),
-            Padding = new Thickness(12, 10, 12, 10),
-            Child = _nav,
+            BorderBrush = new SolidColorBrush(surfaces.Line),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = bar,
         };
-        Grid.SetColumn(navHost, 0);
-        body.Children.Add(navHost);
+    }
 
-        _content.HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
-        _content.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
-        _content.Padding = new Thickness(24, 12, 20, 12);
-        Grid.SetColumn(_content, 1);
-        body.Children.Add(_content);
-        Grid.SetRow(body, 1);
-        root.Children.Add(body);
+    private Control BuildNav()
+    {
+        var surfaces = _settings.Current.Surfaces;
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+
+        var kicker = new TextBlock
+        {
+            Text = _localizer.Get(LocKeys.Settings.NavKicker),
+            FontSize = SettingsMetrics.CaptionSize,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = new SolidColorBrush(surfaces.ForegroundTertiary),
+            Margin = new Thickness(10, 4, 10, 7),
+        };
+        Grid.SetRow(kicker, 0);
+        grid.Children.Add(kicker);
+
+        var scroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Content = _nav,
+        };
+        Grid.SetRow(scroll, 1);
+        grid.Children.Add(scroll);
+
+        var version = new StackPanel
+        {
+            Margin = new Thickness(10, 12, 10, 4),
+        };
+        version.Children.Add(new TextBlock
+        {
+            Text = "FluidBar 2.0.0",
+            FontSize = SettingsMetrics.CaptionSize,
+            FontWeight = FontWeight.Medium,
+            Foreground = new SolidColorBrush(surfaces.ForegroundSecondary),
+        });
+        version.Children.Add(new TextBlock
+        {
+            Text = _localizer.Get(LocKeys.Settings.VersionLine),
+            FontSize = SettingsMetrics.CaptionSize,
+            Foreground = new SolidColorBrush(surfaces.ForegroundTertiary),
+            Margin = new Thickness(0, 1, 0, 0),
+        });
+        var footer = new Border
+        {
+            BorderBrush = new SolidColorBrush(surfaces.Line),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Child = version,
+        };
+        Grid.SetRow(footer, 2);
+        grid.Children.Add(footer);
 
         RebuildNav();
-        return root;
+        return new Border
+        {
+            BorderBrush = new SolidColorBrush(surfaces.Line),
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Padding = new Thickness(10, 14, 10, 14),
+            Child = grid,
+        };
+    }
+
+    private Control BuildPane()
+    {
+        _content.HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
+        _content.VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        _content.Padding = new Thickness(SettingsMetrics.PanePaddingX, SettingsMetrics.PanePaddingY,
+            SettingsMetrics.PanePaddingX, SettingsMetrics.PanePaddingY);
+        Grid.SetColumn(_content, 1);
+        return _content;
     }
 
     private void RebuildNav()
     {
         _nav.Children.Clear();
         _navButtons.Clear();
-        var foreground = new SolidColorBrush(_settings.Current.Surfaces.Foreground);
+        _navCounts.Clear();
+        var surfaces = _settings.Current.Surfaces;
         foreach (var (section, labelKey, icon) in SectionOrder)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-            row.Children.Add(new ItemIcon { Kind = icon, Width = 18, Height = 18, Brush = foreground });
-            row.Children.Add(new TextBlock { Text = _localizer.Get(labelKey), VerticalAlignment = VerticalAlignment.Center, FontSize = Typography.SettingsBodySize });
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+            var glyph = new SettingsGlyph
+            {
+                Kind = icon,
+                Brush = new SolidColorBrush(surfaces.ForegroundTertiary),
+                Width = 16,
+                Height = 16,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(glyph, 0);
+            row.Children.Add(glyph);
+
+            var label = new TextBlock
+            {
+                Text = _localizer.Get(labelKey),
+                FontSize = 12,
+                Foreground = new SolidColorBrush(surfaces.ForegroundSecondary),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(9, 0, 0, 0),
+            };
+            Grid.SetColumn(label, 1);
+            row.Children.Add(label);
+
+            var count = new Border
+            {
+                MinWidth = 16,
+                Height = 16,
+                Padding = new Thickness(4, 0, 4, 0),
+                CornerRadius = new CornerRadius(5),
+                Background = new SolidColorBrush(surfaces.RaisedHover),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                IsVisible = false,
+                Child = new TextBlock
+                {
+                    FontSize = SettingsMetrics.CaptionSize,
+                    Foreground = new SolidColorBrush(surfaces.ForegroundSecondary),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            Grid.SetColumn(count, 2);
+            row.Children.Add(count);
+            _navCounts[section] = (TextBlock)count.Child!;
+
             var button = new Button
             {
                 Content = row,
+                Height = SettingsMetrics.NavItemHeight,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(10, 7, 10, 7),
+                Padding = new Thickness(10, 0, 10, 0),
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
-                Foreground = foreground,
                 Tag = section,
             };
             button.Click += (_, _) => ShowSection(section);
+            button.PointerEntered += (_, _) =>
+            {
+                if ((SettingsWindowSection)button.Tag! != _section)
+                {
+                    button.Background = new SolidColorBrush(surfaces.Raised);
+                }
+            };
+            button.PointerExited += (_, _) =>
+            {
+                if ((SettingsWindowSection)button.Tag! != _section)
+                {
+                    button.Background = Brushes.Transparent;
+                }
+            };
             _navButtons.Add(button);
             _nav.Children.Add(button);
         }
@@ -225,13 +423,64 @@ public sealed class SettingsWindow : Window, ILocalizable
     private void UpdateNavSelection()
     {
         var surfaces = _settings.Current.Surfaces;
-        for (var i = 0; i < _navButtons.Count; i++)
+        foreach (var button in _navButtons)
         {
-            var selected = (SettingsWindowSection)_navButtons[i].Tag! == _section;
-            _navButtons[i].Background = selected
-                ? new SolidColorBrush(surfaces.Raised)
-                : Brushes.Transparent;
-            _navButtons[i].FontWeight = selected ? FontWeight.SemiBold : FontWeight.Normal;
+            var selected = (SettingsWindowSection)button.Tag! == _section;
+            button.Background = selected ? new SolidColorBrush(surfaces.Raised) : Brushes.Transparent;
+            if (button.Content is Grid row)
+            {
+                foreach (var child in row.Children)
+                {
+                    if (child is TextBlock label)
+                    {
+                        label.Foreground = new SolidColorBrush(selected ? surfaces.Foreground : surfaces.ForegroundSecondary);
+                        label.FontWeight = selected ? FontWeight.Medium : FontWeight.Normal;
+                    }
+                    else if (child is SettingsGlyph glyph)
+                    {
+                        glyph.Brush = new SolidColorBrush(selected ? surfaces.Foreground : surfaces.ForegroundTertiary);
+                        glyph.InvalidateVisual();
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task RefreshNavCountsAsync()
+    {
+        try
+        {
+            var plugins = await _plugins.ListAsync(CancellationToken.None).ConfigureAwait(true);
+            SetNavCount(SettingsWindowSection.Plugins, plugins.Count);
+        }
+        catch (Exception)
+        {
+            // A count badge is decorative; never let it break the window.
+        }
+
+        try
+        {
+            var entries = await _marketplace.BrowseAsync(new MarketplaceQuery(null, "all", "stable"), CancellationToken.None)
+                .ConfigureAwait(true);
+            SetNavCount(SettingsWindowSection.Marketplace, entries.Count);
+        }
+        catch (Exception)
+        {
+            // Same as above.
+        }
+    }
+
+    private void SetNavCount(SettingsWindowSection section, int count)
+    {
+        if (!_navCounts.TryGetValue(section, out var text) || count <= 0)
+        {
+            return;
+        }
+
+        text.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (text.Parent is Border badge)
+        {
+            badge.IsVisible = true;
         }
     }
 
@@ -254,11 +503,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             _preview = FindPreview(content);
         }
 
-        _content.Content = new Border
-        {
-            Padding = new Thickness(0, 4, 0, 0),
-            Child = content,
-        };
+        _content.Content = content;
         UpdateNavSelection();
     }
 
@@ -312,7 +557,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
         var themeChanged = previous.Theme != current.Theme;
-        Background = new SolidColorBrush(current.Surfaces.Window);
+        ApplyChrome();
         if (themeChanged)
         {
             RebuildNav();
@@ -324,17 +569,16 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
     }
 
-    /// <summary>Draws a small vector glyph for a nav item (no icon font/emoji).</summary>
-    private sealed class ItemIcon : Control
+    /// <summary>Draws the prototype's island mark (a pill outline with a status dot).</summary>
+    private sealed class IslandMark : Control
     {
-        public IconKind Kind { get; set; } = IconKind.Settings;
-
-        public IBrush Brush { get; set; } = Brushes.White;
-
         public override void Render(DrawingContext context)
         {
-            var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
-            Icons.Draw(context, Kind, bounds, Brush);
+            var width = Bounds.Width;
+            var height = Bounds.Height;
+            context.DrawRectangle(null, new Pen(Brushes.White, 1.1),
+                new Rect(width * 0.20, height * 0.36, width * 0.52, height * 0.28), 3, 3);
+            context.DrawEllipse(Brushes.White, null, new Point(width * 0.80, height * 0.5), 1.5, 1.5);
         }
     }
 }

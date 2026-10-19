@@ -186,9 +186,13 @@
     "Page.Widgets.AddTask": "添加任务",
 
     "Settings.Title": "设置",
+    "Settings.NavKicker": "偏好设置",
+    "Settings.VersionLine": "Windows 桌面版",
+    "Settings.FooterNote": "交互原型 · 非发行版本",
     "Settings.General.Title": "通用",
     "Settings.Appearance.Title": "外观",
     "Settings.Island.Title": "灵动岛",
+    "Settings.Island.Description": "默认形态、停靠锚点与自动收起行为。",
     "Settings.Plugins.Title": "插件",
     "Settings.Marketplace.Title": "插件市场",
     "Settings.Advanced.Title": "高级",
@@ -238,6 +242,8 @@
     "Settings.Appearance.MotionStrength": "动效强度",
     "Settings.Appearance.Preview": "预览",
     "Settings.Appearance.PreviewHint": "改动会实时反映到灵动岛。",
+    "Settings.Appearance.PreviewLabel": "灵动岛预览",
+    "Settings.Appearance.LiveHint": "更改会立即应用到灵动岛。",
 
     "Settings.Island.Mode.Title": "模式",
     "Settings.Island.Mode.Float": "悬浮药丸",
@@ -277,6 +283,8 @@
     "Settings.Plugins.Empty": "尚未安装插件",
     "Settings.Plugins.Orphan": "插件缺失",
     "Settings.Plugins.OrphanHint": "设置中已启用但未安装——请移除或重新安装。",
+    "Settings.Plugins.StateDisabled": "已停用",
+    "Settings.Plugins.StateUnavailable": "不可用",
     "Settings.Plugins.RestartRequired": "请重启 FluidBar 以完成卸载。",
     "Settings.Plugins.ConsentRequired": "此插件需要你的同意才能运行。",
 
