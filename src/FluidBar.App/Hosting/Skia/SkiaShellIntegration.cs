@@ -20,7 +20,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     private readonly Action _settings;
     private readonly Action _market;
     private readonly Action _exit;
-    private readonly HotkeySettings _bindings;
+    private HotkeySettings _bindings;
     private int _disposed;
 
     /// <summary>Creates the shell integration; call <see cref="StartAsync"/> once.</summary>
@@ -72,6 +72,16 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         await RegisterAsync("settings", _bindings.Settings, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Re-registers all global hotkeys after the user edits them in settings.</summary>
+    public async Task ApplyBindingsAsync(HotkeySettings bindings, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _bindings = bindings;
+        await _hotkeys.UnregisterAllAsync(cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("toggle", _bindings.Toggle, cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("hide", _bindings.Hide, cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("settings", _bindings.Settings, cancellationToken).ConfigureAwait(false);
+    }
     private async Task RegisterAsync(string name, string gesture, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(gesture))
@@ -193,6 +203,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             => Trace.WriteLine($"[{entry.Level}] {entry.Category}/{entry.EventId}: {entry.Message}");
     }
 }
+
 
 
 

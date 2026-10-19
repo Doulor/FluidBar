@@ -96,3 +96,9 @@
 
 ### 2026-10-19 03:08 — MVP 发布包
 - `tools/release/publish.ps1` 生成 `build/release/FluidBar-win-x64.zip`（47 MB）；exe 56.5 MB，SHA256 86A4F33A…A4021；Release smoke 通过。
+
+### 2026-10-19 12:30 — 可编辑全局热键 + 实时重注册
+- `AppSettings` 新增 `HotkeyToggle/HotkeyHide/HotkeySettings`，设置 → 通用改为可编辑 TextBox（Enter/失焦提交），JSON 往返与默认回退有测试。
+- `SkiaShellIntegration.ApplyBindingsAsync`：保存后立即 unregister/register，无需重启；冲突时回退 Ctrl+Alt+Shift。
+- 修复 AppBootstrap 退出时未释放 tray/hotkey 集成。
+- 全量：**1477 passed / 0 failed**（UI 186）。

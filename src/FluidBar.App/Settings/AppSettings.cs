@@ -153,6 +153,15 @@ public sealed record AppSettings
     /// <summary>Auto-update preference (<c>notify</c>/<c>auto</c>/<c>off</c>).</summary>
     public string AutoUpdate { get; init; } = "notify";
 
+    /// <summary>Global hotkey to toggle the island (Ctrl+Alt+D).</summary>
+    public string HotkeyToggle { get; init; } = "Ctrl+Alt+D";
+
+    /// <summary>Global hotkey to hide the island (Ctrl+Alt+H).</summary>
+    public string HotkeyHide { get; init; } = "Ctrl+Alt+H";
+
+    /// <summary>Global hotkey to open settings (Ctrl+Alt+S).</summary>
+    public string HotkeySettings { get; init; } = "Ctrl+Alt+S";
+
     /// <summary>Island material tier.</summary>
     public IslandMaterial Material { get; init; } = IslandMaterial.Obsidian;
 
@@ -330,6 +339,9 @@ public sealed record AppSettings
         Language = string.IsNullOrWhiteSpace(Language) ? "system" : Language.Trim(),
         Theme = Enum.IsDefined(Theme) ? Theme : AppTheme.System,
         AutoUpdate = AutoUpdate is "notify" or "auto" or "off" ? AutoUpdate : "notify",
+        HotkeyToggle = NormalizeHotkey(HotkeyToggle, "Ctrl+Alt+D"),
+        HotkeyHide = NormalizeHotkey(HotkeyHide, "Ctrl+Alt+H"),
+        HotkeySettings = NormalizeHotkey(HotkeySettings, "Ctrl+Alt+S"),
         Material = Enum.IsDefined(Material) ? Material : IslandMaterial.Obsidian,
         Palette = Palette is "obsidian" or "graphite" or "slate" or "nord" ? Palette : "obsidian",
         AccentMode = AccentMode is "artwork" or "system" or "custom" ? AccentMode : "artwork",
@@ -371,6 +383,9 @@ public sealed record AppSettings
                 StartWithWindows = StartWithWindows,
                 TrayIcon = TrayIcon,
                 AutoUpdate = AutoUpdate,
+                HotkeyToggle = HotkeyToggle,
+                HotkeyHide = HotkeyHide,
+                HotkeySettings = HotkeySettings,
                 Telemetry = false,
             },
             Appearance = new AppearanceJson
@@ -440,6 +455,9 @@ public sealed record AppSettings
                 StartWithWindows = document.General?.StartWithWindows ?? defaults.StartWithWindows,
                 TrayIcon = document.General?.TrayIcon ?? defaults.TrayIcon,
                 AutoUpdate = document.General?.AutoUpdate ?? defaults.AutoUpdate,
+                HotkeyToggle = document.General?.HotkeyToggle ?? defaults.HotkeyToggle,
+                HotkeyHide = document.General?.HotkeyHide ?? defaults.HotkeyHide,
+                HotkeySettings = document.General?.HotkeySettings ?? defaults.HotkeySettings,
                 Theme = ParseTheme(document.Appearance?.Theme),
                 Material = document.Appearance?.Material == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
                 Palette = document.Appearance?.Palette ?? defaults.Palette,
@@ -488,6 +506,12 @@ public sealed record AppSettings
             error = ex.Message;
             return null;
         }
+    }
+
+    private static string NormalizeHotkey(string? value, string fallback)
+    {
+        var text = value?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? fallback : text;
     }
 
     private static AppTheme ParseTheme(string? theme) => theme switch
@@ -607,6 +631,12 @@ internal sealed class GeneralJson
 
     public string? AutoUpdate { get; set; }
 
+    public string? HotkeyToggle { get; set; }
+
+    public string? HotkeyHide { get; set; }
+
+    public string? HotkeySettings { get; set; }
+
     public bool? Telemetry { get; set; }
 }
 
@@ -679,3 +709,5 @@ internal sealed class AdvancedJson
 internal sealed partial class SettingsJsonContext : JsonSerializerContext
 {
 }
+
+

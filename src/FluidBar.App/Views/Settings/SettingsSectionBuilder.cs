@@ -1,6 +1,7 @@
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -218,9 +219,12 @@ public static class SettingsSectionBuilder
                 FontSize = Typography.SettingsBodySize,
                 Margin = new Thickness(0, 10, 0, 0),
             },
-            KeyRow("Ctrl+Alt+D", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle)),
-            KeyRow("Ctrl+Alt+H", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Hide)),
-            KeyRow("Ctrl+Alt+S", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Settings)),
+            HotkeyRow(ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle), settings.HotkeyToggle,
+                value => ctx.Settings.Update(s => s with { HotkeyToggle = value })),
+            HotkeyRow(ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Hide), settings.HotkeyHide,
+                value => ctx.Settings.Update(s => s with { HotkeyHide = value })),
+            HotkeyRow(ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Settings), settings.HotkeySettings,
+                value => ctx.Settings.Update(s => s with { HotkeySettings = value })),
             KeyRow("LeftAlt", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.HoldToHide)),
             KeyRow("Esc / 1–6", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle)));
     }
@@ -250,6 +254,38 @@ public static class SettingsSectionBuilder
             FontSize = Typography.SettingsCaptionSize,
         });
         return row;
+    }
+
+    private static Control HotkeyRow(string label, string value, Action<string> commit)
+    {
+        var box = new TextBox
+        {
+            Text = value,
+            Width = 180,
+            FontFamily = Fonts.MonoRegular.FontFamily,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        void Commit()
+        {
+            var text = (box.Text ?? string.Empty).Trim();
+            if (!string.IsNullOrEmpty(text) && !string.Equals(text, value, StringComparison.Ordinal))
+            {
+                commit(text);
+            }
+        }
+
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Commit();
+                e.Handled = true;
+            }
+        };
+        return Row(label, null, box);
     }
 
     private static Control BuildAppearance(SettingsWindowContext ctx)

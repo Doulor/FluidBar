@@ -285,14 +285,59 @@ internal sealed class AppBootstrap
                 settings: () => Dispatcher.UIThread.Post(OpenSettings),
                 market: () => Dispatcher.UIThread.Post(OpenMarket),
                 exit: () => Dispatcher.UIThread.Post(Shutdown),
-                bindings: new HotkeySettings());
+                bindings: new HotkeySettings
+                {
+                    Toggle = _settings!.Current.HotkeyToggle,
+                    Hide = _settings.Current.HotkeyHide,
+                    Settings = _settings.Current.HotkeySettings,
+                });
             await _shell.StartAsync().ConfigureAwait(true);
+            _settings!.Changed += OnSettingsChanged;
         }
         catch (Exception ex)
         {
             _logger.Warning(LogCategories.Lifecycle, "app.shell-integration-failed",
                 "Tray/hotkey integration could not be started; the island still runs.", ex);
             _shell = null;
+        }
+    }
+
+    private void OnSettingsChanged(AppSettings previous, AppSettings current)
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        if (string.Equals(previous.HotkeyToggle, current.HotkeyToggle, StringComparison.Ordinal)
+            && string.Equals(previous.HotkeyHide, current.HotkeyHide, StringComparison.Ordinal)
+            && string.Equals(previous.HotkeySettings, current.HotkeySettings, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var bindings = new HotkeySettings
+        {
+            Toggle = current.HotkeyToggle,
+            Hide = current.HotkeyHide,
+            Settings = current.HotkeySettings,
+        };
+        Dispatcher.UIThread.Post(() => _ = ApplyHotkeysAsync(bindings));
+    }
+
+    private async Task ApplyHotkeysAsync(HotkeySettings bindings)
+    {
+        try
+        {
+            if (_shell is not null)
+            {
+                await _shell.ApplyBindingsAsync(bindings).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Lifecycle, "app.hotkeys-apply-failed",
+                "The edited hotkey bindings could not be applied; restart FluidBar to retry.", ex);
         }
     }
     /// <summary>
@@ -476,6 +521,21 @@ internal sealed class AppBootstrap
 
         _skiaHost?.Dispose();
         _skiaHost = null;
+        _settings?.Changed -= OnSettingsChanged;
+        if (_shell is not null)
+        {
+            try
+            {
+                _shell.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Lifecycle, "app.shell-dispose-failed",
+                    "The tray/hotkey integration did not dispose cleanly.", ex);
+            }
+
+            _shell = null;
+        }
         _host?.Dispose();
         _host = null;
         _platformActions?.DisposeInBackground();
