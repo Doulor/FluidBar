@@ -80,6 +80,15 @@ public sealed class SkiaIslandController : IDisposable
     private static readonly TimeSpan CopyFeedbackDuration = TimeSpan.FromMilliseconds(1600);
     private (string Preview, DateTimeOffset At)? _copiedClipboard;
 
+    // Peek-on-track-change: a synthetic hover peek (armed → shown → leave) driven purely by deadlines
+    // so the media track change can preview the hover card without a real pointer over the island.
+    private SyntheticPeekPhase _syntheticPeek;
+    private DateTimeOffset _syntheticPeekDueAt;
+    private string? _lastTrackKey;
+
+    /// <summary>How long the synthetic peek stays visible before it retracts (ms).</summary>
+    public const int SyntheticPeekVisibleMs = 1600;
+
     // Click-vs-drag: a compact press is only a candidate click; the host turns it into a window move
     // once the pointer passes SkiaDragThreshold in screen space, and the click is committed on release.
     private bool _clickPending;
@@ -172,6 +181,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Whether the pointer is currently moving the island window (drag-to-move).</summary>
     public bool IsWindowDragging => _windowDragActive;
 
+    /// <summary>Whether a peek triggered by a media track change is in flight (diagnostics/tests).</summary>
+    public bool IsSyntheticPeekActive => _syntheticPeek != SyntheticPeekPhase.None;
+
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating || IsWaveActive();
 
@@ -194,6 +206,7 @@ public sealed class SkiaIslandController : IDisposable
                 || state.PeekDwellDeadline is not null
                 || state.AutoCollapseDeadline is not null
                 || state.AutoHideDeadline is not null
+                || _syntheticPeek != SyntheticPeekPhase.None
                 || _copiedClipboard is not null
                 || _schedulerState.HasActivities
                 || _archipelago.IsVisible;
@@ -267,6 +280,8 @@ public sealed class SkiaIslandController : IDisposable
             ApplyInput(IslandInput.AutoHideElapsed());
         }
 
+        PumpSyntheticPeek(now);
+
         if (_copiedClipboard is { } copied && now - copied.At > CopyFeedbackDuration)
         {
             // Drop the check-mark highlight once the confirmation window elapsed and repaint the page.
@@ -288,6 +303,91 @@ public sealed class SkiaIslandController : IDisposable
 
         UpdatePointerZones();
         UpdateArchipelago(now);
+    }
+
+    /// <summary>Drives the synthetic peek deadlines (armed → shown → leave → done).</summary>
+    private void PumpSyntheticPeek(DateTimeOffset now)
+    {
+        switch (_syntheticPeek)
+        {
+            case SyntheticPeekPhase.Armed:
+                if (now < _syntheticPeekDueAt)
+                {
+                    return;
+                }
+
+                ApplyInput(IslandInput.HoverIntentElapsed());
+                if (State.Kind == IslandStateKind.Peek)
+                {
+                    _syntheticPeek = SyntheticPeekPhase.Shown;
+                    _syntheticPeekDueAt = now.AddMilliseconds(SyntheticPeekVisibleMs);
+                }
+                else
+                {
+                    _syntheticPeek = SyntheticPeekPhase.None;
+                }
+
+                break;
+
+            case SyntheticPeekPhase.Shown:
+                if (now < _syntheticPeekDueAt)
+                {
+                    return;
+                }
+
+                ApplyInput(IslandInput.PointerLeft());
+                _syntheticPeek = SyntheticPeekPhase.Leave;
+                _syntheticPeekDueAt = now.AddMilliseconds(Theme.UiDurations.LeaveDebounce);
+                break;
+
+            case SyntheticPeekPhase.Leave:
+                if (now < _syntheticPeekDueAt)
+                {
+                    return;
+                }
+
+                ApplyInput(IslandInput.LeaveDebounceElapsed());
+                _syntheticPeek = SyntheticPeekPhase.None;
+                break;
+        }
+    }
+
+    /// <summary>Detects a media track change and, when enabled, previews the hover peek card.</summary>
+    private void ObserveTrackChange(IslandContent content, AppSettings settings)
+    {
+        var trackKey = content.Media is { } media
+            ? string.Join('|', media.Source, media.Title, media.Artist, media.Album, media.ArtworkKey)
+            : null;
+        if (trackKey is null)
+        {
+            _lastTrackKey = null;
+            return;
+        }
+
+        var changed = _lastTrackKey is not null && !string.Equals(trackKey, _lastTrackKey, StringComparison.Ordinal);
+        _lastTrackKey = trackKey;
+        if (!changed || !settings.PeekOnTrackChange || _syntheticPeek != SyntheticPeekPhase.None)
+        {
+            return;
+        }
+
+        // Only a settled compact pill previews; an expanded panel already shows the track.
+        if (!_started || State.Kind != IslandStateKind.Compact || State.IsHovering || State.IsSuppressed || State.IsPinned)
+        {
+            return;
+        }
+
+        _syntheticPeek = SyntheticPeekPhase.Armed;
+        _syntheticPeekDueAt = _time.GetLocalNow().AddMilliseconds(Theme.UiDurations.HoverIntent);
+        ApplyInput(IslandInput.PointerEntered());
+    }
+
+    private enum SyntheticPeekPhase
+    {
+        None,
+        Armed,
+        Shown,
+        Leave,
     }
 
     /// <summary>Steps motion/pager/strip and accumulates render invalidation for one frame.</summary>
@@ -638,6 +738,13 @@ public sealed class SkiaIslandController : IDisposable
                 ApplyInput(IslandInput.Escape());
                 return true;
 
+            case IslandHitKind.Settings:
+                // Gear in the expanded chrome row (task-8): collapse first so the always-on-top island
+                // does not cover the settings window for the auto-collapse delay, then open settings.
+                ApplyInput(IslandInput.Escape());
+                RequestSettings();
+                return true;
+
             case IslandHitKind.PageControl:
                 HandlePageControl(hit);
                 return true;
@@ -884,7 +991,9 @@ public sealed class SkiaIslandController : IDisposable
 
     private static IslandBehaviorOptions BuildBehaviorOptions(AppSettings settings) => new()
     {
-        Enabled = true,
+        // Safe mode keeps the island off the screen for activity/hover reveals; the user can still
+        // summon it explicitly (hotkey/tray) to reach the settings and turn safe mode off.
+        Enabled = !settings.Advanced.SafeMode,
         HoverPeek = settings.HoverPeek,
         HoverReveal = true,
         AutoCollapseMs = settings.AutoCollapseMs,
@@ -985,6 +1094,7 @@ public sealed class SkiaIslandController : IDisposable
         var content = _data.Snapshot();
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         var settings = _settings.Current;
+        ObserveTrackChange(content, settings);
 
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
@@ -1102,6 +1212,11 @@ public sealed class SkiaIslandController : IDisposable
         if (previousProfile != currentProfile)
         {
             _motion.UpdateProfile(currentProfile);
+        }
+
+        if (!current.PeekOnTrackChange)
+        {
+            _syntheticPeek = SyntheticPeekPhase.None;
         }
 
         if (previous.HoverPeek != current.HoverPeek

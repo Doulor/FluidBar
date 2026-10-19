@@ -31,6 +31,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
     private string? _lastETag;
     private string? _downloadedFilePath;
     private string? _downloadedInstallerTag;
+    private UpdateStatusSnapshot? _currentSnapshot;
     private int _disposed;
 
     public UpdateCheckClient(HttpClient httpClient, UpdateClientOptions options, Version currentVersion,
@@ -54,8 +55,13 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         remove => _publisher.Changed -= value;
     }
 
-    /// <summary>Latest state (settings About page reads this).</summary>
-    public UpdateStatusSnapshot Current => _publisher.Current ?? UpdateStatusSnapshot.Idle(_currentVersion);
+    /// <summary>
+    /// Latest state (settings About page reads this). Updated synchronously by every publish so a
+    /// caller that awaited a check/download never observes an older state while the coalescing
+    /// publisher has not dispatched yet.
+    /// </summary>
+    public UpdateStatusSnapshot Current
+        => Volatile.Read(ref _currentSnapshot) ?? UpdateStatusSnapshot.Idle(_currentVersion);
 
     /// <summary>
     /// Creates the one shared <see cref="HttpClient"/> for the app. Do not create one per check:
@@ -93,6 +99,13 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         {
             Publish(new UpdateStatusSnapshot(UpdateState.Checking, _currentVersion, Current.AvailableRelease, null,
                 UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, null));
+
+            if (_options.ReleaseFeedUrl.IsFile)
+            {
+                // Local folder feed (dev/offline verification): a real JSON manifest plus real asset
+                // files on disk. No HTTP, no ETag — the manifest is re-read on every check.
+                return await CheckFileFeedAsync(request, cancellationToken).ConfigureAwait(false);
+            }
 
             var etag = request.ETag ?? _lastETag;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -183,6 +196,69 @@ public sealed class UpdateCheckClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// Reads a local <c>file://</c> release feed: a real JSON manifest plus real asset files on disk.
+    /// Used for offline/dev verification of the whole check → download → verify chain without HTTP.
+    /// </summary>
+    private async Task<UpdateCheckResult> CheckFileFeedAsync(UpdateCheckRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var path = ToLocalPath(_options.ReleaseFeedUrl);
+            if (!File.Exists(path))
+            {
+                return Fail($"Update feed '{path}' does not exist.", null);
+            }
+
+            if (new FileInfo(path).Length > _options.MaxManifestBytes)
+            {
+                return Fail("Update manifest exceeded the size limit.", null);
+            }
+
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            var release = ReleaseManifestParser.SelectRelease(json, request.Channel,
+                _options.InstallerAssetPattern);
+            if (release is null)
+            {
+                return Fail("No usable release found in the update feed.", null);
+            }
+
+            var now = _timeProvider.GetUtcNow();
+            if (!release.Version.IsNewerThan(request.CurrentVersion))
+            {
+                Publish(new UpdateStatusSnapshot(UpdateState.UpToDate, _currentVersion, release, null,
+                    UpdateVerificationStatus.NotVerified, now, null));
+                return new UpdateCheckResult(UpdateCheckStatus.UpToDate, release, null);
+            }
+
+            Publish(new UpdateStatusSnapshot(UpdateState.Available, _currentVersion, release, null,
+                UpdateVerificationStatus.NotVerified, now, null));
+            _counters.IncrementUpdateChecks();
+            _logger.LogInfo(PlatformLogCategory.Update, "update.available",
+                "A newer release is available.",
+                new Dictionary<string, object?>
+                {
+                    ["current"] = _currentVersion.ToString(),
+                    ["latest"] = release.Version.ToString(),
+                    ["channel"] = request.Channel.ToString(),
+                    ["feed"] = path,
+                });
+            return new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, release, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return Fail("Update check failed.", null, ex);
+        }
+    }
+
+    /// <summary>Converts a <c>file://</c> URI into a local filesystem path.</summary>
+    private static string ToLocalPath(Uri uri) => Uri.UnescapeDataString(uri.LocalPath);
+
+    /// <summary>
     /// Downloads the installer to <see cref="UpdateClientOptions.DownloadDirectory"/> and verifies it.
     /// Must be called only from an explicit user action; the result's <see cref="UpdateDownloadResult.CanInstall"/>
     /// gates the install button.
@@ -233,21 +309,32 @@ public sealed class UpdateCheckClient : IAsyncDisposable
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(10)); // large installer; still bounded
 
-            using var response = await _httpClient.GetAsync(release.Installer.Url,
-                HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            long received;
+            if (release.Installer.Url.IsFile)
             {
-                return DownloadFailure($"Installer download returned HTTP {(int)response.StatusCode}.");
+                // Local asset (offline verification path): a real file copied through the same
+                // .part → verify → move pipeline as an HTTP download.
+                received = await CopyLocalAssetAsync(release.Installer.Url, temporaryFilePath,
+                    _options.MaxInstallerBytes, progress, timeout.Token).ConfigureAwait(false);
             }
-
-            var declaredLength = response.Content.Headers.ContentLength;
-            if (declaredLength is > 0 && declaredLength > _options.MaxInstallerBytes)
+            else
             {
-                return DownloadFailure("Installer exceeds the configured size limit.");
-            }
+                using var response = await _httpClient.GetAsync(release.Installer.Url,
+                    HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return DownloadFailure($"Installer download returned HTTP {(int)response.StatusCode}.");
+                }
 
-            var received = await CopyToFileAsync(response, temporaryFilePath, declaredLength ?? 0, progress,
-                timeout.Token).ConfigureAwait(false);
+                var declaredLength = response.Content.Headers.ContentLength;
+                if (declaredLength is > 0 && declaredLength > _options.MaxInstallerBytes)
+                {
+                    return DownloadFailure("Installer exceeds the configured size limit.");
+                }
+
+                received = await CopyToFileAsync(response, temporaryFilePath, declaredLength ?? 0, progress,
+                    timeout.Token).ConfigureAwait(false);
+            }
 
             var verification = await _verifier.VerifyAsync(temporaryFilePath, release, cancellationToken)
                 .ConfigureAwait(false);
@@ -314,7 +401,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         }
     }
 
-    /// <summary>Forgets the cached download (e.g. after the user discards the update).</summary>
+    /// <summary>Forgets the cached download (e.g. after the user discards the update) and resets the state.</summary>
     public void ClearDownloadedInstaller()
     {
         if (_downloadedFilePath is not null)
@@ -324,12 +411,57 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
         _downloadedFilePath = null;
         _downloadedInstallerTag = null;
+        Publish(new UpdateStatusSnapshot(UpdateState.Idle, _currentVersion, null, null,
+            UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, null));
     }
 
     private bool IsCachedInstallerValid(UpdateRelease release)
         => _downloadedFilePath is not null
            && string.Equals(_downloadedInstallerTag, release.Tag, StringComparison.Ordinal)
            && File.Exists(_downloadedFilePath);
+
+    /// <summary>Copies a local <c>file://</c> asset into the download directory (bounded, cancellable).</summary>
+    private static async Task<long> CopyLocalAssetAsync(Uri source, string filePath, long maxBytes,
+        IProgress<double>? progress, CancellationToken cancellationToken)
+    {
+        var sourcePath = ToLocalPath(source);
+        var sourceInfo = new FileInfo(sourcePath);
+        if (!sourceInfo.Exists)
+        {
+            throw new FileNotFoundException("Installer asset does not exist.", sourcePath);
+        }
+
+        if (sourceInfo.Length > maxBytes)
+        {
+            throw new InvalidOperationException("Installer exceeds the configured size limit.");
+        }
+
+        await using var input = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var output = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None,
+            bufferSize: 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var declaredLength = sourceInfo.Length;
+        var buffer = new byte[128 * 1024];
+        long total = 0;
+        while (true)
+        {
+            var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            total += read;
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+            if (declaredLength > 0)
+            {
+                progress?.Report(Math.Clamp(total / (double)declaredLength, 0, 1));
+            }
+        }
+
+        return total;
+    }
 
     private async Task<long> CopyToFileAsync(HttpResponseMessage response, string filePath, long declaredLength,
         IProgress<double>? progress, CancellationToken cancellationToken)
@@ -407,7 +539,11 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         return new UpdateDownloadResult(false, null, UpdateVerificationStatus.NotVerified, null, reason);
     }
 
-    private void Publish(UpdateStatusSnapshot snapshot) => _publisher.Publish(snapshot);
+    private void Publish(UpdateStatusSnapshot snapshot)
+    {
+        Volatile.Write(ref _currentSnapshot, snapshot);
+        _publisher.Publish(snapshot);
+    }
 
     private static void DeleteFileQuietly(string path)
     {

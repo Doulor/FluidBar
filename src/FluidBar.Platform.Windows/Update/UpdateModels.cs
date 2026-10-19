@@ -49,6 +49,13 @@ public enum UpdateState
     Available,
     Downloading,
     ReadyToInstall,
+
+    /// <summary>
+    /// The verified installer was launched; the application must restart to finish the upgrade
+    /// (spec §8.4 "prompt to restart").
+    /// </summary>
+    RestartRequired,
+
     Failed,
 }
 

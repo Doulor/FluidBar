@@ -15,7 +15,9 @@ using FluidBar.Core.Settings;
 using FluidBar.Marketplace.Signing;
 using FluidBar.Plugins.Builtin;
 using FluidBar.Platform.Windows.Notifications;
+using FluidBar.Platform.Windows.Shell;
 using FluidBar.Sdk.Versioning;
+using UpdateState = FluidBar.Platform.Windows.Update.UpdateState;
 
 namespace FluidBar.App;
 
@@ -31,7 +33,7 @@ namespace FluidBar.App;
 internal sealed class AppBootstrap
 {
     private readonly IClassicDesktopStyleApplicationLifetime _lifetime;
-    private readonly TraceAppLogger _logger = new(LogLevel.Information);
+    private readonly SettingsAwareLogger _logger;
     private LocalizationService? _localizer;
     private SettingsController? _settings;
     private DesignIslandDataSource? _data;
@@ -43,10 +45,16 @@ internal sealed class AppBootstrap
     private PluginRuntime? _pluginRuntime;
     private NotificationService? _pluginNotifications;
     private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
+    private StartupRegistrationSync? _startupRegistration;
+    private AppUpdateCoordinator? _updates;
+    private CrashGuard? _crashGuard;
+    private UpdateState _lastPromptedUpdateState = UpdateState.Idle;
 
     public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
     {
         _lifetime = lifetime ?? throw new ArgumentNullException(nameof(lifetime));
+        // Level follows the advanced setting (spec §8.2 diagnostics.logLevel) without a restart.
+        _logger = new SettingsAwareLogger(() => _settings?.Current.Advanced.LogLevel);
     }
 
     public async Task StartAsync()
@@ -66,8 +74,16 @@ internal sealed class AppBootstrap
 
             _data = new DesignIslandDataSource(_localizer);
             _lifetime.Exit += (_, _) => DisposeServices();
+
+            // "Follow the system" values (theme / reduced motion / accent) are probed once off the UI
+            // thread; the cached snapshot is what the theme mapper reads on the UI thread.
+            await RefreshSystemAppearanceAsync().ConfigureAwait(true);
+            StartLogFileSink();
+            EvaluateCrashGuard();
             await StartIslandHostAsync().ConfigureAwait(true);
+            await StartStartupRegistrationAsync().ConfigureAwait(true);
             await StartShellIntegrationAsync().ConfigureAwait(true);
+            await StartUpdateCoordinatorAsync().ConfigureAwait(true);
             await StartPluginRuntimeAsync().ConfigureAwait(true);
 
             if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE"), "1", StringComparison.Ordinal))
@@ -82,6 +98,230 @@ internal sealed class AppBootstrap
             _logger.Critical(LogCategories.Lifecycle, "app.start-failed", "FluidBar failed to start.", ex);
             Shutdown();
         }
+    }
+
+    /// <summary>Refreshes the cached Windows appearance preferences (theme / reduced motion / accent).</summary>
+    private async Task RefreshSystemAppearanceAsync()
+    {
+        try
+        {
+            await Task.Run(static () => SystemAppearanceProbe.Refresh()).ConfigureAwait(true);
+            _logger.Information(LogCategories.Settings, "settings.system-appearance",
+                "Windows appearance preferences resolved.",
+                data: new Dictionary<string, object?>
+                {
+                    ["lightTheme"] = SystemAppearanceProbe.IsLightTheme,
+                    ["reducedMotion"] = SystemAppearanceProbe.PrefersReducedMotion,
+                    ["accent"] = SystemAppearanceProbe.SystemAccentHex,
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "settings.system-appearance-failed",
+                "Reading the Windows appearance preferences failed; neutral defaults are used.", ex);
+        }
+    }
+
+    /// <summary>Starts the JSON-lines file log sink in the background (spec §8.1/§9.3).</summary>
+    private void StartLogFileSink()
+    {
+        var directory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FluidBar", "logs");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _logger.StartFileSinkAsync(directory).ConfigureAwait(false);
+                _logger.Information(LogCategories.Lifecycle, "app.log-sink-started",
+                    "JSON-lines log sink started.",
+                    data: new Dictionary<string, object?> { ["path"] = _logger.LogFilePath });
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Lifecycle, "app.log-sink-failed",
+                    "The JSON-lines log sink could not be started.", ex);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Applies the advanced "crash guard" setting: hooks unhandled exceptions, records crash markers
+    /// and forces safe mode after two consecutive crashes (spec §8.4).
+    /// </summary>
+    private void EvaluateCrashGuard()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        if (!_settings.Current.Advanced.CrashGuard)
+        {
+            _logger.Information(LogCategories.Lifecycle, "crash-guard.disabled",
+                "Crash guard is disabled in the advanced settings.");
+            return;
+        }
+
+        _crashGuard = new CrashGuard(logger: _logger);
+        AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
+        if (!_crashGuard.TryEnterSafeMode())
+        {
+            return;
+        }
+
+        _settings.Update(settings => settings with
+        {
+            Advanced = settings.Advanced with { SafeMode = true },
+        });
+    }
+
+    private void OnAppDomainUnhandledException(object? sender, UnhandledExceptionEventArgs e)
+    {
+        var exception = e.ExceptionObject as Exception ?? new InvalidOperationException("Unknown unhandled exception.");
+        _crashGuard?.RecordUnhandledException(exception, "appdomain");
+    }
+
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        _crashGuard?.RecordUnhandledException(e.Exception, "task");
+        e.SetObserved();
+    }
+
+    private void UninstallCrashHooks()
+    {
+        if (_crashGuard is null)
+        {
+            return;
+        }
+
+        AppDomain.CurrentDomain.UnhandledException -= OnAppDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+        _crashGuard.MarkCleanExit();
+        _crashGuard = null;
+    }
+
+    /// <summary>Reconciles the HKCU Run key with the "start with Windows" setting (self-heal on start).</summary>
+    private async Task StartStartupRegistrationAsync()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _startupRegistration = new StartupRegistrationSync(_settings, _logger);
+            _startupRegistration.Attach();
+            await _startupRegistration.SyncAsync(selfHeal: true).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "settings.startup.init-failed",
+                "The start-with-Windows registration could not be synchronised.", ex);
+        }
+    }
+
+    /// <summary>Composes the update coordinator and schedules the startup + interval checks.</summary>
+    private async Task StartUpdateCoordinatorAsync()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _updates = new AppUpdateCoordinator(_settings, _logger);
+            _updates.Changed += OnUpdateChanged;
+            await _updates.StartAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "update.coordinator-failed",
+                "The update coordinator could not be composed; update checks are unavailable.", ex);
+            _updates = null;
+        }
+    }
+
+    /// <summary>Prompts about an update state change through a tray balloon (when the tray is visible).</summary>
+    private void OnUpdateChanged(object? sender, EventArgs e)
+    {
+        var snapshot = _updates?.Current;
+        if (snapshot is null || snapshot.State == _lastPromptedUpdateState)
+        {
+            return;
+        }
+
+        _lastPromptedUpdateState = snapshot.State;
+        if (snapshot.State is not (UpdateState.Available or UpdateState.ReadyToInstall or UpdateState.RestartRequired)
+            || _localizer is null)
+        {
+            return;
+        }
+
+        var version = snapshot.AvailableRelease?.Version.ToString() ?? _updates!.CurrentVersion.ToString();
+        var message = snapshot.State switch
+        {
+            UpdateState.Available => _localizer.Format(LocKeys.Settings.About.Update.Available,
+                ("version", version), ("size", FormatBytes(snapshot.AvailableRelease?.Installer?.SizeBytes ?? 0))),
+            UpdateState.ReadyToInstall => _localizer.Format(LocKeys.Settings.About.Update.Ready,
+                ("version", version)),
+            _ => _localizer.Get(LocKeys.Settings.About.Update.RestartRequired),
+        };
+
+        Dispatcher.UIThread.Post(() => _ = PromptUpdateAsync(message));
+    }
+
+    private async Task PromptUpdateAsync(string message)
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _shell.ShowBalloonAsync("FluidBar", message).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Settings, "update.prompt-failed",
+                "The update prompt could not be shown.", ex);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+        => bytes >= 1024L * 1024L
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024.0):0.0} MB")
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / 1024.0:0} KB");
+
+    /// <summary>Runs the explicit "restart and install" action and exits so the installer can replace files.</summary>
+    private void RestartToInstall()
+    {
+        if (_updates is null)
+        {
+            return;
+        }
+
+        var result = _updates.Install();
+        if (result.Launched)
+        {
+            _logger.Information(LogCategories.Lifecycle, "update.restart",
+                "Verified installer launched; shutting down for the restart.",
+                data: new Dictionary<string, object?> { ["installer"] = result.InstallerPath });
+            Shutdown();
+            return;
+        }
+
+        _logger.Warning(LogCategories.Lifecycle, "update.restart-refused",
+            "The installer could not be launched.", null,
+            new Dictionary<string, object?>
+            {
+                ["reason"] = result.FailureReason,
+                ["installer"] = result.InstallerPath,
+            });
     }
 
     /// <summary>
@@ -292,7 +532,7 @@ internal sealed class AppBootstrap
                     Hide = _settings.Current.HotkeyHide,
                     Settings = _settings.Current.HotkeySettings,
                 });
-            await _shell.StartAsync().ConfigureAwait(true);
+            await _shell.StartAsync(_settings!.Current.TrayIcon).ConfigureAwait(true);
             _settings!.Changed += OnSettingsChanged;
         }
         catch (Exception ex)
@@ -310,6 +550,12 @@ internal sealed class AppBootstrap
             return;
         }
 
+        if (previous.TrayIcon != current.TrayIcon)
+        {
+            var visible = current.TrayIcon;
+            Dispatcher.UIThread.Post(() => _ = ApplyTrayVisibilityAsync(visible));
+        }
+
         if (string.Equals(previous.HotkeyToggle, current.HotkeyToggle, StringComparison.Ordinal)
             && string.Equals(previous.HotkeyHide, current.HotkeyHide, StringComparison.Ordinal)
             && string.Equals(previous.HotkeySettings, current.HotkeySettings, StringComparison.Ordinal))
@@ -324,6 +570,22 @@ internal sealed class AppBootstrap
             Settings = current.HotkeySettings,
         };
         Dispatcher.UIThread.Post(() => _ = ApplyHotkeysAsync(bindings));
+    }
+
+    private async Task ApplyTrayVisibilityAsync(bool visible)
+    {
+        try
+        {
+            if (_shell is not null)
+            {
+                await _shell.SetTrayVisibleAsync(visible).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Lifecycle, "app.tray-toggle-failed",
+                "The tray icon visibility could not be changed; restart FluidBar to retry.", ex);
+        }
     }
 
     private async Task ApplyHotkeysAsync(HotkeySettings bindings)
@@ -369,6 +631,8 @@ internal sealed class AppBootstrap
                     PublishPluginEvent),
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
                 BuiltinServices = services,
+                // Safe mode disables every community plugin (spec §8.4); first-party ones still load.
+                LoadCommunity = !_settings.Current.Advanced.SafeMode,
                 Enablement = new SettingsPluginEnablementStore(_settings),
                 MarketplaceIndexUrl = ResolveMarketplaceIndexUrl(),
                 Trust = ResolveMarketplaceTrust(),
@@ -378,6 +642,12 @@ internal sealed class AppBootstrap
 
             _pluginRuntime = await Task.Run(() => PluginRuntime.CreateAsync(options)).ConfigureAwait(true);
             var report = _pluginRuntime.Report;
+            if (_settings.Current.Advanced.SafeMode)
+            {
+                _logger.Warning(LogCategories.Plugin, "plugin.runtime.safe-mode",
+                    "Safe mode is on: community plugins are not loaded.");
+            }
+
             _logger.Information(LogCategories.Plugin, "plugin.runtime.started",
                 $"Plugin runtime composed: {_pluginRuntime.Builtins.Count} built-in, " +
                 $"{report.CommunityResults.Count(result => result.Success)} community active, " +
@@ -516,7 +786,11 @@ internal sealed class AppBootstrap
             _localizer,
             section,
             _pluginRuntime?.Marketplace,
-            _pluginRuntime?.Plugins);
+            _pluginRuntime?.Plugins,
+            openPath: null,
+            updates: _updates,
+            frameStats: _skiaHost,
+            restartToInstall: RestartToInstall);
         window.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow = window;
         window.Show();
@@ -550,6 +824,28 @@ internal sealed class AppBootstrap
 
         _skiaHost?.Dispose();
         _skiaHost = null;
+
+        // Update coordinator: stop the schedule and dispose the shared HttpClient.
+        if (_updates is not null)
+        {
+            _updates.Changed -= OnUpdateChanged;
+            try
+            {
+                _updates.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Settings, "update.dispose-failed",
+                    "The update coordinator did not dispose cleanly.", ex);
+            }
+
+            _updates = null;
+        }
+
+        _startupRegistration?.Dispose();
+        _startupRegistration = null;
+        UninstallCrashHooks();
+
         _settings?.Changed -= OnSettingsChanged;
         if (_shell is not null)
         {
@@ -570,9 +866,33 @@ internal sealed class AppBootstrap
         _platformActions?.DisposeInBackground();
         _platformActions = null;
         _data?.Dispose();
+
+        // Force the debounced settings write before the process exits (spec §8.1).
+        if (_settingsStore is not null)
+        {
+            try
+            {
+                _settingsStore.FlushAsync().Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Settings, "settings.flush-failed",
+                    "Pending settings could not be flushed on exit.", ex);
+            }
+        }
+
         _settings?.Dispose();
         _settingsStore?.Dispose();
         _localizer?.Dispose();
+
+        try
+        {
+            _logger.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception)
+        {
+            // Exit path: a log sink that cannot stop must not block shutdown.
+        }
     }
 
     private static async Task DisposeQuietlyAsync(IAsyncDisposable disposable)

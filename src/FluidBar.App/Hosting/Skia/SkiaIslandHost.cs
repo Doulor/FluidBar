@@ -61,9 +61,10 @@ public readonly record struct SkiaIslandHostStats(
 /// zero frames: the clock stops as soon as the springs, pager, strip and dynamic content are at rest.
 /// </para>
 /// </summary>
-public sealed class SkiaIslandHost : IDisposable
+public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 {
     private readonly SkiaIslandHostOptions _options;
+    private readonly SkiaFrameStatsRecorder _frameStats = new();
     private readonly IAppLogger _logger;
     private readonly IPlatformLogger _platformLogger;
     private readonly PlatformCounters _platformCounters;
@@ -152,6 +153,9 @@ public sealed class SkiaIslandHost : IDisposable
 
     /// <summary>Primary layered host (diagnostics/evidence), or null before start.</summary>
     public LayeredWindowHost? PrimaryWindow => _windows.Count > 0 ? _windows[0].Host : null;
+
+    /// <summary>Latest frame-timing sample for the advanced diagnostics setting (spec §9.3).</summary>
+    public FrameStatsSnapshot FrameStats => _frameStats.Snapshot();
 
     /// <summary>Frame/commit counters.</summary>
     public SkiaIslandHostStats Stats => new(
@@ -334,6 +338,7 @@ public sealed class SkiaIslandHost : IDisposable
                 await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
             }
 
+            _frameStats.SetEnabled(settings.Advanced.FrameStats);
             _logger.Information(LogCategories.Lifecycle, "island.skia.started", "Skia island host started.",
                 data: new Dictionary<string, object?>
                 {
@@ -1371,6 +1376,7 @@ public sealed class SkiaIslandHost : IDisposable
         }
 
         var elapsedMs = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
+        _frameStats.Record(elapsedMs);
         entry.Frames++;
         entry.LastRenderMs = elapsedMs;
         Interlocked.Increment(ref _frames);
@@ -1586,7 +1592,15 @@ public sealed class SkiaIslandHost : IDisposable
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
-        if (_disposed || !_started || previous.DisplayOn == current.DisplayOn)
+        if (_disposed || !_started)
+        {
+            return;
+        }
+
+        // Frame statistics is an opt-in render-path recorder (spec §9.3); toggling it takes effect
+        // immediately instead of waiting for the next restart.
+        _frameStats.SetEnabled(current.Advanced.FrameStats);
+        if (previous.DisplayOn == current.DisplayOn)
         {
             return;
         }

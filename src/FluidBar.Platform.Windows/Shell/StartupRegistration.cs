@@ -139,6 +139,13 @@ public sealed class StartupRegistrationService
     private readonly IPlatformLogger _logger;
     private readonly string _valueName;
 
+    /// <summary>Creates a service backed by the real <c>HKCU\...\Run</c> key (production composition).</summary>
+    /// <param name="logger">Structured logger.</param>
+    /// <param name="valueName">Run value name; defaults to <c>FluidBar</c>.</param>
+    public static StartupRegistrationService CreateForCurrentUser(IPlatformLogger? logger = null,
+        string valueName = DefaultValueName)
+        => new(new NativeRegistryValueStore(), logger ?? NullPlatformLogger.Instance, valueName);
+
     public StartupRegistrationService(IRegistryValueStore store, IPlatformLogger logger, string valueName = DefaultValueName)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));

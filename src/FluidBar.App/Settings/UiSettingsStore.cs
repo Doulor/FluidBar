@@ -92,22 +92,35 @@ public sealed class JsonUiSettingsStore : IUiSettingsStore, IDisposable
             return await Task.Run(
                 async () =>
                 {
-                    if (!File.Exists(_path))
+                    // A fresh file can be locked for a few milliseconds by an indexer/AV scanner;
+                    // retrying briefly avoids silently resetting the user's settings on a transient
+                    // sharing violation (a real observed failure mode).
+                    for (var attempt = 0; ; attempt++)
                     {
-                        return AppSettings.Default;
-                    }
+                        try
+                        {
+                            if (!File.Exists(_path))
+                            {
+                                return AppSettings.Default;
+                            }
 
-                    var json = await File.ReadAllTextAsync(_path, cancellationToken).ConfigureAwait(false);
-                    var parsed = AppSettings.TryParse(json, out var error);
-                    if (parsed is null)
-                    {
-                        _logger.Warning(LogCategories.Settings, "settings.ui.corrupt",
-                            "UI settings file could not be parsed; starting from defaults.",
-                            data: new Dictionary<string, object?> { ["error"] = error, ["path"] = _path });
-                        return AppSettings.Default;
-                    }
+                            var json = await File.ReadAllTextAsync(_path, cancellationToken).ConfigureAwait(false);
+                            var parsed = AppSettings.TryParse(json, out var error);
+                            if (parsed is null)
+                            {
+                                _logger.Warning(LogCategories.Settings, "settings.ui.corrupt",
+                                    "UI settings file could not be parsed; starting from defaults.",
+                                    data: new Dictionary<string, object?> { ["error"] = error, ["path"] = _path });
+                                return AppSettings.Default;
+                            }
 
-                    return parsed;
+                            return parsed;
+                        }
+                        catch (IOException) when (attempt < 3)
+                        {
+                            await Task.Delay(40, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
                 },
                 cancellationToken).ConfigureAwait(false);
         }

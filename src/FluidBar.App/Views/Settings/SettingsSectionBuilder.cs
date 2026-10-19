@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using FluidBar.App.Controls;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -12,6 +13,7 @@ using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.App.Views.Plugins;
 using FluidBar.Core.Layout;
+using FluidBar.Platform.Windows.Update;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -41,6 +43,15 @@ public sealed record SettingsWindowContext
 
     /// <summary>Shows a transient status line in the section (exported path, errors).</summary>
     public required Action<string> ShowStatus { get; init; }
+
+    /// <summary>Update service for the About pane (null in previews/headless builds).</summary>
+    public IUpdateUiService? Updates { get; init; }
+
+    /// <summary>Frame-timing source for the advanced diagnostics line (null when no island host).</summary>
+    public IFrameStatsSource? FrameStats { get; init; }
+
+    /// <summary>Launches the verified installer and exits (About "restart and install").</summary>
+    public Action? RestartToInstall { get; init; }
 }
 
 /// <summary>Builds the seven settings sections from the strongly typed settings model.</summary>
@@ -1014,6 +1025,11 @@ public static class SettingsSectionBuilder
             Child = SettingsWidgets.Group(palette, topBorder: true,
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats), null, settings.Advanced.FrameStats,
                     value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { FrameStats = value } })),
+                // Live diagnostics line (spec §9.3 frame.p50/p99): the toggle has a visible effect
+                // instead of only switching a flag nobody reads.
+                settings.Advanced.FrameStats && ctx.FrameStats is not null
+                    ? BuildFrameStatsLine(ctx)
+                    : new Border { Height = 0 },
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.CrashGuard), null, settings.Advanced.CrashGuard,
                     value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
@@ -1073,8 +1089,54 @@ public static class SettingsSectionBuilder
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
                     0.8, 1.6, 0.05, settings.FontScale,
                     value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })))});
+        // The reset action must be the chip's own callback: SmallAction marks PointerPressed as
+        // handled, so a second handler appended after creation would never run (the reset chip used
+        // to be a dead button).
+        void ApplyReset()
+        {
+            if (!string.Equals(confirm.Text, "RESET", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var defaults = settings with
+            {
+                Language = AppSettings.Default.Language,
+                Theme = AppSettings.Default.Theme,
+                StartWithWindows = AppSettings.Default.StartWithWindows,
+                TrayIcon = AppSettings.Default.TrayIcon,
+                AutoUpdate = AppSettings.Default.AutoUpdate,
+                HotkeyToggle = AppSettings.Default.HotkeyToggle,
+                HotkeyHide = AppSettings.Default.HotkeyHide,
+                HotkeySettings = AppSettings.Default.HotkeySettings,
+                Material = AppSettings.Default.Material,
+                Palette = AppSettings.Default.Palette,
+                AccentMode = AppSettings.Default.AccentMode,
+                AccentFallback = AppSettings.Default.AccentFallback,
+                FillOpacity = AppSettings.Default.FillOpacity,
+                PanelRadius = AppSettings.Default.PanelRadius,
+                FontScale = AppSettings.Default.FontScale,
+                ReducedMotion = AppSettings.Default.ReducedMotion,
+                MotionStrength = AppSettings.Default.MotionStrength,
+                HoverPeek = AppSettings.Default.HoverPeek,
+                AutoCollapseMs = AppSettings.Default.AutoCollapseMs,
+                AutoHideMs = AppSettings.Default.AutoHideMs,
+                Stacking = AppSettings.Default.Stacking,
+                Mode = AppSettings.Default.Mode,
+                Anchor = AppSettings.Default.Anchor,
+                DisplayOn = AppSettings.Default.DisplayOn,
+                PeekOnTrackChange = AppSettings.Default.PeekOnTrackChange,
+                Placement = AppSettings.Default.Placement,
+                Dock = AppSettings.Default.Dock,
+                Plugins = AppSettings.Default.Plugins,
+                Advanced = AppSettings.Default.Advanced,
+            };
+            ctx.Settings.Replace(defaults);
+            SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
+        }
+
         var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset),
-            SettingsIconKind.Trash, true, () => { }, palette);
+            SettingsIconKind.Trash, true, ApplyReset, palette);
         var resetHost = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -1083,51 +1145,18 @@ public static class SettingsSectionBuilder
         };
         resetHost.Children.Add(confirm);
         resetHost.Children.Add(resetChip);
-        if (resetChip is Border chip)
+        resetChip.IsHitTestVisible = false;
+
+        // Arm on the property change, not TextChanged: Avalonia's TextBox does not raise TextChanged
+        // for every text mutation (e.g. assistive/UIA value sets), which used to leave the chip
+        // permanently disabled. PropertyChanged fires for typing and programmatic/UIA edits alike.
+        confirm.PropertyChanged += (_, args) =>
         {
-            chip.PointerPressed += (_, e) =>
+            if (args.Property != TextBox.TextProperty)
             {
-                if (!string.Equals(confirm.Text, "RESET", StringComparison.Ordinal))
-                {
-                    return;
-                }
+                return;
+            }
 
-                var defaults = settings with
-                {
-                    Theme = AppSettings.Default.Theme,
-                    StartWithWindows = AppSettings.Default.StartWithWindows,
-                    TrayIcon = AppSettings.Default.TrayIcon,
-                    AutoUpdate = AppSettings.Default.AutoUpdate,
-                    HotkeyToggle = AppSettings.Default.HotkeyToggle,
-                    HotkeyHide = AppSettings.Default.HotkeyHide,
-                    HotkeySettings = AppSettings.Default.HotkeySettings,
-                    Material = AppSettings.Default.Material,
-                    Palette = AppSettings.Default.Palette,
-                    AccentMode = AppSettings.Default.AccentMode,
-                    AccentFallback = AppSettings.Default.AccentFallback,
-                    FillOpacity = AppSettings.Default.FillOpacity,
-                    PanelRadius = AppSettings.Default.PanelRadius,
-                    FontScale = AppSettings.Default.FontScale,
-                    ReducedMotion = AppSettings.Default.ReducedMotion,
-                    MotionStrength = AppSettings.Default.MotionStrength,
-                    HoverPeek = AppSettings.Default.HoverPeek,
-                    AutoCollapseMs = AppSettings.Default.AutoCollapseMs,
-                    AutoHideMs = AppSettings.Default.AutoHideMs,
-                    Stacking = AppSettings.Default.Stacking,
-                    Mode = AppSettings.Default.Mode,
-                    Anchor = AppSettings.Default.Anchor,
-                    DisplayOn = AppSettings.Default.DisplayOn,
-                    PeekOnTrackChange = AppSettings.Default.PeekOnTrackChange,
-                };
-                ctx.Settings.Replace(defaults);
-                SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
-                e.Handled = true;
-            };
-            chip.IsHitTestVisible = false;
-        }
-
-        confirm.TextChanged += (_, _) =>
-        {
             var armed = string.Equals(confirm.Text, "RESET", StringComparison.Ordinal);
             resetChip.Opacity = armed ? 1 : 0.45;
             resetChip.IsHitTestVisible = armed;
@@ -1156,7 +1185,7 @@ public static class SettingsSectionBuilder
             {
                 var folder = Path.Combine(appData, "backups");
                 var path = Path.Combine(folder, $"fluidbar-settings-{DateTime.Now:yyyyMMdd-HHmm}.json");
-                var json = ctx.Settings.Current.ToJson();
+                var json = SettingsExport.Create(ctx.Settings.Current, DateTimeOffset.Now);
                 await Task.Run(() =>
                 {
                     Directory.CreateDirectory(folder);
@@ -1196,8 +1225,7 @@ public static class SettingsSectionBuilder
                 var stream = await file.OpenReadAsync();
                 using var reader = new StreamReader(stream);
                 var text = await reader.ReadToEndAsync();
-                var parsed = AppSettings.TryParse(text, out var error);
-                if (parsed is null)
+                if (!SettingsExport.TryParse(text, out var parsed, out var error) || parsed is null)
                 {
                     SetStatus(error ?? ctx.Localizer.Get(LocKeys.Error.Generic));
                     return;
@@ -1222,14 +1250,11 @@ public static class SettingsSectionBuilder
         var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? version;
         var palette = ctx.Palette;
         var settings = ctx.Settings.Current;
-        var accent = Accents.ParseOrDefault(settings.AccentFallback, Accents.Fallback);
-        var updates = new TextBlock
-        {
-            FontSize = SettingsMetrics.LicenseSize,
-            Foreground = new SolidColorBrush(Accents.Success),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
+        var appearance = SystemAppearanceSnapshot.FromWindows();
+        var accent = Accents.ParseOrDefault(
+            SystemSettingResolution.ResolveAccent(settings.AccentMode, settings.AccentFallback, appearance.AccentHex),
+            Accents.Fallback);
+        var updateService = ctx.Updates;
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.About.Title),
             ctx.Localizer.Get(LocKeys.Settings.About.Description));
@@ -1271,15 +1296,75 @@ public static class SettingsSectionBuilder
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 16, 0, 0),
         };
-        actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates),
-            SettingsIconKind.Refresh, () => updates.Text = ctx.Localizer.Get(LocKeys.Settings.About.UpToDate), palette));
+        var busy = updateService?.IsBusy == true;
+        var checkChip = SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates),
+            SettingsIconKind.Refresh,
+            () =>
+            {
+                if (!busy && updateService is not null)
+                {
+                    _ = updateService.CheckNowAsync();
+                }
+            }, palette);
+        if (busy)
+        {
+            checkChip.Opacity = 0.55;
+        }
+
+        actions.Children.Add(checkChip);
+        if (updateService is not null)
+        {
+            switch (updateService.Current.State)
+            {
+                case UpdateState.Available:
+                    actions.Children.Add(SettingsWidgets.PillAction(
+                        ctx.Localizer.Get(LocKeys.Settings.About.Update.Download),
+                        SettingsIconKind.Download,
+                        () => _ = updateService.DownloadCurrentAsync(), palette));
+                    break;
+                case UpdateState.ReadyToInstall:
+                    actions.Children.Add(SettingsWidgets.PillAction(
+                        ctx.Localizer.Get(LocKeys.Settings.About.Update.Install),
+                        SettingsIconKind.Refresh,
+                        () => ctx.RestartToInstall?.Invoke(), palette));
+                    break;
+            }
+        }
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.Website),
             SettingsIconKind.External, () => ctx.OpenPath("https://fluidbar.app"), palette));
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode),
             SettingsIconKind.Github, () => ctx.OpenPath("https://github.com/Doulor/FluidBar"), palette));
         actions.HorizontalAlignment = HorizontalAlignment.Center;
         pane.Children.Add(actions);
-        pane.Children.Add(updates);
+
+        if (updateService is not null)
+        {
+            var (statusText, statusColor) = DescribeUpdate(updateService, ctx.Localizer);
+            pane.Children.Add(new TextBlock
+            {
+                Text = statusText,
+                FontSize = SettingsMetrics.LicenseSize,
+                Foreground = new SolidColorBrush(statusColor),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 430,
+                Margin = new Thickness(0, 8, 0, 0),
+            });
+            pane.Children.Add(new TextBlock
+            {
+                Text = ctx.Localizer.Format(LocKeys.Settings.About.Update.Feed,
+                    ("feed", updateService.FeedDescription)),
+                FontFamily = Fonts.Mono,
+                FontSize = SettingsMetrics.FooterNoteSize,
+                Foreground = palette.TertiaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 470,
+                Margin = new Thickness(0, 4, 0, 0),
+            });
+        }
 
         pane.Children.Add(new TextBlock
         {
@@ -1339,6 +1424,72 @@ public static class SettingsSectionBuilder
         panel.Children.Add(pane);
         panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
+    }
+
+    /// <summary>Builds the live frame-statistics line shown when the advanced setting is on.</summary>
+    private static Control BuildFrameStatsLine(SettingsWindowContext ctx)
+    {
+        var text = new TextBlock
+        {
+            FontFamily = Fonts.Mono,
+            FontSize = SettingsMetrics.FooterNoteSize,
+            Foreground = ctx.Palette.SecondaryBrush,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+        void Refresh() => text.Text = FormatFrameStats(ctx);
+        Refresh();
+
+        // Only ticks while the line is on screen; the section rebuild swaps it out on toggle.
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) => Refresh();
+        text.AttachedToVisualTree += (_, _) => timer.Start();
+        text.DetachedFromVisualTree += (_, _) => timer.Stop();
+        return text;
+    }
+
+    /// <summary>Formats the current frame-timing snapshot (technical values, localized label).</summary>
+    private static string FormatFrameStats(SettingsWindowContext ctx)
+    {
+        var stats = ctx.FrameStats?.FrameStats ?? FrameStatsSnapshot.Disabled;
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats)} · p50 {stats.P50Ms:0.00} ms · p99 {stats.P99Ms:0.00} ms · {stats.Frames} frames");
+    }
+
+    /// <summary>Maps the live update state onto the localized About status line and its tone.</summary>
+    private static (string Text, Color Color) DescribeUpdate(IUpdateUiService service, ILocalizer localizer)
+    {
+        var snapshot = service.Current;
+        var version = snapshot.AvailableRelease?.Version.ToString() ?? service.CurrentVersion.ToString();
+        var size = FormatUpdateSize(snapshot.AvailableRelease?.Installer?.SizeBytes ?? 0);
+        return snapshot.State switch
+        {
+            UpdateState.Checking => (localizer.Get(LocKeys.Settings.About.Update.Checking), Accents.Info),
+            UpdateState.UpToDate => (localizer.Get(LocKeys.Settings.About.UpToDate), Accents.Success),
+            UpdateState.Available => (localizer.Format(LocKeys.Settings.About.Update.Available,
+                ("version", version), ("size", size)), Accents.Warning),
+            UpdateState.Downloading => (localizer.Format(LocKeys.Settings.About.Update.Downloading,
+                ("version", version)), Accents.Info),
+            UpdateState.ReadyToInstall => (localizer.Format(LocKeys.Settings.About.Update.Ready,
+                ("version", version)), Accents.Success),
+            UpdateState.RestartRequired => (localizer.Get(LocKeys.Settings.About.Update.RestartRequired),
+                Accents.Success),
+            UpdateState.Failed => (localizer.Format(LocKeys.Settings.About.Update.Failed,
+                ("reason", snapshot.Message ?? "unknown")), Accents.Danger),
+            _ => (string.Empty, Accents.Info),
+        };
+    }
+
+    /// <summary>Formats an installer size without inventing units (bytes → MB/KB).</summary>
+    private static string FormatUpdateSize(long bytes)
+    {
+        if (bytes <= 0)
+        {
+            return "?";
+        }
+
+        return bytes >= 1024L * 1024L
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / (1024.0 * 1024.0):0.0} MB")
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{bytes / 1024.0:0} KB");
     }
 
     private static Control AboutLink(string label, SettingsIconKind icon, Action clicked, SettingsPalette palette)

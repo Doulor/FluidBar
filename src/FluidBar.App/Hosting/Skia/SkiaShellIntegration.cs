@@ -21,6 +21,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     private readonly Action _market;
     private readonly Action _exit;
     private HotkeySettings _bindings;
+    private bool _trayStarted;
     private int _disposed;
 
     /// <summary>Creates the shell integration; call <see cref="StartAsync"/> once.</summary>
@@ -45,8 +46,13 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         _hotkeys = new HotkeyService(_messageHost, logger, counters);
     }
 
-    /// <summary>Starts the message host, tray icon and hotkeys.</summary>
-    public async Task StartAsync(CancellationToken cancellationToken = default)
+    /// <summary>Whether the tray icon is currently registered.</summary>
+    public bool TrayVisible => _trayStarted;
+
+    /// <summary>Starts the message host, tray icon (when enabled) and hotkeys.</summary>
+    /// <param name="trayVisible">Initial tray-icon state from the general settings.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task StartAsync(bool trayVisible = true, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         await _messageHost.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -55,7 +61,54 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         _tray.LeftClicked += OnTrayLeftClicked;
         _hotkeys.Pressed += OnHotkeyPressed;
 
-        await _tray.StartAsync(new TrayIconOptions { ToolTip = "FluidBar 2.0", IconFilePath = TryExtractTrayIcon() }, cancellationToken).ConfigureAwait(false);
+        if (trayVisible)
+        {
+            await StartTrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await _hotkeys.StartAsync(cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("toggle", _bindings.Toggle, cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("hide", _bindings.Hide, cancellationToken).ConfigureAwait(false);
+        await RegisterAsync("settings", _bindings.Settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Applies the general "tray icon" setting live (idempotent).</summary>
+    /// <param name="visible">Whether the tray icon should be registered.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task SetTrayVisibleAsync(bool visible, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (visible == _trayStarted)
+        {
+            return;
+        }
+
+        if (visible)
+        {
+            await StartTrayAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await _tray.StopAsync(cancellationToken).ConfigureAwait(false);
+        _trayStarted = false;
+    }
+
+    /// <summary>Shows a tray balloon when the icon is visible (update prompts); no-op otherwise.</summary>
+    /// <param name="title">Balloon title.</param>
+    /// <param name="message">Balloon message.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task ShowBalloonAsync(string title, string message, CancellationToken cancellationToken = default)
+        => _trayStarted
+            ? _tray.ShowBalloonAsync(title, message, cancellationToken)
+            : Task.CompletedTask;
+
+    private async Task StartTrayAsync(CancellationToken cancellationToken)
+    {
+        await _tray.StartAsync(new TrayIconOptions
+        {
+            ToolTip = "FluidBar 2.0",
+            IconFilePath = TryExtractTrayIcon(),
+        }, cancellationToken).ConfigureAwait(false);
         _tray.SetMenuItems(
         [
             new TrayMenuItem("toggle", "显示 / 隐藏灵动岛"),
@@ -65,11 +118,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             new TrayMenuItem("exit", "退出 FluidBar"),
         ]);
         await _tray.SetToolTipAsync("FluidBar 2.0", cancellationToken).ConfigureAwait(false);
-
-        await _hotkeys.StartAsync(cancellationToken).ConfigureAwait(false);
-        await RegisterAsync("toggle", _bindings.Toggle, cancellationToken).ConfigureAwait(false);
-        await RegisterAsync("hide", _bindings.Hide, cancellationToken).ConfigureAwait(false);
-        await RegisterAsync("settings", _bindings.Settings, cancellationToken).ConfigureAwait(false);
+        _trayStarted = true;
     }
 
     /// <summary>Re-registers all global hotkeys after the user edits them in settings.</summary>
@@ -189,7 +238,18 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         _hotkeys.Pressed -= OnHotkeyPressed;
 
         try { await _hotkeys.StopAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("hotkeys stop failed: " + ex); }
-        try { await _tray.StopAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("tray stop failed: " + ex); }
+        try
+        {
+            if (_trayStarted)
+            {
+                await _tray.StopAsync().ConfigureAwait(false);
+                _trayStarted = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine("tray stop failed: " + ex);
+        }
         try { await _hotkeys.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("hotkeys dispose failed: " + ex); }
         try { await _tray.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("tray dispose failed: " + ex); }
         try { await _messageHost.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("message host dispose failed: " + ex); }

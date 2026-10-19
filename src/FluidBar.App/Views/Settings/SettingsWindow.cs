@@ -35,6 +35,9 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly IMarketplaceUiService _marketplace;
     private readonly IPluginUiService _plugins;
     private readonly Action<string?> _openPath;
+    private readonly IUpdateUiService? _updates;
+    private readonly IFrameStatsSource? _frameStats;
+    private readonly Action? _restartToInstall;
     private readonly StackPanel _nav = new() { Spacing = SettingsMetrics.NavGap };
     private readonly ScrollViewer _content = new();
     private readonly TextBlock _titleText = new();
@@ -58,10 +61,16 @@ public sealed class SettingsWindow : Window, ILocalizable
         SettingsWindowSection section,
         IMarketplaceUiService? marketplace = null,
         IPluginUiService? plugins = null,
-        Action<string?>? openPath = null)
+        Action<string?>? openPath = null,
+        IUpdateUiService? updates = null,
+        IFrameStatsSource? frameStats = null,
+        Action? restartToInstall = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
+        _updates = updates;
+        _frameStats = frameStats;
+        _restartToInstall = restartToInstall;
         _marketplace = marketplace ?? CreateDefaultMarketplace(localizer);
         _plugins = plugins ?? new FluidBar.App.Views.Plugins.BuiltinPluginContributionUiService(settings, localizer);
         _openPath = openPath ?? (static path =>
@@ -72,7 +81,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             }
         });
         _section = section;
-        _palette = SettingsPalette.For(settings.Current.Theme);
+        _palette = SettingsPalette.For(ResolvePaletteTheme(settings.Current.Theme));
 
         // .settings-window { width: min(900px, 100vw - 48px); height: min(620px, 100vh - 48px) }
         Width = SettingsMetrics.WindowWidth;
@@ -96,6 +105,11 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         _settings.Changed += OnSettingsChanged;
         _localizer.Changed += OnLocalizerChanged;
+        if (_updates is not null)
+        {
+            _updates.Changed += OnUpdateChanged;
+        }
+
         RebuildContent();
         _ = RefreshNavCountsAsync();
     }
@@ -159,8 +173,25 @@ public sealed class SettingsWindow : Window, ILocalizable
     {
         _settings.Changed -= OnSettingsChanged;
         _localizer.Changed -= OnLocalizerChanged;
+        if (_updates is not null)
+        {
+            _updates.Changed -= OnUpdateChanged;
+        }
+
         base.OnClosed(e);
     }
+
+    private static AppTheme ResolvePaletteTheme(AppTheme theme)
+        => SystemSettingResolution.ResolveTheme(theme, SystemAppearanceSnapshot.FromWindows().LightTheme);
+
+    private void OnUpdateChanged(object? sender, EventArgs e)
+        => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (_section == SettingsWindowSection.About)
+            {
+                RebuildContent();
+            }
+        });
 
     private void ApplyChrome()
     {
@@ -526,6 +557,9 @@ public sealed class SettingsWindow : Window, ILocalizable
             Owner = () => this,
             OpenPath = _openPath,
             ShowStatus = ShowStatus,
+            Updates = _updates,
+            FrameStats = _frameStats,
+            RestartToInstall = _restartToInstall,
         };
         var content = SettingsSectionBuilder.Build(_section, context);
         if (_section == SettingsWindowSection.Appearance)
@@ -586,18 +620,26 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
-        var themeChanged = previous.Theme != current.Theme;
+        var themeChanged = ResolvePaletteTheme(previous.Theme) != ResolvePaletteTheme(current.Theme);
         if (themeChanged)
         {
-            _palette = SettingsPalette.For(current.Theme);
+            _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme));
             ApplyChrome();
             RebuildTitleBarBrushes();
             RebuildNav();
             RebuildContent();
+            return;
         }
-        else
+
+        if (_preview is not null && _section == SettingsWindowSection.Appearance)
         {
-            _preview?.Update(current, _localizer);
+            _preview.Update(current, _localizer);
+        }
+
+        // Diagnostics/update panes show live values: rebuild so the toggle has an immediate effect.
+        if (_section == SettingsWindowSection.Advanced && previous.Advanced.FrameStats != current.Advanced.FrameStats)
+        {
+            RebuildContent();
         }
     }
 
