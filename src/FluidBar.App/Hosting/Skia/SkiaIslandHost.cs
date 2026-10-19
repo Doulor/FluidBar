@@ -1079,9 +1079,10 @@ public sealed class SkiaIslandHost : IDisposable
 
         UpdateHitRegions(force: false);
         RefreshAccessibility();
+        _controller.SnapMotion();
         EnsureDeadlineTicker();
         EnsureFrameLoop();
-        RenderNow();
+        RenderNow(forceFull: true);
     }
 
     /// <summary>

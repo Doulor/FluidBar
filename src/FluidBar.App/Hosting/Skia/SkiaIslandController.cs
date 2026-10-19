@@ -816,6 +816,13 @@ public sealed class SkiaIslandController : IDisposable
         PlacementRequested?.Invoke();
     }
 
+    /// <summary>Snaps the shell motion to the current state target and rebuilds the render state.</summary>
+    public void SnapMotion()
+    {
+        _motion.SnapToTarget();
+        BuildRenderState();
+        InvalidateFull();
+    }
     /// <summary>Human-readable diagnostics (smoke runs, bug reports).</summary>
     public string Describe()
     {
@@ -1392,4 +1399,5 @@ public sealed class SkiaIslandController : IDisposable
         return new VisualRect(left, top, right - left, bottom - top);
     }
 }
+
 
