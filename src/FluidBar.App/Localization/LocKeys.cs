@@ -454,6 +454,8 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.General.Title</c></summary>
             public const string Title = "Settings.General.Title";
+            /// <summary><c>Settings.General.Subtitle</c></summary>
+            public const string Subtitle = "Settings.General.Subtitle";
             /// <summary><c>Settings.General.Language</c></summary>
             public const string Language = "Settings.General.Language";
             /// <summary><c>Settings.General.LanguageHint</c></summary>
@@ -468,6 +470,8 @@ public static partial class LocKeys
             public const string TrayIconHint = "Settings.General.TrayIconHint";
             /// <summary><c>Settings.General.AutoUpdate</c></summary>
             public const string AutoUpdateLabel = "Settings.General.AutoUpdate";
+        /// <summary><c>Settings.General.AutoUpdateHint</c></summary>
+        public const string AutoUpdateHint = "Settings.General.AutoUpdateHint";
             /// <summary><c>Settings.General.Telemetry</c></summary>
             public const string Telemetry = "Settings.General.Telemetry";
             /// <summary><c>Settings.General.TelemetryHint</c></summary>
@@ -734,6 +738,14 @@ public static partial class LocKeys
             public const string SafeMode = "Settings.Advanced.SafeMode";
             /// <summary><c>Settings.Advanced.SafeModeHint</c></summary>
             public const string SafeModeHint = "Settings.Advanced.SafeModeHint";
+        /// <summary><c>Settings.Advanced.LanguageFollowSystem</c></summary>
+        public const string LanguageFollowSystem = "Settings.Advanced.LanguageFollowSystem";
+        /// <summary><c>Settings.Advanced.LanguageFollowSystemHint</c></summary>
+        public const string LanguageFollowSystemHint = "Settings.Advanced.LanguageFollowSystemHint";
+        /// <summary><c>Settings.Advanced.UpdateMode</c></summary>
+        public const string UpdateMode = "Settings.Advanced.UpdateMode";
+        /// <summary><c>Settings.Advanced.UpdateModeHint</c></summary>
+        public const string UpdateModeHint = "Settings.Advanced.UpdateModeHint";
             /// <summary><c>Settings.Advanced.Reset</c></summary>
             public const string Reset = "Settings.Advanced.Reset";
             /// <summary><c>Settings.Advanced.ResetAppearance</c></summary>

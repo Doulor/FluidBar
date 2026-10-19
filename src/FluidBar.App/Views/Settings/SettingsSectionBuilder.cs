@@ -239,46 +239,32 @@ public static class SettingsSectionBuilder
     {
         var settings = ctx.Settings.Current;
         var brushes = Palette(ctx);
+        // The prototype's general pane is exactly two language segments; "follow system" lives in Advanced.
         var languageOptions = new (string, string)[]
         {
-            (ctx.Localizer.Get(LocKeys.Locale.System), "system"),
             (ctx.Localizer.Get(LocKeys.Locale.Chinese), "zh-Hans"),
             (ctx.Localizer.Get(LocKeys.Locale.English), "en-US"),
         };
-
-        var telemetry = new SettingsSwitch
-        {
-            IsOn = false,
-            IsEnabled = false,
-            Accent = brushes.Accent,
-            OffTrack = brushes.RaisedHover,
-            OffHairline = brushes.LineStrong,
-            OffKnob = brushes.Secondary,
-        };
+        var effectiveLanguage = string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase)
+            ? (ctx.Localizer.CurrentCulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en-US")
+            : settings.Language;
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Title),
-            ctx.Localizer.Get(LocKeys.Settings.General.LanguageHint),
+            ctx.Localizer.Get(LocKeys.Settings.General.Subtitle),
             SettingsWidgets.Group(brushes.Line, topBorder: true,
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Language),
-                    ctx.Localizer.Get(LocKeys.Settings.General.LanguageHint), languageOptions, settings.Language,
+                    ctx.Localizer.Get(LocKeys.Settings.General.LanguageHint), languageOptions, effectiveLanguage,
                     value => ctx.Settings.Update(s => s with { Language = value })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.StartWithWindows),
                     ctx.Localizer.Get(LocKeys.Settings.General.StartWithWindowsHint), settings.StartWithWindows,
                     value => ctx.Settings.Update(s => s with { StartWithWindows = value })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdateLabel), null,
-                    [
-                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Notify), "notify"),
-                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Auto), "auto"),
-                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Off), "off"),
-                    ],
-                    settings.AutoUpdate,
-                    value => ctx.Settings.Update(s => s with { AutoUpdate = value }), small: true),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdateLabel),
+                    ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdateHint),
+                    !string.Equals(settings.AutoUpdate, "off", StringComparison.OrdinalIgnoreCase),
+                    value => ctx.Settings.Update(s => s with { AutoUpdate = value ? "notify" : "off" })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.TrayIcon),
                     ctx.Localizer.Get(LocKeys.Settings.General.TrayIconHint), settings.TrayIcon,
-                    value => ctx.Settings.Update(s => s with { TrayIcon = value })),
-                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
-                    ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint), telemetry,
-                    brushes.Foreground, brushes.Tertiary, brushes.Line)));
+                    value => ctx.Settings.Update(s => s with { TrayIcon = value }))));
 
         panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.General.Hotkeys), brushes.Tertiary));
         panel.Children.Add(SettingsWidgets.Group(brushes.Line, topBorder: false,
@@ -908,7 +894,37 @@ public static class SettingsSectionBuilder
                 value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
             ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
                 ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } }))));
+                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } })),
+            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystem),
+                ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystemHint),
+                string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase),
+                value => ctx.Settings.Update(s => s with
+                {
+                    Language = value
+                        ? "system"
+                        : (ctx.Localizer.CurrentCulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en-US"),
+                })),
+            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateMode),
+                ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateModeHint),
+                [
+                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Notify), "notify"),
+                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Auto), "auto"),
+                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Off), "off"),
+                ],
+                settings.AutoUpdate,
+                value => ctx.Settings.Update(s => s with { AutoUpdate = value }), small: true),
+            SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
+                ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint),
+                new SettingsSwitch
+                {
+                    IsOn = false,
+                    IsEnabled = false,
+                    Accent = brushes.Accent,
+                    OffTrack = brushes.RaisedHover,
+                    OffHairline = brushes.LineStrong,
+                    OffKnob = brushes.Secondary,
+                },
+                brushes.Foreground, brushes.Tertiary, brushes.Line)));
 
         var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), IconKind.Warning,
             true, () =>
