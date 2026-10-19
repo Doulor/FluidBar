@@ -32,7 +32,16 @@ internal static class IslandTestFixtures
         "18-expanded-clipboard",
         "19-expanded-agent",
         "20-expanded-widgets",
+        "21-rail-page0-home",
+        "22-rail-page1-media",
+        "23-rail-page2-notifications",
+        "24-rail-page3-clipboard",
+        "25-rail-page4-agent",
+        "26-rail-page5-widgets",
     ];
+
+    /// <summary>Short rail labels exactly as the shipped zh-Hans catalog renders them.</summary>
+    public static string[] ZhShortTitles { get; } = ["主页", "媒体", "通知", "剪贴板", "代理", "小组件"];
 
     public static IslandTheme Theme => IslandTheme.Dark;
 
@@ -330,6 +339,12 @@ internal static class IslandTestFixtures
         "18-expanded-clipboard" => Expanded(3),
         "19-expanded-agent" => Expanded(4),
         "20-expanded-widgets" => Expanded(5),
+        "21-rail-page0-home" => RailState(0),
+        "22-rail-page1-media" => RailState(1),
+        "23-rail-page2-notifications" => RailState(2),
+        "24-rail-page3-clipboard" => RailState(3),
+        "25-rail-page4-agent" => RailState(4),
+        "26-rail-page5-widgets" => RailState(5),
         _ => Expanded(0),
     };
 
@@ -360,6 +375,25 @@ internal static class IslandTestFixtures
         }
 
         return days;
+    }
+
+    /// <summary>
+    /// Expanded prototype rail state: zh short labels and the detached strip revealed at a page. This
+    /// is the state the golden rail cases capture (layout contract: 26 / dynamic capsule / 26 trio,
+    /// 8 DIP gaps, 3 DIP dots on a 7 DIP pitch).
+    /// </summary>
+    /// <param name="page">Committed page index.</param>
+    /// <param name="position">Continuous pager position (NaN = settled on <paramref name="page"/>).</param>
+    public static IslandRenderState RailState(int page, double position = double.NaN)
+    {
+        var settled = double.IsNaN(position) ? page : position;
+        var content = Content() with { ShortTitles = ZhShortTitles, PageTitles = ZhShortTitles };
+        return IslandRenderState.Expanded(
+            IslandMode.Float,
+            PagerRenderState.FromPosition(settled),
+            content,
+            Theme,
+            ArchipelagoState.Shown(settled));
     }
 
     public static IslandRenderState Expanded(

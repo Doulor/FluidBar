@@ -105,8 +105,8 @@ public class CoreArchitectureTests
         Assert.Equal(36, Layout.LayoutTokens.HostBottomPadding, 1e-9);
         Assert.Equal(76, Layout.LayoutTokens.HostFloatBottomAllowance, 1e-9);
         Assert.Equal(136, Layout.LayoutTokens.HostDockBottomAllowance, 1e-9);
-        Assert.Equal(10, Layout.LayoutTokens.ArchipelagoGap, 1e-9);
-        Assert.Equal(30, Layout.LayoutTokens.ArchipelagoStripHeight, 1e-9);
+        Assert.Equal(8, Layout.LayoutTokens.ArchipelagoGap, 1e-9);
+        Assert.Equal(32, Layout.LayoutTokens.ArchipelagoStripHeight, 1e-9);
         Assert.Equal(352, Layout.LayoutTokens.ArchipelagoTrackWidth, 1e-9);
         Assert.Equal(208, Layout.LayoutTokens.CompactSize(Activities.ActivityKind.Volume).Width, 1e-9);
         Assert.Equal(40, Layout.LayoutTokens.CompactSize(Activities.ActivityKind.Volume).Height, 1e-9);

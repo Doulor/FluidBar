@@ -302,7 +302,7 @@ public class LayoutTests
                 Assert.NotNull(archipelago);
                 Assert.Equal(result.Placement.ArchipelagoStrip, archipelago.Strip);
                 Assert.Equal(352, archipelago.Strip.Width, Eps);
-                Assert.Equal(30, archipelago.Strip.Height, Eps);
+                Assert.Equal(32, archipelago.Strip.Height, Eps);
                 Assert.Equal(result.Shell.X + 44, archipelago.Strip.X, Eps);
                 Assert.Equal(ExpectedStripTop(mode, result.Shell), archipelago.Strip.Y, Eps);
                 Assert.True(archipelago.Strip.Bottom <= work.Height + Eps, context + " strip inside work area");
@@ -497,8 +497,8 @@ public class LayoutTests
         Assert.Equal(444, LayoutTokens.HostSurfaceDockHeight, Eps);
         Assert.Equal(24, LayoutTokens.HostTopPadding, Eps);
         Assert.Equal(36, LayoutTokens.HostBottomPadding, Eps);
-        Assert.Equal(10, LayoutTokens.ArchipelagoGap, Eps);
-        Assert.Equal(30, LayoutTokens.ArchipelagoStripHeight, Eps);
+        Assert.Equal(8, LayoutTokens.ArchipelagoGap, Eps);
+        Assert.Equal(32, LayoutTokens.ArchipelagoStripHeight, Eps);
         Assert.Equal(76, LayoutTokens.HostFloatBottomAllowance, Eps);
         Assert.Equal(136, LayoutTokens.HostDockBottomAllowance, Eps);
         Assert.Equal(352, LayoutTokens.ArchipelagoTrackWidth, Eps);
@@ -516,9 +516,9 @@ public class LayoutTests
         Assert.Equal(136, dockHost.BottomAllowance, Eps);
         Assert.Equal(new VisualRect(24, 24, 440, 284), floatHost.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(24, 24, 440, 284), dockHost.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(68, 318, 352, 30), floatHost.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 316, 352, 32), floatHost.ArchipelagoStripLocal);
         Assert.Equal(new VisualRect(24, 316, 440, 52), dockHost.DockStripLocal);
-        Assert.Equal(new VisualRect(68, 378, 352, 30), dockHost.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 376, 352, 32), dockHost.ArchipelagoStripLocal);
         Assert.True(floatHost.BottomBandLocal.Height > floatHost.BottomPadding);
         Assert.True(dockHost.BottomBandLocal.Height > dockHost.BottomPadding);
     }
@@ -571,7 +571,7 @@ public class LayoutTests
         Assert.Equal(compact.Shell.Y - 8 - 284, expanded.Shell.Y, Eps);
         Assert.Equal(work.Height - 4 - 76, expanded.Placement.DockStrip.Bottom, Eps);
         Assert.Equal(work.Height - 4 - 36, expanded.Placement.ArchipelagoStrip.Bottom, Eps);
-        Assert.Equal(expanded.Placement.DockStrip.Bottom + 10, expanded.Placement.ArchipelagoStrip.Y, Eps);
+        Assert.Equal(expanded.Placement.DockStrip.Bottom + LayoutTokens.ArchipelagoGap, expanded.Placement.ArchipelagoStrip.Y, Eps);
         Assert.True(expanded.Placement.DockStrip.Bottom <= work.Height);
         Assert.True(expanded.Placement.ArchipelagoStrip.Bottom <= work.Height);
         Assert.True(expanded.Placement.IsClamped);

@@ -170,9 +170,10 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandHitKind.DotLeft, leftDot.Kind);
         Assert.Equal(0, leftDot.PageIndex);
 
+        // Every dot in a cluster jumps to the farthest page in that direction (prototype far-dot rule).
         var rightDot = renderer.HitTest(state, layout.DotsRight[0].MidX, layout.DotsRight[0].MidY);
         Assert.Equal(IslandHitKind.DotRight, rightDot.Kind);
-        Assert.Equal(4, rightDot.PageIndex);
+        Assert.Equal(5, rightDot.PageIndex);
 
         var farRight = renderer.HitTest(state, layout.DotsRight[1].MidX, layout.DotsRight[1].MidY);
         Assert.Equal(IslandHitKind.DotRight, farRight.Kind);
@@ -184,19 +185,22 @@ public sealed class IslandHitTestTests
     }
 
     [Fact]
-    public void Transient_strip_hit_test_inverts_the_reveal_transform()
+    public void Transient_strip_keeps_its_geometry_during_the_reveal_fade()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var baseState = IslandTestFixtures.Expanded(3, strip: true);
         var layout = renderer.MeasureStrip(baseState);
 
-        var transformed = baseState with
+        // Prototype2 fades the rail in with an opacity transition only, so the pills never slide or
+        // scale: the measured rects stay hit-testable while the reveal is still in flight.
+        var fading = baseState with
         {
             Archipelago = baseState.Archipelago with { TranslateYDip = 6, Scale = 0.95, Opacity = 0.8 },
         };
-        var hit = renderer.HitTest(transformed, layout.Current.MidX, layout.Current.MidY + 6);
+        var hit = renderer.HitTest(fading, layout.Current.MidX, layout.Current.MidY);
         Assert.Equal(IslandHitKind.RailSlot, hit.Kind);
         Assert.Equal(3, hit.PageIndex);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(fading, layout.Current.MidX, layout.Current.Top - 2).Kind);
     }
 
     [Fact]
@@ -210,6 +214,10 @@ public sealed class IslandHitTestTests
         var hit = renderer.HitTest(state, dot.MidX, dot.MidY + 5);
         Assert.Equal(IslandHitKind.DotRight, hit.Kind);
         Assert.Equal(5, hit.PageIndex);
+
+        // The prototype hit area is 7×15: 7 DIP above the centre still hits, 8 DIP does not.
+        Assert.Equal(IslandHitKind.DotRight, renderer.HitTest(state, dot.MidX, dot.MidY + 7).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 8).Kind);
     }
 
     [Fact]

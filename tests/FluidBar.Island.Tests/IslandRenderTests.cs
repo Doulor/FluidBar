@@ -134,7 +134,7 @@ public sealed class IslandRenderTests
 
         var strip = renderer.MeasureStrip(shown);
         var shell = IslandMetrics.ShellRect(shown);
-        Assert.True(strip.Strip.Top >= shell.Bottom + 10 - 0.01f, "strip must sit below the shell");
+        Assert.Equal(shell.Bottom + 8f, strip.Strip.Top, 0.001f);
 
         using var hiddenBitmap = renderer.RenderToBitmap(hidden, IslandTestFixtures.Scale);
         using var shownBitmap = renderer.RenderToBitmap(shown, IslandTestFixtures.Scale);

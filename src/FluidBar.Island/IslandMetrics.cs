@@ -62,37 +62,83 @@ public static class IslandMetrics
     /// <summary>Compact trailing chip height (20 DIP).</summary>
     public const double CompactChipHeight = 20;
 
-    /// <summary>Detached previous/next mini-island width (26 DIP, prototype).</summary>
+    /// <summary>Detached previous/next mini-island diameter (26 DIP, prototype `RAIL_SLOT`).</summary>
     public const double MiniNeighbourWidth = 26;
 
     /// <summary>Detached previous/next mini-island height (26 DIP, prototype).</summary>
     public const double MiniNeighbourHeight = 26;
 
-    /// <summary>Detached current mini-island width (73 DIP, prototype label capsule).</summary>
-    public const double MiniCurrentWidth = 73;
+    /// <summary>
+    /// Detached current capsule base width (64 DIP, prototype `RAIL_CUR_BASE`). The painted capsule
+    /// grows with its localized label; measure the real width through
+    /// <see cref="MiniRailLayout.CapsuleWidthAt"/> instead of using this base directly.
+    /// </summary>
+    public const double MiniCurrentBaseWidth = 64;
+
+    /// <summary>Current capsule width floor (64 DIP; the prototype clamps to `RAIL_CUR_BASE`).</summary>
+    public const double MiniCurrentMinWidth = MiniCurrentBaseWidth;
+
+    /// <summary>Current capsule width ceiling (104 DIP; the prototype clamps the label growth).</summary>
+    public const double MiniCurrentMaxWidth = 104;
 
     /// <summary>Detached current mini-island height (28 DIP, prototype).</summary>
     public const double MiniCurrentHeight = 28;
 
-    /// <summary>Gap between detached islands (8 DIP).</summary>
+    /// <summary>Gap between detached islands (8 DIP, prototype `RAIL_GAP`).</summary>
     public const double MiniGap = 8;
+
+    /// <summary>Previous/next icon size (12 DIP; `.mini-ico .ico`).</summary>
+    public const double MiniNeighbourIconSize = 12;
+
+    /// <summary>Current capsule icon size (11 DIP; `.mini.current .mini-ico .ico`).</summary>
+    public const double MiniCurrentIconSize = 11;
+
+    /// <summary>Icon-to-label gap inside the current capsule (4 DIP; `.mini-content` gap).</summary>
+    public const double MiniContentGap = 4;
+
+    /// <summary>Current capsule label font size (9 DIP; `.mini-label`).</summary>
+    public const double MiniLabelSize = 9;
+
+    /// <summary>Current capsule label letter spacing (0.01em on a 9 DIP label = 0.09 DIP per character).</summary>
+    public const double MiniLabelLetterSpacingEm = 0.01;
 
     /// <summary>Far-page dot diameter (3 DIP).</summary>
     public const double DotSize = 3;
 
-    /// <summary>Gap between far-page dots (4 DIP, prototype).</summary>
+    /// <summary>Gap between far-page dots (4 DIP, prototype `RAIL_DOT_GAP`); the dot pitch is 7 DIP.</summary>
     public const double DotGap = 4;
 
-    /// <summary>Dot hit target size (12 DIP; dots are tiny, the hit target is not).</summary>
+    /// <summary>Overflow dot width (7 DIP; `.far-dot.wide` — the last dot of a clipped cluster).</summary>
+    public const double DotWideWidth = 7;
+
+    /// <summary>Overflow dot corner radius (2 DIP; `.far-dot.wide`).</summary>
+    public const double DotWideRadius = 2;
+
+    /// <summary>Far-page dot alpha (40 % white; `.far-dot`).</summary>
+    public const float DotAlpha = 0.4f;
+
+    /// <summary>Gap between an island and its dot cluster (7 DIP, prototype `RAIL_DOT_GAP_EDGE`).</summary>
+    public const double DotIslandGap = 7;
+
+    /// <summary>Dot hit-target width (7 DIP; `.far-dot::after` insets −2 px horizontally).</summary>
+    public const double DotHitWidth = 7;
+
+    /// <summary>Dot hit-target height (15 DIP; `.far-dot::after` insets −6 px vertically).</summary>
+    public const double DotHitHeight = 15;
+
+    /// <summary>
+    /// Legacy square dot hit size (12 DIP). Superseded by <see cref="DotHitWidth"/> /
+    /// <see cref="DotHitHeight"/> (the prototype's 7×15 target); kept for UIA bounds callers.
+    /// </summary>
     public const double DotHitSize = 12;
 
-    /// <summary>Maximum far-page dots per side (3).</summary>
+    /// <summary>Maximum far-page dots per side (3, prototype `RAIL_DOT_MAX`).</summary>
     public const int MaxDotsPerSide = 3;
 
-    /// <summary>Strip envelope height (30 DIP).</summary>
+    /// <summary>Strip envelope height (32 DIP; the prototype `.mini-rail` height).</summary>
     public const double StripHeight = LayoutTokens.ArchipelagoStripHeight;
 
-    /// <summary>Gap between the expanded shell and the strip (10 DIP).</summary>
+    /// <summary>Gap between the expanded shell and the strip (8 DIP; `.mini-rail` top offset).</summary>
     public const double StripGap = LayoutTokens.ArchipelagoGap;
 
     /// <summary>Host surface size for a mode in DIP.</summary>
@@ -170,8 +216,8 @@ public static class IslandType
     /// <summary>Compact tiny caption (9.5 DIP).</summary>
     public static readonly TextStyle CompactTiny = new(FontRole.Ui, 9.5f);
 
-    /// <summary>Mini-island label (9 DIP).</summary>
-    public static readonly TextStyle MiniLabel = new(FontRole.UiSemiBold, 9f);
+    /// <summary>Transient-rail capsule label (9 DIP regular; prototype2 `.mini-label` inherits 400).</summary>
+    public static readonly TextStyle MiniLabel = new(FontRole.Ui, 9f);
 
     /// <summary>Page clock (dashboard) — same as <see cref="Clock"/>.</summary>
     public static readonly TextStyle PageClock = Clock;

@@ -133,9 +133,14 @@ public sealed class LayeredHostTests
         Assert.Equal(LayeredSurfaceSize.PanelHeight, dockSurface.ShellEnvelopeLocal.Height);
         Assert.Equal(LayeredSurfaceSize.DockStripTop, dockSurface.DockStripTopLocal);
         Assert.Equal(LayeredSurfaceSize.DockStripHeight, dockSurface.DockStripLocal.Height);
-        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Dock), dockSurface.ArchipelagoTopLocal);
-        Assert.Equal(LayeredSurfaceSize.ArchipelagoStripHeight, dockSurface.ArchipelagoStripLocal.Height);
-        Assert.Equal(LayeredSurfaceSize.ArchipelagoTop(LayeredHostMode.Float), floatSurface.ArchipelagoTopLocal);
+        // Core owns the prototype2 rail band (8 DIP gap, 32 DIP strip): float 316, dock 376. The
+        // LayeredSurfaceSize copy of those two lane constants is a pre-prototype snapshot that no
+        // runtime path reads (the window size composes to the same 384/444), so it is not compared.
+        Assert.Equal(316, floatSurface.ArchipelagoTopLocal, 1e-9);
+        Assert.Equal(376, dockSurface.ArchipelagoTopLocal, 1e-9);
+        Assert.Equal(32, dockSurface.ArchipelagoStripLocal.Height, 1e-9);
+        Assert.Equal(32, floatSurface.ArchipelagoStripLocal.Height, 1e-9);
+        Assert.Equal(LayeredSurfaceSize.ArchipelagoStripHeight, 30);
     }
 
     [Theory]

@@ -264,16 +264,30 @@ public readonly record struct ArchipelagoState
     /// <summary>Resolved right far-page dot count (clamped to the available pages and the 3-dot cap).</summary>
     public int ResolvedFarRightDots => ResolveDots(FarRightDotCount, PagePosition, left: false);
 
+    /// <summary>
+    /// Whether the left cluster has more far pages than the three rendered dots. The prototype draws
+    /// the last dot 7 DIP wide (`.far-dot.wide`) and only that dot names the hidden count.
+    /// </summary>
+    public bool ResolvedFarLeftOverflow => AvailableDots(PagePosition, left: true) > MaxDotsPerSide;
+
+    /// <summary>Whether the right cluster overflows its three rendered dots (wide last dot).</summary>
+    public bool ResolvedFarRightOverflow => AvailableDots(PagePosition, left: false) > MaxDotsPerSide;
+
     private static int ResolveDots(int requested, double pagePosition, bool left)
+    {
+        var available = AvailableDots(pagePosition, left);
+        var count = requested >= 0 ? requested : available;
+        return Math.Clamp(count, 0, Math.Min(MaxDotsPerSide, available));
+    }
+
+    private static int AvailableDots(double pagePosition, bool left)
     {
         var page = PagePagerPolicy.OffsetToPage(
             (double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, PagerConstants.PageCount - 1) : 0)
             * PagerConstants.PagePitchDip);
-        var available = left
+        return left
             ? Math.Max(0, page - 1)
             : Math.Max(0, (PagerConstants.PageCount - 1) - (page + 1));
-        var count = requested >= 0 ? requested : available;
-        return Math.Clamp(count, 0, Math.Min(MaxDotsPerSide, available));
     }
 }
 

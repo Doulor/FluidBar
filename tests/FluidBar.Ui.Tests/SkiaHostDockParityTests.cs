@@ -13,13 +13,13 @@ namespace FluidBar.Ui.Tests;
 public sealed class SkiaHostDockParityTests
 {
     [Fact]
-    public void Dock_CoreHostSurface_LocalRects_ArePanel24To308_Strip316To368_Arch378To408()
+    public void Dock_CoreHostSurface_LocalRects_ArePanel24To308_Strip316To368_Arch376To408()
     {
         var dock = HostSurface.Dock;
 
         Assert.Equal(new VisualRect(24, 24, 440, 284), dock.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(24, 316, 440, 52), dock.DockStripLocal);
-        Assert.Equal(new VisualRect(68, 378, 352, 30), dock.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 376, 352, 32), dock.ArchipelagoStripLocal);
         Assert.Equal(444, dock.Height);
         Assert.Equal(488, dock.Width);
     }
@@ -55,11 +55,11 @@ public sealed class SkiaHostDockParityTests
     }
 
     [Fact]
-    public void Float_RendererStrip_SitsAt318NotBelowTheShellInDockTerms()
+    public void Float_RendererStrip_SitsAt316NotBelowTheShellInDockTerms()
     {
         var floatSurface = HostSurface.Float;
         Assert.Equal(new VisualRect(24, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(68, 318, 352, 30), floatSurface.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 316, 352, 32), floatSurface.ArchipelagoStripLocal);
 
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
@@ -72,8 +72,10 @@ public sealed class SkiaHostDockParityTests
         using var renderer = new IslandRenderer();
         var strip = renderer.MeasureStrip(state);
 
-        Assert.Equal(318f, strip.Strip.Top, 3);
-        Assert.Equal(30f, strip.Strip.Height, 3);
+        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 32 DIP tall.
+        Assert.Equal(316f, strip.Strip.Top, 3);
+        Assert.Equal(32f, strip.Strip.Height, 3);
+        Assert.Equal(244f, strip.Strip.MidX, 3);
     }
 
     [Theory]

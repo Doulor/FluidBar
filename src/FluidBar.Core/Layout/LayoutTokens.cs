@@ -52,7 +52,7 @@ public static class LayoutTokens
 
     /// <summary>
     /// Fixed float/flush host surface height (488x384 DIP): shell envelope 332 + the detached
-    /// Page Archipelago band 52 (gap 10 + strip 30 + bottom padding 12). The host surface is the
+    /// Page Archipelago band 52 (gap 8 + strip 32 + bottom padding 12). The host surface is the
     /// only thing the layered window sizes itself to; the shell stays 440x284.
     /// </summary>
     public const double HostSurfaceFloatHeight = ExpandedHeight + (2 * WindowPadding) + ArchipelagoBandHeight;
@@ -86,21 +86,27 @@ public static class LayoutTokens
     /// </summary>
     public const double HostBottomPadding = WindowPadding + 12;
 
-    /// <summary>Gap between the expanded shell bottom and the detached archipelago strip (10 DIP).</summary>
-    public const double ArchipelagoGap = 10;
+    /// <summary>
+    /// Gap between the expanded shell bottom and the detached archipelago strip (8 DIP; the
+    /// prototype2 <c>.mini-rail</c> sits at <c>top: calc(100% + 8px)</c>).
+    /// </summary>
+    public const double ArchipelagoGap = 8;
 
-    /// <summary>Detached archipelago strip height (30 DIP; the active pill's height).</summary>
-    public const double ArchipelagoStripHeight = 30;
+    /// <summary>
+    /// Detached archipelago strip height (32 DIP; the prototype2 <c>.mini-rail</c> height that
+    /// centres the 26 DIP neighbour circles and the 28 DIP current capsule).
+    /// </summary>
+    public const double ArchipelagoStripHeight = 32;
 
     /// <summary>
     /// Total bottom allowance of the float/flush host surface below the expanded shell
-    /// (gap 10 + strip 30 + bottom padding 36 = 76 DIP).
+    /// (gap 8 + strip 32 + bottom padding 36 = 76 DIP).
     /// </summary>
     public const double HostFloatBottomAllowance = ArchipelagoGap + ArchipelagoStripHeight + HostBottomPadding;
 
     /// <summary>
     /// Total bottom allowance of the dock host surface below the expanded panel
-    /// (dock gap 8 + dock strip 52 + archipelago gap 10 + strip 30 + bottom padding 36 = 136 DIP).
+    /// (dock gap 8 + dock strip 52 + archipelago gap 8 + strip 32 + bottom padding 36 = 136 DIP).
     /// </summary>
     public const double HostDockBottomAllowance = DockExpandedGap + DockStripHeight
         + ArchipelagoGap + ArchipelagoStripHeight + HostBottomPadding;
@@ -149,7 +155,7 @@ public static class LayoutTokens
 
     /// <summary>
     /// Total vertical band the detached archipelago adds below the legacy 332 DIP host
-    /// (gap 10 + strip 30 + bottom padding 12 = 52 DIP).
+    /// (gap 8 + strip 32 + bottom padding 12 = 52 DIP).
     /// </summary>
     public const double ArchipelagoBandHeight = ArchipelagoGap + ArchipelagoStripHeight + (HostBottomPadding - WindowPadding);
 

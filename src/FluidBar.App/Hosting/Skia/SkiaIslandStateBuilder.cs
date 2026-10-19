@@ -196,6 +196,18 @@ public static class SkiaIslandStateBuilder
             localizer.Get(LocKeys.Page.Widgets.Title),
         ];
 
+        // The transient preview rail paints the short page names (prototype2 .mini-label:
+        // 主页/媒体/通知/剪贴板/代理/小组件), not the long expanded-page titles.
+        string[] shortTitles =
+        [
+            localizer.Get(LocKeys.Rail.Home),
+            localizer.Get(LocKeys.Rail.Media),
+            localizer.Get(LocKeys.Rail.Notifications),
+            localizer.Get(LocKeys.Rail.Clipboard),
+            localizer.Get(LocKeys.Rail.Agent),
+            localizer.Get(LocKeys.Rail.Widgets),
+        ];
+
         return new ExpandedPageContent
         {
             Home = home,
@@ -205,7 +217,7 @@ public static class SkiaIslandStateBuilder
             Agent = agentPage,
             Widgets = widgetsPage,
             PageTitles = titles,
-            ShortTitles = titles,
+            ShortTitles = shortTitles,
         };
     }
 
