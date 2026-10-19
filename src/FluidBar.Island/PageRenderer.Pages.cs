@@ -605,15 +605,25 @@ internal sealed partial class PageRenderer
         var m = _metrics;
         var card = PageMetricsLayout.WidgetsWeather(page, m);
         DrawCard(canvas, card, 11);
+
+        // The App maps the WMO weather code onto the three weather glyphs this icon set contains; a
+        // model without a glyph keeps the historical cloud-sun so old fixtures/previews are unchanged.
+        var glyph = model.WeatherIcon ?? IconKind.CloudSun;
+        var glyphColor = glyph switch
+        {
+            IconKind.Sun => new SKColor(0xF4, 0xC4, 0x6C),
+            IconKind.Moon => new SKColor(0xA9, 0xB8, 0xE8),
+            _ => new SKColor(0xF4, 0xC4, 0x6C),
+        };
         IconSet.Draw(
             canvas,
-            IconKind.CloudSun,
+            glyph,
             new SKRect(card.Left + 10, card.MidY - 9, card.Left + 28, card.MidY + 9),
-            Alpha(new SKColor(0xF4, 0xC4, 0x6C), _opacity),
+            Alpha(glyphColor, _opacity),
             _icon);
 
-        // No weather source exists yet; an icon-only card looked broken, so the card states that the
-        // data is unavailable instead of painting an empty temperature column.
+        // Without a real reading (offline and no cache yet) the card states that the data is
+        // unavailable instead of painting an empty temperature column.
         if (string.IsNullOrEmpty(model.WeatherTemp) && string.IsNullOrEmpty(model.WeatherCondition))
         {
             DrawCardCaption(canvas, card, model.WeatherUnavailableText, card.Left + 36);

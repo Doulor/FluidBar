@@ -217,6 +217,24 @@ public sealed record IslandContent
     /// <summary>Widget task rows.</summary>
     public ImmutableArray<WidgetTaskData> Tasks { get; init; } = [];
 
+    /// <summary>Widgets weather: current temperature ("18°"); null when no real reading exists.</summary>
+    public string? WeatherTemp { get; init; }
+
+    /// <summary>Widgets weather secondary line: age of the cached reading when it is stale, else null.</summary>
+    public string? WeatherConditionText { get; init; }
+
+    /// <summary>Widgets weather: today's high/low ("21° / 11°").</summary>
+    public string? WeatherHighLow { get; init; }
+
+    /// <summary>Widgets weather: wind line ("NW 12 km/h").</summary>
+    public string? WeatherWind { get; init; }
+
+    /// <summary>Widgets weather glyph chosen from the WMO code (existing icon set).</summary>
+    public WidgetWeatherGlyph WeatherGlyph { get; init; } = WidgetWeatherGlyph.CloudSun;
+
+    /// <summary>Localized caption for the task card when the task file is missing/invalid/empty.</summary>
+    public string? TasksEmptyHint { get; init; }
+
     /// <summary>System stat rows for the widgets card (CPU/RAM/battery); empty when unsampleable.</summary>
     public ImmutableArray<WidgetStatData> Stats { get; init; } = [];
 

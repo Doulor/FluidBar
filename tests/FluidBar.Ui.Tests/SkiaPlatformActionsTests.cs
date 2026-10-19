@@ -4,6 +4,7 @@ using FluidBar.Core.Diagnostics;
 using FluidBar.Platform.Windows.Focus;
 using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
+using FluidBar.Platform.Windows.Tasks;
 using FluidBar.Platform.Windows.Threading;
 
 namespace FluidBar.Ui.Tests;
@@ -222,6 +223,81 @@ public sealed class SkiaPlatformActionsTests
             "no longer exists");
 
         settings.Dispose();
+    }
+
+    [Fact]
+    public async Task TaskToggle_WithoutTaskData_IsUnsupported()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        AssertUnsupported(
+            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.TaskToggle, Index: 0)),
+            "tasks.json");
+
+        settings.Dispose();
+    }
+
+    [Fact]
+    public async Task WidgetsContent_WithoutRealData_IsExplicitlyEmpty()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        var content = actions.Snapshot();
+
+        Assert.Null(content.WeatherTemp);
+        Assert.Null(content.WeatherHighLow);
+        Assert.Empty(content.Tasks);
+        Assert.NotNull(content.TasksEmptyHint);
+        Assert.Contains("tasks.json", content.TasksEmptyHint!, StringComparison.Ordinal);
+        settings.Dispose();
+    }
+
+    [Fact]
+    public async Task TaskToggle_WritesTheConfiguredTaskFile()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "fluidbar-ui-tasks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "tasks.json");
+        await File.WriteAllTextAsync(path,
+            """[ { "title": "Alpha", "done": false }, { "title": "Beta", "done": true } ]""");
+        try
+        {
+            var settings = CreateSettings();
+            await using var actions = new SkiaPlatformActions(settings, logger: null, timeProvider: null,
+                quickToggles: null, localizer: null, weatherOptions: null,
+                taskOptions: new TaskListOptions
+                {
+                    FilePath = path,
+                    ReloadInterval = TimeSpan.FromSeconds(1),
+                });
+
+            await actions.TaskSource.StartAsync();
+            await WaitUntilAsync(() => actions.TaskSource.Current is not null);
+            Assert.Equal(2, actions.Snapshot().Tasks.Length);
+
+            var result = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.TaskToggle, Index: 0));
+
+            Assert.Equal(IslandActionOutcome.Handled, result.Outcome);
+            await WaitUntilAsync(() => actions.TaskSource.Current is { } current && current.Items[0].Done);
+            var json = await File.ReadAllTextAsync(path);
+            Assert.Contains("\"title\": \"Alpha\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"done\": true", json, StringComparison.Ordinal);
+            await actions.TaskSource.StopAsync();
+            settings.Dispose();
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best effort.
+            }
+        }
     }
 
     [Fact]

@@ -67,6 +67,55 @@ public sealed class ExpandedPageTests
             $"expected the red cover art, got R={pixel.Red} G={pixel.Green} B={pixel.Blue}");
     }
 
+    [Fact]
+    public void WidgetsPage_weather_glyph_follows_the_mapped_weather_icon()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var baseState = IslandTestFixtures.Expanded(5);
+        var sun = SampleIconInk(renderer, baseState, IconKind.Sun);
+        var moon = SampleIconInk(renderer, baseState, IconKind.Moon);
+        var legacy = SampleIconInk(renderer, baseState, null);
+
+        // Sun is warm, moon is cool: the mapped glyph has to reach the painter, while a model without a
+        // glyph keeps the historical cloud-sun (so older fixtures/goldens are unchanged).
+        Assert.True(sun.R > sun.B + 25, $"sun glyph was not warm: R={sun.R} B={sun.B}");
+        Assert.True(moon.B > moon.R + 12, $"moon glyph was not cool: R={moon.R} B={moon.B}");
+        Assert.True(legacy.R > legacy.B + 25, $"the default cloud-sun glyph changed: R={legacy.R} B={legacy.B}");
+    }
+
+    /// <summary>Average colour of the bright glyph strokes inside the weather icon box.</summary>
+    private static (int R, int G, int B) SampleIconInk(IslandRenderer renderer, IslandRenderState state, IconKind? icon)
+    {
+        var pages = state.Pages with { Widgets = state.Pages.Widgets with { WeatherIcon = icon } };
+        using var bitmap = renderer.RenderToBitmap(state with { Pages = pages }, IslandTestFixtures.Scale);
+        var page = IslandMetrics.PageRect(state, 5);
+        var card = PageLayout.WidgetsWeather(page);
+        var left = (int)Math.Floor((card.Left + 10) * IslandTestFixtures.Scale);
+        var right = (int)Math.Ceiling((card.Left + 28) * IslandTestFixtures.Scale);
+        var top = (int)Math.Floor((card.MidY - 9) * IslandTestFixtures.Scale);
+        var bottom = (int)Math.Ceiling((card.MidY + 9) * IslandTestFixtures.Scale);
+        long red = 0, green = 0, blue = 0;
+        var count = 0;
+        for (var y = top; y < bottom; y++)
+        {
+            for (var x = left; x < right; x++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.Alpha < 8 || pixel.Red + pixel.Green + pixel.Blue < 150)
+                {
+                    continue;
+                }
+
+                red += pixel.Red;
+                green += pixel.Green;
+                blue += pixel.Blue;
+                count++;
+            }
+        }
+
+        return count == 0 ? (0, 0, 0) : ((int)(red / count), (int)(green / count), (int)(blue / count));
+    }
+
     private static byte[] SolidPng(SKColor color)
     {
         using var bitmap = new SKBitmap(8, 8);

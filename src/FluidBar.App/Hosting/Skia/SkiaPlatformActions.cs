@@ -15,7 +15,9 @@ using FluidBar.Platform.Windows.Media.Lyrics;
 using FluidBar.Platform.Windows.Monitors;
 using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
+using FluidBar.Platform.Windows.Tasks;
 using FluidBar.Platform.Windows.Threading;
+using FluidBar.Platform.Windows.Weather;
 
 namespace FluidBar.App.Hosting.Skia;
 
@@ -61,6 +63,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly LyricsService _lyrics;
     private readonly SkiaSystemStats _systemStats;
     private readonly NotificationService _notifications;
+    private readonly WeatherService _weather;
+    private readonly TaskListService _tasks;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
     private INotificationSource? _pluginNotificationSource;
     private DateOnly _calendarMonth;
@@ -92,8 +96,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <param name="logger">App logger for control/service failures.</param>
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
     /// <param name="quickToggles">Quick-toggle services, or null to build the production ones.</param>
+    /// <param name="weatherOptions">Weather monitor options (env seams by default; tests inject a fake handler/cache).</param>
+    /// <param name="taskOptions">Task file options (env seam by default; tests point at a temp file).</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger, TimeProvider? timeProvider,
-        IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null)
+        IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null,
+        WeatherServiceOptions? weatherOptions = null, TaskListOptions? taskOptions = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer;
@@ -158,6 +165,15 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }, time);
         _notifications.SnapshotChanged += OnNotificationsChanged;
 
+        // Widgets page real data: Open-Meteo (no key) with a %APPDATA% cache, and the local tasks.json.
+        // Both are monitors: they run on their own background pollers and never block the UI thread.
+        _weather = new WeatherService(_platformLogger, _counters,
+            weatherOptions ?? WeatherServiceOptions.FromEnvironment(localizer?.Culture), time);
+        _weather.SnapshotChanged += OnWidgetDataChanged;
+        _tasks = new TaskListService(_platformLogger, _counters,
+            taskOptions ?? TaskListOptions.FromEnvironment(), time);
+        _tasks.SnapshotChanged += OnWidgetDataChanged;
+
         var today = time.GetLocalNow();
         _calendarMonth = new DateOnly(today.Year, today.Month, 1);
 
@@ -196,6 +212,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Platform logger used by the App-composed services.</summary>
     public IPlatformLogger PlatformLogger => _platformLogger;
+
+    /// <summary>Weather monitor (widgets page; Open-Meteo + local cache). Exposed for diagnostics/tests.</summary>
+    public WeatherService WeatherSource => _weather;
+
+    /// <summary>Task file service (widgets page; <c>%APPDATA%\\FluidBar\\tasks.json</c>).</summary>
+    public TaskListService TaskSource => _tasks;
 
     /// <summary>
     /// The app's only toast listener: the notification page maps it, and the plugin path consumes the
@@ -270,6 +292,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var culture = _localizer?.CurrentCulture ?? CultureInfo.CurrentCulture;
         int? batteryPercent = battery is { HasBattery: true } ? battery.Percent : null;
         var today = DateOnly.FromDateTime(now.DateTime);
+        // Widgets page: real weather (fresh or last-known cached) and the local task file. Both mappers
+        // return explicit empty values when nothing real exists, so the cards never show invented data.
+        var weather = WidgetContentMapper.MapWeather(_weather.Current, now, _localizer);
+        var tasks = WidgetContentMapper.MapTasks(_tasks.Current, _localizer, _tasks.FilePath);
         return new IslandContent
         {
             Now = now,
@@ -286,7 +312,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Notifications = NotificationContentMapper.Map(
                 _notifications.Current, PageNotificationLimit, now, _localizer),
             Agents = MapAgents(_agentInbox.Current),
-            Tasks = [],
+            Tasks = tasks.Tasks,
+            TasksEmptyHint = tasks.EmptyHint,
+            WeatherTemp = weather.TemperatureText,
+            WeatherConditionText = weather.ConditionText,
+            WeatherHighLow = weather.HighLowText,
+            WeatherWind = weather.WindText,
+            WeatherGlyph = weather.Glyph,
             // The widgets page owns the calendar locally: the month grid needs no platform service, so
             // the previous empty card was a missing mapping rather than missing data.
             CalendarMonthTitle = FormatMonthTitle(_calendarMonth, culture),
@@ -311,6 +343,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         EnsureLyricsForCurrentSession();
         EnsureMediaTick();
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Weather or task data changed (widgets page repaint).</summary>
+    private void OnWidgetDataChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
+    {
+        try
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.actions.widgets-changed-failed",
+                "Refreshing the island after a widgets data change failed.", ex);
+        }
     }
 
     /// <summary>Toast list changed (new toast, closed toast, or the service's polling fallback tick).</summary>
@@ -678,6 +724,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("notifications", () => _notifications.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("weather", () => _weather.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("tasks", () => _tasks.StartAsync(cancellationToken)).ConfigureAwait(false);
         _systemStats.Prime();
         ScheduleClockTick();
     }
@@ -760,8 +808,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
                 action, "agent session activation is App-owned (no platform session-activate service)"),
-            IslandPlatformActionKind.TaskToggle => Defer(
-                action, "task state is App-owned (no platform task service)"),
+            IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
             _ => Unsupported($"unknown island action {action.Kind}"),
         };
@@ -1000,6 +1047,22 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             : Unsupported("the notification is no longer in the listener list");
     }
 
+    /// <summary>
+    /// Flips one task checkbox in <c>tasks.json</c> (atomic write on the thread pool). Reports unsupported
+    /// when the file is missing/invalid or the row does not exist; the card repaints from the new snapshot.
+    /// </summary>
+    private IslandActionResult ToggleTask(int index)
+    {
+        var snapshot = _tasks.Current;
+        if (snapshot is null || !snapshot.IsAvailable || index < 0 || index >= Math.Min(WidgetContentMapper.MaxRenderedTasks, snapshot.Count))
+        {
+            return Unsupported("tasks.json has no toggleable row at that index (missing or invalid file)");
+        }
+
+        _ = RunAsync(() => _tasks.ToggleAsync(index), "island.actions.task-toggle");
+        return IslandActionResult.Handled;
+    }
+
     private IslandActionResult CopyClipboard(in IslandPlatformAction action)
     {
         var text = action.Text;
@@ -1099,6 +1162,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
         await StopOneAsync("notifications", () => _notifications.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("weather", () => _weather.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("tasks", () => _tasks.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("media", () => _media.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("focus-assist", () => _focus.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-radio", () => _bluetooth.DisposeAsync().AsTask()).ConfigureAwait(false);

@@ -327,9 +327,23 @@ public static class SkiaIslandStateBuilder
             TodayLabel = localizer.Get(LocKeys.Page.Widgets.Today),
             Tasks = tasks,
             Stats = stats,
-            WeatherUnavailableText = unavailable,
+            // Real weather from the Open-Meteo monitor; the glyph is the WMO code mapped onto the three
+            // weather icons the island has. Without a reading the card keeps the explicit unavailable state.
+            WeatherTemp = content.WeatherTemp,
+            WeatherCondition = content.WeatherConditionText,
+            WeatherHighLow = content.WeatherHighLow,
+            WeatherWind = content.WeatherWind,
+            WeatherIcon = content.WeatherTemp is null
+                ? null
+                : content.WeatherGlyph switch
+                {
+                    WidgetWeatherGlyph.Sun => IconKind.Sun,
+                    WidgetWeatherGlyph.Moon => IconKind.Moon,
+                    _ => IconKind.CloudSun,
+                },
+            WeatherUnavailableText = content.WeatherTemp is null ? unavailable : null,
             StatsEmptyText = unavailable,
-            TasksEmptyText = unavailable,
+            TasksEmptyText = tasks.Length == 0 ? content.TasksEmptyHint ?? unavailable : null,
         };
     }
 
@@ -375,7 +389,11 @@ public static class SkiaIslandStateBuilder
             .Append(content.BatteryPercent).Append('|').Append(content.IsCharging).Append('|')
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
             .Append(content.UnreadCount).Append('|')
-            .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|');
+            .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|')
+            // Widgets weather/task text: a new temperature or a task hint must repaint the page.
+            .Append(content.WeatherTemp).Append('|').Append(content.WeatherConditionText).Append('|')
+            .Append(content.WeatherHighLow).Append('|').Append(content.WeatherWind).Append('|')
+            .Append((int)content.WeatherGlyph).Append('|').Append(content.TasksEmptyHint).Append('|');
 
         AppendNotifications(builder, content.Notifications);
         AppendClipboard(builder, content.Clipboard);

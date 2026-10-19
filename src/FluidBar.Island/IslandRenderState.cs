@@ -861,6 +861,12 @@ public sealed record WidgetsPageModel
     /// <summary>Wind line ("NW 3").</summary>
     public string? WeatherWind { get; init; }
 
+    /// <summary>
+    /// Weather glyph chosen from the WMO weather code (Sun/Moon/CloudSun of the existing icon set). Null
+    /// keeps the historical cloud-sun glyph, so models built before this field render unchanged.
+    /// </summary>
+    public IconKind? WeatherIcon { get; init; }
+
     /// <summary>Localized "unavailable" caption painted when the weather source has no data.</summary>
     public string? WeatherUnavailableText { get; init; }
 
