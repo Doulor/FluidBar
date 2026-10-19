@@ -3,8 +3,8 @@
 > 更新时间：2026-10-19 16:40（Asia/Shanghai）
 > 仓库：`D:\build\GitLocal\FluidBar`
 > 分支：`v2/rebuild`
-> HEAD：见 `git log -1`（本次修复尚未提交，工作区含渲染提交/输入/动画/状态机改动）
-> 结论先写：**渲染阻塞已解决**——分层窗口在“隐式几何”下 `UpdateLayeredWindowIndirect` 返回 TRUE 但不刷新；现在一律显式传几何，真实鼠标点击可看到弹簧展开、悬停保持、移开自动收起、岛外点击穿透。下一步是页面控件真实回归、托盘右键、UIA 刷新与发布。
+> HEAD：`b41b293 fix(host): make layered frames visible (explicit ULW geometry) and restore interaction`
+> 结论先写：**渲染阻塞已解决，MVP 可运行**——分层窗口在“隐式几何”下 `UpdateLayeredWindowIndirect` 返回 TRUE 但不刷新；现在一律显式传几何。真实鼠标：点击药丸弹簧展开、悬停保持、移开 2.6s 收起、chevron 收起、滚轮翻页、岛外点击穿透；首页显示真实音量/电量（亮度不支持时显示 "—"）。全量 1482 tests 绿，Release 已发布。下一步：剪贴板行复制/媒体/开关的真实回归、托盘右键、UIA 刷新、多显示器验收。
 
 ---
 
