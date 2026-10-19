@@ -512,7 +512,14 @@ public static class SettingsSectionBuilder
     private static Control BuildPlugins(SettingsWindowContext ctx)
     {
         var list = new StackPanel { Spacing = 6 };
-        var search = new TextBox { Watermark = ctx.Localizer.Get(LocKeys.Settings.Plugins.Search), Width = 260 };
+        // A TextBox stretches by default, so an explicit width would centre it; pin it to the left.
+        var search = new TextBox
+        {
+            Watermark = ctx.Localizer.Get(LocKeys.Settings.Plugins.Search),
+            Width = 320,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 4, 0, 10),
+        };
         var contributions = ctx.Plugins as FluidBar.App.Views.Plugins.IPluginContributionUiService;
         string? selectedPlugin = null;
         var panel = Section(
@@ -659,24 +666,38 @@ public static class SettingsSectionBuilder
             Padding = new Thickness(0, 14, 0, 14),
         };
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        var info = new StackPanel { Spacing = 4 };
+        var info = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
 
-        var title = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        title.Children.Add(new TextBlock
+        // Grid instead of a horizontal StackPanel: a StackPanel gives every child the same row height,
+        // which pushed the version/badge below the name.
+        var title = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto"),
+            ColumnSpacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        var nameText = new TextBlock
         {
             Text = ResolvePluginName(ctx, plugin.Name),
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
             Foreground = brushes.Foreground,
-        });
-        title.Children.Add(new TextBlock
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(nameText, 0);
+        title.Children.Add(nameText);
+
+        var versionText = new TextBlock
         {
             Text = "v" + plugin.Version,
             FontSize = SettingsMetrics.CaptionSize,
             Foreground = brushes.Tertiary,
             VerticalAlignment = VerticalAlignment.Center,
-        });
-        title.Children.Add(new Border
+        };
+        Grid.SetColumn(versionText, 1);
+        title.Children.Add(versionText);
+
+        var badge = new Border
         {
             Padding = new Thickness(5, 1, 5, 1),
             CornerRadius = new CornerRadius(5),
@@ -688,27 +709,25 @@ public static class SettingsSectionBuilder
                 FontSize = 8.5,
                 Foreground = brushes.Secondary,
             },
-        });
+        };
+        Grid.SetColumn(badge, 2);
+        title.Children.Add(badge);
         info.Children.Add(title);
 
+        // Publisher and capabilities share one line (the prototype row is two lines tall, not three).
+        var capabilityText = plugin.CapabilityKeys.Count > 0
+            ? string.Join(" · ", plugin.CapabilityKeys.Select(ctx.Localizer.Get))
+            : null;
         info.Children.Add(new TextBlock
         {
-            Text = plugin.Publisher,
+            Text = string.IsNullOrEmpty(capabilityText)
+                ? plugin.Publisher
+                : $"{plugin.Publisher} · {capabilityText}",
             FontSize = SettingsMetrics.CaptionSize,
             Foreground = brushes.Tertiary,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 620,
         });
-
-        if (plugin.CapabilityKeys.Count > 0)
-        {
-            info.Children.Add(new TextBlock
-            {
-                Text = string.Join(" · ", plugin.CapabilityKeys.Select(ctx.Localizer.Get)),
-                FontSize = 9.5,
-                Foreground = brushes.Tertiary,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 560,
-            });
-        }
 
         if (!plugin.Available)
         {
