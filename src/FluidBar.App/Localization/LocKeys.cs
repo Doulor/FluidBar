@@ -460,6 +460,14 @@ public static partial class LocKeys
             public const string Language = "Settings.General.Language";
             /// <summary><c>Settings.General.LanguageHint</c></summary>
             public const string LanguageHint = "Settings.General.LanguageHint";
+            /// <summary>Keys in the 'Language' area.</summary>
+            public static class LanguageOptions
+            {
+                /// <summary><c>Settings.General.Language.Chinese</c></summary>
+                public const string Chinese = "Settings.General.Language.Chinese";
+                /// <summary><c>Settings.General.Language.English</c></summary>
+                public const string English = "Settings.General.Language.English";
+            }
             /// <summary><c>Settings.General.StartWithWindows</c></summary>
             public const string StartWithWindows = "Settings.General.StartWithWindows";
             /// <summary><c>Settings.General.StartWithWindowsHint</c></summary>
@@ -512,8 +520,12 @@ public static partial class LocKeys
             public const string Title = "Settings.Appearance.Title";
             /// <summary><c>Settings.Appearance.Palette</c></summary>
             public const string PaletteLabel = "Settings.Appearance.Palette";
+            /// <summary><c>Settings.Appearance.PaletteLabelHint</c></summary>
+            public const string PaletteLabelHint = "Settings.Appearance.PaletteLabelHint";
             /// <summary><c>Settings.Appearance.FillOpacity</c></summary>
             public const string FillOpacity = "Settings.Appearance.FillOpacity";
+            /// <summary><c>Settings.Appearance.FillOpacityHint</c></summary>
+            public const string FillOpacityHint = "Settings.Appearance.FillOpacityHint";
             /// <summary><c>Settings.Appearance.FontScale</c></summary>
             public const string FontScale = "Settings.Appearance.FontScale";
             /// <summary><c>Settings.Appearance.MotionStrength</c></summary>
@@ -532,6 +544,8 @@ public static partial class LocKeys
             public const string PreviewLabel = "Settings.Appearance.PreviewLabel";
             /// <summary><c>Settings.Appearance.LiveHint</c></summary>
             public const string LiveHint = "Settings.Appearance.LiveHint";
+            /// <summary><c>Settings.Appearance.Meta</c></summary>
+            public const string Meta = "Settings.Appearance.Meta";
             /// <summary>Keys in the 'Theme' area.</summary>
             public static class Theme
             {
@@ -543,6 +557,8 @@ public static partial class LocKeys
                 public const string Light = "Settings.Appearance.Theme.Light";
                 /// <summary><c>Settings.Appearance.Theme.System</c></summary>
                 public const string System = "Settings.Appearance.Theme.System";
+                /// <summary><c>Settings.Appearance.Theme.Desc</c></summary>
+                public const string Desc = "Settings.Appearance.Theme.Desc";
             }
             /// <summary>Keys in the 'Material' area.</summary>
             public static class Material
@@ -555,6 +571,8 @@ public static partial class LocKeys
                 public const string Acrylic = "Settings.Appearance.Material.Acrylic";
                 /// <summary><c>Settings.Appearance.Material.AcrylicUnavailable</c></summary>
                 public const string AcrylicUnavailable = "Settings.Appearance.Material.AcrylicUnavailable";
+                /// <summary><c>Settings.Appearance.Material.Desc</c></summary>
+                public const string Desc = "Settings.Appearance.Material.Desc";
             }
             /// <summary>Keys in the 'Palette' area.</summary>
             public static class Palette
@@ -579,6 +597,10 @@ public static partial class LocKeys
                 public const string System = "Settings.Appearance.Accent.System";
                 /// <summary><c>Settings.Appearance.Accent.Custom</c></summary>
                 public const string Custom = "Settings.Appearance.Accent.Custom";
+                /// <summary><c>Settings.Appearance.Accent.Desc</c></summary>
+                public const string Desc = "Settings.Appearance.Accent.Desc";
+                /// <summary><c>Settings.Appearance.Accent.ArtworkHint</c></summary>
+                public const string ArtworkHint = "Settings.Appearance.Accent.ArtworkHint";
             }
             /// <summary>Keys in the 'ReducedMotion' area.</summary>
             public static class ReducedMotion
@@ -594,6 +616,12 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.Island.Description</c></summary>
             public const string Description = "Settings.Island.Description";
+            /// <summary><c>Settings.Island.MotionStrength</c></summary>
+            public const string MotionStrength = "Settings.Island.MotionStrength";
+            /// <summary><c>Settings.Island.MotionStrengthHint</c></summary>
+            public const string MotionStrengthHint = "Settings.Island.MotionStrengthHint";
+            /// <summary><c>Settings.Island.PeekOnTrackChangeHint</c></summary>
+            public const string PeekOnTrackChangeHint = "Settings.Island.PeekOnTrackChangeHint";
             /// <summary><c>Settings.Island.Title</c></summary>
             public const string Title = "Settings.Island.Title";
             /// <summary><c>Settings.Island.HoverPeek</c></summary>
@@ -610,6 +638,12 @@ public static partial class LocKeys
             public const string AutoHideMsHint = "Settings.Island.AutoHideMsHint";
             /// <summary><c>Settings.Island.PeekOnTrackChange</c></summary>
             public const string PeekOnTrackChange = "Settings.Island.PeekOnTrackChange";
+            /// <summary>Keys in the 'Motion' area.</summary>
+            public static class Motion
+            {
+                /// <summary><c>Settings.Island.Motion.Desc</c></summary>
+                public const string Desc = "Settings.Island.Motion.Desc";
+            }
             /// <summary>Keys in the 'Mode' area.</summary>
             public static class Mode
             {
@@ -621,6 +655,8 @@ public static partial class LocKeys
                 public const string Flush = "Settings.Island.Mode.Flush";
                 /// <summary><c>Settings.Island.Mode.Dock</c></summary>
                 public const string Dock = "Settings.Island.Mode.Dock";
+                /// <summary><c>Settings.Island.Mode.Desc</c></summary>
+                public const string Desc = "Settings.Island.Mode.Desc";
             }
             /// <summary>Keys in the 'Anchor' area.</summary>
             public static class Anchor
@@ -639,6 +675,8 @@ public static partial class LocKeys
                 public const string BottomCenter = "Settings.Island.Anchor.BottomCenter";
                 /// <summary><c>Settings.Island.Anchor.BottomRight</c></summary>
                 public const string BottomRight = "Settings.Island.Anchor.BottomRight";
+                /// <summary><c>Settings.Island.Anchor.Desc</c></summary>
+                public const string Desc = "Settings.Island.Anchor.Desc";
             }
             /// <summary>Keys in the 'Stacking' area.</summary>
             public static class Stacking
@@ -649,6 +687,8 @@ public static partial class LocKeys
                 public const string Stacked = "Settings.Island.Stacking.Stacked";
                 /// <summary><c>Settings.Island.Stacking.Latest</c></summary>
                 public const string Latest = "Settings.Island.Stacking.Latest";
+                /// <summary><c>Settings.Island.Stacking.Desc</c></summary>
+                public const string Desc = "Settings.Island.Stacking.Desc";
             }
             /// <summary>Keys in the 'DisplayOn' area.</summary>
             public static class DisplayOn
@@ -663,6 +703,8 @@ public static partial class LocKeys
                 public const string FollowMouse = "Settings.Island.DisplayOn.FollowMouse";
                 /// <summary><c>Settings.Island.DisplayOn.Specific</c></summary>
                 public const string Specific = "Settings.Island.DisplayOn.Specific";
+                /// <summary><c>Settings.Island.DisplayOn.Desc</c></summary>
+                public const string Desc = "Settings.Island.DisplayOn.Desc";
             }
         }
         /// <summary>Keys in the 'Plugins' area.</summary>
@@ -670,6 +712,8 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.Plugins.Title</c></summary>
             public const string Title = "Settings.Plugins.Title";
+            /// <summary><c>Settings.Plugins.Description</c></summary>
+            public const string Description = "Settings.Plugins.Description";
             /// <summary><c>Settings.Plugins.Installed</c></summary>
             public const string Installed = "Settings.Plugins.Installed";
             /// <summary><c>Settings.Plugins.Builtin</c></summary>
@@ -684,10 +728,14 @@ public static partial class LocKeys
             public const string Capabilities = "Settings.Plugins.Capabilities";
             /// <summary><c>Settings.Plugins.OpenFolder</c></summary>
             public const string OpenFolder = "Settings.Plugins.OpenFolder";
+            /// <summary><c>Settings.Plugins.FolderHint</c></summary>
+            public const string FolderHint = "Settings.Plugins.FolderHint";
             /// <summary><c>Settings.Plugins.Search</c></summary>
             public const string Search = "Settings.Plugins.Search";
             /// <summary><c>Settings.Plugins.Empty</c></summary>
             public const string Empty = "Settings.Plugins.Empty";
+            /// <summary><c>Settings.Plugins.Count</c></summary>
+            public const string Count = "Settings.Plugins.Count";
             /// <summary><c>Settings.Plugins.Orphan</c></summary>
             public const string Orphan = "Settings.Plugins.Orphan";
             /// <summary><c>Settings.Plugins.OrphanHint</c></summary>
@@ -712,6 +760,8 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.Marketplace.Title</c></summary>
             public const string Title = "Settings.Marketplace.Title";
+            /// <summary><c>Settings.Marketplace.Description</c></summary>
+            public const string Description = "Settings.Marketplace.Description";
             /// <summary>Keys in the device-local community marketplace area.</summary>
             public static class Community
             {
@@ -785,6 +835,8 @@ public static partial class LocKeys
                 public const string Installed = "Settings.Marketplace.Community.Installed";
                 /// <summary><c>Settings.Marketplace.Community.InstallFailed</c></summary>
                 public const string InstallFailed = "Settings.Marketplace.Community.InstallFailed";
+                /// <summary><c>Settings.Marketplace.Community.InstallCount</c></summary>
+                public const string InstallCount = "Settings.Marketplace.Community.InstallCount";
             }
         }
         /// <summary>Keys in the 'Advanced' area.</summary>
@@ -792,6 +844,8 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.Advanced.Title</c></summary>
             public const string Title = "Settings.Advanced.Title";
+            /// <summary><c>Settings.Advanced.Description</c></summary>
+            public const string Description = "Settings.Advanced.Description";
             /// <summary><c>Settings.Advanced.DataFolder</c></summary>
             public const string DataFolder = "Settings.Advanced.DataFolder";
             /// <summary><c>Settings.Advanced.OpenFolder</c></summary>
@@ -852,6 +906,10 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.About.Title</c></summary>
             public const string Title = "Settings.About.Title";
+            /// <summary><c>Settings.About.NavLabel</c></summary>
+            public const string NavLabel = "Settings.About.NavLabel";
+            /// <summary><c>Settings.About.Description</c></summary>
+            public const string Description = "Settings.About.Description";
             /// <summary><c>Settings.About.Version</c></summary>
             public const string Version = "Settings.About.Version";
             /// <summary><c>Settings.About.Build</c></summary>
@@ -870,6 +928,10 @@ public static partial class LocKeys
             public const string SourceCode = "Settings.About.SourceCode";
             /// <summary><c>Settings.About.Acknowledgments</c></summary>
             public const string Acknowledgments = "Settings.About.Acknowledgments";
+            /// <summary><c>Settings.About.Docs</c></summary>
+            public const string Docs = "Settings.About.Docs";
+            /// <summary><c>Settings.About.Feedback</c></summary>
+            public const string Feedback = "Settings.About.Feedback";
         }
         /// <summary>Keys in the 'Market' area.</summary>
         public static class Market
@@ -929,6 +991,8 @@ public static partial class LocKeys
                 public const string Developer = "Settings.Market.Category.Developer";
                 /// <summary><c>Settings.Market.Category.Other</c></summary>
                 public const string Other = "Settings.Market.Category.Other";
+                /// <summary><c>Settings.Market.Category.Ai</c></summary>
+                public const string Ai = "Settings.Market.Category.Ai";
             }
         }
         /// <summary>Keys in the 'media' area.</summary>

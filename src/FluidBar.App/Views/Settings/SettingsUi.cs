@@ -1,7 +1,6 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -10,30 +9,7 @@ using FluidBar.App.Theme;
 
 namespace FluidBar.App.Views.Settings;
 
-/// <summary>Prototype metrics (docs/rewrite/prototype2/styles.css, settings block).</summary>
-internal static class SettingsMetrics
-{
-    public const double TitleBarHeight = 50;
-    public const double NavWidth = 208;
-    public const double NavItemHeight = 36;
-    public const double PanePaddingX = 30;
-    public const double PanePaddingY = 24;
-    public const double RowMinHeight = 46;
-    public const double RowGap = 18;
-    /// <summary>Prototype keycap chip (24 x 16 CSS px).</summary>
-    public const double KeycapHeight = 18;
-    public const double HeadSize = 22;
-    public const double DescSize = 11;
-    public const double RowTitleSize = 12;
-    public const double RowDescSize = 10;
-    public const double CaptionSize = 8.5;
-    public const double SegmentedWidth = 188;
-    public const double SegmentedSmallWidth = 148;
-    public const double SliderWidth = 200;
-    public const double WindowRadius = 22;
-}
-
-/// <summary>Vector glyph used by the settings chrome.</summary>
+/// <summary>Legacy app-glyph wrapper (community marketplace block uses the shared icon set).</summary>
 internal sealed class SettingsGlyph : Control
 {
     /// <summary>Icon identity.</summary>
@@ -50,8 +26,9 @@ internal sealed class SettingsGlyph : Control
 /// <summary>Two-to-four segment control matching the prototype's <c>.segmented</c>/<c>.seg</c>.</summary>
 public sealed class SegmentedControl : Control
 {
+    private static readonly Typeface SemiBold = new(Fonts.Ui, FontStyle.Normal, FontWeight.SemiBold);
+    private static readonly Typeface Regular = new(Fonts.Ui, FontStyle.Normal, FontWeight.Normal);
     private readonly List<(string Label, string Value)> _items = [];
-    private readonly List<double> _widths = [];
     private string _selected = string.Empty;
 
     /// <summary>Total control width (188 by default, 148 for the small variant).</summary>
@@ -78,8 +55,10 @@ public sealed class SegmentedControl : Control
     /// <summary>Creates the control.</summary>
     public SegmentedControl()
     {
-        Height = 32;
+        // .segmented: 1px border + 2px padding + 26px segments.
+        Height = SettingsMetrics.SegHeight + (2 * SettingsMetrics.SegmentedPad) + 2;
         Cursor = new Cursor(StandardCursorType.Hand);
+        Width = ControlWidth;
     }
 
     /// <summary>Current value.</summary>
@@ -90,20 +69,8 @@ public sealed class SegmentedControl : Control
     {
         _items.Clear();
         _items.AddRange(items);
-        _widths.Clear();
         _selected = selected;
-        var total = 6.0;
-        foreach (var item in _items)
-        {
-            var text = new FormattedText(item.Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                Fonts.SemiBold, 9.5, Brushes.White);
-            var width = Math.Max(28, text.Width + 14);
-            _widths.Add(width);
-            total += width;
-        }
-
-        total += 2 * Math.Max(0, _items.Count - 1);
-        Width = Math.Clamp(total, ControlWidth, 360);
+        Width = ControlWidth;
         InvalidateVisual();
     }
 
@@ -111,28 +78,38 @@ public sealed class SegmentedControl : Control
     public override void Render(DrawingContext context)
     {
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
-        context.DrawRectangle(Fill, new Pen(Hairline, 1), bounds, 8, 8);
+        context.DrawRectangle(Fill, new Pen(Hairline, 1), bounds, SettingsMetrics.SegRadius, SettingsMetrics.SegRadius);
         if (_items.Count == 0)
         {
             return;
         }
 
-        var inner = new Rect(3, 3, Math.Max(1, bounds.Width - 6), Math.Max(1, bounds.Height - 6));
-        var x = inner.X;
+        // .segmented { padding: 2px; gap: 2px } → equal flex segments.
+        var pad = SettingsMetrics.SegmentedPad + 1;
+        var gap = SettingsMetrics.SegGap;
+        var available = bounds.Width - (2 * pad) - (gap * (_items.Count - 1));
+        var segWidth = available / _items.Count;
+        var x = pad;
         for (var i = 0; i < _items.Count; i++)
         {
-            var segWidth = i < _widths.Count ? _widths[i] : 28;
-            var rect = new Rect(x, inner.Y, segWidth, inner.Height);
-            x += segWidth + 2;
+            var rect = new Rect(x, pad, segWidth, bounds.Height - (2 * pad));
+            x += segWidth + gap;
             var active = string.Equals(_items[i].Value, _selected, StringComparison.OrdinalIgnoreCase);
             if (active)
             {
-                context.DrawRectangle(ActiveFill, null, rect, 6, 6);
+                context.DrawRectangle(ActiveFill, null, rect, SettingsMetrics.SegItemRadius, SettingsMetrics.SegItemRadius);
             }
 
-            var text = new FormattedText(_items[i].Label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                active ? Fonts.SemiBold : Fonts.Regular, 9.5, active ? ActiveForeground : InactiveForeground);
-            context.DrawText(text, new Point(rect.X + ((rect.Width - text.Width) / 2), rect.Y + ((rect.Height - text.Height) / 2)));
+            var text = new FormattedText(
+                _items[i].Label,
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                active ? SemiBold : Regular,
+                SettingsMetrics.SegFontSize,
+                active ? ActiveForeground : InactiveForeground);
+            context.DrawText(text, new Point(
+                rect.X + ((rect.Width - text.Width) / 2),
+                rect.Y + ((rect.Height - text.Height) / 2)));
         }
     }
 
@@ -145,20 +122,22 @@ public sealed class SegmentedControl : Control
             return;
         }
 
+        var pad = SettingsMetrics.SegmentedPad + 1;
+        var gap = SettingsMetrics.SegGap;
+        var available = Bounds.Width - (2 * pad) - (gap * (_items.Count - 1));
+        var segWidth = available / _items.Count;
         var position = e.GetPosition(this).X;
-        var x = 3.0;
         var index = _items.Count - 1;
         for (var i = 0; i < _items.Count; i++)
         {
-            var segWidth = i < _widths.Count ? _widths[i] : 28;
-            if (position >= x && position <= x + segWidth)
+            var left = pad + (i * (segWidth + gap));
+            if (position >= left && position <= left + segWidth)
             {
                 index = i;
                 break;
             }
-
-            x += segWidth + 2;
         }
+
         if (string.Equals(_items[index].Value, _selected, StringComparison.Ordinal))
         {
             return;
@@ -175,6 +154,14 @@ public sealed class SegmentedControl : Control
 public sealed class SettingsSwitch : Control
 {
     private bool _isOn;
+
+    /// <summary>Creates the control.</summary>
+    public SettingsSwitch()
+    {
+        Width = SettingsMetrics.SwitchWidth;
+        Height = SettingsMetrics.SwitchHeight;
+        Cursor = new Cursor(StandardCursorType.Hand);
+    }
 
     /// <summary>On/off state.</summary>
     public bool IsOn
@@ -204,23 +191,46 @@ public sealed class SettingsSwitch : Control
     /// <summary>Off knob (<c>--ui-fg-2</c>).</summary>
     public IBrush OffKnob { get; set; } = Brushes.LightGray;
 
+    /// <summary>True for the compact plugin-row variant (<c>.plugin-actions .switch</c>, 30×18).</summary>
+    public bool Compact
+    {
+        get => Width < SettingsMetrics.SwitchWidth;
+        set
+        {
+            Width = value ? SettingsMetrics.PluginSwitchWidth : SettingsMetrics.SwitchWidth;
+            Height = value ? SettingsMetrics.PluginSwitchHeight : SettingsMetrics.SwitchHeight;
+            _knob = value ? SettingsMetrics.PluginSwitchKnob : SettingsMetrics.SwitchKnob;
+            InvalidateVisual();
+        }
+    }
+
+    private double _knob = SettingsMetrics.SwitchKnob;
+
     /// <summary>Raised when the user toggles.</summary>
     public event Action<bool>? Toggled;
-
-    /// <summary>Creates the control.</summary>
-    public SettingsSwitch()
-    {
-        Width = 38;
-        Height = 22;
-        Cursor = new Cursor(StandardCursorType.Hand);
-    }
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        var track = new Rect(0, 0, 38, 22);
-        context.DrawRectangle(_isOn ? Accent : OffTrack, _isOn ? null : new Pen(OffHairline, 1), track, 11, 11);
-        context.DrawEllipse(_isOn ? Brushes.White : OffKnob, null, new Point(_isOn ? 28 : 10, 11), 8, 8);
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+        var radius = height / 2;
+        var track = new Rect(0, 0, width, height);
+        context.DrawRectangle(
+            _isOn ? Accent : OffTrack,
+            _isOn ? null : new Pen(OffHairline, 1),
+            track,
+            radius,
+            radius);
+
+        // .switch::after { left: 2px; width: 16px } → translateX(16px) when on.
+        var travel = width - _knob - (2 * SettingsMetrics.SwitchInset) - (width - _knob - 4);
+        var inset = SettingsMetrics.SwitchInset;
+        var centerX = _isOn
+            ? width - inset - (_knob / 2)
+            : inset + (_knob / 2);
+        _ = travel;
+        context.DrawEllipse(_isOn ? Brushes.White : OffKnob, null, new Point(centerX, height / 2), _knob / 2, _knob / 2);
     }
 
     /// <inheritdoc />
@@ -239,6 +249,13 @@ public sealed class SettingsSlider : Control
 {
     private double _value;
     private bool _dragging;
+
+    /// <summary>Creates the control.</summary>
+    public SettingsSlider()
+    {
+        Height = 13;
+        Cursor = new Cursor(StandardCursorType.Hand);
+    }
 
     /// <summary>Lower bound.</summary>
     public double Minimum { get; set; }
@@ -275,28 +292,21 @@ public sealed class SettingsSlider : Control
     /// <summary>Raised while dragging.</summary>
     public event Action<double>? ValueChanged;
 
-    /// <summary>Creates the control.</summary>
-    public SettingsSlider()
-    {
-        Width = SettingsMetrics.SliderWidth;
-        Height = 13;
-        Cursor = new Cursor(StandardCursorType.Hand);
-    }
-
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
         var width = Math.Max(1, Bounds.Width);
         var centerY = Bounds.Height / 2;
         var fraction = Maximum <= Minimum ? 0 : Math.Clamp((_value - Minimum) / (Maximum - Minimum), 0, 1);
-        var thumbX = fraction * width;
-        context.DrawRectangle(Track, null, new Rect(0, centerY - 1.5, width, 3), 1.5, 1.5);
+        var thumbX = SettingsMetrics.ThumbSize / 2 + (fraction * (width - SettingsMetrics.ThumbSize));
+        var half = SettingsMetrics.TrackHeight / 2;
+        context.DrawRectangle(Track, null, new Rect(0, centerY - half, width, SettingsMetrics.TrackHeight), 2, 2);
         if (thumbX > 0)
         {
-            context.DrawRectangle(Fill, null, new Rect(0, centerY - 1.5, thumbX, 3), 1.5, 1.5);
+            context.DrawRectangle(Fill, null, new Rect(0, centerY - half, thumbX, SettingsMetrics.TrackHeight), 2, 2);
         }
 
-        context.DrawEllipse(Fill, null, new Point(thumbX, centerY), 5, 5);
+        context.DrawEllipse(Fill, null, new Point(thumbX, centerY), SettingsMetrics.ThumbSize / 2, SettingsMetrics.ThumbSize / 2);
     }
 
     /// <inheritdoc />
@@ -329,7 +339,8 @@ public sealed class SettingsSlider : Control
 
     private void UpdateFromPosition(double x)
     {
-        var fraction = Math.Clamp(x / Math.Max(1, Bounds.Width), 0, 1);
+        var usable = Math.Max(1, Bounds.Width - SettingsMetrics.ThumbSize);
+        var fraction = Math.Clamp((x - (SettingsMetrics.ThumbSize / 2)) / usable, 0, 1);
         var raw = Minimum + (fraction * (Maximum - Minimum));
         var snapped = Step > 0 ? Math.Round(raw / Step) * Step : raw;
         snapped = Math.Clamp(snapped, Minimum, Maximum);
@@ -344,9 +355,17 @@ public sealed class SettingsSlider : Control
     }
 }
 
-/// <summary>Circular accent swatch with the prototype's active ring.</summary>
+/// <summary>Circular accent swatch with the prototype's active ring (<c>inset: -4px</c>).</summary>
 public sealed class AccentSwatch : Control
 {
+    /// <summary>Creates the swatch (24 px circle + 4 px ring gutter).</summary>
+    public AccentSwatch()
+    {
+        Width = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
+        Height = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
+        Cursor = new Cursor(StandardCursorType.Hand);
+    }
+
     /// <summary>Swatch color.</summary>
     public Color SwatchColor { get; set; }
 
@@ -359,24 +378,22 @@ public sealed class AccentSwatch : Control
     /// <summary>Raised on click.</summary>
     public event Action? Clicked;
 
-    /// <summary>Creates the swatch.</summary>
-    public AccentSwatch()
-    {
-        Width = 32;
-        Height = 32;
-        Cursor = new Cursor(StandardCursorType.Hand);
-    }
-
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        var center = new Point(16, 16);
+        var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
+        var radius = SettingsMetrics.SwatchSize / 2;
         if (IsActive)
         {
-            context.DrawEllipse(null, new Pen(Ring, 1), center, 15.5, 15.5);
+            context.DrawEllipse(null, new Pen(Ring, 1), center, radius + SettingsMetrics.SwatchRingInset - 0.5, radius + SettingsMetrics.SwatchRingInset - 0.5);
         }
 
-        context.DrawEllipse(new SolidColorBrush(SwatchColor), new Pen(new SolidColorBrush(Color.FromArgb(41, 255, 255, 255)), 1), center, 12, 12);
+        context.DrawEllipse(
+            new SolidColorBrush(SwatchColor),
+            new Pen(new SolidColorBrush(Color.FromArgb(41, 255, 255, 255)), 1),
+            center,
+            radius,
+            radius);
     }
 
     /// <inheritdoc />
@@ -391,8 +408,8 @@ public sealed class AccentSwatch : Control
 /// <summary>Prototype-faithful text/row widgets shared by the settings sections.</summary>
 internal static class SettingsWidgets
 {
-    /// <summary>22 px pane title + 11 px description (prototype <c>.pane-head-lg</c>/<c>.pane-desc</c>).</summary>
-    public static Control PaneHeader(string title, string description, IBrush foreground, IBrush secondary)
+    /// <summary><c>.pane-head-lg</c> + <c>.pane-desc</c>.</summary>
+    public static Control PaneHeader(string title, string? description, SettingsPalette palette)
     {
         var panel = new StackPanel { Spacing = 0 };
         panel.Children.Add(new TextBlock
@@ -401,7 +418,10 @@ internal static class SettingsWidgets
             FontFamily = Fonts.Display,
             FontSize = SettingsMetrics.HeadSize,
             FontWeight = FontWeight.SemiBold,
-            Foreground = foreground,
+            LineHeight = SettingsMetrics.HeadSize * SettingsMetrics.HeadLineHeight,
+            LetterSpacing = SettingsMetrics.HeadSize * SettingsMetrics.HeadTracking,
+            Foreground = palette.ForegroundBrush,
+            Margin = new Thickness(0, 0, 0, SettingsMetrics.HeadMarginBottom),
         });
         if (!string.IsNullOrWhiteSpace(description))
         {
@@ -409,31 +429,33 @@ internal static class SettingsWidgets
             {
                 Text = description,
                 FontSize = SettingsMetrics.DescSize,
-                Foreground = secondary,
+                LineHeight = SettingsMetrics.DescSize * SettingsMetrics.DescLineHeight,
+                Foreground = palette.SecondaryBrush,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 560,
+                MaxWidth = SettingsMetrics.DescMaxWidth,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 TextAlignment = TextAlignment.Left,
-                Margin = new Thickness(0, 5, 0, 18),
+                Margin = new Thickness(0, 0, 0, SettingsMetrics.DescMarginBottom),
             });
         }
 
         return panel;
     }
 
-    /// <summary>8.5 px uppercase section caption (prototype <c>.section-caption</c>).</summary>
-    public static Control Caption(string text, IBrush tertiary)
+    /// <summary><c>.section-caption</c>.</summary>
+    public static Control Caption(string text, SettingsPalette palette)
         => new TextBlock
         {
             Text = text.ToUpperInvariant(),
             FontSize = SettingsMetrics.CaptionSize,
             FontWeight = FontWeight.SemiBold,
-            Foreground = tertiary,
-            Margin = new Thickness(0, 20, 0, 2),
+            LetterSpacing = SettingsMetrics.CaptionSize * SettingsMetrics.CaptionTracking,
+            Foreground = palette.TertiaryBrush,
+            Margin = new Thickness(0, SettingsMetrics.CaptionMarginTop, 0, SettingsMetrics.CaptionMarginBottom),
         };
 
-    /// <summary>Group of rows; the first row gets the prototype's group hairline when requested.</summary>
-    public static Control Group(IBrush hairline, bool topBorder, params Control[] rows)
+    /// <summary><c>.setting-group</c>: hairline above the first row unless a caption precedes it.</summary>
+    public static Control Group(SettingsPalette palette, bool topBorder, params Control[] rows)
     {
         var panel = new StackPanel();
         foreach (var row in rows)
@@ -443,33 +465,28 @@ internal static class SettingsWidgets
 
         return new Border
         {
-            BorderBrush = hairline,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(0, topBorder ? 1 : 0, 0, 0),
             Child = panel,
         };
     }
 
-    /// <summary>One setting row: 12 px title, 10 px description, right-aligned control, hairline below.</summary>
-    public static Control Row(string title, string? description, Control control, IBrush foreground,
-        IBrush tertiary, IBrush hairline)
+    /// <summary><c>.setting-row</c>: 53 px minimum, 8 px vertical padding, 18 px gap, hairline below.</summary>
+    public static Control Row(string title, string? description, Control control, SettingsPalette palette)
     {
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            MinHeight = SettingsMetrics.RowMinHeight,
-        };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var text = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 3,
-            Margin = new Thickness(0, 6, SettingsMetrics.RowGap, 6),
+            Spacing = 0,
         };
         text.Children.Add(new TextBlock
         {
             Text = title,
             FontSize = SettingsMetrics.RowTitleSize,
             FontWeight = FontWeight.Medium,
-            Foreground = foreground,
+            LineHeight = SettingsMetrics.RowTitleSize * SettingsMetrics.RowTitleLineHeight,
+            Foreground = palette.ForegroundBrush,
         });
         if (!string.IsNullOrWhiteSpace(description))
         {
@@ -477,11 +494,10 @@ internal static class SettingsWidgets
             {
                 Text = description,
                 FontSize = SettingsMetrics.RowDescSize,
-                Foreground = tertiary,
+                LineHeight = SettingsMetrics.RowDescSize * SettingsMetrics.RowDescLineHeight,
+                Foreground = palette.TertiaryBrush,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 430,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                TextAlignment = TextAlignment.Left,
+                Margin = new Thickness(0, SettingsMetrics.RowDescMarginTop, 0, 0),
             });
         }
 
@@ -489,61 +505,50 @@ internal static class SettingsWidgets
         grid.Children.Add(text);
         control.VerticalAlignment = VerticalAlignment.Center;
         control.HorizontalAlignment = HorizontalAlignment.Right;
+        control.Margin = new Thickness(SettingsMetrics.RowGap, 0, 0, 0);
         Grid.SetColumn(control, 1);
         grid.Children.Add(control);
         return new Border
         {
-            BorderBrush = hairline,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(0, 0, 0, 1),
+            MinHeight = SettingsMetrics.RowMinHeight,
+            Padding = new Thickness(0, SettingsMetrics.RowPadY, 0, SettingsMetrics.RowPadY),
             Child = grid,
         };
     }
 
-    /// <summary>Shortcut row with right-aligned keycaps (prototype <c>.shortcut-row</c>).</summary>
-    public static Control ShortcutRow(string label, string[] keys, IBrush foreground, IBrush secondary,
-        IBrush hairline, IBrush raised, IBrush lineStrong)
+    /// <summary><c>.setting-control</c>: horizontal group with the prototype's 8 px gap.</summary>
+    public static Control ControlHost(params Control[] controls)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Height = 39 };
-        grid.Children.Add(new TextBlock
-        {
-            Text = label,
-            FontSize = 11,
-            FontWeight = FontWeight.Medium,
-            Foreground = foreground,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        var keycaps = new StackPanel
+        var panel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 3,
+            Spacing = SettingsMetrics.ControlGap,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Right,
         };
-        foreach (var key in keys)
+        foreach (var control in controls)
         {
-            keycaps.Children.Add(Keycap(key, secondary, raised, lineStrong));
+            panel.Children.Add(control);
         }
 
-        Grid.SetColumn(keycaps, 1);
-        grid.Children.Add(keycaps);
-        return new Border
-        {
-            BorderBrush = hairline,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = grid,
-        };
+        return panel;
     }
 
-    /// <summary>Shortcut row with a custom right-hand control (editable hotkeys).</summary>
-    public static Control ShortcutRow(string label, Control right, IBrush foreground, IBrush hairline)
+    /// <summary><c>.shortcut-row</c>: 39 px tall, right-aligned keycaps.</summary>
+    public static Control ShortcutRow(string label, IReadOnlyList<string> keys, SettingsPalette palette, bool last = false)
+        => ShortcutRow(label, Keycaps(keys, palette), palette, last);
+
+    /// <summary><c>.shortcut-row</c> with a custom right-hand control.</summary>
+    public static Control ShortcutRow(string label, Control right, SettingsPalette palette, bool last = false)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Height = 39 };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Height = SettingsMetrics.ShortcutRowHeight };
         grid.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 11,
+            FontSize = SettingsMetrics.ShortcutFontSize,
             FontWeight = FontWeight.Medium,
-            Foreground = foreground,
+            Foreground = palette.ForegroundBrush,
             VerticalAlignment = VerticalAlignment.Center,
         });
         right.VerticalAlignment = VerticalAlignment.Center;
@@ -552,100 +557,237 @@ internal static class SettingsWidgets
         grid.Children.Add(right);
         return new Border
         {
-            BorderBrush = hairline,
-            BorderThickness = new Thickness(0, 0, 0, 1),
+            // .shortcut-row:last-child { border-bottom: 0 }
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(0, 0, 0, last ? 0 : 1),
             Child = grid,
         };
     }
 
-    /// <summary>Single keycap chip.</summary>
-    public static Control Keycap(string text, IBrush secondary, IBrush raised, IBrush lineStrong)
+    /// <summary><c>.keycaps</c>: 3 px gap container.</summary>
+    public static Control Keycaps(IReadOnlyList<string> keys, SettingsPalette palette)
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.KeycapGap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        foreach (var key in keys)
+        {
+            panel.Children.Add(Keycap(key, palette));
+        }
+
+        return panel;
+    }
+
+    /// <summary><c>.keycap</c>: 22 px tall chip with a 1 px bottom shadow.</summary>
+    public static Control Keycap(string text, SettingsPalette palette)
         => new Border
         {
-            MinWidth = 20,
+            MinWidth = SettingsMetrics.KeycapMinWidth,
             Height = SettingsMetrics.KeycapHeight,
-            Padding = new Thickness(5, 0, 5, 0),
-            CornerRadius = new CornerRadius(4),
-            Background = raised,
-            BorderBrush = lineStrong,
+            Padding = new Thickness(SettingsMetrics.KeycapPadX, 0, SettingsMetrics.KeycapPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.KeycapRadius),
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineStrongBrush,
             BorderThickness = new Thickness(1),
             Child = new TextBlock
             {
                 Text = text,
-                FontSize = 8,
-                Foreground = secondary,
+                FontSize = SettingsMetrics.KeycapFontSize,
+                Foreground = palette.SecondaryBrush,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };
 
-    /// <summary>Monospace path field (prototype <c>.path-field</c>).</summary>
-    public static Control PathField(string path, IBrush field, IBrush hairline, IBrush secondary, IBrush tertiary)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        row.Children.Add(new SettingsGlyph
+    /// <summary><c>.value-tag</c>.</summary>
+    public static Control ValueTag(string text, SettingsPalette palette)
+        => new Border
         {
-            Kind = IconKind.Folder,
-            Brush = tertiary,
-            Width = 12,
-            Height = 12,
+            MinWidth = SettingsMetrics.ValueTagMinWidth,
+            Height = SettingsMetrics.ValueTagHeight,
+            Padding = new Thickness(SettingsMetrics.ValueTagPadX, 0, SettingsMetrics.ValueTagPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.ValueTagRadius),
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = SettingsMetrics.ValueTagSize,
+                Foreground = palette.SecondaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+
+    /// <summary><c>.setting-range</c>: 200 px cell = slider + 10 px gap + 48 px value tag.</summary>
+    public static Control RangeHost(SettingsSlider slider, Control tag)
+    {
+        slider.Width = SettingsMetrics.RangeWidth - SettingsMetrics.RangeGap - SettingsMetrics.ValueTagMinWidth;
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.RangeGap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        panel.Children.Add(slider);
+        panel.Children.Add(tag);
+        return panel;
+    }
+
+    /// <summary><c>.search-field</c>: 34 px field with a 14 px glyph.</summary>
+    public static Control SearchField(string watermark, string text, Action<string> changed, SettingsPalette palette)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        grid.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Search,
+            Brush = palette.TertiaryBrush,
+            Width = SettingsMetrics.SearchIcon,
+            Height = SettingsMetrics.SearchIcon,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var box = new TextBox
+        {
+            Watermark = watermark,
+            Text = text,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
+            MinHeight = 0,
+            FontSize = SettingsMetrics.SearchFontSize,
+            Foreground = palette.ForegroundBrush,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(SettingsMetrics.SearchGap, 0, 0, 0),
+        };
+        box.TextChanged += (_, _) => changed(box.Text ?? string.Empty);
+        Grid.SetColumn(box, 1);
+        grid.Children.Add(box);
+        return new Border
+        {
+            Height = SettingsMetrics.SearchHeight,
+            Padding = new Thickness(SettingsMetrics.SearchPadX, 0, SettingsMetrics.SearchPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.SearchRadius),
+            Background = palette.FieldBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            Child = grid,
+        };
+    }
+
+    /// <summary><c>.icon-btn</c> (24 px square action glyph).</summary>
+    public static Control IconButton(SettingsIconKind kind, Action clicked, SettingsPalette palette)
+    {
+        var host = new Border
+        {
+            Width = SettingsMetrics.IconButton,
+            Height = SettingsMetrics.IconButton,
+            CornerRadius = new CornerRadius(6),
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Child = new SettingsIcon
+            {
+                Kind = kind,
+                Brush = palette.TertiaryBrush,
+                Width = SettingsMetrics.IconButtonGlyph,
+                Height = SettingsMetrics.IconButtonGlyph,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        host.PointerEntered += (_, _) => host.Background = palette.RaisedHoverBrush;
+        host.PointerExited += (_, _) => host.Background = Brushes.Transparent;
+        host.PointerPressed += (_, e) =>
+        {
+            clicked();
+            e.Handled = true;
+        };
+        return host;
+    }
+
+    /// <summary><c>.path-field</c>: mono path in a 34 px field.</summary>
+    public static Control PathField(string path, SettingsPalette palette)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.SearchGap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Folder,
+            Brush = palette.TertiaryBrush,
+            Width = SettingsMetrics.PathIcon,
+            Height = SettingsMetrics.PathIcon,
             VerticalAlignment = VerticalAlignment.Center,
         });
         row.Children.Add(new TextBlock
         {
             Text = path,
             FontFamily = Fonts.Mono,
-            FontSize = 9.5,
-            Foreground = secondary,
+            FontSize = SettingsMetrics.PathFieldSize,
+            Foreground = palette.SecondaryBrush,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         return new Border
         {
-            Height = 34,
-            Padding = new Thickness(10, 0, 10, 0),
-            CornerRadius = new CornerRadius(7),
-            Background = field,
-            BorderBrush = hairline,
+            Height = SettingsMetrics.PathFieldHeight,
+            Padding = new Thickness(SettingsMetrics.SearchPadX, 0, SettingsMetrics.SearchPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.PathFieldRadius),
+            Background = palette.FieldBrush,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(1),
             Child = row,
         };
     }
 
-    /// <summary>Small action chip (prototype <c>.small-action</c>, optional danger tone).</summary>
-    public static Control SmallAction(string label, IconKind icon, bool danger, Action clicked, IBrush raised,
-        IBrush raisedHover, IBrush hairline, IBrush secondary, IBrush foreground)
+    /// <summary><c>.small-action</c> chip (30 px, optional danger tone).</summary>
+    public static Control SmallAction(string label, SettingsIconKind icon, bool danger, Action clicked, SettingsPalette palette)
     {
         var dangerBrush = new SolidColorBrush(Color.Parse("#E06A62"));
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
-        content.Children.Add(new SettingsGlyph
+        var content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        content.Children.Add(new SettingsIcon
         {
             Kind = icon,
-            Brush = danger ? dangerBrush : secondary,
-            Width = 11,
-            Height = 11,
+            Brush = danger ? dangerBrush : palette.SecondaryBrush,
+            Width = SettingsMetrics.SmallActionIcon,
+            Height = SettingsMetrics.SmallActionIcon,
             VerticalAlignment = VerticalAlignment.Center,
         });
         content.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 9.5,
-            Foreground = danger ? dangerBrush : secondary,
+            FontSize = SettingsMetrics.SmallActionSize,
+            Foreground = danger ? dangerBrush : palette.SecondaryBrush,
             VerticalAlignment = VerticalAlignment.Center,
         });
         var chip = new Border
         {
-            Height = 30,
-            Padding = new Thickness(10, 0, 10, 0),
-            CornerRadius = new CornerRadius(7),
-            Background = raised,
-            BorderBrush = danger ? new SolidColorBrush(Color.FromArgb(51, 255, 69, 58)) : hairline,
+            Height = SettingsMetrics.SmallActionHeight,
+            Padding = new Thickness(SettingsMetrics.SmallActionPadX, 0, SettingsMetrics.SmallActionPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.SmallActionRadius),
+            Background = danger ? new SolidColorBrush(Color.FromArgb(15, 255, 69, 58)) : palette.RaisedBrush,
+            BorderBrush = danger ? new SolidColorBrush(Color.FromArgb(51, 255, 69, 58)) : palette.LineBrush,
             BorderThickness = new Thickness(1),
             Child = content,
             Cursor = new Cursor(StandardCursorType.Hand),
         };
-        chip.PointerEntered += (_, _) => chip.Background = raisedHover;
-        chip.PointerExited += (_, _) => chip.Background = raised;
+        chip.PointerEntered += (_, _) => chip.Background = danger
+            ? new SolidColorBrush(Color.FromArgb(31, 255, 69, 58))
+            : palette.RaisedHoverBrush;
+        chip.PointerExited += (_, _) => chip.Background = danger
+            ? new SolidColorBrush(Color.FromArgb(15, 255, 69, 58))
+            : palette.RaisedBrush;
         chip.PointerPressed += (_, e) =>
         {
             clicked();
@@ -654,74 +796,81 @@ internal static class SettingsWidgets
         return chip;
     }
 
-    /// <summary>Centred app mark for the About pane (prototype <c>.about-mark</c>).</summary>
-    public static Control AboutMark(Color accent, Color glyph)
+    /// <summary><c>.about-mark</c>: 72 px rounded tile with an accent bloom behind the island glyph.</summary>
+    public static Control AboutMark(Color accent, SettingsPalette palette)
     {
-        var host = new Grid { Width = 72, Height = 72 };
-        host.Children.Add(new Border
+        var host = new Grid { Width = SettingsMetrics.AboutMark, Height = SettingsMetrics.AboutMark };
+        var tile = new Border
         {
-            Width = 72,
-            Height = 72,
-            CornerRadius = new CornerRadius(20),
-            Background = new SolidColorBrush(Color.Parse("#070709")),
+            Width = SettingsMetrics.AboutMark,
+            Height = SettingsMetrics.AboutMark,
+            CornerRadius = new CornerRadius(SettingsMetrics.AboutMarkRadius),
+            Background = new SolidColorBrush(palette.Mark),
             BorderBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             ClipToBounds = true,
-            Child = new Ellipse
-            {
-                Width = 40,
-                Height = 40,
-                Fill = new SolidColorBrush(accent, 0.4),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, -10, -10),
-            },
-        });
-        host.Children.Add(new SettingsGlyph
+        };
+        var bloom = new Border
         {
-            Kind = IconKind.Agent,
-            Brush = new SolidColorBrush(glyph),
-            Width = 34,
-            Height = 34,
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(20),
+            Background = new SolidColorBrush(accent, 0.4),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, -10, -10),
+        };
+        tile.Child = bloom;
+        host.Children.Add(tile);
+        host.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Island,
+            Brush = Brushes.White,
+            Width = SettingsMetrics.AboutMarkGlyph,
+            Height = SettingsMetrics.AboutMarkGlyph,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         });
         return host;
     }
 
-    /// <summary>Pill action button (prototype <c>.about-btn</c>).</summary>
-    public static Control PillAction(string label, IconKind icon, Action clicked, IBrush raised, IBrush raisedHover,
-        IBrush hairline, IBrush secondary, IBrush foreground)
+    /// <summary><c>.about-btn</c>.</summary>
+    public static Control PillAction(string label, SettingsIconKind icon, Action clicked, SettingsPalette palette)
     {
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
-        content.Children.Add(new SettingsGlyph
+        var content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        content.Children.Add(new SettingsIcon
         {
             Kind = icon,
-            Brush = secondary,
-            Width = 11,
-            Height = 11,
+            Brush = palette.SecondaryBrush,
+            Width = SettingsMetrics.SmallActionIcon,
+            Height = SettingsMetrics.SmallActionIcon,
             VerticalAlignment = VerticalAlignment.Center,
         });
         content.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 10.5,
-            Foreground = foreground,
+            FontSize = SettingsMetrics.AboutBtnSize,
+            Foreground = palette.ForegroundBrush,
             VerticalAlignment = VerticalAlignment.Center,
         });
         var chip = new Border
         {
-            Height = 32,
-            Padding = new Thickness(12, 0, 12, 0),
-            CornerRadius = new CornerRadius(7),
-            Background = raised,
-            BorderBrush = hairline,
+            Height = SettingsMetrics.AboutBtnHeight,
+            Padding = new Thickness(SettingsMetrics.AboutBtnPadX, 0, SettingsMetrics.AboutBtnPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.SmallActionRadius),
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(1),
             Child = content,
             Cursor = new Cursor(StandardCursorType.Hand),
         };
-        chip.PointerEntered += (_, _) => chip.Background = raisedHover;
-        chip.PointerExited += (_, _) => chip.Background = raised;
+        chip.PointerEntered += (_, _) => chip.Background = palette.RaisedHoverBrush;
+        chip.PointerExited += (_, _) => chip.Background = palette.RaisedBrush;
         chip.PointerPressed += (_, e) =>
         {
             clicked();
@@ -730,38 +879,66 @@ internal static class SettingsWidgets
         return chip;
     }
 
-    /// <summary>Contributor chip (prototype <c>.contrib</c>).</summary>
-    public static Control ContributorChip(string name, Color dot, IBrush raised, IBrush hairline, IBrush secondary)
+    /// <summary><c>.contrib</c> chip.</summary>
+    public static Control ContributorChip(string name, Color dot, SettingsPalette palette)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
-        row.Children.Add(new Ellipse { Width = 5, Height = 5, Fill = new SolidColorBrush(dot), VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(new TextBlock { Text = name, FontSize = 9.5, Foreground = secondary, VerticalAlignment = VerticalAlignment.Center });
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(new Avalonia.Controls.Shapes.Ellipse
+        {
+            Width = 5,
+            Height = 5,
+            Fill = new SolidColorBrush(dot),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = name,
+            FontSize = SettingsMetrics.ContribSize,
+            Foreground = palette.SecondaryBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
         return new Border
         {
-            Height = 24,
-            Padding = new Thickness(10, 0, 10, 0),
-            CornerRadius = new CornerRadius(12),
-            Background = raised,
-            BorderBrush = hairline,
+            Height = SettingsMetrics.ContribHeight,
+            Padding = new Thickness(SettingsMetrics.ContribPadX, 0, SettingsMetrics.ContribPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.ContribRadius),
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(1),
             Child = row,
         };
     }
 
-    /// <summary>Muted footer note with the prototype's top hairline.</summary>
-    public static Control FooterNote(string text, IBrush tertiary, IBrush hairline)
+    /// <summary><c>.settings-footer-note</c>.</summary>
+    public static Control FooterNote(string text, SettingsPalette palette)
         => new Border
         {
-            BorderBrush = hairline,
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(0, 1, 0, 0),
-            Margin = new Thickness(0, 18, 0, 0),
-            Padding = new Thickness(0, 10, 0, 0),
+            Margin = new Thickness(0, SettingsMetrics.FooterNoteMarginTop, 0, 0),
+            Padding = new Thickness(0, SettingsMetrics.FooterNotePadTop, 0, 0),
             Child = new TextBlock
             {
                 Text = text,
-                FontSize = SettingsMetrics.CaptionSize,
-                Foreground = tertiary,
+                FontSize = SettingsMetrics.FooterNoteSize,
+                Foreground = palette.TertiaryBrush,
                 TextWrapping = TextWrapping.Wrap,
             },
+        };
+
+    /// <summary>Uppercase kicker text (<c>.nav-kicker</c>, <c>.ap-head</c>, <c>.featured-kicker</c>).</summary>
+    public static TextBlock Kicker(string text, double size, double tracking, IBrush brush, FontWeight weight = FontWeight.SemiBold)
+        => new()
+        {
+            Text = text.ToUpperInvariant(),
+            FontSize = size,
+            FontWeight = weight,
+            LetterSpacing = size * tracking,
+            Foreground = brush,
         };
 }

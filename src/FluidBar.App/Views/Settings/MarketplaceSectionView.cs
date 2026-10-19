@@ -28,15 +28,15 @@ public sealed class MarketplaceSectionView : StackPanel
     private static readonly (string Token, string Key)[] Categories =
     [
         ("all", LocKeys.Settings.Market.Category.All),
-        ("media", LocKeys.Settings.Market.Category.Media),
         ("productivity", LocKeys.Settings.Market.Category.Productivity),
-        ("system", LocKeys.Settings.Market.Category.System),
+        ("media", LocKeys.Settings.Market.Category.Media),
         ("developer", LocKeys.Settings.Market.Category.Developer),
-        ("other", LocKeys.Settings.Market.Category.Other),
+        ("system", LocKeys.Settings.Market.Category.System),
+        ("ai", LocKeys.Settings.Market.Category.Ai),
     ];
-
     private readonly IMarketplaceUiService _marketplace;
     private readonly ILocalizer _localizer;
+    private readonly SettingsPalette? _palette;
     private readonly AppSurfaceColors _surfaces;
     private readonly Func<Window?> _owner;
     private readonly string _channel;
@@ -67,10 +67,24 @@ public sealed class MarketplaceSectionView : StackPanel
         Func<Window?> owner,
         string channel,
         CommunityMarketplaceService? community = null)
+        : this(marketplace, localizer, SettingsPalette.FromSurfaces(surfaces), owner, channel, community)
     {
+    }
+
+    /// <summary>Creates the marketplace view with the prototype settings palette.</summary>
+    public MarketplaceSectionView(
+        IMarketplaceUiService marketplace,
+        ILocalizer localizer,
+        SettingsPalette palette,
+        Func<Window?> owner,
+        string channel,
+        CommunityMarketplaceService? community = null)
+    {
+        ArgumentNullException.ThrowIfNull(palette);
+        _palette = palette;
+        _surfaces = FromSurfaces(palette);
         _marketplace = marketplace ?? throw new ArgumentNullException(nameof(marketplace));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
-        _surfaces = surfaces;
         _owner = owner;
         _channel = channel;
         _community = community ?? CommunityMarketplaceService.CreateDefault();
@@ -89,6 +103,24 @@ public sealed class MarketplaceSectionView : StackPanel
 
     /// <summary>The device-local community marketplace backing this section.</summary>
     public CommunityMarketplaceService Community => _community;
+
+    /// <summary>Projects a prototype palette onto the legacy surface record (community block styling).</summary>
+    private static AppSurfaceColors FromSurfaces(SettingsPalette palette)
+        => new(
+            palette.Window,
+            palette.Window,
+            palette.Raised,
+            palette.RaisedHover,
+            palette.Field,
+            palette.Line,
+            palette.LineStrong,
+            palette.Foreground,
+            palette.Secondary,
+            palette.Tertiary,
+            palette.Active,
+            palette.ActiveForeground);
+
+    private static AppSurfaceColors FromSurfaces(AppSurfaceColors surfaces) => surfaces;
 
     /// <summary>Rebuilds the plugin list (signed catalog + device-local community marketplace).</summary>
     public async void Refresh() => await ReloadAsync();
@@ -159,38 +191,6 @@ public sealed class MarketplaceSectionView : StackPanel
 
         Children.Add(BuildToolbar(secondary, tertiary, line, raised));
 
-        if (_marketplace.IsOfflineFallback)
-        {
-            Children.Add(new Border
-            {
-                Background = new SolidColorBrush(_surfaces.Raised),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(51, 255, 149, 0)),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(10, 8, 10, 8),
-                Margin = new Thickness(0, 10, 0, 0),
-                Child = new TextBlock
-                {
-                    Text = _marketplace.StatusMessage ?? _localizer.Get(LocKeys.Settings.Market.DemoCatalog),
-                    Foreground = new SolidColorBrush(Accents.Warning),
-                    FontSize = 9.5,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-            });
-        }
-
-        if (!string.IsNullOrEmpty(_status))
-        {
-            Children.Add(new TextBlock
-            {
-                Text = _status,
-                Foreground = new SolidColorBrush(Accents.Warning),
-                FontSize = 9.5,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 8, 0, 0),
-            });
-        }
-
         if (plugins.Count == 0)
         {
             Children.Add(new TextBlock
@@ -228,71 +228,109 @@ public sealed class MarketplaceSectionView : StackPanel
 
         Children.Add(BuildCommunitySection(foreground, secondary, tertiary, line, raised));
 
-        Children.Add(new StackPanel
+        // The offline/demo notice is honest state, not prototype chrome: it stays at the bottom of the
+        // pane so the grid above matches the prototype's layout exactly.
+        Children.Add(BuildMarketNotice(secondary, tertiary, line));
+
+        // .market-footnote { margin-top: 14px; gap: 5px; 8.5px --ui-fg-3 } with a 10 px shield.
+        var footnote = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 5,
-            Margin = new Thickness(0, 8, 0, 0),
-            Children =
-            {
-                new SettingsGlyph
-                {
-                    Kind = IconKind.Check,
-                    Brush = tertiary,
-                    Width = 10,
-                    Height = 10,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-                new TextBlock
-                {
-                    Text = _localizer.Get(LocKeys.Settings.Market.Footnote),
-                    FontSize = 8.5,
-                    Foreground = tertiary,
-                    TextWrapping = TextWrapping.Wrap,
-                    MaxWidth = 620,
-                },
-            },
+            Margin = new Thickness(0, SettingsMetrics.MarketFootnoteMarginTop, 0, 0),
+        };
+        footnote.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Shield,
+            Brush = tertiary,
+            Width = SettingsMetrics.MarketFootnoteIcon,
+            Height = SettingsMetrics.MarketFootnoteIcon,
+            VerticalAlignment = VerticalAlignment.Center,
         });
+        footnote.Children.Add(new TextBlock
+        {
+            Text = _localizer.Get(LocKeys.Settings.Market.Footnote),
+            FontSize = SettingsMetrics.MarketFootnoteSize,
+            Foreground = tertiary,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 620,
+        });
+        Children.Add(footnote);
+    }
+
+    /// <summary>Compact catalog-state notice (offline/demo/errors) shown below the grid.</summary>
+    private Control BuildMarketNotice(IBrush secondary, IBrush tertiary, IBrush line)
+    {
+        var panel = new StackPanel
+        {
+            Spacing = 4,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        if (_marketplace.IsOfflineFallback)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = _marketplace.StatusMessage ?? _localizer.Get(LocKeys.Settings.Market.DemoCatalog),
+                Foreground = new SolidColorBrush(Accents.Warning),
+                FontSize = SettingsMetrics.MarketFootnoteSize,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        if (!string.IsNullOrEmpty(_status))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = _status,
+                Foreground = new SolidColorBrush(Accents.Warning),
+                FontSize = SettingsMetrics.MarketFootnoteSize,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        _ = secondary;
+        _ = tertiary;
+        _ = line;
+        return panel;
     }
 
     private Control BuildToolbar(IBrush secondary, IBrush tertiary, IBrush line, IBrush raised)
     {
+        var stack = new StackPanel { Spacing = 0, Margin = new Thickness(0, SettingsMetrics.MarketToolbarMarginTop, 0, 0) };
+
+        // .search-field { height:34; radius:8; background: var(--ui-field); border: 1px var(--ui-line) }
         var field = new Border
         {
-            Height = 34,
-            CornerRadius = new CornerRadius(8),
-            Background = raised,
+            Height = SettingsMetrics.SearchHeight,
+            CornerRadius = new CornerRadius(SettingsMetrics.SearchRadius),
+            Background = _palette?.FieldBrush ?? raised,
             BorderBrush = line,
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(10, 0, 10, 0),
-            Child = new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-                Children =
-                {
-                    new SettingsGlyph
-                    {
-                        Kind = IconKind.Search,
-                        Brush = tertiary,
-                        Width = 14,
-                        Height = 14,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    },
-                },
-            },
+            Padding = new Thickness(SettingsMetrics.SearchPadX, 0, SettingsMetrics.SearchPadX, 0),
         };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        grid.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Search,
+            Brush = tertiary,
+            Width = SettingsMetrics.SearchIcon,
+            Height = SettingsMetrics.SearchIcon,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
         var search = new TextBox
         {
             Watermark = _localizer.Get(LocKeys.Settings.Market.Search),
             Text = _search,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            FontSize = 11,
+            Padding = new Thickness(0),
+            MinHeight = 0,
+            FontSize = SettingsMetrics.SearchFontSize,
             VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(8, 0, 0, 0),
+            Margin = new Thickness(SettingsMetrics.SearchGap, 0, 0, 0),
         };
         Grid.SetColumn(search, 1);
-        ((Grid)((Border)field).Child!).Children.Add(search);
+        grid.Children.Add(search);
         search.TextChanged += (_, _) => _search = search.Text ?? string.Empty;
         search.KeyDown += (_, e) =>
         {
@@ -302,24 +340,32 @@ public sealed class MarketplaceSectionView : StackPanel
                 e.Handled = true;
             }
         };
+        field.Child = grid;
+        stack.Children.Add(field);
 
-        var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 9, 0, 10) };
+        // .market-cats { gap:4; margin: 9px 0 10px }
+        var chips = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.CatGap,
+            Margin = new Thickness(0, SettingsMetrics.MarketCatsMarginTop, 0, SettingsMetrics.MarketCatsMarginBottom),
+        };
         foreach (var (token, key) in Categories)
         {
             var active = string.Equals(token, _category, StringComparison.Ordinal);
             var chip = new Border
             {
-                Height = 26,
-                Padding = new Thickness(10, 0, 10, 0),
-                CornerRadius = new CornerRadius(7),
+                Height = SettingsMetrics.CatChipHeight,
+                Padding = new Thickness(SettingsMetrics.CatChipPadX, 0, SettingsMetrics.CatChipPadX, 0),
+                CornerRadius = new CornerRadius(SettingsMetrics.CatChipRadius),
                 Background = active ? new SolidColorBrush(_surfaces.Active) : raised,
                 BorderBrush = active ? Brushes.Transparent : line,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(active ? 0 : 1),
                 Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
                 Child = new TextBlock
                 {
                     Text = _localizer.Get(key),
-                    FontSize = 9.5,
+                    FontSize = SettingsMetrics.CatChipSize,
                     FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
                     Foreground = active ? new SolidColorBrush(_surfaces.ActiveForeground) : secondary,
                     VerticalAlignment = VerticalAlignment.Center,
@@ -335,10 +381,8 @@ public sealed class MarketplaceSectionView : StackPanel
             chips.Children.Add(chip);
         }
 
-        var toolbar = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
-        toolbar.Children.Add(field);
-        toolbar.Children.Add(chips);
-        return toolbar;
+        stack.Children.Add(chips);
+        return stack;
     }
 
     private Control BuildFeatured(MarketPlugin plugin, IBrush foreground, IBrush secondary)
@@ -351,8 +395,9 @@ public sealed class MarketplaceSectionView : StackPanel
         copy.Children.Add(new TextBlock
         {
             Text = _localizer.Get(LocKeys.Settings.Market.Featured).ToUpperInvariant(),
-            FontSize = 8,
+            FontSize = SettingsMetrics.FeaturedKickerSize,
             FontWeight = FontWeight.SemiBold,
+            LetterSpacing = SettingsMetrics.FeaturedKickerSize * SettingsMetrics.FeaturedKickerTracking,
             Foreground = new SolidColorBrush(Color.Parse("#7FD8FF")),
             Margin = new Thickness(0, 0, 0, 5),
         });
@@ -360,28 +405,40 @@ public sealed class MarketplaceSectionView : StackPanel
         {
             Text = plugin.Name,
             FontFamily = Fonts.Display,
-            FontSize = 20,
+            FontSize = SettingsMetrics.FeaturedTitleSize,
             FontWeight = FontWeight.SemiBold,
+            LetterSpacing = -0.4,
             Foreground = Brushes.White,
             Margin = new Thickness(0, 0, 0, 4),
+            TextTrimming = TextTrimming.CharacterEllipsis,
         });
         copy.Children.Add(new TextBlock
         {
             Text = plugin.Summary,
-            FontSize = 10,
+            FontSize = SettingsMetrics.FeaturedDescSize,
+            LineHeight = SettingsMetrics.FeaturedDescSize * 1.5,
             Foreground = new SolidColorBrush(Color.FromArgb(168, 232, 244, 250)),
             TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 400,
+            MaxWidth = SettingsMetrics.FeaturedDescMaxWidth,
+            MaxLines = 2,
             HorizontalAlignment = HorizontalAlignment.Left,
             TextAlignment = TextAlignment.Left,
         });
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 9, Margin = new Thickness(0, 11, 0, 0) };
+        // .featured-actions { display:flex; gap:9px; margin-top:11px }
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 9,
+            Margin = new Thickness(0, SettingsMetrics.FeaturedActionsMarginTop, 0, 0),
+        };
         actions.Children.Add(BuildFeaturedInstall(plugin));
         actions.Children.Add(new TextBlock
         {
-            Text = _localizer.Format(LocKeys.Settings.Market.Downloads, ("count", plugin.Installs)),
-            FontSize = 8.5,
+            Text = plugin.Verified
+                ? _localizer.Get(LocKeys.Settings.Market.Verified) + " · " + _localizer.Format(LocKeys.Settings.Market.Downloads, ("count", plugin.Installs))
+                : _localizer.Format(LocKeys.Settings.Market.Downloads, ("count", plugin.Installs)),
+            FontSize = SettingsMetrics.FeaturedMetaSize,
             Foreground = new SolidColorBrush(Color.FromArgb(138, 232, 244, 250)),
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -389,9 +446,9 @@ public sealed class MarketplaceSectionView : StackPanel
 
         var art = new Border
         {
-            Width = 80,
-            Height = 80,
-            CornerRadius = new CornerRadius(19),
+            Width = SettingsMetrics.FeaturedArt,
+            Height = SettingsMetrics.FeaturedArt,
+            CornerRadius = new CornerRadius(SettingsMetrics.FeaturedArtRadius),
             VerticalAlignment = VerticalAlignment.Center,
             Background = new LinearGradientBrush
             {
@@ -405,12 +462,12 @@ public sealed class MarketplaceSectionView : StackPanel
             },
             BorderBrush = new SolidColorBrush(Color.FromArgb(61, 127, 216, 255)),
             BorderThickness = new Thickness(1),
-            Child = new SettingsGlyph
+            Child = new SettingsIcon
             {
                 Kind = CategoryIcon(plugin.Category),
                 Brush = new SolidColorBrush(Color.Parse("#C8F4FF")),
-                Width = 36,
-                Height = 36,
+                Width = SettingsMetrics.FeaturedArtGlyph,
+                Height = SettingsMetrics.FeaturedArtGlyph,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },
@@ -419,7 +476,7 @@ public sealed class MarketplaceSectionView : StackPanel
         var body = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            ColumnSpacing = 16,
+            ColumnSpacing = SettingsMetrics.FeaturedGap,
         };
         Grid.SetColumn(copy, 0);
         Grid.SetColumn(art, 1);
@@ -456,12 +513,16 @@ public sealed class MarketplaceSectionView : StackPanel
                 },
             },
         });
-        host.Children.Add(new Border { Padding = new Thickness(18), Child = body });
+        host.Children.Add(new Border
+        {
+            Padding = new Thickness(SettingsMetrics.FeaturedPad),
+            Child = body,
+        });
 
         return new Border
         {
-            MinHeight = 122,
-            CornerRadius = new CornerRadius(14),
+            MinHeight = SettingsMetrics.FeaturedMinHeight,
+            CornerRadius = new CornerRadius(SettingsMetrics.FeaturedRadius),
             BorderBrush = new SolidColorBrush(Color.FromArgb(23, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             ClipToBounds = true,
@@ -522,12 +583,12 @@ public sealed class MarketplaceSectionView : StackPanel
             Height = 34,
             CornerRadius = new CornerRadius(9),
             Background = new SolidColorBrush(CategoryColor(plugin.Category)),
-            Child = new SettingsGlyph
+            Child = new SettingsIcon
             {
                 Kind = CategoryIcon(plugin.Category),
                 Brush = Brushes.White,
-                Width = 18,
-                Height = 18,
+                Width = SettingsMetrics.MarketGlyph,
+                Height = SettingsMetrics.MarketGlyph,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },
@@ -545,9 +606,9 @@ public sealed class MarketplaceSectionView : StackPanel
         });
         if (plugin.Verified)
         {
-            nameRow.Children.Add(new SettingsGlyph
+            nameRow.Children.Add(new SettingsIcon
             {
-                Kind = IconKind.Check,
+                Kind = SettingsIconKind.Shield,
                 Brush = new SolidColorBrush(Accents.Success),
                 Width = 10,
                 Height = 10,
@@ -610,13 +671,14 @@ public sealed class MarketplaceSectionView : StackPanel
         };
     }
 
-    private static IconKind CategoryIcon(string category) => category switch
+    private static SettingsIconKind CategoryIcon(string category) => category switch
     {
-        "media" => IconKind.Media,
-        "productivity" => IconKind.Task,
-        "system" => IconKind.Monitor,
-        "developer" => IconKind.Agent,
-        _ => IconKind.Store,
+        "media" => SettingsIconKind.Star,
+        "productivity" => SettingsIconKind.Sliders,
+        "system" => SettingsIconKind.Alert,
+        "developer" => SettingsIconKind.Palette,
+        "ai" => SettingsIconKind.Shield,
+        _ => SettingsIconKind.Storefront,
     };
 
     private static Color CategoryColor(string category) => category switch
@@ -1112,7 +1174,7 @@ public sealed class MarketplaceSectionView : StackPanel
                 ratingRow,
                 new TextBlock
                 {
-                    Text = _localizer.Format(LocKeys.Settings.Market.Downloads, ("count", listing.Stats.Downloads)),
+                    Text = _localizer.Format(CommunityCopy.InstallCount, ("count", listing.Stats.Downloads)),
                     FontSize = 8.5,
                     Foreground = tertiary,
                     VerticalAlignment = VerticalAlignment.Center,

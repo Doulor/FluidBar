@@ -30,8 +30,8 @@ public sealed record SettingsWindowContext
     /// <summary>Plugin list service.</summary>
     public required IPluginUiService Plugins { get; init; }
 
-    /// <summary>Current settings-window surfaces.</summary>
-    public required AppSurfaceColors Surfaces { get; init; }
+    /// <summary>Prototype palette for the current theme.</summary>
+    public required SettingsPalette Palette { get; init; }
 
     /// <summary>Owner window accessor (consent dialog parenting).</summary>
     public required Func<Window?> Owner { get; init; }
@@ -76,174 +76,117 @@ public static class SettingsSectionBuilder
         }
     }
 
-    private static StackPanel Section(string title, string? subtitle, params Control[] rows)
-        => Section(Ambient, title, subtitle, rows);
+    // ---- shared helpers ---------------------------------------------------------------------
 
-    private static Control Row(string? label, string? description, Control control)
-        => Row(Ambient, label, description, control);
+    private static StackPanel Section(string title, string? subtitle, params Control[] children)
+        => Section(Ambient, title, subtitle, children);
 
-    private static Control ToggleRow(string label, string? description, bool value, Action<bool> changed)
-        => ToggleRow(Ambient, label, description, value, changed);
-
-    private static Control ComboRow(string label, string? description, (string Label, string Value)[] options,
-        string current, Action<string> changed)
-        => SegmentedRow(Ambient, label, description, options, current, changed);
-
-    private static Control SliderRow(string label, string? description, double min, double max, double step,
-        double value, Func<double, string> format, Action<double> changed)
-        => SliderRow(Ambient, label, description, min, max, step, value, format, changed);
-
-    private static Control ButtonRow(string label, string? description, string buttonText, Action clicked)
-        => ButtonRow(Ambient, label, description, buttonText, clicked);
-
-    /// <summary>Prototype palette resolved from the current surfaces + accent.</summary>
-    private readonly record struct SettingsBrushes(
-        IBrush Foreground,
-        IBrush Secondary,
-        IBrush Tertiary,
-        IBrush Line,
-        IBrush LineStrong,
-        IBrush Raised,
-        IBrush RaisedHover,
-        IBrush Active,
-        IBrush ActiveForeground,
-        IBrush Accent)
+    private static StackPanel Section(SettingsWindowContext context, string title, string? subtitle,
+        params Control[] children)
     {
-        public static SettingsBrushes From(SettingsWindowContext context)
+        var panel = new StackPanel { Spacing = 0 };
+        panel.Children.Add(SettingsWidgets.PaneHeader(title, subtitle, context.Palette));
+        foreach (var child in children)
         {
-            var surfaces = context.Surfaces;
-            var accent = Accents.ParseOrDefault(context.Settings.Current.AccentFallback, Accents.Fallback);
-            return new SettingsBrushes(
-                new SolidColorBrush(surfaces.Foreground),
-                new SolidColorBrush(surfaces.ForegroundSecondary),
-                new SolidColorBrush(surfaces.ForegroundTertiary),
-                new SolidColorBrush(surfaces.Line),
-                new SolidColorBrush(surfaces.LineStrong),
-                new SolidColorBrush(surfaces.Raised),
-                new SolidColorBrush(surfaces.RaisedHover),
-                new SolidColorBrush(surfaces.Active),
-                new SolidColorBrush(surfaces.ActiveForeground),
-                new SolidColorBrush(accent));
-        }
-    }
-
-    private static SettingsBrushes Palette(SettingsWindowContext context) => SettingsBrushes.From(context);
-
-    private static StackPanel Section(SettingsWindowContext context, string title, string? subtitle, params Control[] rows)
-    {
-        var brushes = Palette(context);
-        var panel = new StackPanel { Spacing = 0, Margin = new Thickness(0, 0, 0, 12) };
-        panel.Children.Add(SettingsWidgets.PaneHeader(title, subtitle ?? string.Empty, brushes.Foreground, brushes.Secondary));
-        foreach (var row in rows)
-        {
-            panel.Children.Add(row);
+            panel.Children.Add(child);
         }
 
         return panel;
     }
 
-    private static Control Row(SettingsWindowContext context, string? label, string? description, Control control)
-    {
-        var brushes = Palette(context);
-        return SettingsWidgets.Row(label ?? string.Empty, description, control, brushes.Foreground, brushes.Tertiary, brushes.Line);
-    }
+    private static Control Row(string title, string? description, Control control)
+        => SettingsWidgets.Row(title, description, control, Ambient.Palette);
 
-    private static Control ToggleRow(SettingsWindowContext context, string label, string? description, bool value, Action<bool> changed)
+    private static Control ToggleRow(SettingsWindowContext context, string label, string? description, bool value,
+        Action<bool> changed, bool enabled = true)
     {
-        var brushes = Palette(context);
+        var palette = context.Palette;
         var toggle = new SettingsSwitch
         {
             IsOn = value,
-            Accent = brushes.Accent,
-            OffTrack = brushes.RaisedHover,
-            OffHairline = brushes.LineStrong,
-            OffKnob = brushes.Secondary,
+            IsEnabled = enabled,
+            Accent = new SolidColorBrush(AccentOf(context)),
+            OffTrack = palette.RaisedHoverBrush,
+            OffHairline = palette.LineStrongBrush,
+            OffKnob = palette.SecondaryBrush,
         };
-        toggle.Toggled += changed;
-        return SettingsWidgets.Row(label, description, toggle, brushes.Foreground, brushes.Tertiary, brushes.Line);
+        if (enabled)
+        {
+            toggle.Toggled += changed;
+        }
+
+        return SettingsWidgets.Row(label, description, toggle, palette);
     }
 
     private static Control SegmentedRow(SettingsWindowContext context, string label, string? description,
         (string Label, string Value)[] options, string current, Action<string> changed, bool small = false)
     {
-        var brushes = Palette(context);
+        var palette = context.Palette;
         var segmented = new SegmentedControl
         {
             ControlWidth = small ? SettingsMetrics.SegmentedSmallWidth : SettingsMetrics.SegmentedWidth,
-            Fill = brushes.Raised,
-            Hairline = brushes.Line,
-            ActiveFill = brushes.Active,
-            ActiveForeground = brushes.ActiveForeground,
-            InactiveForeground = brushes.Secondary,
+            Fill = palette.RaisedBrush,
+            Hairline = palette.LineBrush,
+            ActiveFill = palette.ActiveBrush,
+            ActiveForeground = palette.ActiveForegroundBrush,
+            InactiveForeground = palette.SecondaryBrush,
         };
         segmented.SetItems(options, current);
         segmented.Changed += changed;
-        return SettingsWidgets.Row(label, description, segmented, brushes.Foreground, brushes.Tertiary, brushes.Line);
+        return SettingsWidgets.Row(label, description, segmented, palette);
     }
 
     private static Control SliderRow(SettingsWindowContext context, string label, string? description,
         double min, double max, double step, double value, Func<double, string> format, Action<double> changed)
     {
-        var brushes = Palette(context);
+        var palette = context.Palette;
         var slider = new SettingsSlider
         {
             Minimum = min,
             Maximum = max,
             Step = step,
             Value = Math.Clamp(value, min, max),
-            Width = 142,
-            Fill = brushes.Foreground,
-            Track = brushes.RaisedHover,
+            Fill = palette.ForegroundBrush,
+            Track = palette.RaisedHoverBrush,
         };
         var tagText = new TextBlock
         {
             Text = format(slider.Value),
-            FontSize = SettingsMetrics.CaptionSize,
-            Foreground = brushes.Secondary,
+            FontSize = SettingsMetrics.ValueTagSize,
+            Foreground = palette.SecondaryBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var tag = new Border
+        var tag = SettingsWidgets.ValueTag(format(slider.Value), palette);
+        if (tag is Border { Child: TextBlock tagBlock })
         {
-            MinWidth = 48,
-            Height = 24,
-            Padding = new Thickness(7, 0, 7, 0),
-            CornerRadius = new CornerRadius(6),
-            Background = brushes.Raised,
-            BorderBrush = brushes.Line,
-            BorderThickness = new Thickness(1),
-            Child = tagText,
-        };
-        slider.ValueChanged += value2 =>
+            tagText = tagBlock;
+        }
+
+        slider.ValueChanged += next =>
         {
-            tagText.Text = format(value2);
-            changed(value2);
+            tagText.Text = format(next);
+            changed(next);
         };
-        var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        host.Children.Add(slider);
-        host.Children.Add(tag);
-        return SettingsWidgets.Row(label, description, host, brushes.Foreground, brushes.Tertiary, brushes.Line);
+        return SettingsWidgets.Row(label, description, SettingsWidgets.RangeHost(slider, tag), palette);
     }
 
-    private static Control ButtonRow(SettingsWindowContext context, string label, string? description, string buttonText, Action clicked)
-    {
-        var button = new Button { Content = buttonText, Padding = new Thickness(12, 5, 12, 5), CornerRadius = new CornerRadius(8) };
-        button.Click += (_, _) => clicked();
-        return Row(context, label, description, button);
-    }
+    private static Color AccentOf(SettingsWindowContext context)
+        => Accents.ParseOrDefault(context.Settings.Current.AccentFallback, Accents.Fallback);
 
     private static string[] SplitHotkey(string value)
         => value.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    // ---- general ----------------------------------------------------------------------------
+
     private static Control BuildGeneral(SettingsWindowContext ctx)
     {
         var settings = ctx.Settings.Current;
-        var brushes = Palette(ctx);
-        // The prototype's general pane is exactly two language segments; "follow system" lives in Advanced.
+        var palette = ctx.Palette;
         var languageOptions = new (string, string)[]
         {
-            (ctx.Localizer.Get(LocKeys.Locale.Chinese), "zh-Hans"),
-            (ctx.Localizer.Get(LocKeys.Locale.English), "en-US"),
+            (ctx.Localizer.Get(LocKeys.Settings.General.LanguageOptions.Chinese), "zh-Hans"),
+            (ctx.Localizer.Get(LocKeys.Settings.General.LanguageOptions.English), "en-US"),
         };
         var effectiveLanguage = string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase)
             ? (ctx.Localizer.CurrentCulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en-US")
@@ -251,7 +194,7 @@ public static class SettingsSectionBuilder
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Title),
             ctx.Localizer.Get(LocKeys.Settings.General.Subtitle),
-            SettingsWidgets.Group(brushes.Line, topBorder: true,
+            SettingsWidgets.Group(palette, topBorder: true,
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Language),
                     ctx.Localizer.Get(LocKeys.Settings.General.LanguageHint), languageOptions, effectiveLanguage,
                     value => ctx.Settings.Update(s => s with { Language = value })),
@@ -266,41 +209,23 @@ public static class SettingsSectionBuilder
                     ctx.Localizer.Get(LocKeys.Settings.General.TrayIconHint), settings.TrayIcon,
                     value => ctx.Settings.Update(s => s with { TrayIcon = value }))));
 
-        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.General.Hotkeys), brushes.Tertiary));
-        panel.Children.Add(SettingsWidgets.Group(brushes.Line, topBorder: false,
+        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.General.Hotkeys), palette));
+        panel.Children.Add(SettingsWidgets.Group(palette, topBorder: false,
             HotkeyRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle), settings.HotkeyToggle,
                 value => ctx.Settings.Update(s => s with { HotkeyToggle = value })),
             HotkeyRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Hide), settings.HotkeyHide,
                 value => ctx.Settings.Update(s => s with { HotkeyHide = value })),
             HotkeyRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Settings), settings.HotkeySettings,
-                value => ctx.Settings.Update(s => s with { HotkeySettings = value })),
-            StaticKeycapRow(ctx, "LeftAlt", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.HoldToHide)),
-            StaticKeycapRow(ctx, "Esc", ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle))));
-        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+                value => ctx.Settings.Update(s => s with { HotkeySettings = value }), last: true)));
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
     }
 
-    private static Control StaticKeycapRow(SettingsWindowContext ctx, string keys, string label)
+    private static Control HotkeyRow(SettingsWindowContext ctx, string label, string value, Action<string> commit,
+        bool last = false)
     {
-        var brushes = Palette(ctx);
-        var caps = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3 };
-        foreach (var key in SplitHotkey(keys))
-        {
-            caps.Children.Add(SettingsWidgets.Keycap(key, brushes.Secondary, brushes.Raised, brushes.LineStrong));
-        }
-
-        return SettingsWidgets.ShortcutRow(label, caps, brushes.Foreground, brushes.Line);
-    }
-
-    private static Control HotkeyRow(SettingsWindowContext ctx, string label, string value, Action<string> commit)
-    {
-        var brushes = Palette(ctx);
-        var caps = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3 };
-        foreach (var key in SplitHotkey(value))
-        {
-            caps.Children.Add(SettingsWidgets.Keycap(key, brushes.Secondary, brushes.Raised, brushes.LineStrong));
-        }
-
+        var palette = ctx.Palette;
+        var caps = SettingsWidgets.Keycaps(SplitHotkey(value), palette);
         var box = new TextBox
         {
             Text = value,
@@ -348,8 +273,10 @@ public static class SettingsSectionBuilder
                 e.Handled = true;
             }
         };
-        return SettingsWidgets.ShortcutRow(label, host, brushes.Foreground, brushes.Line);
+        return SettingsWidgets.ShortcutRow(label, host, palette, last);
     }
+
+    // ---- appearance -------------------------------------------------------------------------
 
     /// <summary>Accent swatch colors offered by the appearance section (prototype ACCENTS).</summary>
     private static readonly (string Name, string Hex)[] AccentChoices =
@@ -364,20 +291,25 @@ public static class SettingsSectionBuilder
     private static Control BuildAppearance(SettingsWindowContext ctx)
     {
         var settings = ctx.Settings.Current;
-        var brushes = Palette(ctx);
+        var palette = ctx.Palette;
         var preview = new IslandPreview();
         preview.Update(settings, ctx.Localizer);
 
-        var swatches = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var swatches = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.AccentGap,
+        };
         foreach (var (_, hex) in AccentChoices)
         {
             var color = Color.Parse(hex);
             var swatch = new AccentSwatch
             {
                 SwatchColor = color,
-                Ring = brushes.Secondary,
-                IsActive = settings.AccentMode == "custom"
-                    && string.Equals(settings.AccentFallback, hex, StringComparison.OrdinalIgnoreCase),
+                Ring = palette.SecondaryBrush,
+                // The ring marks the accent actually in use: with mode "artwork" it is the fallback
+                // colour the island uses whenever artwork sampling has no answer, so it is always shown.
+                IsActive = string.Equals(settings.AccentFallback, hex, StringComparison.OrdinalIgnoreCase),
             };
             swatch.Clicked += () => ctx.Settings.Update(s => s with { AccentFallback = hex, AccentMode = "custom" });
             swatches.Children.Add(swatch);
@@ -385,8 +317,9 @@ public static class SettingsSectionBuilder
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Title),
             ctx.Localizer.Get(LocKeys.Settings.Appearance.Subtitle),
-            SettingsWidgets.Group(brushes.Line, topBorder: true,
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Title), null,
+            SettingsWidgets.Group(palette, topBorder: true,
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Dark), "dark"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Light), "light"),
@@ -397,7 +330,7 @@ public static class SettingsSectionBuilder
                         Theme = value == "light" ? AppTheme.Light : AppTheme.Dark,
                     })),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Title),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.AcrylicUnavailable),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Obsidian), "obsidian"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Acrylic), "acrylic"),
@@ -407,62 +340,77 @@ public static class SettingsSectionBuilder
                     {
                         Material = value == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
                     })),
-                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title), null, swatches,
-                    brushes.Foreground, brushes.Tertiary, brushes.Line),
+                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Desc), swatches, palette),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
                     value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),
-                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacity), null,
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacity),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityHint),
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
                     value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }))));
 
-        // Prototype preview header: label on the left, the live radius/opacity pair on the right.
-        var previewHeader = new Grid
+        // .appearance-preview { margin-top:16; padding-top:12; border-top }
+        var previewHead = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(0, 20, 0, 8),
+            Margin = new Thickness(0, 0, 0, SettingsMetrics.ApHeadMarginBottom),
         };
-        var previewLabel = new TextBlock
+        previewHead.Children.Add(SettingsWidgets.Kicker(
+            ctx.Localizer.Get(LocKeys.Settings.Appearance.PreviewLabel),
+            SettingsMetrics.ApHeadSize,
+            SettingsMetrics.ApHeadTracking,
+            palette.TertiaryBrush));
+        var meta = new TextBlock
         {
-            Text = ctx.Localizer.Get(LocKeys.Settings.Appearance.PreviewLabel),
-            FontSize = SettingsMetrics.CaptionSize,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = brushes.Tertiary,
+            Text = ctx.Localizer.Format(LocKeys.Settings.Appearance.Meta,
+                ("radius", $"{settings.PanelRadius:0}"),
+                ("opacity", $"{settings.FillOpacity * 100:0}")),
+            FontFamily = Fonts.Mono,
+            FontSize = SettingsMetrics.ApMetaSize,
+            Foreground = palette.TertiaryBrush,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(previewLabel, 0);
-        previewHeader.Children.Add(previewLabel);
-        var previewValues = new TextBlock
+        Grid.SetColumn(meta, 1);
+        previewHead.Children.Add(meta);
+
+        var canvas = new Border
         {
-            Text = $"{settings.PanelRadius:0} px · {settings.FillOpacity * 100:0}%",
-            FontSize = SettingsMetrics.CaptionSize,
-            Foreground = brushes.Tertiary,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(previewValues, 1);
-        previewHeader.Children.Add(previewValues);
-        panel.Children.Add(previewHeader);
-        panel.Children.Add(new Border
-        {
-            Height = 104,
-            CornerRadius = new CornerRadius(12),
-            BorderBrush = brushes.Line,
+            Height = SettingsMetrics.ApCanvasHeight,
+            CornerRadius = new CornerRadius(SettingsMetrics.ApCanvasRadius),
+            BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(1),
             ClipToBounds = true,
             Child = preview,
+        };
+        var previewBlock = new StackPanel
+        {
+            Margin = new Thickness(0, SettingsMetrics.PreviewMarginTop, 0, 0),
+            Spacing = 0,
+        };
+        previewBlock.Children.Add(new Border
+        {
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(0, SettingsMetrics.PreviewPadTop, 0, 0),
+            Child = new StackPanel { Children = { previewHead, canvas } },
         });
-        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.Appearance.LiveHint), brushes.Tertiary, brushes.Line));
+        panel.Children.Add(previewBlock);
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.Appearance.LiveHint), palette));
         return panel;
     }
+
+    // ---- island -----------------------------------------------------------------------------
 
     private static Control BuildIsland(SettingsWindowContext ctx)
     {
         var settings = ctx.Settings.Current;
-        var brushes = Palette(ctx);
+        var palette = ctx.Palette;
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Title),
             ctx.Localizer.Get(LocKeys.Settings.Island.Description),
-            SettingsWidgets.Group(brushes.Line, topBorder: true,
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Mode.Title), null,
+            SettingsWidgets.Group(palette, topBorder: true,
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Mode.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.Mode.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Mode.Float), "float"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Mode.Flush), "flush"),
@@ -470,7 +418,8 @@ public static class SettingsSectionBuilder
                     ],
                     settings.Mode,
                     value => ctx.Settings.Update(s => s with { Mode = value })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.Title), null,
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.TopLeft), "top-left"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.TopCenter), "top-center"),
@@ -481,7 +430,8 @@ public static class SettingsSectionBuilder
                     ],
                     settings.Anchor,
                     value => ctx.Settings.Update(s => s with { Anchor = value })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Title), null,
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Stacked), "stacked"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Latest), "latest"),
@@ -494,15 +444,42 @@ public static class SettingsSectionBuilder
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.HoverPeek),
                     ctx.Localizer.Get(LocKeys.Settings.Island.HoverPeekHint), settings.HoverPeek,
                     value => ctx.Settings.Update(s => s with { HoverPeek = value })),
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.Motion.Desc),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.System), "system"),
+                        (ctx.Localizer.Get(LocKeys.Common.On), "on"),
+                        (ctx.Localizer.Get(LocKeys.Common.Off), "off"),
+                    ],
+                    settings.ReducedMotion switch
+                    {
+                        ReducedMotionPreference.On => "on",
+                        ReducedMotionPreference.Off => "off",
+                        _ => "system",
+                    },
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        ReducedMotion = value switch
+                        {
+                            "on" => ReducedMotionPreference.On,
+                            "off" => ReducedMotionPreference.Off,
+                            _ => ReducedMotionPreference.System,
+                        },
+                    })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseMs),
                     ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseMsHint), 0, 8000, 100, settings.AutoCollapseMs,
-                    value => $"{value:0} ms", value => ctx.Settings.Update(s => s with { AutoCollapseMs = (int)Math.Round(value) })),
+                    value => $"{value / 1000:0.0} s", value => ctx.Settings.Update(s => s with { AutoCollapseMs = (int)Math.Round(value) })),
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.MotionStrength),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.MotionStrengthHint), 0.5, 1.5, 0.05, settings.MotionStrength,
+                    value => $"×{value:0.00}", value => ctx.Settings.Update(s => s with { MotionStrength = value })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.AutoHideMs),
                     ctx.Localizer.Get(LocKeys.Settings.Island.AutoHideMsHint), 0, 30000, 500, settings.AutoHideMs,
-                    value => $"{value:0} ms", value => ctx.Settings.Update(s => s with { AutoHideMs = (int)Math.Round(value) })),
-                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChange), null, settings.PeekOnTrackChange,
+                    value => $"{value / 1000:0} s", value => ctx.Settings.Update(s => s with { AutoHideMs = (int)Math.Round(value) })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChange),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChangeHint), settings.PeekOnTrackChange,
                     value => ctx.Settings.Update(s => s with { PeekOnTrackChange = value })),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Title), null,
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Title),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Desc),
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Primary), "primary"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.All), "all"),
@@ -523,31 +500,104 @@ public static class SettingsSectionBuilder
                             _ => DisplayTarget.Primary,
                         },
                     }))));
-        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
     }
 
+    // ---- plugins ----------------------------------------------------------------------------
+
     private static Control BuildPlugins(SettingsWindowContext ctx)
     {
-        var list = new StackPanel { Spacing = 6 };
-        // A TextBox stretches by default, so an explicit width would centre it; pin it to the left.
-        var search = new TextBox
+        var palette = ctx.Palette;
+        var list = new StackPanel { Spacing = SettingsMetrics.PluginListGap };
+        var contributions = ctx.Plugins as IPluginContributionUiService;
+        var search = SettingsWidgets.SearchField(
+            ctx.Localizer.Get(LocKeys.Settings.Plugins.Search), string.Empty, _ => { }, palette);
+        var rowsHost = list;
+        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Plugins.Title),
+            ctx.Localizer.Get(LocKeys.Settings.Plugins.Description),
+            new Border { Margin = new Thickness(0, 0, 0, 10), Child = search },
+            rowsHost);
+
+        var toolbar = BuildPluginToolbar(ctx, palette);
+        panel.Children.Add(toolbar);
+        var footer = SettingsWidgets.FooterNote(string.Empty, palette);
+        panel.Children.Add(footer);
+        if (search is Border { Child: Grid searchGrid } && searchGrid.Children.Count > 1
+            && searchGrid.Children[1] is TextBox searchBox)
         {
-            Watermark = ctx.Localizer.Get(LocKeys.Settings.Plugins.Search),
-            Width = 320,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 4, 0, 10),
-        };
-        var contributions = ctx.Plugins as FluidBar.App.Views.Plugins.IPluginContributionUiService;
-        string? selectedPlugin = null;
-        var panel = Section(
-            ctx.Localizer.Get(LocKeys.Settings.Plugins.Title),
-            null,
-            search,
-            list);
-        search.TextChanged += (_, _) => _ = LoadAsync();
+            searchBox.TextChanged += (_, _) => _ = LoadAsync();
+        }
+
         _ = LoadAsync();
         return panel;
+
+        Control BuildPluginToolbar(SettingsWindowContext context, SettingsPalette colors)
+        {
+            var bar = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Margin = new Thickness(0, SettingsMetrics.MarketToolbarMarginTop, 0, 0),
+            };
+            bar.Children.Add(new TextBlock
+            {
+                Text = context.Localizer.Get(LocKeys.Settings.Plugins.FolderHint),
+                FontSize = SettingsMetrics.RowDescSize,
+                Foreground = colors.TertiaryBrush,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            var open = SettingsWidgets.SmallAction(
+                context.Localizer.Get(LocKeys.Settings.Plugins.OpenFolder),
+                SettingsIconKind.Folder,
+                false,
+                () => context.OpenPath(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar", "plugins")),
+                colors);
+            open.HorizontalAlignment = HorizontalAlignment.Right;
+            open.Margin = new Thickness(8, 0, 0, 0);
+            Grid.SetColumn(open, 1);
+            bar.Children.Add(open);
+            return bar;
+        }
+
+        async Task LoadAsync()
+        {
+            var query = (search as Border)?.Child is Grid g && g.Children.Count > 1 && g.Children[1] is TextBox box
+                ? box.Text?.Trim() ?? string.Empty
+                : string.Empty;
+            try
+            {
+                var plugins = await ctx.Plugins.ListAsync(CancellationToken.None);
+                list.Children.Clear();
+                var count = 0;
+                foreach (var plugin in plugins)
+                {
+                    if (query.Length > 0
+                        && !plugin.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        && !plugin.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    count++;
+                    list.Children.Add(BuildPluginRow(ctx, plugin, ShowDetail));
+                }
+
+                if (footer is Border { Child: TextBlock footerText })
+                {
+                    footerText.Text = ctx.Localizer.Format(LocKeys.Settings.Plugins.Count, ("count", count));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Section closed while loading; nothing to attach.
+            }
+            catch (Exception ex)
+            {
+                ctx.ShowStatus(ex.Message);
+            }
+        }
 
         void ShowDetail(string pluginId)
         {
@@ -556,24 +606,37 @@ public static class SettingsSectionBuilder
                 return;
             }
 
-            selectedPlugin = pluginId;
             panel.Children.Clear();
-            var back = new Button { Content = ctx.Localizer.Get(LocKeys.Common.Back) };
-            back.Click += (_, _) =>
+            var back = SettingsWidgets.SmallAction(
+                ctx.Localizer.Get(LocKeys.Common.Back), SettingsIconKind.Refresh, false,
+                () =>
+                {
+                    panel.Children.Clear();
+                    panel.Children.Add(SettingsWidgets.PaneHeader(
+                        ctx.Localizer.Get(LocKeys.Settings.Plugins.Title),
+                        ctx.Localizer.Get(LocKeys.Settings.Plugins.Description), palette));
+                    panel.Children.Add(search);
+                    panel.Children.Add(list);
+                    panel.Children.Add(toolbar);
+                    panel.Children.Add(footer);
+                    _ = LoadAsync();
+                },
+                palette);
+            panel.Children.Add(new Border
             {
-                selectedPlugin = null;
-                panel.Children.Clear();
-                panel.Children.Add(search);
-                panel.Children.Add(list);
-                _ = LoadAsync();
-            };
-            panel.Children.Add(back);
-            var name = FluidBar.App.Views.Plugins.LocalizedValue.Resolve(contributions.DisplayName(pluginId), ctx.Localizer);
+                Margin = new Thickness(0, SettingsMetrics.CaptionMarginTop, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = back,
+            });
+            var name = LocalizedValue.Resolve(contributions.DisplayName(pluginId), ctx.Localizer);
             panel.Children.Add(new TextBlock
             {
                 Text = name,
-                FontSize = Typography.SettingsSectionSize,
+                FontFamily = Fonts.Display,
+                FontSize = SettingsMetrics.HeadSize,
                 FontWeight = FontWeight.SemiBold,
+                Foreground = palette.ForegroundBrush,
+                Margin = new Thickness(0, 12, 0, 0),
             });
             foreach (var page in contributions.SettingsPages(pluginId))
             {
@@ -593,53 +656,25 @@ public static class SettingsSectionBuilder
             var commands = contributions.Commands(pluginId);
             if (commands.Count > 0)
             {
-                panel.Children.Add(new TextBlock
-                {
-                    Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.Commands),
-                    FontSize = Typography.SettingsBodySize,
-                    FontWeight = FontWeight.SemiBold,
-                    Margin = new Thickness(0, 10, 0, 0),
-                });
+                panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.Plugins.Commands), palette));
                 foreach (var command in commands)
                 {
-                    var label = FluidBar.App.Views.Plugins.LocalizedValue.Resolve(command.Title, ctx.Localizer);
-                    var commandButton = new Button
-                    {
-                        Content = string.IsNullOrEmpty(label) ? command.Id : label,
-                        HorizontalAlignment = HorizontalAlignment.Left,
-                    };
+                    var label = LocalizedValue.Resolve(command.Title, ctx.Localizer);
                     var commandId = command.Id;
-                    commandButton.Click += (_, _) =>
-                    {
-                        _ = contributions.InvokeCommandAsync(pluginId, commandId);
-                        ctx.ShowStatus(commandId);
-                    };
+                    var commandButton = SettingsWidgets.SmallAction(
+                        string.IsNullOrEmpty(label) ? command.Id : label,
+                        SettingsIconKind.Sliders,
+                        false,
+                        () =>
+                        {
+                            _ = contributions.InvokeCommandAsync(pluginId, commandId);
+                            ctx.ShowStatus(commandId);
+                        },
+                        palette);
+                    commandButton.HorizontalAlignment = HorizontalAlignment.Left;
+                    commandButton.Margin = new Thickness(0, 0, 0, 5);
                     panel.Children.Add(commandButton);
                 }
-            }
-        }
-
-        async Task LoadAsync()
-        {
-            try
-            {
-                var plugins = await ctx.Plugins.ListAsync(CancellationToken.None);
-                list.Children.Clear();
-                var query = search.Text?.Trim() ?? string.Empty;
-                foreach (var plugin in plugins.Where(p => query.Length == 0
-                    || p.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                    || p.Id.Contains(query, StringComparison.OrdinalIgnoreCase)))
-                {
-                    list.Children.Add(BuildPluginRow(ctx, plugin, ShowDetail));
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // Section closed while loading; nothing to attach.
-            }
-            catch (Exception ex)
-            {
-                ctx.ShowStatus(ex.Message);
             }
         }
     }
@@ -647,12 +682,7 @@ public static class SettingsSectionBuilder
     /// <summary>Resolves a plugin display name: catalog keys are localized, plain names pass through.</summary>
     private static string ResolvePluginName(SettingsWindowContext ctx, string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return name;
-        }
-
-        if (!name.Contains('.', StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(name) || !name.Contains('.', StringComparison.Ordinal))
         {
             return name;
         }
@@ -673,191 +703,303 @@ public static class SettingsSectionBuilder
         return string.Equals(localized, error, StringComparison.Ordinal) ? error : localized;
     }
 
+    /// <summary>One <c>.plugin-row</c>: 36 px icon, name/version/badges, meta, permission chips, actions.</summary>
     private static Control BuildPluginRow(SettingsWindowContext ctx, PluginListItem plugin, Action<string> showDetail)
     {
-        var brushes = Palette(ctx);
+        var palette = ctx.Palette;
         var enabled = plugin.IsEnabled;
-        var border = new Border
-        {
-            BorderBrush = brushes.Line,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(0, 14, 0, 14),
-        };
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        var info = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
 
-        // Grid instead of a horizontal StackPanel: a StackPanel gives every child the same row height,
-        // which pushed the version/badge below the name.
-        var title = new Grid
+        var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto"),
-            ColumnSpacing = 8,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
         };
-        var nameText = new TextBlock
-        {
-            Text = ResolvePluginName(ctx, plugin.Name),
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = brushes.Foreground,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(nameText, 0);
-        title.Children.Add(nameText);
 
-        var versionText = new TextBlock
+        var icon = new Border
         {
-            Text = "v" + plugin.Version,
-            FontSize = SettingsMetrics.CaptionSize,
-            Foreground = brushes.Tertiary,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Grid.SetColumn(versionText, 1);
-        title.Children.Add(versionText);
-
-        var badge = new Border
-        {
-            Padding = new Thickness(5, 1, 5, 1),
-            CornerRadius = new CornerRadius(5),
-            Background = brushes.Raised,
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
+            Width = SettingsMetrics.PluginIcon,
+            Height = SettingsMetrics.PluginIcon,
+            CornerRadius = new CornerRadius(SettingsMetrics.PluginIconRadius),
+            Background = new SolidColorBrush(PluginColor(plugin.Id)),
+            Child = new SettingsIcon
             {
-                Text = ctx.Localizer.Get(plugin.Builtin ? LocKeys.Settings.Plugins.Builtin : LocKeys.Settings.Plugins.Community),
-                FontSize = 8.5,
-                Foreground = brushes.Secondary,
+                Kind = PluginIcon(plugin.Id),
+                Brush = Brushes.White,
+                Width = SettingsMetrics.PluginGlyph,
+                Height = SettingsMetrics.PluginGlyph,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
             },
         };
-        Grid.SetColumn(badge, 2);
-        title.Children.Add(badge);
-        info.Children.Add(title);
+        Grid.SetColumn(icon, 0);
+        row.Children.Add(icon);
 
-        // Publisher and capabilities share one line (the prototype row is two lines tall, not three).
-        var capabilityText = plugin.CapabilityKeys.Count > 0
-            ? string.Join(" · ", plugin.CapabilityKeys.Select(ctx.Localizer.Get))
-            : null;
-        info.Children.Add(new TextBlock
+        var main = new StackPanel { Spacing = 0, Margin = new Thickness(SettingsMetrics.PluginRowGap, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var nameRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        nameRow.Children.Add(new TextBlock
         {
-            Text = string.IsNullOrEmpty(capabilityText)
-                ? plugin.Publisher
-                : $"{plugin.Publisher} · {capabilityText}",
-            FontSize = SettingsMetrics.CaptionSize,
-            Foreground = brushes.Tertiary,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 620,
+            Text = ResolvePluginName(ctx, plugin.Name),
+            FontSize = SettingsMetrics.PluginNameSize,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = palette.ForegroundBrush,
+            VerticalAlignment = VerticalAlignment.Center,
         });
+        nameRow.Children.Add(new TextBlock
+        {
+            Text = "v" + plugin.Version,
+            FontSize = SettingsMetrics.PluginVersionSize,
+            Foreground = palette.TertiaryBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        nameRow.Children.Add(Badge(
+            ctx.Localizer.Get(plugin.Builtin ? LocKeys.Settings.Plugins.Builtin : LocKeys.Settings.Plugins.Community),
+            palette));
+        main.Children.Add(nameRow);
+        main.Children.Add(new TextBlock
+        {
+            Text = plugin.Publisher,
+            FontSize = SettingsMetrics.PluginMetaSize,
+            Foreground = palette.TertiaryBrush,
+            Margin = new Thickness(0, 1, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        if (plugin.CapabilityKeys.Count > 0)
+        {
+            var perms = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = SettingsMetrics.PermGap,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            foreach (var key in plugin.CapabilityKeys)
+            {
+                perms.Children.Add(Perm(ctx.Localizer.Get(key), palette));
+            }
+
+            main.Children.Add(perms);
+        }
 
         if (!plugin.Available)
         {
-            info.Children.Add(new TextBlock
+            main.Children.Add(new TextBlock
             {
                 Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.StateUnavailable),
-                FontSize = 9.5,
+                FontSize = SettingsMetrics.RowDescSize,
                 Foreground = new SolidColorBrush(Accents.Warning),
+                Margin = new Thickness(0, 4, 0, 0),
             });
         }
         else if (!enabled)
         {
-            info.Children.Add(new TextBlock
+            main.Children.Add(new TextBlock
             {
                 Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.StateDisabled),
-                FontSize = 9.5,
-                Foreground = brushes.Tertiary,
+                FontSize = SettingsMetrics.RowDescSize,
+                Foreground = palette.TertiaryBrush,
+                Margin = new Thickness(0, 4, 0, 0),
             });
         }
 
         if (!string.IsNullOrEmpty(plugin.Error))
         {
-            info.Children.Add(new TextBlock
+            main.Children.Add(new TextBlock
             {
                 Text = ResolvePluginError(ctx, plugin.Error),
-                FontSize = 9.5,
+                FontSize = SettingsMetrics.RowDescSize,
                 Foreground = new SolidColorBrush(Accents.Warning),
                 TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 4, 0, 0),
             });
         }
 
         if (plugin.RestartRequired)
         {
-            info.Children.Add(new TextBlock
+            main.Children.Add(new TextBlock
             {
                 Text = ctx.Localizer.Get(LocKeys.Settings.Plugins.RestartRequired),
-                FontSize = 9.5,
+                FontSize = SettingsMetrics.RowDescSize,
                 Foreground = new SolidColorBrush(Accents.Warning),
                 TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 4, 0, 0),
             });
         }
 
-        Grid.SetColumn(info, 0);
-        grid.Children.Add(info);
+        Grid.SetColumn(main, 1);
+        row.Children.Add(main);
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        if (ctx.Plugins is FluidBar.App.Views.Plugins.IPluginContributionUiService contributionService
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 3,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(SettingsMetrics.PluginRowGap, 0, 0, 0),
+        };
+        if (ctx.Plugins is IPluginContributionUiService contributionService
             && (contributionService.SettingsPages(plugin.Id).Count > 0 || contributionService.Commands(plugin.Id).Count > 0))
         {
-            var settingsButton = new Button
-            {
-                Content = ctx.Localizer.Get(LocKeys.Settings.Plugins.SettingsButton),
-                Tag = plugin.Id,
-                Padding = new Thickness(12, 5, 12, 5),
-                CornerRadius = new CornerRadius(8),
-            };
-            settingsButton.Click += (_, _) => showDetail(plugin.Id);
-            actions.Children.Add(settingsButton);
+            actions.Children.Add(SettingsWidgets.IconButton(SettingsIconKind.Settings, () => showDetail(plugin.Id), palette));
         }
 
         var toggle = new SettingsSwitch
         {
             IsOn = enabled,
             IsEnabled = plugin.Available,
-            Accent = brushes.Accent,
-            OffTrack = brushes.RaisedHover,
-            OffHairline = brushes.LineStrong,
-            OffKnob = brushes.Secondary,
+            Compact = true,
+            Accent = new SolidColorBrush(AccentOf(ctx)),
+            OffTrack = palette.RaisedHoverBrush,
+            OffHairline = palette.LineStrongBrush,
+            OffKnob = palette.SecondaryBrush,
+            Margin = new Thickness(2, 0, 0, 0),
         };
         toggle.Toggled += value => _ = ctx.Plugins.SetEnabledAsync(plugin.Id, value, CancellationToken.None);
         actions.Children.Add(toggle);
-        Grid.SetColumn(actions, 1);
-        grid.Children.Add(actions);
-        border.Child = grid;
-        return border;
+        Grid.SetColumn(actions, 2);
+        row.Children.Add(actions);
+
+        return new Border
+        {
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(SettingsMetrics.PluginRowRadius),
+            Padding = new Thickness(SettingsMetrics.PluginRowPadX, SettingsMetrics.PluginRowPadY,
+                SettingsMetrics.PluginRowPadX, SettingsMetrics.PluginRowPadY),
+            Child = row,
+        };
     }
+
+    private static Control Badge(string text, SettingsPalette palette)
+        => new Border
+        {
+            Height = SettingsMetrics.BadgeHeight,
+            Padding = new Thickness(SettingsMetrics.BadgePadX, 0, SettingsMetrics.BadgePadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.BadgeRadius),
+            Background = palette.RaisedHoverBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = text.ToUpperInvariant(),
+                FontSize = SettingsMetrics.BadgeSize,
+                FontWeight = FontWeight.SemiBold,
+                LetterSpacing = SettingsMetrics.BadgeSize * SettingsMetrics.BadgeTracking,
+                Foreground = palette.SecondaryBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+
+    private static Control Perm(string text, SettingsPalette palette)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 3,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(new SettingsIcon
+        {
+            Kind = SettingsIconKind.Shield,
+            Brush = palette.TertiaryBrush,
+            Width = 7,
+            Height = 7,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = SettingsMetrics.PermSize,
+            Foreground = palette.TertiaryBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return new Border
+        {
+            Height = SettingsMetrics.PermHeight,
+            Padding = new Thickness(SettingsMetrics.PermPadX, 0, SettingsMetrics.PermPadX, 0),
+            CornerRadius = new CornerRadius(SettingsMetrics.PermRadius),
+            Background = palette.RaisedBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            Child = row,
+        };
+    }
+
+    private static SettingsIconKind PluginIcon(string id) => id switch
+    {
+        var value when value.Contains("media", StringComparison.OrdinalIgnoreCase) => SettingsIconKind.Star,
+        var value when value.Contains("clipboard", StringComparison.OrdinalIgnoreCase) => SettingsIconKind.File,
+        var value when value.Contains("notifications", StringComparison.OrdinalIgnoreCase) => SettingsIconKind.Alert,
+        var value when value.Contains("agent", StringComparison.OrdinalIgnoreCase) => SettingsIconKind.Sliders,
+        var value when value.Contains("code", StringComparison.OrdinalIgnoreCase) => SettingsIconKind.Palette,
+        _ => SettingsIconKind.Puzzle,
+    };
+
+    private static Color PluginColor(string id) => id switch
+    {
+        var value when value.Contains("media", StringComparison.OrdinalIgnoreCase) => Color.Parse("#3E6E86"),
+        var value when value.Contains("clipboard", StringComparison.OrdinalIgnoreCase) => Color.Parse("#8A6A3A"),
+        var value when value.Contains("notifications", StringComparison.OrdinalIgnoreCase) => Color.Parse("#4A5686"),
+        var value when value.Contains("agent", StringComparison.OrdinalIgnoreCase) => Color.Parse("#3F6E52"),
+        var value when value.Contains("code", StringComparison.OrdinalIgnoreCase) => Color.Parse("#4A5686"),
+        _ => Color.Parse("#4C5566"),
+    };
+
+    // ---- marketplace ------------------------------------------------------------------------
 
     private static Control BuildMarketplace(SettingsWindowContext ctx)
     {
-        var view = new MarketplaceSectionView(ctx.Marketplace, ctx.Localizer, ctx.Surfaces, ctx.Owner, ctx.Settings.Current.Plugins.Channel);
+        var view = new MarketplaceSectionView(
+            ctx.Marketplace,
+            ctx.Localizer,
+            ctx.Palette,
+            ctx.Owner,
+            ctx.Settings.Current.Plugins.Channel);
         view.Refresh();
-        return Section(ctx.Localizer.Get(LocKeys.Settings.Marketplace.Title), null, view);
+        return Section(ctx.Localizer.Get(LocKeys.Settings.Marketplace.Title),
+            ctx.Localizer.Get(LocKeys.Settings.Marketplace.Description), view);
     }
+
+    // ---- advanced ---------------------------------------------------------------------------
 
     private static Control BuildAdvanced(SettingsWindowContext ctx)
     {
         var settings = ctx.Settings.Current;
+        var palette = ctx.Palette;
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar");
         var localData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FluidBar");
-        var status = new TextBlock { FontSize = Typography.SettingsCaptionSize, Opacity = 0.7, TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock
+        {
+            FontSize = SettingsMetrics.FooterNoteSize,
+            Foreground = palette.TertiaryBrush,
+            TextWrapping = TextWrapping.Wrap,
+        };
         void SetStatus(string text)
         {
             status.Text = text;
             ctx.ShowStatus(text);
         }
 
-        var brushes = Palette(ctx);
-        var scope = new SegmentedControl
+        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.Title),
+            ctx.Localizer.Get(LocKeys.Settings.Advanced.Description));
+        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.Advanced.DataFolder), palette));
+        panel.Children.Add(SettingsWidgets.PathField(appData, palette));
+
+        var actions = new StackPanel
         {
-            ControlWidth = 240,
-            Fill = brushes.Raised,
-            Hairline = brushes.Line,
-            ActiveFill = brushes.Active,
-            ActiveForeground = brushes.ActiveForeground,
-            InactiveForeground = brushes.Secondary,
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.AdvActionsGap,
+            Margin = new Thickness(0, SettingsMetrics.AdvActionsMarginTop, 0, 0),
         };
-        scope.SetItems(
-        [
-            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetAppearance), "appearance"),
-            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetPluginsAndCaches), "plugins"),
-            (ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetEverything), "all"),
-        ], "appearance");
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder),
+            SettingsIconKind.Folder, false, () => ctx.OpenPath(appData), palette));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs),
+            SettingsIconKind.File, false, () => ctx.OpenPath(Path.Combine(localData, "logs")), palette));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export),
+            SettingsIconKind.Download, false, () => _ = ExportAsync(), palette));
+        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import),
+            SettingsIconKind.Refresh, false, () => _ = ImportAsync(), palette));
+        panel.Children.Add(actions);
+
         var confirm = new TextBox
         {
             Watermark = ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmPlaceholder),
@@ -865,164 +1007,147 @@ public static class SettingsSectionBuilder
             FontFamily = Fonts.Mono,
             FontSize = 11,
         };
-        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.Title), null);
-        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.Advanced.DataFolder), brushes.Tertiary));
-        panel.Children.Add(SettingsWidgets.PathField(appData, brushes.Raised, brushes.Line, brushes.Secondary, brushes.Tertiary));
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Margin = new Thickness(0, 10, 0, 0) };
-        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder),
-            IconKind.Folder, false, () => ctx.OpenPath(appData), brushes.Raised, brushes.RaisedHover, brushes.Line,
-            brushes.Secondary, brushes.Foreground));
-        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs),
-            IconKind.Document, false, () => ctx.OpenPath(Path.Combine(localData, "logs")), brushes.Raised,
-            brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
-        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export),
-            IconKind.Download, false, () => _ = ExportAsync(), brushes.Raised, brushes.RaisedHover, brushes.Line,
-            brushes.Secondary, brushes.Foreground));
-        actions.Children.Add(SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import),
-            IconKind.Rollback, false, () => _ = ImportAsync(), brushes.Raised, brushes.RaisedHover, brushes.Line,
-            brushes.Secondary, brushes.Foreground));
-        panel.Children.Add(actions);
-
-        panel.Children.Add(SettingsWidgets.Group(brushes.Line, topBorder: true,
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats), null, settings.Advanced.FrameStats,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { FrameStats = value } })),
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.CrashGuard), null, settings.Advanced.CrashGuard,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
-                ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
-                value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } })),
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystem),
-                ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystemHint),
-                settings.Theme == AppTheme.System,
-                value => ctx.Settings.Update(s => s with
-                {
-                    Theme = value ? AppTheme.System : (s.Theme == AppTheme.System ? AppTheme.Dark : s.Theme),
-                })),
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystem),
-                ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystemHint),
-                string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase),
-                value => ctx.Settings.Update(s => s with
-                {
-                    Language = value
-                        ? "system"
-                        : (ctx.Localizer.CurrentCulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en-US"),
-                })),
-            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateMode),
-                ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateModeHint),
-                [
-                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Notify), "notify"),
-                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Auto), "auto"),
-                    (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Off), "off"),
-                ],
-                settings.AutoUpdate,
-                value => ctx.Settings.Update(s => s with { AutoUpdate = value }), small: true),
-            SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
-                ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint),
-                new SettingsSwitch
-                {
-                    IsOn = false,
-                    IsEnabled = false,
-                    Accent = brushes.Accent,
-                    OffTrack = brushes.RaisedHover,
-                    OffHairline = brushes.LineStrong,
-                    OffKnob = brushes.Secondary,
-                },
-                brushes.Foreground, brushes.Tertiary, brushes.Line),
-            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel), null,
-                [
-                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
-                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
-                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
-                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
-                ],
-                settings.Palette,
-                value => ctx.Settings.Update(s => s with { Palette = value })),
-            ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork), null,
-                settings.AccentMode == "artwork",
-                value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
-            SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
-                0.8, 1.6, 0.05, settings.FontScale,
-                value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })),
-            SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.Title), null,
-                [
-                    (ctx.Localizer.Get(LocKeys.Settings.Appearance.ReducedMotion.System), "system"),
-                    (ctx.Localizer.Get(LocKeys.Common.On), "on"),
-                    (ctx.Localizer.Get(LocKeys.Common.Off), "off"),
-                ],
-                settings.ReducedMotion switch
-                {
-                    ReducedMotionPreference.On => "on",
-                    ReducedMotionPreference.Off => "off",
-                    _ => "system",
-                },
-                value => ctx.Settings.Update(s => s with
-                {
-                    ReducedMotion = value switch
+        panel.Children.Add(new Border
+        {
+            Margin = new Thickness(0, 12, 0, 0),
+            Child = SettingsWidgets.Group(palette, topBorder: true,
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats), null, settings.Advanced.FrameStats,
+                    value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { FrameStats = value } })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.CrashGuard), null, settings.Advanced.CrashGuard,
+                    value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { CrashGuard = value } })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeMode),
+                    ctx.Localizer.Get(LocKeys.Settings.Advanced.SafeModeHint), settings.Advanced.SafeMode,
+                    value => ctx.Settings.Update(s => s with { Advanced = s.Advanced with { SafeMode = value } })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystem),
+                    ctx.Localizer.Get(LocKeys.Settings.Advanced.ThemeFollowSystemHint),
+                    settings.Theme == AppTheme.System,
+                    value => ctx.Settings.Update(s => s with
                     {
-                        "on" => ReducedMotionPreference.On,
-                        "off" => ReducedMotionPreference.Off,
-                        _ => ReducedMotionPreference.System,
+                        Theme = value ? AppTheme.System : (s.Theme == AppTheme.System ? AppTheme.Dark : s.Theme),
+                    })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystem),
+                    ctx.Localizer.Get(LocKeys.Settings.Advanced.LanguageFollowSystemHint),
+                    string.Equals(settings.Language, "system", StringComparison.OrdinalIgnoreCase),
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        Language = value
+                            ? "system"
+                            : (ctx.Localizer.CurrentCulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en-US"),
+                    })),
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateMode),
+                    ctx.Localizer.Get(LocKeys.Settings.Advanced.UpdateModeHint),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Notify), "notify"),
+                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Auto), "auto"),
+                        (ctx.Localizer.Get(LocKeys.Settings.General.AutoUpdate.Off), "off"),
+                    ],
+                    settings.AutoUpdate,
+                    value => ctx.Settings.Update(s => s with { AutoUpdate = value }), small: true),
+                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
+                    ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint),
+                    new SettingsSwitch
+                    {
+                        IsOn = false,
+                        IsEnabled = false,
+                        Accent = new SolidColorBrush(AccentOf(ctx)),
+                        OffTrack = palette.RaisedHoverBrush,
+                        OffHairline = palette.LineStrongBrush,
+                        OffKnob = palette.SecondaryBrush,
                     },
-                })),
-            SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.MotionStrength), null,
-                0.5, 1.5, 0.05, settings.MotionStrength,
-                value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { MotionStrength = value }))));
-
-        var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), IconKind.Warning,
-            true, () =>
+                    palette),
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabelHint),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
+                    ],
+                    settings.Palette,
+                    value => ctx.Settings.Update(s => s with { Palette = value })),
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkHint),
+                    settings.AccentMode == "artwork",
+                    value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
+                    0.8, 1.6, 0.05, settings.FontScale,
+                    value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })))});
+        var resetChip = SettingsWidgets.SmallAction(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset),
+            SettingsIconKind.Trash, true, () => { }, palette);
+        var resetHost = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = SettingsMetrics.AdvActionsGap,
+            Margin = new Thickness(0, SettingsMetrics.AdvActionsMarginTop, 0, 0),
+        };
+        resetHost.Children.Add(confirm);
+        resetHost.Children.Add(resetChip);
+        if (resetChip is Border chip)
+        {
+            chip.PointerPressed += (_, e) =>
             {
                 if (!string.Equals(confirm.Text, "RESET", StringComparison.Ordinal))
                 {
                     return;
                 }
 
-                var defaults = scope.SelectedValue switch
+                var defaults = settings with
                 {
-                    "plugins" => settings with
-                    {
-                        Plugins = AppSettings.Default.Plugins with { Channel = settings.Plugins.Channel },
-                    },
-                    "all" => AppSettings.Default with { Language = settings.Language, Theme = settings.Theme },
-                    _ => settings with
-                    {
-                        Theme = AppSettings.Default.Theme,
-                        Material = AppSettings.Default.Material,
-                        Palette = AppSettings.Default.Palette,
-                        AccentMode = AppSettings.Default.AccentMode,
-                        AccentFallback = AppSettings.Default.AccentFallback,
-                        FillOpacity = AppSettings.Default.FillOpacity,
-                        FontScale = AppSettings.Default.FontScale,
-                        ReducedMotion = AppSettings.Default.ReducedMotion,
-                        MotionStrength = AppSettings.Default.MotionStrength,
-                    },
+                    Theme = AppSettings.Default.Theme,
+                    StartWithWindows = AppSettings.Default.StartWithWindows,
+                    TrayIcon = AppSettings.Default.TrayIcon,
+                    AutoUpdate = AppSettings.Default.AutoUpdate,
+                    HotkeyToggle = AppSettings.Default.HotkeyToggle,
+                    HotkeyHide = AppSettings.Default.HotkeyHide,
+                    HotkeySettings = AppSettings.Default.HotkeySettings,
+                    Material = AppSettings.Default.Material,
+                    Palette = AppSettings.Default.Palette,
+                    AccentMode = AppSettings.Default.AccentMode,
+                    AccentFallback = AppSettings.Default.AccentFallback,
+                    FillOpacity = AppSettings.Default.FillOpacity,
+                    PanelRadius = AppSettings.Default.PanelRadius,
+                    FontScale = AppSettings.Default.FontScale,
+                    ReducedMotion = AppSettings.Default.ReducedMotion,
+                    MotionStrength = AppSettings.Default.MotionStrength,
+                    HoverPeek = AppSettings.Default.HoverPeek,
+                    AutoCollapseMs = AppSettings.Default.AutoCollapseMs,
+                    AutoHideMs = AppSettings.Default.AutoHideMs,
+                    Stacking = AppSettings.Default.Stacking,
+                    Mode = AppSettings.Default.Mode,
+                    Anchor = AppSettings.Default.Anchor,
+                    DisplayOn = AppSettings.Default.DisplayOn,
+                    PeekOnTrackChange = AppSettings.Default.PeekOnTrackChange,
                 };
                 ctx.Settings.Replace(defaults);
                 SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
-            }, brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground);
-        resetChip.Opacity = 0.45;
-        resetChip.IsHitTestVisible = false;
+                e.Handled = true;
+            };
+            chip.IsHitTestVisible = false;
+        }
+
         confirm.TextChanged += (_, _) =>
         {
             var armed = string.Equals(confirm.Text, "RESET", StringComparison.Ordinal);
             resetChip.Opacity = armed ? 1 : 0.45;
             resetChip.IsHitTestVisible = armed;
         };
-
-        var resetRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        resetRow.Children.Add(confirm);
-        resetRow.Children.Add(resetChip);
-        panel.Children.Add(SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset),
-            ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetConfirmBody), scope, brushes.Foreground, brushes.Tertiary, brushes.Line));
+        resetChip.Opacity = 0.45;
+        resetChip.Margin = new Thickness(0, 0, 0, 0);
         panel.Children.Add(new Border
         {
-            BorderBrush = brushes.Line,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(0, 0, 0, 12),
-            Child = resetRow,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(0, 1, 0, 1),
+            Padding = new Thickness(0, SettingsMetrics.AdvActionsMarginTop, 0, SettingsMetrics.AdvActionsMarginTop),
+            Margin = new Thickness(0, 12, 0, 0),
+            Child = resetHost,
         });
-        panel.Children.Add(status);
-        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+        panel.Children.Add(new Border
+        {
+            Margin = new Thickness(0, 8, 0, 0),
+            Child = status,
+        });
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
 
         async Task ExportAsync()
@@ -1088,50 +1213,55 @@ public static class SettingsSectionBuilder
         }
     }
 
+    // ---- about ------------------------------------------------------------------------------
+
     private static Control BuildAbout(SettingsWindowContext ctx)
     {
         var assembly = typeof(AppSettings).Assembly;
         var version = assembly.GetName().Version?.ToString(3) ?? "2.0.0";
         var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? version;
-        var brushes = Palette(ctx);
+        var palette = ctx.Palette;
         var settings = ctx.Settings.Current;
         var accent = Accents.ParseOrDefault(settings.AccentFallback, Accents.Fallback);
         var updates = new TextBlock
         {
-            FontSize = 9.5,
+            FontSize = SettingsMetrics.LicenseSize,
             Foreground = new SolidColorBrush(Accents.Success),
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 8, 0, 0),
         };
 
-        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.About.Title), null);
-        var pane = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
-        pane.Children.Add(SettingsWidgets.AboutMark(accent, Colors.White));
+        var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.About.Title),
+            ctx.Localizer.Get(LocKeys.Settings.About.Description));
+        // .about-pane: a centred column, but .contributors spans the full pane width so its
+        // uppercase title stays left-aligned while the chips are centred.
+        var pane = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        var mark = SettingsWidgets.AboutMark(accent, palette);
+        mark.HorizontalAlignment = HorizontalAlignment.Center;
+        pane.Children.Add(mark);
         pane.Children.Add(new TextBlock
         {
             Text = "FluidBar",
             FontFamily = Fonts.Display,
-            FontSize = 23,
+            FontSize = SettingsMetrics.AboutNameSize,
             FontWeight = FontWeight.SemiBold,
-            Foreground = brushes.Foreground,
+            LetterSpacing = -0.46,
+            Foreground = palette.ForegroundBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 14, 0, 0),
         });
         pane.Children.Add(new TextBlock
         {
             Text = ctx.Localizer.Format(LocKeys.Settings.About.Version, ("version", version)),
-            FontSize = 10,
-            Foreground = brushes.Tertiary,
+            FontSize = SettingsMetrics.AboutVersionSize,
+            LetterSpacing = 0.3,
+            Foreground = palette.TertiaryBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 3, 0, 0),
-        });
-        pane.Children.Add(new TextBlock
-        {
-            Text = ctx.Localizer.Format(LocKeys.Settings.About.Build, ("build", informational)),
-            FontSize = 9,
-            Foreground = brushes.Tertiary,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 2, 0, 0),
         });
 
         var actions = new StackPanel
@@ -1142,45 +1272,104 @@ public static class SettingsSectionBuilder
             Margin = new Thickness(0, 16, 0, 0),
         };
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates),
-            IconKind.Download, () => updates.Text = ctx.Localizer.Get(LocKeys.Settings.About.UpToDate),
-            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+            SettingsIconKind.Refresh, () => updates.Text = ctx.Localizer.Get(LocKeys.Settings.About.UpToDate), palette));
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.Website),
-            IconKind.ExternalLink, () => ctx.OpenPath("https://fluidbar.app"),
-            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+            SettingsIconKind.External, () => ctx.OpenPath("https://fluidbar.app"), palette));
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode),
-            IconKind.ExternalLink, () => ctx.OpenPath("https://github.com/Doulor/FluidBar"),
-            brushes.Raised, brushes.RaisedHover, brushes.Line, brushes.Secondary, brushes.Foreground));
+            SettingsIconKind.Github, () => ctx.OpenPath("https://github.com/Doulor/FluidBar"), palette));
+        actions.HorizontalAlignment = HorizontalAlignment.Center;
         pane.Children.Add(actions);
         pane.Children.Add(updates);
 
         pane.Children.Add(new TextBlock
         {
-            Text = "MIT · 2026",
-            FontSize = 9.5,
-            Foreground = brushes.Tertiary,
+            Text = ctx.Localizer.Get(LocKeys.Settings.About.License),
+            FontSize = SettingsMetrics.LicenseSize,
+            Foreground = palette.TertiaryBrush,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 18, 0, 0),
         });
 
-        var contributors = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        contributors.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.About.Contributors), brushes.Tertiary));
-        var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };
-        chips.Children.Add(SettingsWidgets.ContributorChip("Doulor", accent, brushes.Raised, brushes.Line, brushes.Secondary));
+        var contributors = new StackPanel
+        {
+            Margin = new Thickness(0, 16, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        contributors.Children.Add(new Border
+        {
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(0, 14, 0, 0),
+            Child = new TextBlock
+            {
+                Text = ctx.Localizer.Get(LocKeys.Settings.About.Contributors).ToUpperInvariant(),
+                FontSize = SettingsMetrics.CaptionSize,
+                LetterSpacing = SettingsMetrics.CaptionSize * SettingsMetrics.CaptionTracking,
+                Foreground = palette.TertiaryBrush,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                TextAlignment = TextAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 8),
+            },
+        });
+        var chips = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        chips.Children.Add(SettingsWidgets.ContributorChip("Doulor", accent, palette));
         contributors.Children.Add(chips);
         pane.Children.Add(contributors);
 
+        var links = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 14,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 18, 0, 0),
+        };
+        links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.Docs), SettingsIconKind.File,
+            () => ctx.OpenPath("https://fluidbar.app/docs"), palette));
+        links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode), SettingsIconKind.Github,
+            () => ctx.OpenPath("https://github.com/Doulor/FluidBar"), palette));
+        links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.Feedback), SettingsIconKind.Chat,
+            () => ctx.OpenPath("https://github.com/Doulor/FluidBar/issues"), palette));
+        pane.Children.Add(links);
+
         panel.Children.Add(pane);
-        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), brushes.Tertiary, brushes.Line));
+        panel.Children.Add(SettingsWidgets.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
     }
 
-    /// <summary>Draws the app mark glyph (vector, no emoji/bitmap).</summary>
-    private sealed class MarkGlyph : Control
+    private static Control AboutLink(string label, SettingsIconKind icon, Action clicked, SettingsPalette palette)
     {
-        public override void Render(DrawingContext context)
+        var row = new StackPanel
         {
-            var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height).Deflate(8);
-            Icons.Draw(context, IconKind.Agent, bounds, new SolidColorBrush(Color.Parse("#4CC9F0")));
-        }
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+        row.Children.Add(new SettingsIcon
+        {
+            Kind = icon,
+            Brush = palette.SecondaryBrush,
+            Width = 10,
+            Height = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = SettingsMetrics.LicenseSize,
+            Foreground = palette.SecondaryBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        row.PointerPressed += (_, e) =>
+        {
+            clicked();
+            e.Handled = true;
+        };
+        return row;
     }
 }
