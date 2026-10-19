@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Interop;
@@ -23,6 +24,12 @@ public sealed record BrightnessSnapshot(int Percent, BrightnessSource Source, bo
 /// <summary>Pure DDC/CI brightness math.</summary>
 public static class BrightnessMath
 {
+    /// <summary>
+    /// Lowest brightness the island will write (5 %). Writing 0 % can blank the panel and break the
+    /// WMI write path on some laptops, leaving the user with an invisible, unrecoverable island.
+    /// </summary>
+    public const int MinimumPercent = 5;
+
     /// <summary>Converts <c>GetMonitorBrightness</c> min/current/max to a percentage.</summary>
     public static int? FromDdc(uint minimum, uint current, uint maximum)
     {
@@ -296,6 +303,8 @@ internal sealed class WmiBrightnessProvider : IBrightnessProvider, IDisposable
                 return null;
             }
 
+            // (see the write path: a transient WMI failure must not disable brightness forever)
+
             dynamic results = ((dynamic)_service!).ExecQuery(BrightnessQuery);
             try
             {
@@ -340,11 +349,25 @@ internal sealed class WmiBrightnessProvider : IBrightnessProvider, IDisposable
         }
         catch (Exception ex)
         {
-            MarkUnavailable(ex);
+            // A failed query leaves the cached SWbemServices in a bad state; drop it so the next poll
+            // reconnects instead of disabling brightness for the rest of the session.
+            _logger.LogWarning(PlatformLogCategory.Monitor, "brightness.wmi-read-failed",
+                "WMI brightness query failed; reconnecting on the next poll.", ex);
+            ReleaseService();
             return null;
         }
     }
 
+    /// <summary>
+    /// Writes the brightness on a fresh short-lived MTA thread.
+    /// </summary>
+    /// <remarks>
+    /// On this machine's WMI provider a write only succeeds from a COM apartment that has not written
+    /// before: the second write on the poll thread (or on any reused apartment) fails with
+    /// "unspecified error" and the provider stays stuck for the rest of the process. A brand-new thread
+    /// with its own MTA apartment writes reliably every time, so each write gets its own thread and
+    /// releases its COM objects before it exits.
+    /// </remarks>
     public bool TrySetPercent(int percent)
     {
         if (_unavailable)
@@ -352,41 +375,82 @@ internal sealed class WmiBrightnessProvider : IBrightnessProvider, IDisposable
             return false;
         }
 
+        var applied = false;
+        var thread = new Thread(() => applied = WriteOnFreshApartment(percent))
+        {
+            Name = "FluidBar.BrightnessWrite",
+            IsBackground = true,
+        };
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        if (!thread.Join(TimeSpan.FromSeconds(3)))
+        {
+            _logger.LogWarning(PlatformLogCategory.Monitor, "brightness.wmi-write-timeout",
+                "The WMI brightness write thread did not finish in time.");
+            return false;
+        }
+
+        return applied;
+    }
+
+    private bool WriteOnFreshApartment(int percent)
+    {
+        object? locator = null;
+        object? service = null;
+        object? results = null;
         try
         {
-            if (!EnsureService())
+            var locatorType = Type.GetTypeFromProgID("WbemScripting.SWbemLocator");
+            if (locatorType is null)
+            {
+                _logger.LogWarning(PlatformLogCategory.Monitor, "brightness.wmi-unavailable",
+                    "WbemScripting.SWbemLocator is not registered; WMI brightness fallback disabled.");
+                _unavailable = true;
+                return false;
+            }
+
+            locator = Activator.CreateInstance(locatorType);
+            if (locator is null)
             {
                 return false;
             }
 
-            dynamic results = ((dynamic)_service!).ExecQuery(BrightnessMethodQuery);
-            try
+            service = locatorType.InvokeMember("ConnectServer", BindingFlags.InvokeMethod, null, locator,
+                [".", "root\\WMI"]);
+            results = service?.GetType().InvokeMember("ExecQuery", BindingFlags.InvokeMethod, null, service,
+                [BrightnessMethodQuery]);
+            if (results is not System.Collections.IEnumerable enumerable)
             {
-                foreach (dynamic instance in results)
+                return false;
+            }
+
+            foreach (var instance in enumerable)
+            {
+                if (instance is null)
                 {
-                    try
-                    {
-                        // WmiSetBrightness(Timeout, Brightness) with timeout 0 = immediate.
-                        instance.WmiSetBrightness(0, percent);
-                        return true;
-                    }
-                    finally
-                    {
-                        ReleaseCom(instance);
-                    }
+                    continue;
                 }
 
-                return false;
+                // WmiSetBrightness(Timeout, Brightness) with timeout 0 = immediate.
+                instance.GetType().InvokeMember("WmiSetBrightness", BindingFlags.InvokeMethod, null, instance,
+                    [0, percent]);
+                return true;
             }
-            finally
-            {
-                ReleaseCom(results);
-            }
+
+            return false;
         }
         catch (Exception ex)
         {
-            MarkUnavailable(ex);
+            _logger.LogWarning(PlatformLogCategory.Monitor, "brightness.wmi-write-failed",
+                "WMI brightness write failed on a fresh apartment.", ex);
             return false;
+        }
+        finally
+        {
+            // COM objects are apartment-bound: release them on the thread that created them.
+            ReleaseCom(results);
+            ReleaseCom(service);
+            ReleaseCom(locator);
         }
     }
 
@@ -555,7 +619,9 @@ public sealed class BrightnessMonitor : PlatformMonitor<BrightnessSnapshot>
     /// <summary>Sets brightness (preferred provider first). Runs on the poll thread; never on the UI thread.</summary>
     public async Task<bool> SetPercentAsync(int percent, CancellationToken cancellationToken = default)
     {
-        var clamped = Math.Clamp(percent, 0, 100);
+        // Never write 0 %: on this hardware a 0 % write breaks the WMI write path until the service
+        // reconnects and leaves the panel black, so the island would be invisible and unrecoverable.
+        var clamped = Math.Clamp(percent, BrightnessMath.MinimumPercent, 100);
         var poller = _poller;
         if (poller is null)
         {
@@ -576,6 +642,8 @@ public sealed class BrightnessMonitor : PlatformMonitor<BrightnessSnapshot>
 
             if (applied)
             {
+                // Publish the applied level immediately; if the provider is still catching up the next
+                // 2 s poll corrects it (no blocking wait on the poll thread).
                 var (value, source) = QueryCore();
                 if (value is not null)
                 {

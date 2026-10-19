@@ -506,6 +506,9 @@ public sealed record MediaSummaryModel
     /// <summary>Whether the session is playing.</summary>
     public bool IsPlaying { get; init; } = true;
 
+    /// <summary>Whether a real timeline is known (false hides the progress bar).</summary>
+    public bool HasTimeline { get; init; } = true;
+
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }
 
@@ -554,6 +557,9 @@ public sealed record MediaPageModel
 
     /// <summary>Whether the session is playing.</summary>
     public bool IsPlaying { get; init; } = true;
+
+    /// <summary>Whether a real timeline is known (false hides the seek row).</summary>
+    public bool HasTimeline { get; init; } = true;
 
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }

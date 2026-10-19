@@ -30,6 +30,12 @@ public sealed record MediaSessionData
     /// <summary>Total duration display text.</summary>
     public string DurationText { get; init; } = "0:00";
 
+    /// <summary>
+    /// Whether a real timeline (position + duration) is known. False for window-title fallback sources
+    /// (players without SMTC), where the island must hide the progress bar instead of faking it.
+    /// </summary>
+    public bool HasTimeline { get; init; } = true;
+
     /// <summary>Whether playback is active.</summary>
     public bool IsPlaying { get; init; }
 

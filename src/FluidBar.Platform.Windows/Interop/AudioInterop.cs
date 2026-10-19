@@ -185,6 +185,144 @@ internal static class AudioInterop
         int QueryHardwareSupport(out uint hardwareSupportMask);
     }
 
+    internal static readonly Guid IIdAudioSessionManager2 = new("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+
+    /// <summary>Per-session audio state reported by <c>IAudioSessionControl::GetState</c>.</summary>
+    internal const int AudioSessionStateInactive = 0;
+
+    /// <summary>Per-session audio state reported by <c>IAudioSessionControl::GetState</c>.</summary>
+    internal const int AudioSessionStateActive = 1;
+
+    /// <summary>Per-session audio state reported by <c>IAudioSessionControl::GetState</c>.</summary>
+    internal const int AudioSessionStateExpired = 2;
+
+    /// <summary>
+    /// <c>IAudioSessionManager2</c> on the default render endpoint: enumerates the per-process audio
+    /// sessions so the media fallback can tell which player is actually producing sound.
+    /// </summary>
+    [ComImport]
+    [Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IAudioSessionManager2
+    {
+        // IAudioSessionManager (kept for vtable order; never called by the fallback).
+        [PreserveSig]
+        int GetAudioSessionControl(IntPtr audioSessionGuid, uint streamFlags, out IntPtr sessionControl);
+
+        [PreserveSig]
+        int GetSimpleAudioVolume(IntPtr audioSessionGuid, uint streamFlags, out IntPtr audioVolume);
+
+        // IAudioSessionManager2
+        [PreserveSig]
+        int GetSessionEnumerator(out IAudioSessionEnumerator sessionEnumerator);
+
+        [PreserveSig]
+        int RegisterSessionNotification(IntPtr notification);
+
+        [PreserveSig]
+        int UnregisterSessionNotification(IntPtr notification);
+
+        [PreserveSig]
+        int RegisterDuckNotification([MarshalAs(UnmanagedType.LPWStr)] string sessionId, IntPtr duckNotification);
+
+        [PreserveSig]
+        int UnregisterDuckNotification(IntPtr duckNotification);
+    }
+
+    [ComImport]
+    [Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IAudioSessionEnumerator
+    {
+        [PreserveSig]
+        int GetCount(out int sessionCount);
+
+        [PreserveSig]
+        int GetSession(int sessionIndex, [MarshalAs(UnmanagedType.Interface)] out IAudioSessionControl session);
+    }
+
+    [ComImport]
+    [Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IAudioSessionControl
+    {
+        [PreserveSig]
+        int GetState(out int state);
+
+        [PreserveSig]
+        int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string displayName);
+
+        [PreserveSig]
+        int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string displayName, IntPtr eventContext);
+
+        [PreserveSig]
+        int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string iconPath);
+
+        [PreserveSig]
+        int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string iconPath, IntPtr eventContext);
+
+        [PreserveSig]
+        int GetGroupingParam(out Guid groupingParam);
+
+        [PreserveSig]
+        int SetGroupingParam(ref Guid groupingParam, IntPtr eventContext);
+
+        [PreserveSig]
+        int RegisterAudioSessionNotification(IntPtr newNotifications);
+
+        [PreserveSig]
+        int UnregisterAudioSessionNotification(IntPtr newNotifications);
+    }
+
+    /// <summary>Session identity (process id) for the fallback media source.</summary>
+    [ComImport]
+    [Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IAudioSessionControl2
+    {
+        [PreserveSig]
+        int GetState(out int state);
+
+        [PreserveSig]
+        int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string displayName);
+
+        [PreserveSig]
+        int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string displayName, IntPtr eventContext);
+
+        [PreserveSig]
+        int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string iconPath);
+
+        [PreserveSig]
+        int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string iconPath, IntPtr eventContext);
+
+        [PreserveSig]
+        int GetGroupingParam(out Guid groupingParam);
+
+        [PreserveSig]
+        int SetGroupingParam(ref Guid groupingParam, IntPtr eventContext);
+
+        [PreserveSig]
+        int RegisterAudioSessionNotification(IntPtr newNotifications);
+
+        [PreserveSig]
+        int UnregisterAudioSessionNotification(IntPtr newNotifications);
+
+        [PreserveSig]
+        int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string sessionIdentifier);
+
+        [PreserveSig]
+        int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string sessionInstanceIdentifier);
+
+        [PreserveSig]
+        int GetProcessId(out uint processId);
+
+        [PreserveSig]
+        int IsSystemSoundsSession();
+
+        [PreserveSig]
+        int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
+    }
+
     /// <summary>Parses <c>AUDIO_VOLUME_NOTIFICATION_DATA</c> without copying the channel array.</summary>
     internal static AudioVolumeNotification ParseNotification(IntPtr notificationData)
     {

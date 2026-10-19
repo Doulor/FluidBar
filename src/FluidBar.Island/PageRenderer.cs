@@ -165,7 +165,10 @@ internal sealed partial class PageRenderer : IDisposable
         IconSet.Draw(canvas, media.IsPlaying ? IconKind.Pause : IconKind.Play, play.Deflate(7),
             Alpha(_theme.Foreground, _opacity), _icon);
 
-        DrawTrack(canvas, PageLayout.HomeMediaProgress(page), media.ProgressPercent / 100.0, accent, _theme.HudTrack);
+        if (media.HasTimeline)
+        {
+            DrawTrack(canvas, PageLayout.HomeMediaProgress(page), media.ProgressPercent / 100.0, accent, _theme.HudTrack);
+        }
     }
 
     private void DrawSliders(SKCanvas canvas, HomePageModel home, SKRect page)
@@ -256,18 +259,22 @@ internal sealed partial class PageRenderer : IDisposable
             new SKRect(lyricCard.Left + 42, lyricCard.Top + 24, lyricCard.Right - 10, lyricCard.Top + 36),
             _theme.ForegroundSecondary, TextAlign.Left, _opacity);
 
-        var seek = PageLayout.MediaSeekTrack(page);
-        var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
-        DrawTrack(canvas, seek, progress, _theme.Foreground, _theme.LineStrong);
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.Foreground, _opacity);
-        canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
+        // Window-title fallback sources have no timeline: hide the seek row instead of drawing 0:00.
+        if (media.HasTimeline)
+        {
+            var seek = PageLayout.MediaSeekTrack(page);
+            var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
+            DrawTrack(canvas, seek, progress, _theme.Foreground, _theme.LineStrong);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, _opacity);
+            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
 
-        var row = PageLayout.MediaSeekRow(page);
-        _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
-            new SKRect(row.Left, row.Top + 3, row.Left + 30, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.DurationText, IslandType.SeekTime,
-            new SKRect(row.Right - 30, row.Top + 3, row.Right, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+            var row = PageLayout.MediaSeekRow(page);
+            _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
+                new SKRect(row.Left, row.Top + 3, row.Left + 30, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+            _text.Draw(canvas, media.DurationText, IslandType.SeekTime,
+                new SKRect(row.Right - 30, row.Top + 3, row.Right, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+        }
 
         DrawTransport(canvas, media, page);
 

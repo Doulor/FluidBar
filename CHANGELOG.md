@@ -154,3 +154,12 @@
 - 胶片条自动隐藏 1000 → **1200 ms**（设计区间上限），切换动画可读性更好。
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
+
+### 2026-10-19 20:55 — 酷狗等非 SMTC 播放器识别 + 亮度写入彻底修复
+- **媒体识别（酷狗）**：酷狗不注册 Windows SMTC，GSMTC 永远返回 0 个会话。新增 WASAPI 音频会话探测（`IAudioSessionManager2` → 进程 PID + Active 状态 + 峰值）+ 播放器窗口标题解析（`MediaWindowFallback`）作为回退源：仅当 GSMTC 没有活动会话时，每 1s 检查一次；识别到就发布 `MediaSnapshot`（标题/艺术家/播放中），无封面与时间轴时如实留空。
+- **紧凑药丸**：媒体播放时药丸显示 标题 / 艺术家 / 波形 / 播放暂停图标（酷狗实测 “Cameras / Justice Skolnik、Jeremy Zucker”）。
+- **无时间轴不伪造进度**：新增 `HasTimeline`，回退源隐藏进度条与 0:00 时间行；同时修复 `ResolveMedia` 丢失 `HasTimeline`/`Artwork` 的问题（此前媒体页会画出假进度）。
+- **亮度写入彻底修复**：本机 WMI provider 在同一个 COM apartment 上第二次写入必然失败（“未指定的错误”），且失败后同进程长时间不可用。改为**每次写入都在全新的 MTA 线程/COM apartment 上执行**（写后立即释放 COM 对象），实测连续 35→50→81→5 四次写入全部成功。
+- **0% 保护**：滑块最低夹到 **5%**（`BrightnessMath.MinimumPercent`），避免把屏幕调到全黑后无法恢复；读失败自动重连，不再永久禁用亮度。
+- 测试：**1490 passed / 0 failed**（Platform 415，新增 6 个回退解析/亮度下限测试）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `E1BEE457255CAF01C66423955D8B26144158EE21B3E42B3305E5F056FAA5F2C4`。

@@ -47,6 +47,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
     private GlobalSystemMediaTransportControlsSession? _session;
+    private BackgroundPoller? _fallbackPoller;
+    private volatile bool _fallbackActive;
     private CancellationTokenSource? _artworkCts;
     private int _refreshPending;
     private DateTimeOffset _lastRefreshTimestamp = DateTimeOffset.MinValue;
@@ -77,6 +79,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         _manager.CurrentSessionChanged += OnCurrentSessionChanged;
         _logger.LogInfo(PlatformLogCategory.Media, "media.started", "GSMTC media service started.");
         await RefreshCoreAsync(cancellationToken).ConfigureAwait(false);
+
+        // Players without SMTC support (KuGou, some Chinese players) never appear in GSMTC. A 1 s
+        // WASAPI session probe + window-title parser covers them; it only runs while GSMTC has no
+        // active session, so the normal path stays fully event-driven.
+        _fallbackPoller = new BackgroundPoller("media-fallback", TimeSpan.FromSeconds(1), PollWindowFallback, _logger);
+        _fallbackPoller.Start();
     }
 
     protected override async ValueTask OnStopAsync(CancellationToken cancellationToken)
@@ -89,10 +97,73 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             manager.CurrentSessionChanged -= OnCurrentSessionChanged;
         }
 
+        _fallbackPoller?.Dispose();
+        _fallbackPoller = null;
+        _fallbackActive = false;
         DetachSession();
         CancelArtworkFetch();
         Publish(MediaSnapshot.Empty);
         await ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Fallback tick: when GSMTC has no active session, find the process that is actually producing
+    /// sound and publish its window-title metadata. No artwork/timeline exists on this path.
+    /// </summary>
+    private void PollWindowFallback()
+    {
+        if (State != PlatformMonitorState.Running || _manager is null)
+        {
+            return;
+        }
+
+        lock (_sessionGate)
+        {
+            if (_session is not null)
+            {
+                return;
+            }
+        }
+
+        var candidate = MediaWindowFallback.FindCandidate();
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fb-fallback.log"), "poll candidate=" + (candidate is null ? "null" : candidate.ProcessName + "|" + candidate.Title + "|" + candidate.Artist) + "\n"); } catch { }
+        if (candidate is null)
+        {
+            if (_fallbackActive)
+            {
+                _fallbackActive = false;
+                Publish(MediaSnapshot.Empty);
+            }
+
+            return;
+        }
+
+        var snapshot = new MediaSnapshot(
+            "win:" + candidate.ProcessName,
+            candidate.ProcessName,
+            candidate.Title,
+            candidate.Artist,
+            string.Empty,
+            MediaPlaybackState.Playing,
+            IsPlaying: true,
+            TimeSpan.Zero,
+            // No timeline on this path: keep the timestamp at MinValue so the App does not interpolate
+            // a position that does not exist.
+            DateTimeOffset.MinValue,
+            TimeSpan.Zero,
+            CanSeek: false,
+            CanGoNext: false,
+            CanGoPrevious: false,
+            candidate.TrackKey);
+
+        var changed = !string.Equals(Current?.BuildContentSignature(), snapshot.BuildContentSignature(),
+            StringComparison.Ordinal);
+        _fallbackActive = true;
+        if (changed)
+        {
+            _counters.IncrementMediaSnapshotChanges();
+            Publish(snapshot);
+        }
     }
 
     /// <summary>Requests a coalesced refresh (called by GSMTC events; never blocks the WinRT callback thread).</summary>
@@ -169,7 +240,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (activeSession is null)
         {
             DetachSession();
-            Publish(MediaSnapshot.Empty);
+            // The fallback poller owns the snapshot while it has a live non-SMTC player.
+            if (!_fallbackActive)
+            {
+                Publish(MediaSnapshot.Empty);
+            }
+
             return;
         }
 
@@ -179,6 +255,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private async Task AttachAndSnapshotAsync(GlobalSystemMediaTransportControlsSession session,
         CancellationToken cancellationToken)
     {
+        _fallbackActive = false;
         lock (_sessionGate)
         {
             if (!ReferenceEquals(_session, session))
