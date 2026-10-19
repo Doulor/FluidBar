@@ -2,10 +2,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using FluidBar.App.Controls;
 using FluidBar.App.Localization;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
+using FluidBar.Marketplace.Community;
+using FluidBar.Marketplace.Install;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -13,6 +16,11 @@ namespace FluidBar.App.Views.Settings;
 /// Marketplace section UI matching the prototype: gradient featured card, search field, category chips
 /// and a two-column card grid with install/update/rollback/uninstall. A consent dialog with honest
 /// capability copy is shown before any install (spec 6.5).
+/// <para>
+/// The section also hosts the device-local community marketplace (submit → review → list → install →
+/// download counter → rating). Its state lives in <c>%APPDATA%\FluidBar\marketplace</c> and every action
+/// is a real filesystem operation, so a restart shows exactly the same listings, counters and ratings.
+/// </para>
 /// </summary>
 public sealed class MarketplaceSectionView : StackPanel
 {
@@ -31,45 +39,102 @@ public sealed class MarketplaceSectionView : StackPanel
     private readonly AppSurfaceColors _surfaces;
     private readonly Func<Window?> _owner;
     private readonly string _channel;
+    private readonly CommunityMarketplaceService _community;
+    private IReadOnlyList<CommunityListing> _communityListings = [];
+    private IReadOnlyList<CommunitySubmission> _pendingSubmissions = [];
     private string _search = string.Empty;
     private string _category = "all";
     private bool _busy;
+    private bool _communityBusy;
     private string? _status;
+    private string? _communityStatus;
 
     /// <summary>Creates the marketplace view.</summary>
+    /// <param name="marketplace">Signed-index marketplace service (network catalog).</param>
+    /// <param name="localizer">Localizer for the signed catalog.</param>
+    /// <param name="surfaces">Surface palette.</param>
+    /// <param name="owner">Window provider for the consent dialog.</param>
+    /// <param name="channel">Update channel.</param>
+    /// <param name="community">
+    /// Device-local community marketplace; when omitted it is created over
+    /// <c>%APPDATA%\FluidBar\marketplace</c> (tests inject a temporary root).
+    /// </param>
     public MarketplaceSectionView(
         IMarketplaceUiService marketplace,
         ILocalizer localizer,
         AppSurfaceColors surfaces,
         Func<Window?> owner,
-        string channel)
+        string channel,
+        CommunityMarketplaceService? community = null)
     {
         _marketplace = marketplace ?? throw new ArgumentNullException(nameof(marketplace));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _surfaces = surfaces;
         _owner = owner;
         _channel = channel;
+        _community = community ?? CommunityMarketplaceService.CreateDefault();
         Spacing = 0;
         _marketplace.Changed += (_, _) => Refresh();
+        _community.Changed += (_, _) =>
+        {
+            if (VisualRoot is null)
+            {
+                return;
+            }
+
+            Refresh();
+        };
     }
 
-    /// <summary>Rebuilds the plugin list from the service.</summary>
-    public async void Refresh()
+    /// <summary>The device-local community marketplace backing this section.</summary>
+    public CommunityMarketplaceService Community => _community;
+
+    /// <summary>Rebuilds the plugin list (signed catalog + device-local community marketplace).</summary>
+    public async void Refresh() => await ReloadAsync();
+
+    /// <summary>
+    /// Reloads both catalogs and rebuilds the section. Awaitable so tests and the harness can render a
+    /// settled section without sleeping on a fire-and-forget refresh.
+    /// </summary>
+    public async Task ReloadAsync()
     {
+        IReadOnlyList<MarketPlugin> plugins = [];
         try
         {
             var query = new MarketplaceQuery(_search, _category, _channel);
-            var plugins = await _marketplace.BrowseAsync(query, CancellationToken.None);
-            Build(plugins);
+            plugins = await _marketplace.BrowseAsync(query, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
             // The section was closed while refreshing; nothing to update.
+            return;
         }
         catch (Exception ex)
         {
             _status = ex.Message;
-            Build([]);
+        }
+
+        await LoadCommunityAsync();
+        Build(plugins);
+    }
+
+    /// <summary>Reloads the pending review queue and the approved community listings from disk.</summary>
+    private async Task LoadCommunityAsync()
+    {
+        try
+        {
+            _communityListings = await _community.BrowseAsync(null, CancellationToken.None);
+            _pendingSubmissions = await _community.GetPendingAsync(CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            // Nothing to render; keep the last snapshot.
+        }
+        catch (Exception ex)
+        {
+            _communityListings = [];
+            _pendingSubmissions = [];
+            _communityStatus = "The local marketplace is unavailable: " + ex.Message;
         }
     }
 
@@ -159,6 +224,8 @@ public sealed class MarketplaceSectionView : StackPanel
 
             Children.Add(grid);
         }
+
+        Children.Add(BuildCommunitySection(foreground, secondary, tertiary, line, raised));
 
         Children.Add(new StackPanel
         {
@@ -740,5 +807,641 @@ public sealed class MarketplaceSectionView : StackPanel
         {
             Children.Remove(progressBar);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------------
+    // Device-local community marketplace: submit → review → list → install → download counter → rating.
+    // ---------------------------------------------------------------------------------------------------
+
+    private Control BuildCommunitySection(IBrush foreground, IBrush secondary, IBrush tertiary, IBrush line, IBrush raised)
+    {
+        var stack = new StackPanel
+        {
+            Spacing = 6,
+            Margin = new Thickness(0, 18, 0, 0),
+        };
+
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        var titles = new StackPanel { Spacing = 1 };
+        titles.Children.Add(new TextBlock
+        {
+            Text = CommunityStrings.Title,
+            FontFamily = Fonts.Display,
+            FontSize = 13.5,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = foreground,
+        });
+        titles.Children.Add(new TextBlock
+        {
+            Text = CommunityStrings.Subtitle(_community.Store.RootDirectory),
+            FontSize = 8.5,
+            Foreground = tertiary,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 520,
+        });
+        var submit = new Button
+        {
+            Content = CommunityStrings.Submit,
+            IsEnabled = !_communityBusy,
+            Height = 28,
+            Padding = new Thickness(11, 0, 11, 0),
+            CornerRadius = new CornerRadius(7),
+            FontSize = 9.5,
+            FontWeight = FontWeight.SemiBold,
+            Background = new SolidColorBrush(_surfaces.Active),
+            Foreground = new SolidColorBrush(_surfaces.ActiveForeground),
+            BorderThickness = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        submit.Click += async (_, _) => await PickAndSubmitAsync();
+        Grid.SetColumn(submit, 1);
+        header.Children.Add(titles);
+        header.Children.Add(submit);
+        stack.Children.Add(header);
+
+        if (!string.IsNullOrEmpty(_communityStatus))
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = _communityStatus,
+                Foreground = new SolidColorBrush(Accents.Warning),
+                FontSize = 9,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        if (_pendingSubmissions.Count > 0)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = CommunityStrings.PendingHeader(_pendingSubmissions.Count),
+                FontSize = 9,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = secondary,
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+            foreach (var submission in _pendingSubmissions)
+            {
+                stack.Children.Add(BuildPendingRow(submission, foreground, secondary, tertiary, line, raised));
+            }
+        }
+
+        if (_communityListings.Count == 0)
+        {
+            stack.Children.Add(new Border
+            {
+                Margin = new Thickness(0, 4, 0, 0),
+                Padding = new Thickness(12),
+                CornerRadius = new CornerRadius(10),
+                Background = raised,
+                BorderBrush = line,
+                BorderThickness = new Thickness(1),
+                Child = new TextBlock
+                {
+                    Text = CommunityStrings.Empty,
+                    FontSize = 9.5,
+                    Foreground = tertiary,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            });
+            return stack;
+        }
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            Margin = new Thickness(0, 4, 0, 0),
+        };
+        for (var index = 0; index < _communityListings.Count; index++)
+        {
+            if (index % 2 == 0)
+            {
+                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            }
+
+            var card = BuildCommunityCard(_communityListings[index], foreground, secondary, tertiary, line, raised);
+            card.Margin = new Thickness(index % 2 == 0 ? 0 : 4.5, 0, index % 2 == 0 ? 4.5 : 0, 9);
+            Grid.SetRow(card, index / 2);
+            Grid.SetColumn(card, index % 2);
+            grid.Children.Add(card);
+        }
+
+        stack.Children.Add(grid);
+        return stack;
+    }
+
+    private Control BuildPendingRow(
+        CommunitySubmission submission,
+        IBrush foreground,
+        IBrush secondary,
+        IBrush tertiary,
+        IBrush line,
+        IBrush raised)
+    {
+        var info = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+        var nameRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        nameRow.Children.Add(new TextBlock
+        {
+            Text = submission.Plugin.Name,
+            FontSize = 10.5,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = foreground,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        nameRow.Children.Add(new TextBlock
+        {
+            Text = "v" + submission.Version,
+            FontSize = 9,
+            Foreground = tertiary,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        nameRow.Children.Add(new Border
+        {
+            Padding = new Thickness(5, 1, 5, 1),
+            CornerRadius = new CornerRadius(5),
+            Background = new SolidColorBrush(submission.SignatureState == CommunitySignatureState.Verified
+                ? Color.FromArgb(38, 74, 222, 128)
+                : Color.FromArgb(38, 255, 149, 0)),
+            Child = new TextBlock
+            {
+                Text = submission.SignatureState == CommunitySignatureState.Verified
+                    ? CommunityStrings.Signed
+                    : CommunityStrings.Unsigned,
+                FontSize = 8,
+                Foreground = new SolidColorBrush(submission.SignatureState == CommunitySignatureState.Verified
+                    ? Accents.Success
+                    : Accents.Warning),
+            },
+        });
+        info.Children.Add(nameRow);
+        info.Children.Add(new TextBlock
+        {
+            Text = submission.Plugin.PublisherName + " · " + submission.Plugin.Id + " · sha256 "
+                + submission.PackageSha256[..Math.Min(12, submission.PackageSha256.Length)] + "…",
+            FontSize = 8.5,
+            Foreground = tertiary,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        actions.Children.Add(CommunityAction(
+            CommunityStrings.Approve,
+            new SolidColorBrush(_surfaces.Active),
+            new SolidColorBrush(_surfaces.ActiveForeground),
+            () => ReviewAsync(submission, approve: true)));
+        actions.Children.Add(CommunityAction(
+            CommunityStrings.Reject,
+            raised,
+            new SolidColorBrush(Accents.Warning),
+            () => ReviewAsync(submission, approve: false)));
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 10,
+        };
+        Grid.SetColumn(info, 0);
+        Grid.SetColumn(actions, 1);
+        grid.Children.Add(info);
+        grid.Children.Add(actions);
+
+        return new Border
+        {
+            Padding = new Thickness(12, 9, 12, 9),
+            CornerRadius = new CornerRadius(9),
+            Background = raised,
+            BorderBrush = line,
+            BorderThickness = new Thickness(1),
+            Child = grid,
+        };
+    }
+
+    private Control BuildCommunityCard(
+        CommunityListing listing,
+        IBrush foreground,
+        IBrush secondary,
+        IBrush tertiary,
+        IBrush line,
+        IBrush raised)
+    {
+        var panel = new StackPanel { Spacing = 5 };
+        var head = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        head.Children.Add(new Border
+        {
+            Width = 30,
+            Height = 30,
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(Color.Parse("#4C5566")),
+            Child = new SettingsGlyph
+            {
+                Kind = IconKind.Store,
+                Brush = Brushes.White,
+                Width = 16,
+                Height = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        });
+        var titles = new StackPanel { Spacing = 1, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        titles.Children.Add(new TextBlock
+        {
+            Text = listing.Plugin.Name,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = foreground,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        titles.Children.Add(new TextBlock
+        {
+            Text = listing.Plugin.PublisherName + " · v" + listing.Version
+                + (listing.SignatureState == CommunitySignatureState.Verified ? " · signed" : " · unsigned"),
+            FontSize = 8.5,
+            Foreground = tertiary,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        Grid.SetColumn(titles, 1);
+        head.Children.Add(titles);
+        panel.Children.Add(head);
+        panel.Children.Add(new TextBlock
+        {
+            Text = listing.Plugin.Summary,
+            FontSize = 9,
+            Foreground = secondary,
+            TextWrapping = TextWrapping.Wrap,
+            MaxLines = 2,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        var stars = BuildStarRating(listing, tertiary);
+        var ratingText = new TextBlock
+        {
+            Text = listing.Stats.Rating is { } rating
+                ? CommunityStrings.RatingSummary(rating, listing.Stats.RatingCount)
+                : CommunityStrings.NotRated,
+            FontSize = 8.5,
+            Foreground = tertiary,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(5, 0, 0, 0),
+        };
+        var ratingRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0 };
+        ratingRow.Children.Add(stars);
+        ratingRow.Children.Add(ratingText);
+
+        var foot = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        foot.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children =
+            {
+                ratingRow,
+                new TextBlock
+                {
+                    Text = CommunityStrings.Downloads(listing.Stats.Downloads),
+                    FontSize = 8.5,
+                    Foreground = tertiary,
+                    VerticalAlignment = VerticalAlignment.Center,
+                },
+            },
+        });
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var install = new Button
+        {
+            Content = CommunityStrings.Install,
+            IsEnabled = !_communityBusy,
+            Height = 26,
+            MinWidth = 58,
+            Padding = new Thickness(9, 0, 9, 0),
+            CornerRadius = new CornerRadius(7),
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Background = new SolidColorBrush(_surfaces.Active),
+            Foreground = new SolidColorBrush(_surfaces.ActiveForeground),
+            BorderThickness = new Thickness(0),
+        };
+        install.Click += async (_, _) => await InstallCommunityAsync(listing);
+        actions.Children.Add(install);
+        actions.Children.Add(CommunityAction(CommunityStrings.Delist, Brushes.Transparent, tertiary, () => DelistAsync(listing)));
+        Grid.SetColumn(actions, 1);
+        foot.Children.Add(actions);
+        panel.Children.Add(foot);
+
+        return new Border
+        {
+            MinHeight = 104,
+            Padding = new Thickness(11),
+            CornerRadius = new CornerRadius(10),
+            Background = raised,
+            BorderBrush = line,
+            BorderThickness = new Thickness(1),
+            Child = panel,
+        };
+    }
+
+    private Control BuildStarRating(CommunityListing listing, IBrush tertiary)
+    {
+        var starBrush = new SolidColorBrush(Color.Parse("#F0B429"));
+        var emptyBrush = tertiary;
+        var current = listing.Stats.UserRating ?? 0;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1 };
+        for (var star = 1; star <= 5; star++)
+        {
+            var value = star;
+            var glyph = new TextBlock
+            {
+                Text = value <= current ? "\u2605" : "\u2606",
+                FontSize = 11.5,
+                Foreground = value <= current ? starBrush : emptyBrush,
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ToolTip.SetTip(glyph, CommunityStrings.RateHint(value));
+            glyph.PointerPressed += async (_, e) =>
+            {
+                e.Handled = true;
+                await RateCommunityAsync(listing.Id, value);
+            };
+            row.Children.Add(glyph);
+        }
+
+        return row;
+    }
+
+    private Button CommunityAction(string label, IBrush background, IBrush foreground, Func<Task> action)
+    {
+        var button = new Button
+        {
+            Content = label,
+            IsEnabled = !_communityBusy,
+            Height = 26,
+            Padding = new Thickness(9, 0, 9, 0),
+            CornerRadius = new CornerRadius(7),
+            FontSize = 9,
+            Background = background,
+            Foreground = foreground,
+            BorderThickness = new Thickness(0),
+        };
+        button.Click += async (_, _) => await action();
+        return button;
+    }
+
+    private async Task PickAndSubmitAsync()
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is null)
+        {
+            _communityStatus = CommunityStrings.PickerUnavailable;
+            return;
+        }
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = CommunityStrings.Submit,
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(CommunityStrings.PackageFileType) { Patterns = ["*.fbp"] },
+            ],
+        });
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var packagePath = files[0].TryGetLocalPath();
+        if (string.IsNullOrWhiteSpace(packagePath))
+        {
+            _communityStatus = CommunityStrings.PickerUnavailable;
+            return;
+        }
+
+        // Accept the two detached-signature conventions the repo uses: '<name>.sig.json' and '<name>.fbp.sig.json'.
+        string? signaturePath = null;
+        foreach (var candidate in new[] { Path.ChangeExtension(packagePath, ".sig.json"), packagePath + ".sig.json" })
+        {
+            if (File.Exists(candidate))
+            {
+                signaturePath = candidate;
+                break;
+            }
+        }
+
+        await SubmitAsync(packagePath, signaturePath);
+    }
+
+    private async Task SubmitAsync(string packagePath, string? signaturePath)
+    {
+        _communityBusy = true;
+        _communityStatus = CommunityStrings.Validating(Path.GetFileName(packagePath));
+        try
+        {
+            var result = await _community.SubmitAsync(new CommunitySubmitRequest
+            {
+                PackagePath = packagePath,
+                SignaturePath = signaturePath,
+            });
+            _communityStatus = result.Success
+                ? CommunityStrings.Submitted(result.Submission!.PluginId, result.Submission.Version, result.Warnings)
+                : CommunityStrings.SubmitFailed(result.Errors);
+        }
+        catch (Exception ex)
+        {
+            _communityStatus = CommunityStrings.SubmitFailed([ex.Message]);
+        }
+        finally
+        {
+            _communityBusy = false;
+            Refresh();
+        }
+    }
+
+    private async Task ReviewAsync(CommunitySubmission submission, bool approve)
+    {
+        if (_communityBusy)
+        {
+            return;
+        }
+
+        _communityBusy = true;
+        try
+        {
+            var result = approve
+                ? await _community.ApproveAsync(submission.PluginId, submission.Version, CommunityStrings.ApprovedNote)
+                : await _community.RejectAsync(submission.PluginId, submission.Version, CommunityStrings.RejectedNote);
+            _communityStatus = result.Success
+                ? approve
+                    ? CommunityStrings.Approved(submission.PluginId, submission.Version)
+                    : CommunityStrings.Rejected(submission.PluginId, submission.Version)
+                : CommunityStrings.ReviewFailed(result.Errors);
+        }
+        catch (Exception ex)
+        {
+            _communityStatus = CommunityStrings.ReviewFailed([ex.Message]);
+        }
+        finally
+        {
+            _communityBusy = false;
+            Refresh();
+        }
+    }
+
+    private async Task DelistAsync(CommunityListing listing)
+    {
+        if (_communityBusy)
+        {
+            return;
+        }
+
+        _communityBusy = true;
+        try
+        {
+            var result = await _community.RejectAsync(listing.Id, listing.Version, CommunityStrings.DelistedNote);
+            _communityStatus = result.Success
+                ? CommunityStrings.Rejected(listing.Id, listing.Version)
+                : CommunityStrings.ReviewFailed(result.Errors);
+        }
+        catch (Exception ex)
+        {
+            _communityStatus = CommunityStrings.ReviewFailed([ex.Message]);
+        }
+        finally
+        {
+            _communityBusy = false;
+            Refresh();
+        }
+    }
+
+    private async Task RateCommunityAsync(string pluginId, int stars)
+    {
+        if (_communityBusy)
+        {
+            return;
+        }
+
+        _communityBusy = true;
+        try
+        {
+            var listing = await _community.RateAsync(pluginId, stars);
+            _communityStatus = CommunityStrings.Rated(listing.Id, stars);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            _communityStatus = CommunityStrings.RatingOutOfRange;
+        }
+        catch (Exception ex)
+        {
+            _communityStatus = CommunityStrings.RatingFailed(ex.Message);
+        }
+        finally
+        {
+            _communityBusy = false;
+            Refresh();
+        }
+    }
+
+    private async Task InstallCommunityAsync(CommunityListing listing)
+    {
+        if (_communityBusy)
+        {
+            return;
+        }
+
+        _communityBusy = true;
+        var progress = new Progress<InstallPhase>(phase => _communityStatus = CommunityStrings.Installing(listing.Id, phase));
+        try
+        {
+            var outcome = await _community.InstallAsync(listing.Id, progress);
+            _communityStatus = outcome.Success
+                ? outcome.Message
+                : CommunityStrings.InstallFailed(outcome.Message);
+        }
+        catch (Exception ex)
+        {
+            _communityStatus = CommunityStrings.InstallFailed(ex.Message);
+        }
+        finally
+        {
+            _communityBusy = false;
+            Refresh();
+        }
+    }
+
+    /// <summary>English copy of the community marketplace block (localization keys live outside this file's scope).</summary>
+    private static class CommunityStrings
+    {
+        internal const string Title = "Local community marketplace";
+        internal const string Submit = "Submit .fbp…";
+        internal const string Signed = "signed";
+        internal const string Unsigned = "unsigned";
+        internal const string Approve = "Approve";
+        internal const string Reject = "Reject";
+        internal const string Install = "Install";
+        internal const string Delist = "Delist";
+        internal const string NotRated = "not rated yet";
+        internal const string PickerUnavailable = "The file picker is unavailable in this window.";
+        internal const string PackageFileType = "FluidBar plugin package";
+        internal const string ApprovedNote = "Approved by the local reviewer.";
+        internal const string RejectedNote = "Rejected by the local reviewer.";
+        internal const string DelistedNote = "Delisted from the local marketplace.";
+
+        internal static string Subtitle(string root) =>
+            "Submit a package, review it, install it, rate it. State is stored on this device in " + root + ".";
+
+        internal static string PendingHeader(int count) => "Pending review (" + count + ")";
+
+        internal const string Empty =
+            "No approved plugins yet. Submit a .fbp, then approve it to publish it here.";
+
+        internal static string Downloads(long downloads) =>
+            downloads == 1 ? "1 install" : downloads + " installs";
+
+        internal static string RatingSummary(double rating, int count) =>
+            rating.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " / 5 (" + count + ")";
+
+        internal static string RateHint(int stars) => "Rate " + stars + (stars == 1 ? " star" : " stars");
+
+        internal static string Validating(string fileName) => "Validating " + fileName + "…";
+
+        internal static string Submitted(string pluginId, string version, IReadOnlyList<string> warnings) =>
+            "Submitted " + pluginId + " " + version + " for review."
+            + (warnings.Count == 0 ? string.Empty : " " + string.Join(" ", warnings));
+
+        internal static string SubmitFailed(IReadOnlyList<string> errors) =>
+            "Submission rejected: " + string.Join("; ", errors);
+
+        internal static string Approved(string pluginId, string version) =>
+            "Approved " + pluginId + " " + version + "; it is now listed.";
+
+        internal static string Rejected(string pluginId, string version) =>
+            "Rejected " + pluginId + " " + version + "; it is no longer listed.";
+
+        internal static string ReviewFailed(IReadOnlyList<string> errors) =>
+            "Review failed: " + string.Join("; ", errors);
+
+        internal static string Rated(string pluginId, int stars) =>
+            "Rated " + pluginId + " " + stars + "/5.";
+
+        internal const string RatingOutOfRange = "Ratings must be between 1 and 5 stars.";
+
+        internal static string RatingFailed(string message) => "Rating failed: " + message;
+
+        internal static string Installing(string pluginId, InstallPhase phase) =>
+            "Installing " + pluginId + ": " + phase + "…";
+
+        internal static string InstallFailed(string message) => "Install failed: " + message;
     }
 }
