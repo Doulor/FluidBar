@@ -516,6 +516,10 @@ public static partial class LocKeys
             public const string Preview = "Settings.Appearance.Preview";
             /// <summary><c>Settings.Appearance.PreviewHint</c></summary>
             public const string PreviewHint = "Settings.Appearance.PreviewHint";
+            /// <summary><c>Settings.Appearance.PanelRadius</c></summary>
+            public const string PanelRadius = "Settings.Appearance.PanelRadius";
+            /// <summary><c>Settings.Appearance.PanelRadiusHint</c></summary>
+            public const string PanelRadiusHint = "Settings.Appearance.PanelRadiusHint";
             /// <summary><c>Settings.Appearance.PreviewLabel</c></summary>
             public const string PreviewLabel = "Settings.Appearance.PreviewLabel";
             /// <summary><c>Settings.Appearance.LiveHint</c></summary>
@@ -684,6 +688,8 @@ public static partial class LocKeys
             public const string StateDisabled = "Settings.Plugins.StateDisabled";
             /// <summary><c>Settings.Plugins.StateUnavailable</c></summary>
             public const string StateUnavailable = "Settings.Plugins.StateUnavailable";
+            /// <summary><c>Settings.Plugins.ErrorPlatformServiceUnavailable</c></summary>
+            public const string ErrorPlatformServiceUnavailable = "Settings.Plugins.ErrorPlatformServiceUnavailable";
             /// <summary><c>Settings.Plugins.RestartRequired</c></summary>
             public const string RestartRequired = "Settings.Plugins.RestartRequired";
             /// <summary><c>Settings.Plugins.ConsentRequired</c></summary>

@@ -242,6 +242,8 @@
     "Settings.Appearance.MotionStrength": "Motion strength",
     "Settings.Appearance.Preview": "Preview",
     "Settings.Appearance.PreviewHint": "Changes update the island live.",
+    "Settings.Appearance.PanelRadius": "Panel corner radius",
+    "Settings.Appearance.PanelRadiusHint": "Compact pills stay stadium-shaped.",
     "Settings.Appearance.PreviewLabel": "Island preview",
     "Settings.Appearance.LiveHint": "Changes apply to the island immediately.",
 
@@ -285,6 +287,7 @@
     "Settings.Plugins.OrphanHint": "Enabled in settings but not installed — remove or reinstall.",
     "Settings.Plugins.StateDisabled": "Disabled",
     "Settings.Plugins.StateUnavailable": "Unavailable",
+    "Settings.Plugins.ErrorPlatformServiceUnavailable": "A required platform service is unavailable on this machine.",
     "Settings.Plugins.RestartRequired": "Restart FluidBar to finish unloading.",
     "Settings.Plugins.ConsentRequired": "This plugin needs your consent to run.",
 

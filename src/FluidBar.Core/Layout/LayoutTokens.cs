@@ -350,7 +350,8 @@ public static class LayoutTokens
     /// Corner radii for a shell form and mode. Compact pills are stadiums (h/2 capped at 44);
     /// flush has square top corners; dock uses the 12/16 radii.
     /// </summary>
-    public static CornerRadii RadiiFor(ShellForm form, IslandMode mode, double height)
+    public static CornerRadii RadiiFor(ShellForm form, IslandMode mode, double height,
+        double expandedRadius = ExpandedRadius)
     {
         var compactRadius = Math.Min(height / 2, CompactRadiusCap);
         return form switch
@@ -364,7 +365,7 @@ public static class LayoutTokens
             {
                 IslandMode.Dock => CornerRadii.Uniform(DockExpandedRadius),
                 IslandMode.Flush => new CornerRadii(0, 0, FlushBottomRadius, FlushBottomRadius),
-                _ => CornerRadii.Uniform(ExpandedRadius),
+                _ => CornerRadii.Uniform(expandedRadius),
             },
             _ => CornerRadii.Uniform(compactRadius),
         };

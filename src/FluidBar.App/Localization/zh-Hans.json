@@ -242,6 +242,8 @@
     "Settings.Appearance.MotionStrength": "动效强度",
     "Settings.Appearance.Preview": "预览",
     "Settings.Appearance.PreviewHint": "改动会实时反映到灵动岛。",
+    "Settings.Appearance.PanelRadius": "大面板圆角",
+    "Settings.Appearance.PanelRadiusHint": "小胶囊始终保持胶囊形。",
     "Settings.Appearance.PreviewLabel": "灵动岛预览",
     "Settings.Appearance.LiveHint": "更改会立即应用到灵动岛。",
 
@@ -285,6 +287,7 @@
     "Settings.Plugins.OrphanHint": "设置中已启用但未安装——请移除或重新安装。",
     "Settings.Plugins.StateDisabled": "已停用",
     "Settings.Plugins.StateUnavailable": "不可用",
+    "Settings.Plugins.ErrorPlatformServiceUnavailable": "此插件需要的系统服务在当前设备上不可用。",
     "Settings.Plugins.RestartRequired": "请重启 FluidBar 以完成卸载。",
     "Settings.Plugins.ConsentRequired": "此插件需要你的同意才能运行。",
 

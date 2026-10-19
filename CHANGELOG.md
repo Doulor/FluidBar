@@ -155,6 +155,12 @@
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
 
+### 2026-10-19 22:40 — 设置：大面板圆角可调 + 插件错误本地化
+- **大面板圆角**：新增 `AppSettings.PanelRadius`（16–36 DIP，默认 28，持久化到 `appearance.panelRadius`），经 `LayoutTokens.RadiiFor` → `SkiaIslandMotion.PanelRadius` → `IslandRenderState.ShellRadii` 贯通到灵动岛渲染；外观页新增「大面板圆角」滑杆（16px / 28px 拐角实测不同）。顺带修复外观类设置改动后灵动岛不重绘的问题（`OnSettingsChanged` 现在重建渲染状态并请求整帧）。
+- **插件不可用文案本地化**：运行时改为返回 `Settings.Plugins.ErrorPlatformServiceUnavailable` 键，插件页解析为中文/英文，不再直接显示英文诊断。
+- 全量 **1490 passed / 0 failed**。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `E4320B0E57DC7E3B1FF63A634E4D26CB7CF265B189453E16DCE2B8FEF8E86F57`。
+
 ### 2026-10-19 22:45 — 设置：插件市场按原型重排
 - **精选卡**：渐变底（青色径向光晕）+ 8px 大写 kicker、20px 标题、10px 描述、浅色安装按钮与安装量、80px 圆角图标块。
 - **工具条**：34px 搜索框（放大镜 + 占位符）+ 分类 chips（全部/媒体/效率/系统/开发者/其他，选中态白底深字）。

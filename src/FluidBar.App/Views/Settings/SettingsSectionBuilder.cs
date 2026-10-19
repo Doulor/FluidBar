@@ -433,6 +433,9 @@ public static class SettingsSectionBuilder
                     value => ctx.Settings.Update(s => s with { Palette = value })),
                 SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title), null, swatches,
                     brushes.Foreground, brushes.Tertiary, brushes.Line),
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
+                    value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork), null,
                     settings.AccentMode == "artwork",
                     value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
@@ -687,6 +690,18 @@ public static class SettingsSectionBuilder
         return string.Equals(localized, name, StringComparison.Ordinal) ? name : localized;
     }
 
+    /// <summary>Resolves host error keys (plugin runtime) and passes raw diagnostics through.</summary>
+    private static string ResolvePluginError(SettingsWindowContext ctx, string error)
+    {
+        if (!error.StartsWith("Settings.Plugins.", StringComparison.Ordinal))
+        {
+            return error;
+        }
+
+        var localized = ctx.Localizer.Get(error);
+        return string.Equals(localized, error, StringComparison.Ordinal) ? error : localized;
+    }
+
     private static Control BuildPluginRow(SettingsWindowContext ctx, PluginListItem plugin, Action<string> showDetail)
     {
         var brushes = Palette(ctx);
@@ -772,7 +787,7 @@ public static class SettingsSectionBuilder
         {
             info.Children.Add(new TextBlock
             {
-                Text = plugin.Error,
+                Text = ResolvePluginError(ctx, plugin.Error),
                 FontSize = 9.5,
                 Foreground = new SolidColorBrush(Accents.Warning),
                 TextWrapping = TextWrapping.Wrap,

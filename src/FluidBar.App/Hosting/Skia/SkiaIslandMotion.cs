@@ -152,6 +152,9 @@ public sealed class SkiaIslandMotion : IDisposable
         }
     }
 
+    /// <summary>Expanded panel radius from settings (DIP); compact pills keep their stadium radius.</summary>
+    public double PanelRadius { get; set; } = LayoutTokens.ExpandedRadius;
+
     /// <summary>Per-corner radii blended between the compact and expanded tokens by height.</summary>
     public CornerRadii ShellRadii
     {
@@ -159,7 +162,7 @@ public sealed class SkiaIslandMotion : IDisposable
         {
             var mode = _target.Mode;
             var compactRadii = LayoutTokens.RadiiFor(ShellForm.Compact, mode, Height);
-            var expandedRadii = LayoutTokens.RadiiFor(ShellForm.Expanded, mode, LayoutTokens.ExpandedHeight);
+            var expandedRadii = LayoutTokens.RadiiFor(ShellForm.Expanded, mode, LayoutTokens.ExpandedHeight, PanelRadius);
             var t = Math.Clamp(ExpandedFactor, 0, 1);
             return new CornerRadii(
                 Lerp(compactRadii.TopLeft, expandedRadii.TopLeft, t),

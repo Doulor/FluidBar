@@ -1108,6 +1108,13 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         SyncContent(full: false);
+
+        // Appearance changes (panel radius, fill opacity, accent…) must repaint even while the shell
+        // is idle: rebuild the render state and request a full frame instead of waiting for the next
+        // animation tick.
+        BuildRenderState();
+        InvalidateFull();
+
         if (modeOrAnchorChanged)
         {
             _motion.SnapToTarget();
@@ -1223,6 +1230,7 @@ public sealed class SkiaIslandController : IDisposable
     private void BuildRenderState()
     {
         var mode = _settings.Current.IslandMode;
+        _motion.PanelRadius = _settings.Current.PanelRadius;
         var form = ResolveVisualForm();
         var expanded = form == ShellForm.Expanded;
         _renderState = new IslandRenderState

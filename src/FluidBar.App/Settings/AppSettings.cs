@@ -177,6 +177,9 @@ public sealed record AppSettings
     /// <summary>Shell fill opacity (0.85–1.0; text-bearing states must stay ≥0.85).</summary>
     public double FillOpacity { get; init; } = LayoutTokens.FillOpacity;
 
+    /// <summary>Expanded panel corner radius in DIP (16–36; compact pills stay stadiums).</summary>
+    public double PanelRadius { get; init; } = 28;
+
     /// <summary>Text scale for island content (0.8–1.6).</summary>
     public double FontScale { get; init; } = 1.0;
 
@@ -382,6 +385,7 @@ public sealed record AppSettings
         AccentMode = AccentMode is "artwork" or "system" or "custom" ? AccentMode : "artwork",
         AccentFallback = FluidBar.App.Theme.Accents.ParseOrDefault(AccentFallback, FluidBar.App.Theme.Accents.Fallback).ToString(),
         FillOpacity = Math.Clamp(FillOpacity, LayoutTokens.MinFillOpacity, 1.0),
+        PanelRadius = Math.Clamp(PanelRadius, 16, 36),
         FontScale = Math.Clamp(FontScale, 0.8, 1.6),
         ReducedMotion = Enum.IsDefined(ReducedMotion) ? ReducedMotion : ReducedMotionPreference.System,
         MotionStrength = Math.Clamp(MotionStrength, MotionProfile.MinStrength, MotionProfile.MaxStrength),
@@ -432,6 +436,7 @@ public sealed record AppSettings
                 Palette = Palette,
                 Accent = new AccentJson { Mode = AccentMode, Fallback = AccentFallback },
                 FillOpacity = FillOpacity,
+                PanelRadius = PanelRadius,
                 FontScale = FontScale,
                 ReducedMotion = ReducedMotion.ToString().ToLowerInvariant(),
                 MotionStrength = MotionStrength,
@@ -501,6 +506,7 @@ public sealed record AppSettings
                 AccentMode = document.Appearance?.Accent?.Mode ?? defaults.AccentMode,
                 AccentFallback = document.Appearance?.Accent?.Fallback ?? defaults.AccentFallback,
                 FillOpacity = document.Appearance?.FillOpacity ?? defaults.FillOpacity,
+                PanelRadius = document.Appearance?.PanelRadius ?? defaults.PanelRadius,
                 FontScale = document.Appearance?.FontScale ?? defaults.FontScale,
                 ReducedMotion = ParseReducedMotion(document.Appearance?.ReducedMotion),
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
@@ -684,6 +690,7 @@ internal sealed class AppearanceJson
     public string? Palette { get; set; }
     public AccentJson? Accent { get; set; }
     public double? FillOpacity { get; set; }
+    public double? PanelRadius { get; set; }
     public double? FontScale { get; set; }
     public string? ReducedMotion { get; set; }
     public double? MotionStrength { get; set; }

@@ -322,7 +322,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
                 _builtins.Add(new BuiltinPluginSessionEntry(
                     descriptor,
                     null,
-                    "A required platform service is unavailable on this machine."));
+                    LocKeys.Settings.Plugins.ErrorPlatformServiceUnavailable));
                 continue;
             }
 
