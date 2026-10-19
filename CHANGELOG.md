@@ -155,6 +155,12 @@
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
 
+### 2026-10-20 04:05 代理页显示事件时间
+- `AgentItemData.TimeText` 之前恒为空，代理列表看不出事件先后；现在按收件箱事件的本地时间填 `HH:mm`（与界面语言无关，不需要新翻译键）。
+- 与上一项合计：代理页每行 = 代理名 + 状态（运行中/已完成/失败/等待输入）+ 时间 + 详情。
+- 全量 **1493 passed / 0 failed**。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `E8FA7342D1513E7DA9720E3681CF964CC645A06B790551C8B79CBFDC8F7FAF40`。
+
 ### 2026-10-20 03:40 代理插件支持 DeepSeek Harness
 - 钩子事件里的 `agent` 字段现在识别 **deepseek / deepseek-harness / dsh / harness**，映射到新的 `AgentKind.DeepSeek`；此前所有非 Claude/Codex 的代理都会落到 `Generic`，岛上只能显示成「Agent」。
 - 代理页显示名「DeepSeek Harness」，与 Claude Code、Codex 并列。
