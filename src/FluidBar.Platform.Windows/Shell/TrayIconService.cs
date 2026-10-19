@@ -93,6 +93,10 @@ public sealed class TrayIconService : IAsyncDisposable
         var window = await _host.CreateWindowAsync("tray", PlatformWindowKind.HiddenTopLevel,
             OnWindowMessage, cancellationToken).ConfigureAwait(false);
 
+        // Give the tray owner a real (1x1 off-screen) visible window: TrackPopupMenu cannot
+        // foreground a message-only/zero-size window, which makes right-click appear dead.
+        NativeMethods.User32.SetWindowPos(window.Handle, IntPtr.Zero, -32000, -32000, 1, 1,
+            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_SHOWWINDOW);
         try
         {
             _icon = await _host.InvokeAsync(() => LoadIcon(options.IconFilePath), cancellationToken)
@@ -464,4 +468,5 @@ internal static class Shell32Interop
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     internal static extern bool Shell_NotifyIconW(uint dwMessage, ref NativeMethods.NOTIFYICONDATAW lpData);
 }
+
 
