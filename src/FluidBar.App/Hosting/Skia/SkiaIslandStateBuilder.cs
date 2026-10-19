@@ -171,7 +171,8 @@ public static class SkiaIslandStateBuilder
 
         var clipboardPage = new ClipboardPageModel
         {
-            Items = BuildClipboard(content.Clipboard),
+            Items = BuildClipboard(content.Clipboard, localizer),
+            PinnedLabel = localizer.Get(LocKeys.Clipboard.Pinned),
             EmptyTitle = localizer.Get(LocKeys.Clipboard.Empty),
             EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };
@@ -227,18 +228,24 @@ public static class SkiaIslandStateBuilder
         return models;
     }
 
-    private static ClipboardItemModel[] BuildClipboard(IReadOnlyList<ClipboardItemData> items)
+    private static ClipboardItemModel[] BuildClipboard(IReadOnlyList<ClipboardItemData> items, ILocalizer localizer)
     {
         var models = new ClipboardItemModel[items.Count];
         for (var i = 0; i < models.Length; i++)
         {
             var item = items[i];
+            var kind = item.IsImage ? ClipboardContentKind.Image : ClipboardContentKind.Text;
             models[i] = new ClipboardItemModel
             {
                 Preview = item.Preview,
                 TimeText = item.Meta,
                 IsPinned = item.Pinned,
-                Kind = item.IsImage ? ClipboardContentKind.Image : ClipboardContentKind.Text,
+                Kind = kind,
+                // The renderer used to fall back to hard-coded English "Text"/"Image" labels, which
+                // mixed languages on the zh UI; supply the localized label from the catalog instead.
+                TypeLabel = localizer.Get(kind == ClipboardContentKind.Image
+                    ? LocKeys.Clipboard.Image
+                    : LocKeys.Clipboard.Text),
             };
         }
 
@@ -285,15 +292,32 @@ public static class SkiaIslandStateBuilder
             }
         }
 
+        var stats = new WidgetStatModel[content.Stats.Length];
+        for (var i = 0; i < stats.Length; i++)
+        {
+            var stat = content.Stats[i];
+            stats[i] = new WidgetStatModel(stat.Label, stat.Value, (WidgetStatTone)stat.Kind);
+        }
+
+        // Weather and tasks have no platform source yet: instead of painting blank cards, the renderer
+        // is handed a localized "unavailable" caption for each empty widget.
+        var unavailable = localizer.Get(LocKeys.Settings.Plugins.StateUnavailable);
         return new WidgetsPageModel
         {
             CalendarMonthTitle = content.CalendarMonthTitle,
-            WeekdayHeaders = content.WeekdayHeaders,
+            WeekdayHeaders = content.WeekdayHeaders.IsDefaultOrEmpty
+                ? WidgetsPageModel.DefaultWeekdayHeaders
+                : content.WeekdayHeaders,
             CalendarDays = days,
+            CalendarEventText = localizer.Get(LocKeys.Page.Widgets.NoEvents),
             TasksTitle = localizer.Get(LocKeys.Page.Widgets.Tasks),
             TasksProgressText = tasks.Length == 0 ? null : $"{done}/{tasks.Length}",
             TodayLabel = localizer.Get(LocKeys.Page.Widgets.Today),
             Tasks = tasks,
+            Stats = stats,
+            WeatherUnavailableText = unavailable,
+            StatsEmptyText = unavailable,
+            TasksEmptyText = unavailable,
         };
     }
 
@@ -340,6 +364,7 @@ public static class SkiaIslandStateBuilder
         AppendNotifications(builder, content.Notifications);
         AppendClipboard(builder, content.Clipboard);
         AppendAgents(builder, content.Agents);
+        AppendStats(builder, content.Stats);
         AppendTasks(builder, content.Tasks);
         return builder.ToString();
     }
@@ -376,6 +401,15 @@ public static class SkiaIslandStateBuilder
             builder.Append(item.Name).Append('|').Append(item.StatusText).Append('|')
                 .Append(item.TimeText).Append('|').Append(item.Detail).Append('|')
                 .Append((int)item.Tone).Append('|');
+        }
+    }
+
+    private static void AppendStats(StringBuilder builder, IReadOnlyList<WidgetStatData> items)
+    {
+        builder.Append(items.Count).Append('|');
+        for (var i = 0; i < items.Count; i++)
+        {
+            builder.Append(items[i].Label).Append(':').Append(items[i].Value).Append('|');
         }
     }
 

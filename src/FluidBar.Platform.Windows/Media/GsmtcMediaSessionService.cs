@@ -126,7 +126,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var candidate = MediaWindowFallback.FindCandidate();
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fb-fallback.log"), "poll candidate=" + (candidate is null ? "null" : candidate.ProcessName + "|" + candidate.Title + "|" + candidate.Artist) + "\n"); } catch { }
         if (candidate is null)
         {
             if (_fallbackActive)

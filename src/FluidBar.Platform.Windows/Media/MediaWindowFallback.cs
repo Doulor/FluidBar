@@ -139,7 +139,6 @@ internal static class MediaWindowFallback
     public static WindowMediaCandidate? FindCandidate()
     {
         var ok = AudioSessionProbe.TryGetActiveRenderSessions(out var sessions);
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fb-fallback.log"), "probe ok=" + ok + " sessions=" + sessions.Count + " [" + string.Join(",", sessions.Select(s => s.ProcessId + ":" + s.Peak.ToString("0.00"))) + "]\n"); } catch { }
         if (!ok || sessions.Count == 0)
         {
             return null;

@@ -93,15 +93,19 @@ internal sealed class CompactRenderer : IDisposable
 
     private void DrawIdle(SKCanvas canvas, CompactModel model, float width, float height)
     {
+        // Idle shell is only 132 DIP wide (LayoutTokens.IdleSize), so the clock slot, the status dot
+        // and the date column must share it: the old 70/76/88 split left the date just 32 DIP and
+        // "10月 20" / "Oct 18" were always ellipsised to "10月 ...". Measured clock is ~31 DIP, so the
+        // dot moves to 64 and the date owns everything from 72 to the trailing inset.
         _text.Draw(canvas, model.ClockText ?? "00:00", IslandType.CompactClock,
-            new SKRect(12, 0, 70, height), _theme.Foreground, TextAlign.Left, _opacity);
+            new SKRect(12, 0, 58, height), _theme.Foreground, TextAlign.Left, _opacity);
 
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.Success, _opacity);
-        canvas.DrawCircle(76, height / 2, 2.5f, _fill);
+        canvas.DrawCircle(64, height / 2, 2.5f, _fill);
 
         _text.Draw(canvas, model.DateText, IslandType.CompactSmall,
-            new SKRect(88, 0, width - 12, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+            new SKRect(72, 0, width - 10, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
     }
 
     // ----------------------------------------------------------------- media

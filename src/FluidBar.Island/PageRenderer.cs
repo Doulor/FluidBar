@@ -283,11 +283,16 @@ internal sealed partial class PageRenderer : IDisposable
 
         DrawTransport(canvas, media, page);
 
-        IconSet.Draw(canvas, IconKind.Speaker, new SKRect(page.Left + 254, page.Top + 227, page.Left + 266, page.Top + 239),
-            Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-        _text.Draw(canvas, media.OutputName, IslandType.Output,
-            new SKRect(page.Left + 270, page.Top + 220, page.Left + 320, page.Top + 246), _theme.ForegroundTertiary,
-            TextAlign.Left, _opacity);
+        // The output label only exists for sources that expose an audio endpoint; drawing the bare
+        // speaker glyph without it left an orphan icon floating in the transport row.
+        if (!string.IsNullOrWhiteSpace(media.OutputName))
+        {
+            IconSet.Draw(canvas, IconKind.Speaker, new SKRect(page.Left + 254, page.Top + 227, page.Left + 266, page.Top + 239),
+                Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+            _text.Draw(canvas, media.OutputName, IslandType.Output,
+                new SKRect(page.Left + 270, page.Top + 220, page.Left + 320, page.Top + 246), _theme.ForegroundTertiary,
+                TextAlign.Left, _opacity);
+        }
 
         if (media.QueueCount > 0)
         {

@@ -51,7 +51,8 @@ public sealed class ClipboardPlugin : BuiltinPluginBase
             return ValueTask.CompletedTask;
         });
 
-        PublishSnapshot(_clipboard.Current);
+        // No startup publish: the current clipboard history is old news, and publishing it made the
+        // island pop a "Copied" pill on every launch. SnapshotChanged covers real copies.
     }
 
     private void OnSnapshotChanged(object? sender, SnapshotEventArgs<ClipboardSnapshot> args)

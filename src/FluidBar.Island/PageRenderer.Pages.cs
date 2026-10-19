@@ -590,6 +590,15 @@ internal sealed partial class PageRenderer
             new SKRect(card.Left + 10, card.MidY - 9, card.Left + 28, card.MidY + 9),
             Alpha(new SKColor(0xF4, 0xC4, 0x6C), _opacity),
             _icon);
+
+        // No weather source exists yet; an icon-only card looked broken, so the card states that the
+        // data is unavailable instead of painting an empty temperature column.
+        if (string.IsNullOrEmpty(model.WeatherTemp) && string.IsNullOrEmpty(model.WeatherCondition))
+        {
+            DrawCardCaption(canvas, card, model.WeatherUnavailableText, card.Left + 36);
+            return;
+        }
+
         _text.Draw(
             canvas,
             model.WeatherTemp,
@@ -630,6 +639,11 @@ internal sealed partial class PageRenderer
         DrawCard(canvas, card, 11);
         var stats = model.Stats;
         var count = stats is null ? 0 : Math.Min(3, stats.Count);
+        if (count == 0)
+        {
+            DrawCardCaption(canvas, card, model.StatsEmptyText, card.Left);
+        }
+
         for (var i = 0; i < count; i++)
         {
             var stat = stats![i];
@@ -692,6 +706,14 @@ internal sealed partial class PageRenderer
 
         var tasks = model.Tasks;
         var count = tasks is null ? 0 : Math.Min(3, tasks.Count);
+        if (count == 0)
+        {
+            // The task card is the tallest body area; without rows only the header was painted, so the
+            // card looked like an empty placeholder.
+            DrawCardCaption(canvas, new SKRect(card.Left, card.Top + 22, card.Right, card.Bottom - 6),
+                model.TasksEmptyText, card.Left);
+        }
+
         for (var i = 0; i < count; i++)
         {
             var task = tasks![i];
@@ -746,6 +768,18 @@ internal sealed partial class PageRenderer
     };
 
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>Centres a small localized caption inside a widget card (empty/unavailable state).</summary>
+    private void DrawCardCaption(SKCanvas canvas, SKRect area, string? text, float leftInset)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var rect = new SKRect(leftInset + 8, area.Top, Math.Max(leftInset + 9, area.Right - 8), area.Bottom);
+        _text.Draw(canvas, text, IslandType.EmptyHint, rect, _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+    }
 
     private void DrawListRowBackground(SKCanvas canvas, SKRect row, bool hovered, bool selected)
     {

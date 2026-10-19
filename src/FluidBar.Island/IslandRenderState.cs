@@ -790,8 +790,14 @@ public sealed record WidgetsPageModel
     /// <summary>Wind line ("NW 3").</summary>
     public string? WeatherWind { get; init; }
 
+    /// <summary>Localized "unavailable" caption painted when the weather source has no data.</summary>
+    public string? WeatherUnavailableText { get; init; }
+
     /// <summary>System stat rows (up to three).</summary>
     public IReadOnlyList<WidgetStatModel> Stats { get; init; } = [];
+
+    /// <summary>Localized "unavailable" caption painted when no system stat could be sampled.</summary>
+    public string? StatsEmptyText { get; init; }
 
     /// <summary>Task card title ("Today").</summary>
     public string? TasksTitle { get; init; }
@@ -801,6 +807,9 @@ public sealed record WidgetsPageModel
 
     /// <summary>Task rows (up to three are painted).</summary>
     public IReadOnlyList<WidgetTaskModel> Tasks { get; init; } = [];
+
+    /// <summary>Localized "unavailable" caption painted when no task source is available.</summary>
+    public string? TasksEmptyText { get; init; }
 
     /// <summary>Task row index under the pointer (-1 = none).</summary>
     public int HoverIndex { get; init; } = -1;

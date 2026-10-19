@@ -75,6 +75,11 @@ public sealed class SkiaIslandController : IDisposable
     private bool _started;
     private bool _disposed;
 
+    // Clipboard "copied" confirmation: the platform seam owns the copy, the island owns the 1.6 s
+    // check-mark feedback. Remembered by preview text so a re-ordered history cannot mislabel a row.
+    private static readonly TimeSpan CopyFeedbackDuration = TimeSpan.FromMilliseconds(1600);
+    private (string Preview, DateTimeOffset At)? _copiedClipboard;
+
     // Click-vs-drag: a compact press is only a candidate click; the host turns it into a window move
     // once the pointer passes SkiaDragThreshold in screen space, and the click is committed on release.
     private bool _clickPending;
@@ -189,6 +194,7 @@ public sealed class SkiaIslandController : IDisposable
                 || state.PeekDwellDeadline is not null
                 || state.AutoCollapseDeadline is not null
                 || state.AutoHideDeadline is not null
+                || _copiedClipboard is not null
                 || _schedulerState.HasActivities
                 || _archipelago.IsVisible;
         }
@@ -259,6 +265,15 @@ public sealed class SkiaIslandController : IDisposable
         if (state.AutoHideDeadline is { } hide && now >= hide)
         {
             ApplyInput(IslandInput.AutoHideElapsed());
+        }
+
+        if (_copiedClipboard is { } copied && now - copied.At > CopyFeedbackDuration)
+        {
+            // Drop the check-mark highlight once the confirmation window elapsed and repaint the page.
+            _copiedClipboard = null;
+            SyncContent(full: false);
+            InvalidateFull();
+            StateChanged?.Invoke();
         }
 
         if (_schedulerState.HasActivities)
@@ -980,7 +995,9 @@ public sealed class SkiaIslandController : IDisposable
 
         var peeked = State.Kind == IslandStateKind.Peek;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked);
-        _pages = SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings);
+        _pages = ApplyCopyFeedback(
+            SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
+            _time.GetLocalNow());
         _theme = SkiaIslandThemeMapper.Map(settings);
         _motion.SetTarget(BuildTarget(viewModel));
         BuildRenderState();
@@ -1171,6 +1188,11 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
+        if (action.Kind == IslandPlatformActionKind.ClipboardCopy)
+        {
+            RememberCopiedClipboard(action.Index);
+        }
+
         var result = _platformActions.Invoke(action);
         switch (result.Outcome)
         {
@@ -1185,6 +1207,42 @@ public sealed class SkiaIslandController : IDisposable
                     result.Reason ?? "no platform service backs this control");
                 break;
         }
+    }
+
+    /// <summary>Starts the "copied" confirmation for the clipboard row that was just dispatched.</summary>
+    private void RememberCopiedClipboard(int index)
+    {
+        var items = _pages.Clipboard.Items;
+        if (index < 0 || index >= items.Count)
+        {
+            return;
+        }
+
+        var now = _time.GetLocalNow();
+        _copiedClipboard = (items[index].Preview ?? string.Empty, now);
+        _pages = ApplyCopyFeedback(_pages, now);
+        InvalidateFull();
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Marks the clipboard row matching the remembered preview while the confirmation lasts.</summary>
+    private ExpandedPageContent ApplyCopyFeedback(ExpandedPageContent pages, DateTimeOffset now)
+    {
+        if (_copiedClipboard is not { } copied || now - copied.At > CopyFeedbackDuration)
+        {
+            return pages;
+        }
+
+        var items = pages.Clipboard.Items;
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (string.Equals(items[i].Preview, copied.Preview, StringComparison.Ordinal))
+            {
+                return pages with { Clipboard = pages.Clipboard with { CopiedIndex = i } };
+            }
+        }
+
+        return pages;
     }
 
     private bool TryRaiseLegacyMediaCommand(IslandPlatformActionKind kind)

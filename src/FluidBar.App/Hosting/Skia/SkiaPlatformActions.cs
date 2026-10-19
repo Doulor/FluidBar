@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluidBar.App.Island;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -57,6 +58,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly HttpClient _lyricsHttp;
     private readonly LyricsCache _lyricsCache;
     private readonly LyricsService _lyrics;
+    private readonly SkiaSystemStats _systemStats;
+    private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
+    private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
     private ITimer? _mediaTick;
     private LyricsDocument? _lyricsDocument;
@@ -131,6 +135,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             _lyricsCache,
             _platformLogger,
             _counters);
+        _systemStats = new SkiaSystemStats(time);
+        var today = time.GetLocalNow();
+        _calendarMonth = new DateOnly(today.Year, today.Month, 1);
 
         _media.SnapshotChanged += OnSnapshotChanged;
         _clipboard.SnapshotChanged += OnSnapshotChanged;
@@ -224,10 +231,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var volume = _volume.Current;
         var brightness = _brightness.Current;
         var clipboard = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
+        var now = _time.GetLocalNow();
+        var culture = _localizer?.CurrentCulture ?? CultureInfo.CurrentCulture;
+        int? batteryPercent = battery is { HasBattery: true } ? battery.Percent : null;
+        var today = DateOnly.FromDateTime(now.DateTime);
         return new IslandContent
         {
-            Now = _time.GetLocalNow(),
-            BatteryPercent = battery is { HasBattery: true } ? battery.Percent : null,
+            Now = now,
+            BatteryPercent = batteryPercent,
             IsCharging = battery?.IsCharging ?? false,
             FocusOn = focus?.IsActive ?? false,
             VolumePercent = volume is { HasDevice: true } ? volume.Percent : null,
@@ -238,6 +249,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Notifications = [],
             Agents = MapAgents(_agentInbox.Current),
             Tasks = [],
+            // The widgets page owns the calendar locally: the month grid needs no platform service, so
+            // the previous empty card was a missing mapping rather than missing data.
+            CalendarMonthTitle = FormatMonthTitle(_calendarMonth, culture),
+            WeekdayHeaders = BuildWeekdayHeaders(culture),
+            CalendarDays = BuildCalendarDays(_calendarMonth, today),
+            Stats = _systemStats.Build(batteryPercent, Localized(LocKeys.Battery.Title, "Battery")),
             UnreadCount = 0,
         };
     }
@@ -393,9 +410,103 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return (null, null);
         }
 
-        var current = document.LineAt(position);
-        var next = document.NextLine(position);
-        return (current?.Text, next?.Text);
+        var lines = document.Lines;
+        var index = document.FindLineIndex(position);
+
+        // Lyric files often start with credit lines ("作词: X", "Composer: X") that were parsed as timed lines;
+        // painting them as the current lyric looked like the island was showing the wrong song.
+        var currentIndex = FindLyricIndex(lines, index, forward: false);
+        currentIndex = currentIndex < 0 ? FindLyricIndex(lines, index + 1, forward: true) : currentIndex;
+        if (currentIndex < 0)
+        {
+            return (null, null);
+        }
+
+        var nextIndex = FindLyricIndex(lines, currentIndex + 1, forward: true);
+        return (lines[currentIndex].Text, nextIndex < 0 ? null : lines[nextIndex].Text);
+    }
+
+    /// <summary>Walks the lyric lines from <paramref name="start"/> towards the start/end until a real lyric line.</summary>
+    private static int FindLyricIndex(ImmutableArray<LyricsLine> lines, int start, bool forward)
+    {
+        if (forward)
+        {
+            for (var i = Math.Max(0, start); i < lines.Length; i++)
+            {
+                if (!IsLyricCredit(lines[i].Text))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        for (var i = Math.Min(start, lines.Length - 1); i >= 0; i--)
+        {
+            if (!IsLyricCredit(lines[i].Text))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Credit/metadata tokens that lyric catalogs append as timed lines (zh and en).</summary>
+    private static readonly string[] LyricCreditTokens =
+    [
+        "作词", "作曲", "编曲", "演唱", "原唱", "翻唱", "歌手", "制作人", "制作", "监制", "出品",
+        "混音", "录音", "母带", "和声", "合音", "伴奏", "后期", "封面", "海报", "设计", "策划", "统筹",
+        "发行", "版权", "词曲", "编配",
+        "lyric", "lyrics", "composer", "music", "arranger", "producer", "vocals", "vocal",
+        "artist", "mix", "mastering", "written", "words", "cover", "recorded", "recording",
+        "engineer", "studio", "credits", "lrc",
+    ];
+
+    /// <summary>Separators that join several credit roles in one prefix ("混音/录音: ...").</summary>
+    private static readonly char[] LyricCreditSeparators = ['/', '、', '&', ',', ';', ' ', '·', '|', '-', '+'];
+
+    /// <summary>Whether a lyric line is a credit/metadata line instead of sung text.</summary>
+    private static bool IsLyricCredit(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
+        var trimmed = text.Trim();
+        var colon = trimmed.IndexOfAny([':', '：']);
+        if (colon <= 0 || colon > 24)
+        {
+            return false;
+        }
+
+        var prefix = trimmed[..colon].Trim().ToLowerInvariant();
+        if (prefix.Length == 0)
+        {
+            return false;
+        }
+
+        // Roles are often concatenated ("混音/录音", "作词 & 作曲"), so match token by token.
+        foreach (var token in prefix.Split(LyricCreditSeparators, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = token.Trim();
+            if (candidate.Length == 0)
+            {
+                continue;
+            }
+
+            foreach (var credit in LyricCreditTokens)
+            {
+                if (candidate.StartsWith(credit, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private MediaSessionData MapMedia(MediaSnapshot media)
@@ -455,6 +566,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private ClipboardItemData MapClipboard(ClipboardEntry entry)
     {
+        var preview = ClipboardPreview(entry);
+        return new ClipboardItemData
+        {
+            Preview = preview,
+            Meta = RelativeTime(entry.CapturedAtUtc),
+            // Pin state is App-owned (ClipboardService keeps only history), so the island remembers
+            // pinned rows by preview text for this process lifetime.
+            Pinned = _pinnedClipboard.Contains(preview),
+            IsImage = entry.Kind == ClipboardContentKind.Image,
+        };
+    }
+
+    private static string ClipboardPreview(ClipboardEntry entry)
+    {
         var preview = entry.Kind switch
         {
             ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(entry.Text) => entry.Text!,
@@ -462,13 +587,25 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             ClipboardContentKind.Image => "Image",
             _ => "(empty)",
         };
-        return new ClipboardItemData
+        return preview.ReplaceLineEndings(" ").Trim();
+    }
+
+    private IslandActionResult ToggleClipboardPin(int index)
+    {
+        var history = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
+        if (index < 0 || index >= Math.Min(8, history.Length))
         {
-            Preview = preview.ReplaceLineEndings(" ").Trim(),
-            Meta = RelativeTime(entry.CapturedAtUtc),
-            Pinned = false,
-            IsImage = entry.Kind == ClipboardContentKind.Image,
-        };
+            return Unsupported("the clipboard row no longer exists");
+        }
+
+        var preview = ClipboardPreview(history[index]);
+        if (!_pinnedClipboard.Add(preview))
+        {
+            _pinnedClipboard.Remove(preview);
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
     }
 
     private static string FormatTime(TimeSpan value)
@@ -481,6 +618,59 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes} min";
         if (delta.TotalHours < 24) return $"{(int)delta.TotalHours} h";
         return $"{(int)delta.TotalDays} d";
+    }
+
+    /// <summary>Moves the widgets calendar by one month and republishes the island content.</summary>
+    private IslandActionResult NavigateCalendar(int delta)
+    {
+        _calendarMonth = _calendarMonth.AddMonths(delta);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    /// <summary>Culture-aware month header ("2026年10月" for zh, "October 2026" otherwise).</summary>
+    private static string FormatMonthTitle(DateOnly month, CultureInfo culture)
+    {
+        var date = month.ToDateTime(TimeOnly.MinValue);
+        return culture.TwoLetterISOLanguageName == "zh"
+            ? date.ToString("yyyy年M月", culture)
+            : date.ToString("MMMM yyyy", culture);
+    }
+
+    /// <summary>Seven weekday headers, Monday first (the calendar grid is Monday-first).</summary>
+    private static ImmutableArray<string> BuildWeekdayHeaders(CultureInfo culture)
+    {
+        var names = culture.DateTimeFormat.AbbreviatedDayNames;
+        var builder = ImmutableArray.CreateBuilder<string>(7);
+        for (var i = 0; i < 7; i++)
+        {
+            builder.Add(names[((int)DayOfWeek.Monday + i) % 7]);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>42 Monday-first calendar cells for a month (current day highlighted, no event source yet).</summary>
+    private static ImmutableArray<CalendarDayData> BuildCalendarDays(DateOnly month, DateOnly today)
+    {
+        var first = month.ToDateTime(TimeOnly.MinValue);
+        var offset = ((int)first.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var start = first.AddDays(-offset);
+        var todayDate = today.ToDateTime(TimeOnly.MinValue);
+        var builder = ImmutableArray.CreateBuilder<CalendarDayData>(42);
+        for (var i = 0; i < 42; i++)
+        {
+            var day = start.AddDays(i);
+            builder.Add(new CalendarDayData
+            {
+                Day = day.Day,
+                InMonth = day.Month == month.Month && day.Year == month.Year,
+                IsToday = day.Date == todayDate,
+                HasEvents = false,
+            });
+        }
+
+        return builder.ToImmutable();
     }
 
     /// <summary>Whether the best-effort start has been kicked off.</summary>
@@ -508,6 +698,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
+        _systemStats.Prime();
         ScheduleClockTick();
     }
 
@@ -587,14 +778,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationDismiss => Defer(
                 action, "notification dismissal is App-owned; Windows exposes no public toast-dismiss API"),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
-            IslandPlatformActionKind.ClipboardPin => Defer(
-                action, "clipboard pinning is App-owned; ClipboardService has no pin state"),
+            IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
                 action, "agent session activation is App-owned (no platform session-activate service)"),
             IslandPlatformActionKind.TaskToggle => Defer(
                 action, "task state is App-owned (no platform task service)"),
-            IslandPlatformActionKind.CalendarNavigate => Defer(
-                action, "calendar month state is App-owned (no platform calendar service)"),
+            IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
             _ => Unsupported($"unknown island action {action.Kind}"),
         };
     }

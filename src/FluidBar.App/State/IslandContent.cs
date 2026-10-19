@@ -125,6 +125,28 @@ public sealed record WidgetTaskData
     public bool Done { get; init; }
 }
 
+/// <summary>Visual tone of a widgets system stat bar (maps onto the renderer's own tone enum).</summary>
+public enum WidgetStatKind
+{
+    /// <summary>Secondary/neutral.</summary>
+    Neutral,
+
+    /// <summary>User accent (CPU).</summary>
+    Accent,
+
+    /// <summary>Informational blue (RAM).</summary>
+    Info,
+
+    /// <summary>Success (battery).</summary>
+    Success,
+}
+
+/// <summary>One system stat row on the widgets page (CPU/RAM/battery), sampled by the platform seam.</summary>
+/// <param name="Label">Short label ("CPU", "RAM", localized battery label).</param>
+/// <param name="Value">Percentage 0..100.</param>
+/// <param name="Kind">Bar tone.</param>
+public readonly record struct WidgetStatData(string Label, int Value, WidgetStatKind Kind = WidgetStatKind.Neutral);
+
 /// <summary>One calendar cell on the widgets page.</summary>
 public sealed record CalendarDayData
 {
@@ -194,6 +216,9 @@ public sealed record IslandContent
 
     /// <summary>Widget task rows.</summary>
     public ImmutableArray<WidgetTaskData> Tasks { get; init; } = [];
+
+    /// <summary>System stat rows for the widgets card (CPU/RAM/battery); empty when unsampleable.</summary>
+    public ImmutableArray<WidgetStatData> Stats { get; init; } = [];
 
     /// <summary>Unread notification count.</summary>
     public int UnreadCount { get; init; }
