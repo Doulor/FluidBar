@@ -145,6 +145,16 @@ public static class IslandStateMachine
             {
                 if (!hasActivities)
                 {
+                    if (state.IsHovering)
+                    {
+                        // The pointer is on the open panel: never yank it away because a transient
+                        // activity expired. Content updates in place; leaving re-arms auto-collapse.
+                        return Transition(state, baseState with { Page = state.Page },
+                            IslandTransitionReason.ContentUpdated,
+                            Effect(IslandEffectKind.UpdateContent),
+                            Effect(IslandEffectKind.UpdateTray));
+                    }
+
                     // Close from the cleared base state: otherwise ContentKind/ActivityCount survive the
                     // close and the next compact pill keeps the ended activity's width with idle content.
                     return StartClosing(baseState, options, now, IslandStateKind.Compact,

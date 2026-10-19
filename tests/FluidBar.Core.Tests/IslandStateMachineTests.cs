@@ -408,6 +408,26 @@ public class IslandStateMachineTests
     }
 
     [Fact]
+    public void Expanded_LastActivityEnds_WhileHovering_KeepsThePanelOpen()
+    {
+        var scheduler = new ActivityScheduler();
+        var added = scheduler.Update(ActivitySchedulerState.Empty, TestData.Notification(), TestData.Now);
+        var expanded = IslandState.Hidden with
+        {
+            Kind = IslandStateKind.Expanded,
+            ActivityCount = added.State.ActivityCount,
+            ContentKind = ActivityKind.Notification,
+            IsHovering = true,
+        };
+
+        var transition = Reduce(expanded, FromUpdate(ActivityScheduler.Clear(added.State)));
+
+        Assert.Equal(IslandStateKind.Expanded, transition.State.Kind);
+        Assert.Equal(IslandTransitionReason.ContentUpdated, transition.Reason);
+        Assert.Null(transition.State.ContentKind);
+    }
+
+    [Fact]
     public void Expanded_PointerEntered_SuspendsAutoCollapse()
     {
         var expanded = IslandState.Hidden with

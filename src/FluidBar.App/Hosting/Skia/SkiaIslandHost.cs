@@ -326,6 +326,11 @@ public sealed class SkiaIslandHost : IDisposable
             EnsureDeadlineTicker();
             EnsureFrameLoop();
 
+            if (_mouseHook is not null)
+            {
+                await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
+            }
+
             _logger.Information(LogCategories.Lifecycle, "island.skia.started", "Skia island host started.",
                 data: new Dictionary<string, object?>
                 {
@@ -429,7 +434,9 @@ public sealed class SkiaIslandHost : IDisposable
         _mouseHook.PointerMoved += OnHookPointerMoved;
         _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
-        await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
+        // Started at the end of StartAsync, after the controller has a render state and the first
+        // frame is on screen: a hook that consumes clicks before that would swallow them into a
+        // controller that cannot hit-test yet (the classic "first click after launch does nothing").
     }
 
     private static List<CoreMonitorInfo> EnumerateCoreMonitors(MonitorSet? set)
