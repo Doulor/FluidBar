@@ -309,6 +309,7 @@
     "Settings.Market.Refresh": "刷新",
     "Settings.Market.NoResults": "没有匹配的插件",
     "Settings.Market.DemoCatalog": "正在显示演示目录：安装、更新和回滚已禁用。",
+    "Settings.Market.Footnote": "只安装通过签名校验的插件；安装前会列出它申请的权限。",
     "Settings.Market.Offline": "无法连接插件市场，请检查网络。",
     "Settings.Market.Verified": "已验证发布者",
     "Settings.Market.Downloads": "{count, plural, other {# 次安装}}",

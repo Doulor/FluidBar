@@ -804,6 +804,8 @@ public static partial class LocKeys
             public const string NoResults = "Settings.Market.NoResults";
             /// <summary><c>Settings.Market.DemoCatalog</c></summary>
             public const string DemoCatalog = "Settings.Market.DemoCatalog";
+            /// <summary><c>Settings.Market.Footnote</c></summary>
+            public const string Footnote = "Settings.Market.Footnote";
             /// <summary><c>Settings.Market.Offline</c></summary>
             public const string Offline = "Settings.Market.Offline";
             /// <summary><c>Settings.Market.Verified</c></summary>

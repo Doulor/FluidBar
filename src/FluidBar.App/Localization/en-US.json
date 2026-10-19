@@ -309,6 +309,7 @@
     "Settings.Market.Refresh": "Refresh",
     "Settings.Market.NoResults": "No plugins match your search",
     "Settings.Market.DemoCatalog": "Showing the demo catalog: installs, updates and rollbacks are disabled.",
+    "Settings.Market.Footnote": "Only signed plugins can be installed; the capabilities it asks for are listed first.",
     "Settings.Market.Offline": "The marketplace is unreachable. Check your connection.",
     "Settings.Market.Verified": "Verified publisher",
     "Settings.Market.Downloads": "{count, plural, one {# install} other {# installs}}",
