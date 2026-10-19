@@ -416,14 +416,32 @@ public static class SettingsSectionBuilder
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
                     value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }))));
 
-        panel.Children.Add(new TextBlock
+        // Prototype preview header: label on the left, the live radius/opacity pair on the right.
+        var previewHeader = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Margin = new Thickness(0, 20, 0, 8),
+        };
+        var previewLabel = new TextBlock
         {
             Text = ctx.Localizer.Get(LocKeys.Settings.Appearance.PreviewLabel),
             FontSize = SettingsMetrics.CaptionSize,
             FontWeight = FontWeight.SemiBold,
             Foreground = brushes.Tertiary,
-            Margin = new Thickness(0, 20, 0, 8),
-        });
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(previewLabel, 0);
+        previewHeader.Children.Add(previewLabel);
+        var previewValues = new TextBlock
+        {
+            Text = $"{settings.PanelRadius:0} px · {settings.FillOpacity * 100:0}%",
+            FontSize = SettingsMetrics.CaptionSize,
+            Foreground = brushes.Tertiary,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(previewValues, 1);
+        previewHeader.Children.Add(previewValues);
+        panel.Children.Add(previewHeader);
         panel.Children.Add(new Border
         {
             Height = 104,
