@@ -102,3 +102,7 @@
 - `SkiaShellIntegration.ApplyBindingsAsync`：保存后立即 unregister/register，无需重启；冲突时回退 Ctrl+Alt+Shift。
 - 修复 AppBootstrap 退出时未释放 tray/hotkey 集成。
 - 全量：**1477 passed / 0 failed**（UI 186）。
+
+### 2026-10-19 12:35 — 最终发布校验
+- 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `DA422BA5…37362`；发布 smoke 420 帧、0 提交失败、surface 732×576 @150%、上传 ~273µs。
+- 全量 1477 tests 绿；热键可在设置中编辑并实时重注册。
