@@ -2,6 +2,7 @@ using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Settings;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Platform.Windows.Focus;
+using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
 using FluidBar.Platform.Windows.Threading;
 
@@ -232,6 +233,33 @@ public sealed class SkiaPlatformActionsTests
         AssertUnsupported(
             actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.ClipboardCopy, Text: "")),
             "no text to copy");
+
+        settings.Dispose();
+    }
+
+    [Fact]
+    public async Task NotificationListener_IsOneSharedInstanceForPageAndPlugin()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        var view = Assert.IsType<NewArrivalsNotificationSource>(actions.PluginNotificationSource);
+
+        // The plugin path wraps the very listener the notification page maps: one read loop.
+        Assert.Same(actions.NotificationSource, view.Inner);
+        // The view is created once (a plugin-runtime restart must not re-baseline and swallow arrivals).
+        Assert.Same(view, actions.PluginNotificationSource);
+        settings.Dispose();
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ReleasesTheSharedListenerOnce()
+    {
+        var settings = CreateSettings();
+        var actions = new SkiaPlatformActions(settings);
+
+        await actions.DisposeAsync();
+        await actions.DisposeAsync();
 
         settings.Dispose();
     }

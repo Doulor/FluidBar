@@ -62,6 +62,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly SkiaSystemStats _systemStats;
     private readonly NotificationService _notifications;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
+    private INotificationSource? _pluginNotificationSource;
     private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
     private ITimer? _mediaTick;
@@ -146,8 +147,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _systemStats = new SkiaSystemStats(time);
 
         // The island page needs the toast list (bounded recent + close sync), not just the last event:
-        // it owns a listener instance with seeding enabled. The built-in notification plugin keeps its
-        // own listener for the compact pill (new arrivals only); both read the same Windows list.
+        // this is the app's SINGLE listener (seeding enabled). AppBootstrap hands the arrivals-only view
+        // (PluginNotificationSource) to the notifications plugin, so the plugin keeps its own semantics
+        // without a second read loop.
         _notifications = new NotificationService(_platformLogger, _counters, new NotificationServiceOptions
         {
             MaxRecentNotifications = PageNotificationLimit,
@@ -186,7 +188,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Bounded artwork materializer exposed to the media plugin (<c>AlbumArtPath</c>).</summary>
     public ArtworkTempStore ArtworkTempStore => _artworkTempStore;
 
-    /// <summary>Dedicated platform message host (shared by the plugin notification listener).</summary>
+    /// <summary>Dedicated platform message host (window messages for the App-composed services).</summary>
     public PlatformMessageHost MessageHost => _messageHost;
 
     /// <summary>Diagnostics counters shared by the platform services.</summary>
@@ -194,6 +196,19 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Platform logger used by the App-composed services.</summary>
     public IPlatformLogger PlatformLogger => _platformLogger;
+
+    /// <summary>
+    /// The app's only toast listener: the notification page maps it, and the plugin path consumes the
+    /// arrivals-only view below. Both consumers share this instance (one read loop, one disposal).
+    /// </summary>
+    public INotificationSource NotificationSource => _notifications;
+
+    /// <summary>
+    /// Plugin view over the same listener: hides the backlog the page seeds, so the compact notification
+    /// activity still only fires for toasts that arrive while the app runs.
+    /// </summary>
+    public INotificationSource PluginNotificationSource =>
+        _pluginNotificationSource ??= _notifications.CreateNewArrivalsView();
 
     /// <summary>Latest Wi-Fi radio snapshot (null before the service starts).</summary>
     public RadioSnapshot? WifiState => _wifi.Current;
@@ -300,7 +315,19 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Toast list changed (new toast, closed toast, or the service's polling fallback tick).</summary>
     private void OnNotificationsChanged(object? sender, SnapshotEventArgs<NotificationsSnapshot> args)
-        => Changed?.Invoke(this, EventArgs.Empty);
+    {
+        try
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // The plugin path subscribes to the same listener: a page-side consumer failure is logged and
+            // must never break the notification activity (and vice versa).
+            _logger.Warning(LogCategories.Platform, "island.actions.notifications-changed-failed",
+                "Refreshing the island after a notification change failed; the plugin path is unaffected.", ex);
+        }
+    }
 
     /// <summary>
     /// Starts (or stops) the 1 Hz media refresh. While a session is playing the progress bar and the

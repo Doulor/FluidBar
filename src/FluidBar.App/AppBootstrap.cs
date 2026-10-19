@@ -43,7 +43,6 @@ internal sealed class AppBootstrap
     private SkiaPlatformActions? _platformActions;
     private JsonUiSettingsStore? _settingsStore;
     private PluginRuntime? _pluginRuntime;
-    private NotificationService? _pluginNotifications;
     private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
     private StartupRegistrationSync? _startupRegistration;
     private AppUpdateCoordinator? _updates;
@@ -661,7 +660,15 @@ internal sealed class AppBootstrap
         }
     }
 
-    /// <summary>Builds the first-party platform services from the existing island platform seam.</summary>
+    /// <summary>
+    /// Builds the first-party platform services from the existing island platform seam.
+    /// </summary>
+    /// <remarks>
+    /// The notification listener is NOT created here: <see cref="SkiaPlatformActions"/> owns the single
+    /// instance (the notification page seeds it) and this method hands the notifications plugin an
+    /// arrivals-only view of that same instance. One listener, one read loop, one disposal — the plugin
+    /// still never replays the existing toast backlog as a compact activity.
+    /// </remarks>
     private BuiltinPlatformServices CreateBuiltinPlatformServices()
     {
         if (_platformActions is null)
@@ -669,49 +676,26 @@ internal sealed class AppBootstrap
             return new BuiltinPlatformServices();
         }
 
-        var services = new BuiltinPlatformServices
+        INotificationSource? notifications = null;
+        try
+        {
+            notifications = _platformActions.PluginNotificationSource;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.notifications.unavailable",
+                "The shared notification listener could not be exposed to plugins; the notifications built-in plugin stays disabled.", ex);
+        }
+
+        return new BuiltinPlatformServices
         {
             Media = _platformActions.MediaSource,
             Clipboard = _platformActions.ClipboardSource,
             ArtworkTempStore = _platformActions.ArtworkTempStore,
             AgentInbox = _platformActions.AgentInboxSource,
             AgentHookInstaller = _platformActions.AgentHookInstaller,
+            Notifications = notifications,
         };
-
-        try
-        {
-            _pluginNotifications = new NotificationService(_platformActions.PlatformLogger, _platformActions.Counters);
-            services = new BuiltinPlatformServices
-            {
-                Media = _platformActions.MediaSource,
-                Clipboard = _platformActions.ClipboardSource,
-                ArtworkTempStore = _platformActions.ArtworkTempStore,
-                AgentInbox = _platformActions.AgentInboxSource,
-                AgentHookInstaller = _platformActions.AgentHookInstaller,
-                Notifications = _pluginNotifications,
-            };
-            _ = StartNotificationListenerAsync(_pluginNotifications);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(LogCategories.Plugin, "plugin.notifications.unavailable",
-                "The notification listener could not be created; the notifications built-in plugin stays disabled.", ex);
-        }
-
-        return services;
-    }
-
-    private async Task StartNotificationListenerAsync(NotificationService service)
-    {
-        try
-        {
-            await service.StartAsync().ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(LogCategories.Plugin, "plugin.notifications.start-failed",
-                "The notification listener did not start; the notifications built-in plugin receives no events.", ex);
-        }
     }
 
     /// <summary>Routes one adapted plugin event into the active island host's Core event hub.</summary>
@@ -816,11 +800,7 @@ internal sealed class AppBootstrap
     {
         _pluginRuntime?.DisposeInBackground();
         _pluginRuntime = null;
-        if (_pluginNotifications is not null)
-        {
-            _ = DisposeQuietlyAsync(_pluginNotifications);
-            _pluginNotifications = null;
-        }
+        // The single notification listener is owned (and disposed exactly once) by _platformActions.
 
         _skiaHost?.Dispose();
         _skiaHost = null;
@@ -892,18 +872,6 @@ internal sealed class AppBootstrap
         catch (Exception)
         {
             // Exit path: a log sink that cannot stop must not block shutdown.
-        }
-    }
-
-    private static async Task DisposeQuietlyAsync(IAsyncDisposable disposable)
-    {
-        try
-        {
-            await disposable.DisposeAsync().ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // App exit path: the process is going away; a failed service stop must not crash shutdown.
         }
     }
 

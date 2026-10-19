@@ -53,8 +53,12 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     private UserNotificationListener? _listener;
     private ImmutableArray<NotificationEntry> _recent = ImmutableArray<NotificationEntry>.Empty;
     private NotificationAccessState _access = NotificationAccessState.Unavailable;
+    private static int s_activeInstances;
     private ITimer? _pollTimer;
     private bool _pollingFallback;
+    private IReadOnlySet<uint> _seededIds = ImmutableHashSet<uint>.Empty;
+    private int _primed;
+    private int _instanceCounted;
     private int _processing;
     private int _subscribed;
 
@@ -67,6 +71,19 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         _options = options ?? new NotificationServiceOptions();
         _history = new NotificationHistory(_options.MaxSeenIds, _options.MaxBatch);
     }
+
+    /// <summary>
+    /// Started listener instances in this process. The app composes exactly one
+    /// <see cref="NotificationService"/> (page + plugin share it); a value above one means a second read
+    /// loop exists and the startup log records it.
+    /// </summary>
+    public static int ActiveInstanceCount => Volatile.Read(ref s_activeInstances);
+
+    /// <summary>True once the first listener read finished (existing toasts primed/seeded).</summary>
+    public bool IsPrimed => Volatile.Read(ref _primed) != 0;
+
+    /// <summary>Ids of the toasts seeded as backlog (<see cref="NotificationServiceOptions.SeedRecentFromExisting"/>).</summary>
+    public IReadOnlySet<uint> SeededIds => Volatile.Read(ref _seededIds);
 
     /// <summary>Current permission state.</summary>
     public NotificationAccessState AccessState
@@ -90,6 +107,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
         StopPolling();
         _pollingFallback = false;
+        Volatile.Write(ref _primed, 0);
+        Volatile.Write(ref _seededIds, ImmutableHashSet<uint>.Empty);
 
         UserNotificationListener listener;
         try
@@ -106,6 +125,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         }
 
         _listener = listener;
+        CountInstance();
         var access = MapAccess(listener.GetAccessStatus());
         SetAccess(access, publish: true);
 
@@ -117,6 +137,35 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         {
             _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.permission-required",
                 $"Notification access is '{access}'; the listener is idle until the user grants permission.");
+        }
+
+        _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.listener-started",
+            "Notification listener instance started.", new Dictionary<string, object?>
+            {
+                ["activeInstances"] = ActiveInstanceCount,
+                ["seeded"] = _options.SeedRecentFromExisting,
+                ["mode"] = _pollingFallback ? "polling" : "events",
+                ["pollIntervalMs"] = (int)_options.PollInterval.TotalMilliseconds,
+                ["primed"] = IsPrimed,
+            });
+    }
+
+    /// <summary>Creates an arrivals-only view over this listener (the plugin path keeps the same instance).</summary>
+    public INotificationSource CreateNewArrivalsView() => new NewArrivalsNotificationSource(this, _logger);
+
+    private void CountInstance()
+    {
+        if (Interlocked.Exchange(ref _instanceCounted, 1) == 0)
+        {
+            Interlocked.Increment(ref s_activeInstances);
+        }
+    }
+
+    private void ReleaseInstance()
+    {
+        if (Interlocked.Exchange(ref _instanceCounted, 0) != 0)
+        {
+            Interlocked.Decrement(ref s_activeInstances);
         }
     }
 
@@ -187,6 +236,10 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         {
             StartPolling();
         }
+
+        // The first read finished: the backlog is known (seeded ids, possibly none), so the arrivals-only
+        // view can hide it without racing the seed.
+        Volatile.Write(ref _primed, 1);
     }
 
     /// <summary>
@@ -249,6 +302,12 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             return;
         }
 
+        // Debug-only: one line per read, so a log capture shows the single poll loop and its cadence.
+        _logger.LogDebug(PlatformLogCategory.Notifications, "notifications.poll-tick",
+            "Polling the toast list.", new Dictionary<string, object?>
+            {
+                ["intervalMs"] = (int)_options.PollInterval.TotalMilliseconds,
+            });
         _ = ProcessChangesSafeAsync();
     }
 
@@ -271,6 +330,11 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         lock (_stateGate)
         {
             _recent = seeded;
+        }
+
+        if (!seeded.IsDefaultOrEmpty)
+        {
+            Volatile.Write(ref _seededIds, ImmutableHashSet.CreateRange(seeded.Select(entry => entry.Id)));
         }
 
         Publish(new NotificationsSnapshot(NotificationAccessState.Allowed, seeded));
@@ -345,7 +409,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         }
         catch (Exception ex)
         {
-            _counters.IncrementMediaSessionErrors();
+            _counters.IncrementMonitorCallbackFailures();
             _logger.LogError(PlatformLogCategory.Notifications, "notifications.process-failed",
                 "Processing notification changes failed.", ex);
         }
@@ -464,6 +528,9 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         }
 
         _history.Reset();
+        Volatile.Write(ref _primed, 0);
+        Volatile.Write(ref _seededIds, ImmutableHashSet<uint>.Empty);
+        ReleaseInstance();
         await ValueTask.CompletedTask;
     }
 }
