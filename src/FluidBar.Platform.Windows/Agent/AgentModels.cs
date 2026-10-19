@@ -9,6 +9,9 @@ public enum AgentKind
     Generic,
     Claude,
     Codex,
+
+    /// <summary>DeepSeek Harness and compatible CLI agents.</summary>
+    DeepSeek,
 }
 
 /// <summary>Normalized agent lifecycle event.</summary>
@@ -140,6 +143,7 @@ public static class AgentEventParser
     {
         "claude" or "claude-code" or "claude_code" => AgentKind.Claude,
         "codex" or "openai-codex" or "codex-cli" => AgentKind.Codex,
+        "deepseek" or "deepseek-harness" or "deepseek_harness" or "dsh" or "harness" => AgentKind.DeepSeek,
         _ => AgentKind.Generic,
     };
 

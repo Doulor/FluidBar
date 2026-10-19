@@ -42,6 +42,9 @@ public sealed class AgentEventParserTests
     [InlineData("claude-code", AgentKind.Claude)]
     [InlineData("codex", AgentKind.Codex)]
     [InlineData("openai-codex", AgentKind.Codex)]
+    [InlineData("deepseek", AgentKind.DeepSeek)]
+    [InlineData("deepseek-harness", AgentKind.DeepSeek)]
+    [InlineData("dsh", AgentKind.DeepSeek)]
     [InlineData("other", AgentKind.Generic)]
     [InlineData(null, AgentKind.Generic)]
     public void MapAgent_MapsKnownIds(string? agent, AgentKind expected)

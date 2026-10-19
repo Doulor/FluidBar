@@ -155,6 +155,13 @@
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
 
+### 2026-10-20 03:40 代理插件支持 DeepSeek Harness
+- 钩子事件里的 `agent` 字段现在识别 **deepseek / deepseek-harness / dsh / harness**，映射到新的 `AgentKind.DeepSeek`；此前所有非 Claude/Codex 的代理都会落到 `Generic`，岛上只能显示成「Agent」。
+- 代理页显示名「DeepSeek Harness」，与 Claude Code、Codex 并列。
+- `AgentTests` 增加 3 个解析用例（Platform 415 -> 418）。
+- 全量 **1493 passed / 0 failed**。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `09D27B541AFD858CC34BC9F239A7FB78F2949E2A52CA498B39494A061CFE43BA`。
+
 ### 2026-10-20 03:10 — 插件页布局修复
 - **搜索框跑到中间**：`TextBox` 默认 `HorizontalAlignment=Stretch`，一旦显式设置 `Width` 就会居中。改为 `Left` 对齐并加下边距。
 - **每行标题错位**：名称/版本/「内置」标签原来放在横向 `StackPanel` 里，导致版本和标签被挤到第二行、行高被撑高。改成 `Auto,Auto,Auto` 的 `Grid` + 8 DIP 列间距，三者回到同一行。

@@ -799,6 +799,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         AgentKind.Claude => "Claude Code",
         AgentKind.Codex => "Codex",
+        AgentKind.DeepSeek => "DeepSeek Harness",
         _ => "Agent",
     };
 
