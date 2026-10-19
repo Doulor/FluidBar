@@ -35,6 +35,30 @@
 构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
 （Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
+## 2026-10-20 04:50 检查点（多 agent 通宵轮：原型对齐 + 插件攻坚）
+
+多 agent 协同完成 6 批工作流（marketplace-flows / island-audit / rail-pixel / settings-pixel / media-lyrics / settings-audit / island-polish / island-body）。
+
+- **预览小岛**：用 playwright 实测 prototype2 DOM，17 项像素级对齐（rail 8/32、胶囊按标签 64–104、末点 7×3、命中区 7×15、远点左簇→01 右簇→06、删除 6 处非原型绘制、换页 smoothstep 插值）；补 strip 命中区修复（此前点击被当桌面穿透）。
+- **岛本体**：展开/收起改为 CSS 等价 `380ms cubic-bezier(.3,.8,.25,1)`（52 采样点误差 ≤0.05px）、三层淡入时序独立（消除 0→0.5 跳变）、删除发明的页切换 scale/parallax、壳层去描边+原型双层阴影、内容区 400×260、幽灵胶囊视觉删除、紧凑五形态对齐。
+- **设置面板**：`SettingsTokens` 逐数值搬自 styles.css、按 icons.js 原始 SVG path 重绘图标、chrome/行高/开关/segmented/keycap/预览画布/市场卡片全对齐。
+- **设置项生效**：6 个「只写 json 不生效」项接上消费方（调色板此前 mapper 根本不读）、开机启动真实写 HKCU\Run、安全模式真正阻止拉岛、崩溃护栏、帧统计实时；修 2 个死按钮（重置确认框听错事件、chip 处理器被 Handled 挡掉）。
+- **自动更新**：从「写死 UpToDate」→ 真实链路（启动+5s/24h 检查、.part 下载、SHA-256 校验、仅 Verified 可安装），E2E 用真实 180224 B 产物验证哈希一致。
+- **插件市场**：提交→审核上架→安装→下载计数→评分全流程 + 中英双语；证据 build/evidence/marketplace。
+- **媒体**：MSAA（手写 IAccessible vtable）真机控制酷狗（切歌/暂停/播放实测生效）、本地 KRC 逐行歌词、WebP 封面解码；+34 平台测试 + 9 live 测试。
+- **AI 状态**：Claude Code / Codex / **DeepSeek Harness**（AgentKind.DeepSeek），事件→胶囊端到端验证。
+- **字号**：FontScale 0.8–1.6 由文本度量驱动（1.0 零回归），超出 body 时滚轮先滚内容；修 ParseColor 8 位色顺序、NumberTextCache 脏缓存。
+- **系统外观**：接 WM_SETTINGCHANGE 实时跟随主题/强调色/减少动效。
+
+测试：**1824 passed / 0 failed**（Core 567 · Island 274 · Ui 235 · Platform 477 · Sdk 167 · PluginHost 39 · Integration 31 · Builtin 23 · Architecture 11）。
+Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876CFA40B8A539708999C13024A1313BC2A59E56AB2`，HEAD `884a822`。
+
+剩余（已知、未完成）：
+1) 1.6 字号首屏不完整（需允许 expanded shell 高度随字号增长，改 440×284 视觉契约，属产品决策）；
+2) 托盘图标锁屏下无彩色证据（代码+单测已覆盖，解锁后重跑脚本即可）；
+3) 天气/任务/通知无数据源（诚实显示「不可用」）；
+4) agent 紧凑宽保留 288（按原型 236 会截断真名）。
+
 ## 2026-10-20 03:45 检查点（原型对齐 + 插件升级）
 
 - **设置面板**：通用页（4 行 + 快捷键组，副标题同原型）、外观页（5 行 + 实时预览 + 预览头 `28 px · 96%`）、插件页（搜索左对齐、行标题单行、发布者与能力合并成一行）已与 prototype2 截图逐项对齐；原型之外的能力（跟随系统、更新方式、调色板、字号、动效强度、匿名数据说明）保留在「高级」页。
