@@ -151,4 +151,5 @@
 - **浏览器媒体验证**：用独立 Edge 实例 + Media Session API 页面实测，GSMTC 正确上报标题/艺术家/专辑/封面/进度；岛首页卡片显示封面 + “Midnight City / M83” + 走动进度条，媒体页显示大封面、标题、歌词（网易云命中）与 0:04/0:05 进度。
 - 展开时按下指针会同步 hover 状态，避免“展开后在光标下自动收起”。
 - 测试：**1484 passed / 0 failed**（Core 495 · Platform 409 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `8E4094DECEF2F3CF4391CFDD034B7A523200EC8C284219401FB8EDA5FD691A65`。
+- 胶片条自动隐藏 1000 → **1200 ms**（设计区间上限），切换动画可读性更好。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `B99C91200F8754D76726765C5B21CE18D782CE013EA52ED19CC48AF0273C2555`。

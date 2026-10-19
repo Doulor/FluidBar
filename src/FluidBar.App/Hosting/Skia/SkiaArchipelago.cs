@@ -17,8 +17,8 @@ public sealed class SkiaArchipelago : IDisposable
     /// <summary>Hot-zone dwell before reveal (Core 300 ms).</summary>
     public const int RevealDelayMs = ArchipelagoRevealPolicy.RevealDelayMs;
 
-    /// <summary>Idle time before auto-hide (1000 ms, inside the 900–1200 ms design band).</summary>
-    public const int HideDelayMs = 1000;
+    /// <summary>Idle time before auto-hide (1200 ms: the design band's ceiling, so the switch animation stays readable).</summary>
+    public const int HideDelayMs = 1200;
 
     /// <summary>Translate distance in DIP at the hidden end of the reveal spring.</summary>
     public const double HiddenTranslateYDip = 8;
