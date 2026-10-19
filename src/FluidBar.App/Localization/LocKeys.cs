@@ -712,6 +712,80 @@ public static partial class LocKeys
         {
             /// <summary><c>Settings.Marketplace.Title</c></summary>
             public const string Title = "Settings.Marketplace.Title";
+            /// <summary>Keys in the device-local community marketplace area.</summary>
+            public static class Community
+            {
+                /// <summary><c>Settings.Marketplace.Community.Title</c></summary>
+                public const string Title = "Settings.Marketplace.Community.Title";
+                /// <summary><c>Settings.Marketplace.Community.Subtitle</c></summary>
+                public const string Subtitle = "Settings.Marketplace.Community.Subtitle";
+                /// <summary><c>Settings.Marketplace.Community.Submit</c></summary>
+                public const string Submit = "Settings.Marketplace.Community.Submit";
+                /// <summary><c>Settings.Marketplace.Community.SubmitDialogTitle</c></summary>
+                public const string SubmitDialogTitle = "Settings.Marketplace.Community.SubmitDialogTitle";
+                /// <summary><c>Settings.Marketplace.Community.SubmitFileType</c></summary>
+                public const string SubmitFileType = "Settings.Marketplace.Community.SubmitFileType";
+                /// <summary><c>Settings.Marketplace.Community.PendingHeader</c></summary>
+                public const string PendingHeader = "Settings.Marketplace.Community.PendingHeader";
+                /// <summary><c>Settings.Marketplace.Community.Approve</c></summary>
+                public const string Approve = "Settings.Marketplace.Community.Approve";
+                /// <summary><c>Settings.Marketplace.Community.Reject</c></summary>
+                public const string Reject = "Settings.Marketplace.Community.Reject";
+                /// <summary><c>Settings.Marketplace.Community.Install</c></summary>
+                public const string Install = "Settings.Marketplace.Community.Install";
+                /// <summary><c>Settings.Marketplace.Community.Delist</c></summary>
+                public const string Delist = "Settings.Marketplace.Community.Delist";
+                /// <summary><c>Settings.Marketplace.Community.Signed</c></summary>
+                public const string Signed = "Settings.Marketplace.Community.Signed";
+                /// <summary><c>Settings.Marketplace.Community.Unsigned</c></summary>
+                public const string Unsigned = "Settings.Marketplace.Community.Unsigned";
+                /// <summary><c>Settings.Marketplace.Community.NotRated</c></summary>
+                public const string NotRated = "Settings.Marketplace.Community.NotRated";
+                /// <summary><c>Settings.Marketplace.Community.RatingSummary</c></summary>
+                public const string RatingSummary = "Settings.Marketplace.Community.RatingSummary";
+                /// <summary><c>Settings.Marketplace.Community.RateHint</c></summary>
+                public const string RateHint = "Settings.Marketplace.Community.RateHint";
+                /// <summary><c>Settings.Marketplace.Community.CardSubtitle</c></summary>
+                public const string CardSubtitle = "Settings.Marketplace.Community.CardSubtitle";
+                /// <summary><c>Settings.Marketplace.Community.PendingDetail</c></summary>
+                public const string PendingDetail = "Settings.Marketplace.Community.PendingDetail";
+                /// <summary><c>Settings.Marketplace.Community.Empty</c></summary>
+                public const string Empty = "Settings.Marketplace.Community.Empty";
+                /// <summary><c>Settings.Marketplace.Community.PickerUnavailable</c></summary>
+                public const string PickerUnavailable = "Settings.Marketplace.Community.PickerUnavailable";
+                /// <summary><c>Settings.Marketplace.Community.ApprovedNote</c></summary>
+                public const string ApprovedNote = "Settings.Marketplace.Community.ApprovedNote";
+                /// <summary><c>Settings.Marketplace.Community.RejectedNote</c></summary>
+                public const string RejectedNote = "Settings.Marketplace.Community.RejectedNote";
+                /// <summary><c>Settings.Marketplace.Community.DelistedNote</c></summary>
+                public const string DelistedNote = "Settings.Marketplace.Community.DelistedNote";
+                /// <summary><c>Settings.Marketplace.Community.Validating</c></summary>
+                public const string Validating = "Settings.Marketplace.Community.Validating";
+                /// <summary><c>Settings.Marketplace.Community.Submitted</c></summary>
+                public const string Submitted = "Settings.Marketplace.Community.Submitted";
+                /// <summary><c>Settings.Marketplace.Community.UnsignedWarning</c></summary>
+                public const string UnsignedWarning = "Settings.Marketplace.Community.UnsignedWarning";
+                /// <summary><c>Settings.Marketplace.Community.SubmitFailed</c></summary>
+                public const string SubmitFailed = "Settings.Marketplace.Community.SubmitFailed";
+                /// <summary><c>Settings.Marketplace.Community.Approved</c></summary>
+                public const string Approved = "Settings.Marketplace.Community.Approved";
+                /// <summary><c>Settings.Marketplace.Community.Rejected</c></summary>
+                public const string Rejected = "Settings.Marketplace.Community.Rejected";
+                /// <summary><c>Settings.Marketplace.Community.ReviewFailed</c></summary>
+                public const string ReviewFailed = "Settings.Marketplace.Community.ReviewFailed";
+                /// <summary><c>Settings.Marketplace.Community.Rated</c></summary>
+                public const string Rated = "Settings.Marketplace.Community.Rated";
+                /// <summary><c>Settings.Marketplace.Community.RatingOutOfRange</c></summary>
+                public const string RatingOutOfRange = "Settings.Marketplace.Community.RatingOutOfRange";
+                /// <summary><c>Settings.Marketplace.Community.RatingFailed</c></summary>
+                public const string RatingFailed = "Settings.Marketplace.Community.RatingFailed";
+                /// <summary><c>Settings.Marketplace.Community.Installing</c></summary>
+                public const string Installing = "Settings.Marketplace.Community.Installing";
+                /// <summary><c>Settings.Marketplace.Community.Installed</c></summary>
+                public const string Installed = "Settings.Marketplace.Community.Installed";
+                /// <summary><c>Settings.Marketplace.Community.InstallFailed</c></summary>
+                public const string InstallFailed = "Settings.Marketplace.Community.InstallFailed";
+            }
         }
         /// <summary>Keys in the 'Advanced' area.</summary>
         public static class Advanced

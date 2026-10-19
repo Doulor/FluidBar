@@ -9,6 +9,7 @@ using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.Marketplace.Community;
 using FluidBar.Marketplace.Install;
+using CommunityCopy = FluidBar.App.Localization.LocKeys.Settings.Marketplace.Community;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -825,7 +826,7 @@ public sealed class MarketplaceSectionView : StackPanel
         var titles = new StackPanel { Spacing = 1 };
         titles.Children.Add(new TextBlock
         {
-            Text = CommunityStrings.Title,
+            Text = _localizer.Get(CommunityCopy.Title),
             FontFamily = Fonts.Display,
             FontSize = 13.5,
             FontWeight = FontWeight.SemiBold,
@@ -833,7 +834,7 @@ public sealed class MarketplaceSectionView : StackPanel
         });
         titles.Children.Add(new TextBlock
         {
-            Text = CommunityStrings.Subtitle(_community.Store.RootDirectory),
+            Text = _localizer.Format(CommunityCopy.Subtitle, ("root", _community.Store.RootDirectory)),
             FontSize = 8.5,
             Foreground = tertiary,
             TextWrapping = TextWrapping.Wrap,
@@ -841,7 +842,7 @@ public sealed class MarketplaceSectionView : StackPanel
         });
         var submit = new Button
         {
-            Content = CommunityStrings.Submit,
+            Content = _localizer.Get(CommunityCopy.Submit),
             IsEnabled = !_communityBusy,
             Height = 28,
             Padding = new Thickness(11, 0, 11, 0),
@@ -874,7 +875,7 @@ public sealed class MarketplaceSectionView : StackPanel
         {
             stack.Children.Add(new TextBlock
             {
-                Text = CommunityStrings.PendingHeader(_pendingSubmissions.Count),
+                Text = _localizer.Format(CommunityCopy.PendingHeader, ("count", _pendingSubmissions.Count)),
                 FontSize = 9,
                 FontWeight = FontWeight.SemiBold,
                 Foreground = secondary,
@@ -898,7 +899,7 @@ public sealed class MarketplaceSectionView : StackPanel
                 BorderThickness = new Thickness(1),
                 Child = new TextBlock
                 {
-                    Text = CommunityStrings.Empty,
+                    Text = _localizer.Get(CommunityCopy.Empty),
                     FontSize = 9.5,
                     Foreground = tertiary,
                     TextWrapping = TextWrapping.Wrap,
@@ -964,9 +965,7 @@ public sealed class MarketplaceSectionView : StackPanel
                 : Color.FromArgb(38, 255, 149, 0)),
             Child = new TextBlock
             {
-                Text = submission.SignatureState == CommunitySignatureState.Verified
-                    ? CommunityStrings.Signed
-                    : CommunityStrings.Unsigned,
+                Text = SignatureLabel(submission.SignatureState),
                 FontSize = 8,
                 Foreground = new SolidColorBrush(submission.SignatureState == CommunitySignatureState.Verified
                     ? Accents.Success
@@ -976,8 +975,11 @@ public sealed class MarketplaceSectionView : StackPanel
         info.Children.Add(nameRow);
         info.Children.Add(new TextBlock
         {
-            Text = submission.Plugin.PublisherName + " · " + submission.Plugin.Id + " · sha256 "
-                + submission.PackageSha256[..Math.Min(12, submission.PackageSha256.Length)] + "…",
+            Text = _localizer.Format(
+                CommunityCopy.PendingDetail,
+                ("publisher", submission.Plugin.PublisherName),
+                ("pluginId", submission.Plugin.Id),
+                ("hash", submission.PackageSha256[..Math.Min(12, submission.PackageSha256.Length)])),
             FontSize = 8.5,
             Foreground = tertiary,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -991,12 +993,12 @@ public sealed class MarketplaceSectionView : StackPanel
             HorizontalAlignment = HorizontalAlignment.Right,
         };
         actions.Children.Add(CommunityAction(
-            CommunityStrings.Approve,
+            _localizer.Get(CommunityCopy.Approve),
             new SolidColorBrush(_surfaces.Active),
             new SolidColorBrush(_surfaces.ActiveForeground),
             () => ReviewAsync(submission, approve: true)));
         actions.Children.Add(CommunityAction(
-            CommunityStrings.Reject,
+            _localizer.Get(CommunityCopy.Reject),
             raised,
             new SolidColorBrush(Accents.Warning),
             () => ReviewAsync(submission, approve: false)));
@@ -1059,8 +1061,11 @@ public sealed class MarketplaceSectionView : StackPanel
         });
         titles.Children.Add(new TextBlock
         {
-            Text = listing.Plugin.PublisherName + " · v" + listing.Version
-                + (listing.SignatureState == CommunitySignatureState.Verified ? " · signed" : " · unsigned"),
+            Text = _localizer.Format(
+                CommunityCopy.CardSubtitle,
+                ("publisher", listing.Plugin.PublisherName),
+                ("version", listing.Version),
+                ("signature", SignatureLabel(listing.SignatureState))),
             FontSize = 8.5,
             Foreground = tertiary,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -1082,8 +1087,11 @@ public sealed class MarketplaceSectionView : StackPanel
         var ratingText = new TextBlock
         {
             Text = listing.Stats.Rating is { } rating
-                ? CommunityStrings.RatingSummary(rating, listing.Stats.RatingCount)
-                : CommunityStrings.NotRated,
+                ? _localizer.Format(
+                    CommunityCopy.RatingSummary,
+                    ("rating", rating.ToString("0.0", _localizer.CurrentCulture)),
+                    ("count", listing.Stats.RatingCount))
+                : _localizer.Get(CommunityCopy.NotRated),
             FontSize = 8.5,
             Foreground = tertiary,
             VerticalAlignment = VerticalAlignment.Center,
@@ -1104,7 +1112,7 @@ public sealed class MarketplaceSectionView : StackPanel
                 ratingRow,
                 new TextBlock
                 {
-                    Text = CommunityStrings.Downloads(listing.Stats.Downloads),
+                    Text = _localizer.Format(LocKeys.Settings.Market.Downloads, ("count", listing.Stats.Downloads)),
                     FontSize = 8.5,
                     Foreground = tertiary,
                     VerticalAlignment = VerticalAlignment.Center,
@@ -1121,7 +1129,7 @@ public sealed class MarketplaceSectionView : StackPanel
         };
         var install = new Button
         {
-            Content = CommunityStrings.Install,
+            Content = _localizer.Get(CommunityCopy.Install),
             IsEnabled = !_communityBusy,
             Height = 26,
             MinWidth = 58,
@@ -1135,7 +1143,7 @@ public sealed class MarketplaceSectionView : StackPanel
         };
         install.Click += async (_, _) => await InstallCommunityAsync(listing);
         actions.Children.Add(install);
-        actions.Children.Add(CommunityAction(CommunityStrings.Delist, Brushes.Transparent, tertiary, () => DelistAsync(listing)));
+        actions.Children.Add(CommunityAction(_localizer.Get(CommunityCopy.Delist), Brushes.Transparent, tertiary, () => DelistAsync(listing)));
         Grid.SetColumn(actions, 1);
         foot.Children.Add(actions);
         panel.Children.Add(foot);
@@ -1169,7 +1177,7 @@ public sealed class MarketplaceSectionView : StackPanel
                 Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            ToolTip.SetTip(glyph, CommunityStrings.RateHint(value));
+            ToolTip.SetTip(glyph, _localizer.Format(CommunityCopy.RateHint, ("stars", value)));
             glyph.PointerPressed += async (_, e) =>
             {
                 e.Handled = true;
@@ -1204,17 +1212,17 @@ public sealed class MarketplaceSectionView : StackPanel
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel is null)
         {
-            _communityStatus = CommunityStrings.PickerUnavailable;
+            _communityStatus = _localizer.Get(CommunityCopy.PickerUnavailable);
             return;
         }
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = CommunityStrings.Submit,
+            Title = _localizer.Get(CommunityCopy.SubmitDialogTitle),
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType(CommunityStrings.PackageFileType) { Patterns = ["*.fbp"] },
+                new FilePickerFileType(_localizer.Get(CommunityCopy.SubmitFileType)) { Patterns = ["*.fbp"] },
             ],
         });
         if (files.Count == 0)
@@ -1225,7 +1233,7 @@ public sealed class MarketplaceSectionView : StackPanel
         var packagePath = files[0].TryGetLocalPath();
         if (string.IsNullOrWhiteSpace(packagePath))
         {
-            _communityStatus = CommunityStrings.PickerUnavailable;
+            _communityStatus = _localizer.Get(CommunityCopy.PickerUnavailable);
             return;
         }
 
@@ -1246,7 +1254,7 @@ public sealed class MarketplaceSectionView : StackPanel
     private async Task SubmitAsync(string packagePath, string? signaturePath)
     {
         _communityBusy = true;
-        _communityStatus = CommunityStrings.Validating(Path.GetFileName(packagePath));
+        _communityStatus = _localizer.Format(CommunityCopy.Validating, ("file", Path.GetFileName(packagePath)));
         try
         {
             var result = await _community.SubmitAsync(new CommunitySubmitRequest
@@ -1255,12 +1263,18 @@ public sealed class MarketplaceSectionView : StackPanel
                 SignaturePath = signaturePath,
             });
             _communityStatus = result.Success
-                ? CommunityStrings.Submitted(result.Submission!.PluginId, result.Submission.Version, result.Warnings)
-                : CommunityStrings.SubmitFailed(result.Errors);
+                ? _localizer.Format(
+                    CommunityCopy.Submitted,
+                    ("pluginId", result.Submission!.PluginId),
+                    ("version", result.Submission.Version))
+                    + (result.Submission.SignatureState == CommunitySignatureState.Unsigned
+                        ? " " + _localizer.Get(CommunityCopy.UnsignedWarning)
+                        : string.Empty)
+                : _localizer.Format(CommunityCopy.SubmitFailed, ("errors", JoinErrors(result.Errors)));
         }
         catch (Exception ex)
         {
-            _communityStatus = CommunityStrings.SubmitFailed([ex.Message]);
+            _communityStatus = _localizer.Format(CommunityCopy.SubmitFailed, ("errors", ex.Message));
         }
         finally
         {
@@ -1280,17 +1294,17 @@ public sealed class MarketplaceSectionView : StackPanel
         try
         {
             var result = approve
-                ? await _community.ApproveAsync(submission.PluginId, submission.Version, CommunityStrings.ApprovedNote)
-                : await _community.RejectAsync(submission.PluginId, submission.Version, CommunityStrings.RejectedNote);
+                ? await _community.ApproveAsync(submission.PluginId, submission.Version, _localizer.Get(CommunityCopy.ApprovedNote))
+                : await _community.RejectAsync(submission.PluginId, submission.Version, _localizer.Get(CommunityCopy.RejectedNote));
             _communityStatus = result.Success
                 ? approve
-                    ? CommunityStrings.Approved(submission.PluginId, submission.Version)
-                    : CommunityStrings.Rejected(submission.PluginId, submission.Version)
-                : CommunityStrings.ReviewFailed(result.Errors);
+                    ? _localizer.Format(CommunityCopy.Approved, ("pluginId", submission.PluginId), ("version", submission.Version))
+                    : _localizer.Format(CommunityCopy.Rejected, ("pluginId", submission.PluginId), ("version", submission.Version))
+                : _localizer.Format(CommunityCopy.ReviewFailed, ("errors", JoinErrors(result.Errors)));
         }
         catch (Exception ex)
         {
-            _communityStatus = CommunityStrings.ReviewFailed([ex.Message]);
+            _communityStatus = _localizer.Format(CommunityCopy.ReviewFailed, ("errors", ex.Message));
         }
         finally
         {
@@ -1309,14 +1323,14 @@ public sealed class MarketplaceSectionView : StackPanel
         _communityBusy = true;
         try
         {
-            var result = await _community.RejectAsync(listing.Id, listing.Version, CommunityStrings.DelistedNote);
+            var result = await _community.RejectAsync(listing.Id, listing.Version, _localizer.Get(CommunityCopy.DelistedNote));
             _communityStatus = result.Success
-                ? CommunityStrings.Rejected(listing.Id, listing.Version)
-                : CommunityStrings.ReviewFailed(result.Errors);
+                ? _localizer.Format(CommunityCopy.Rejected, ("pluginId", listing.Id), ("version", listing.Version))
+                : _localizer.Format(CommunityCopy.ReviewFailed, ("errors", JoinErrors(result.Errors)));
         }
         catch (Exception ex)
         {
-            _communityStatus = CommunityStrings.ReviewFailed([ex.Message]);
+            _communityStatus = _localizer.Format(CommunityCopy.ReviewFailed, ("errors", ex.Message));
         }
         finally
         {
@@ -1336,15 +1350,15 @@ public sealed class MarketplaceSectionView : StackPanel
         try
         {
             var listing = await _community.RateAsync(pluginId, stars);
-            _communityStatus = CommunityStrings.Rated(listing.Id, stars);
+            _communityStatus = _localizer.Format(CommunityCopy.Rated, ("pluginId", listing.Id), ("stars", stars));
         }
         catch (ArgumentOutOfRangeException)
         {
-            _communityStatus = CommunityStrings.RatingOutOfRange;
+            _communityStatus = _localizer.Get(CommunityCopy.RatingOutOfRange);
         }
         catch (Exception ex)
         {
-            _communityStatus = CommunityStrings.RatingFailed(ex.Message);
+            _communityStatus = _localizer.Format(CommunityCopy.RatingFailed, ("message", ex.Message));
         }
         finally
         {
@@ -1361,17 +1375,20 @@ public sealed class MarketplaceSectionView : StackPanel
         }
 
         _communityBusy = true;
-        var progress = new Progress<InstallPhase>(phase => _communityStatus = CommunityStrings.Installing(listing.Id, phase));
+        var progress = new Progress<InstallPhase>(phase => _communityStatus = _localizer.Format(
+            CommunityCopy.Installing,
+            ("pluginId", listing.Id),
+            ("stage", InstallStageLabel(phase))));
         try
         {
             var outcome = await _community.InstallAsync(listing.Id, progress);
             _communityStatus = outcome.Success
-                ? outcome.Message
-                : CommunityStrings.InstallFailed(outcome.Message);
+                ? _localizer.Format(CommunityCopy.Installed, ("pluginId", listing.Id), ("version", listing.Version))
+                : _localizer.Format(CommunityCopy.InstallFailed, ("message", outcome.Message));
         }
         catch (Exception ex)
         {
-            _communityStatus = CommunityStrings.InstallFailed(ex.Message);
+            _communityStatus = _localizer.Format(CommunityCopy.InstallFailed, ("message", ex.Message));
         }
         finally
         {
@@ -1380,68 +1397,19 @@ public sealed class MarketplaceSectionView : StackPanel
         }
     }
 
-    /// <summary>English copy of the community marketplace block (localization keys live outside this file's scope).</summary>
-    private static class CommunityStrings
+    /// <summary>Localized signature badge for a community listing/submission.</summary>
+    private string SignatureLabel(CommunitySignatureState state) =>
+        _localizer.Get(state == CommunitySignatureState.Verified ? CommunityCopy.Signed : CommunityCopy.Unsigned);
+
+    /// <summary>Maps a real install phase onto the localized marketplace stage label.</summary>
+    private string InstallStageLabel(InstallPhase phase) => _localizer.Get(phase switch
     {
-        internal const string Title = "Local community marketplace";
-        internal const string Submit = "Submit .fbp…";
-        internal const string Signed = "signed";
-        internal const string Unsigned = "unsigned";
-        internal const string Approve = "Approve";
-        internal const string Reject = "Reject";
-        internal const string Install = "Install";
-        internal const string Delist = "Delist";
-        internal const string NotRated = "not rated yet";
-        internal const string PickerUnavailable = "The file picker is unavailable in this window.";
-        internal const string PackageFileType = "FluidBar plugin package";
-        internal const string ApprovedNote = "Approved by the local reviewer.";
-        internal const string RejectedNote = "Rejected by the local reviewer.";
-        internal const string DelistedNote = "Delisted from the local marketplace.";
+        InstallPhase.Downloading => LocKeys.Market.Stage.Download,
+        InstallPhase.Verifying => LocKeys.Market.Stage.Verify,
+        InstallPhase.Extracting => LocKeys.Market.Stage.Extract,
+        InstallPhase.Staged => LocKeys.Market.Stage.Prepare,
+        _ => LocKeys.Market.Stage.Activate,
+    });
 
-        internal static string Subtitle(string root) =>
-            "Submit a package, review it, install it, rate it. State is stored on this device in " + root + ".";
-
-        internal static string PendingHeader(int count) => "Pending review (" + count + ")";
-
-        internal const string Empty =
-            "No approved plugins yet. Submit a .fbp, then approve it to publish it here.";
-
-        internal static string Downloads(long downloads) =>
-            downloads == 1 ? "1 install" : downloads + " installs";
-
-        internal static string RatingSummary(double rating, int count) =>
-            rating.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " / 5 (" + count + ")";
-
-        internal static string RateHint(int stars) => "Rate " + stars + (stars == 1 ? " star" : " stars");
-
-        internal static string Validating(string fileName) => "Validating " + fileName + "…";
-
-        internal static string Submitted(string pluginId, string version, IReadOnlyList<string> warnings) =>
-            "Submitted " + pluginId + " " + version + " for review."
-            + (warnings.Count == 0 ? string.Empty : " " + string.Join(" ", warnings));
-
-        internal static string SubmitFailed(IReadOnlyList<string> errors) =>
-            "Submission rejected: " + string.Join("; ", errors);
-
-        internal static string Approved(string pluginId, string version) =>
-            "Approved " + pluginId + " " + version + "; it is now listed.";
-
-        internal static string Rejected(string pluginId, string version) =>
-            "Rejected " + pluginId + " " + version + "; it is no longer listed.";
-
-        internal static string ReviewFailed(IReadOnlyList<string> errors) =>
-            "Review failed: " + string.Join("; ", errors);
-
-        internal static string Rated(string pluginId, int stars) =>
-            "Rated " + pluginId + " " + stars + "/5.";
-
-        internal const string RatingOutOfRange = "Ratings must be between 1 and 5 stars.";
-
-        internal static string RatingFailed(string message) => "Rating failed: " + message;
-
-        internal static string Installing(string pluginId, InstallPhase phase) =>
-            "Installing " + pluginId + ": " + phase + "…";
-
-        internal static string InstallFailed(string message) => "Install failed: " + message;
-    }
+    private static string JoinErrors(IReadOnlyList<string> errors) => string.Join("; ", errors);
 }

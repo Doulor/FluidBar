@@ -17,73 +17,122 @@ namespace FluidBar.Ui.Tests;
 /// </summary>
 public sealed class CommunityMarketplaceSectionTests
 {
+    private const string PluginId = "community-ui-sample";
+
     [Fact]
     public async Task MarketplaceSection_RendersSubmitReviewRatingAndInstallCounters()
     {
-        var root = Path.Combine(Path.GetTempPath(), "fluidbar-ui-community-" + Guid.NewGuid().ToString("N"));
+        var root = CreateRoot();
         try
         {
-            var store = new CommunityMarketplaceStore(Path.Combine(root, "marketplace"));
-            var service = new CommunityMarketplaceService(new CommunityMarketplaceOptions { Store = store });
+            var service = await SeedAsync(root);
+            var snapshot = await RenderAsync(service, Locales.Source);
 
-            var approvedPackage = CreatePackage(root, "1.0.0");
-            var submitted = await service.SubmitAsync(new CommunitySubmitRequest { PackagePath = approvedPackage });
-            Assert.True(submitted.Success, string.Join("; ", submitted.Errors));
-            Assert.True((await service.ApproveAsync("community-ui-sample", "1.0.0", "approved in a UI smoke test")).Success);
-            await service.RecordDownloadAsync("community-ui-sample");
-            await service.RateAsync("community-ui-sample", 4);
-
-            var pendingPackage = CreatePackage(root, "2.0.0");
-            Assert.True((await service.SubmitAsync(new CommunitySubmitRequest { PackagePath = pendingPackage })).Success);
-
-            var snapshot = await AvaloniaTest.RunAsync(async () =>
-            {
-                var localizer = TestFixtures.CreateLocalizer("en-US");
-                var view = new MarketplaceSectionView(
-                    new DesignMarketplaceUiService(),
-                    localizer,
-                    AppSettings.Default.Surfaces,
-                    static () => null,
-                    "stable",
-                    service);
-                await view.ReloadAsync();
-                var labels = view.GetLogicalDescendants().OfType<TextBlock>()
-                    .Select(static text => text.Text ?? string.Empty)
-                    .ToList();
-                var buttons = view.GetLogicalDescendants().OfType<Button>()
-                    .Select(static button => button.Content as string ?? string.Empty)
-                    .ToList();
-                return (labels, buttons, view.Community.Store.RootDirectory);
-            });
-
-            Assert.Equal(store.RootDirectory, snapshot.RootDirectory);
-            Assert.Contains("Local community marketplace", snapshot.labels);
-            Assert.Contains("Pending review (1)", snapshot.labels);
-            Assert.Contains("Community UI Sample", snapshot.labels);
-            Assert.Contains(snapshot.labels, static text => text.Contains("community-ui-sample", StringComparison.Ordinal));
-            Assert.Contains("4.0 / 5 (1)", snapshot.labels);
-            Assert.Contains("1 install", snapshot.labels);
-            Assert.Equal(5, snapshot.labels.Count(static text => text is "★" or "☆"));
-            Assert.Equal(4, snapshot.labels.Count(static text => text == "★"));
-            Assert.Contains("Submit .fbp…", snapshot.buttons);
-            Assert.Contains("Approve", snapshot.buttons);
-            Assert.Contains("Reject", snapshot.buttons);
-            Assert.Contains("Install", snapshot.buttons);
-            Assert.Contains("Delist", snapshot.buttons);
+            Assert.Equal(service.Store.RootDirectory, snapshot.RootDirectory);
+            Assert.Contains("Local community marketplace", snapshot.Labels);
+            Assert.Contains("Pending review (1)", snapshot.Labels);
+            Assert.Contains("Community UI Sample", snapshot.Labels);
+            Assert.Contains(snapshot.Labels, static text => text.Contains(PluginId, StringComparison.Ordinal));
+            Assert.Contains("4.0 / 5 (1)", snapshot.Labels);
+            Assert.Contains("1 install", snapshot.Labels);
+            Assert.Equal(5, snapshot.Labels.Count(static text => text is "★" or "☆"));
+            Assert.Equal(4, snapshot.Labels.Count(static text => text == "★"));
+            Assert.Contains("Submit .fbp…", snapshot.Buttons);
+            Assert.Contains("Approve", snapshot.Buttons);
+            Assert.Contains("Reject", snapshot.Buttons);
+            Assert.Contains("Install", snapshot.Buttons);
+            Assert.Contains("Delist", snapshot.Buttons);
         }
         finally
         {
-            try
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public async Task MarketplaceSection_IsLocalizedInChinese()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var service = await SeedAsync(root);
+            var snapshot = await RenderAsync(service, Locales.ChineseSimplified);
+
+            Assert.Contains("本地社区市场", snapshot.Labels);
+            Assert.Contains("待审核（1）", snapshot.Labels);
+            Assert.Contains("未签名", snapshot.Labels);
+            Assert.Contains("4.0 / 5（1 条评分）", snapshot.Labels);
+            Assert.Contains("1 次安装", snapshot.Labels);
+            Assert.Contains("提交 .fbp…", snapshot.Buttons);
+            Assert.Contains("通过", snapshot.Buttons);
+            Assert.Contains("驳回", snapshot.Buttons);
+            Assert.Contains("安装", snapshot.Buttons);
+            Assert.Contains("下架", snapshot.Buttons);
+            Assert.DoesNotContain("Pending review", snapshot.Labels);
+            Assert.DoesNotContain("Approve", snapshot.Buttons);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    private static string CreateRoot() =>
+        Path.Combine(Path.GetTempPath(), "fluidbar-ui-community-" + Guid.NewGuid().ToString("N"));
+
+    private static async Task<CommunityMarketplaceService> SeedAsync(string root)
+    {
+        var store = new CommunityMarketplaceStore(Path.Combine(root, "marketplace"));
+        var service = new CommunityMarketplaceService(new CommunityMarketplaceOptions { Store = store });
+
+        var submitted = await service.SubmitAsync(new CommunitySubmitRequest { PackagePath = CreatePackage(root, "1.0.0") });
+        Assert.True(submitted.Success, string.Join("; ", submitted.Errors));
+        Assert.True((await service.ApproveAsync(PluginId, "1.0.0", "approved in a UI smoke test")).Success);
+        await service.RecordDownloadAsync(PluginId);
+        await service.RateAsync(PluginId, 4);
+
+        var pending = await service.SubmitAsync(new CommunitySubmitRequest { PackagePath = CreatePackage(root, "2.0.0") });
+        Assert.True(pending.Success, string.Join("; ", pending.Errors));
+        return service;
+    }
+
+    private static Task<(List<string> Labels, List<string> Buttons, string RootDirectory)> RenderAsync(
+        CommunityMarketplaceService service,
+        string culture) =>
+        AvaloniaTest.RunAsync(async () =>
+        {
+            ILocalizer localizer = culture == Locales.Source
+                ? TestFixtures.CreateLocalizer(culture)
+                : LocalizationService.CreateDefault(culture, showMissingKeys: false, enablePseudoLocale: false);
+            var view = new MarketplaceSectionView(
+                new DesignMarketplaceUiService(),
+                localizer,
+                AppSettings.Default.Surfaces,
+                static () => null,
+                "stable",
+                service);
+            await view.ReloadAsync();
+            var labels = view.GetLogicalDescendants().OfType<TextBlock>()
+                .Select(static text => text.Text ?? string.Empty)
+                .ToList();
+            var buttons = view.GetLogicalDescendants().OfType<Button>()
+                .Select(static button => button.Content as string ?? string.Empty)
+                .ToList();
+            return (labels, buttons, view.Community.Store.RootDirectory);
+        });
+
+    private static void Cleanup(string root)
+    {
+        try
+        {
+            if (Directory.Exists(root))
             {
-                if (Directory.Exists(root))
-                {
-                    Directory.Delete(root, recursive: true);
-                }
+                Directory.Delete(root, recursive: true);
             }
-            catch (IOException)
-            {
-                // Best-effort temp cleanup.
-            }
+        }
+        catch (IOException)
+        {
+            // Best-effort temp cleanup.
         }
     }
 

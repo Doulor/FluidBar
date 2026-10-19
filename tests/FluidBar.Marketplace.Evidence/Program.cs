@@ -345,6 +345,12 @@ internal static class Program
         return exitCode;
     }
 
+    private static readonly (string Culture, string Top, string Full, string Bottom)[] CaptureCultures =
+    [
+        ("en-US", "01-marketplace-window-top.png", "02-marketplace-section-full.png", "03-marketplace-window-bottom.png"),
+        ("zh-Hans", "04-marketplace-zh-window-top.png", "05-marketplace-zh-section-full.png", "06-marketplace-zh-window-bottom.png"),
+    ];
+
     private static async Task CaptureAsync(
         ClassicDesktopStyleApplicationLifetime lifetime,
         Options options,
@@ -354,56 +360,15 @@ internal static class Program
         var status = 1;
         try
         {
-            var localizer = LocalizationService.CreateDefault("en-US", showMissingKeys: false, enablePseudoLocale: false);
-            LocalizationRuntime.Current = localizer;
-            var settingsStore = new InMemoryUiSettingsStore(AppSettings.Default);
-            var controller = new SettingsController(AppSettings.Default, settingsStore, NullAppLogger.Instance);
-            var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Marketplace);
-            window.Show();
-            await Task.Delay(1800);
-            Dispatcher.UIThread.RunJobs();
-
-            var content = window.Content as Control
-                ?? throw new InvalidOperationException("The settings window has no content.");
             var screenshots = Path.Combine(options.OutputDirectory, "screenshots");
             Directory.CreateDirectory(screenshots);
-
-            var captures = new List<object>();
-            captures.Add(Capture(content, Path.Combine(screenshots, "01-marketplace-window-top.png")));
-
-            var section = FindDescendant<MarketplaceSectionView>(window);
-            if (section is not null)
+            var allCaptures = new List<object>();
+            foreach (var names in CaptureCultures)
             {
-                // Render the whole section (real production view) at its arranged size: one tall image that
-                // contains the signed catalog cards AND the community submit/review/rating block.
-                await Task.Delay(400);
-                Dispatcher.UIThread.RunJobs();
-                captures.Add(Capture(section, Path.Combine(screenshots, "02-marketplace-section-full.png")));
-
-                var scroll = section.FindAncestorOfType<ScrollViewer>();
-                if (scroll is not null)
-                {
-                    var maxOffset = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
-                    captures.Add(new { scrollExtent = scroll.Extent.Height, scrollViewport = scroll.Viewport.Height, maxOffset });
-                    scroll.Offset = new Vector(0, maxOffset);
-                    await Task.Delay(700);
-                    Dispatcher.UIThread.RunJobs();
-                    captures.Add(Capture(content, Path.Combine(screenshots, "03-marketplace-window-bottom.png")));
-                }
-
-                evidence.Add("ui.section", new
-                {
-                    community = section.Community.Store.RootDirectory,
-                    listingCount = section.Community.Store.Load().Plugins.Count,
-                    pendingCount = section.Community.Store.Load().Submissions.Count(
-                        static submission => submission.State == CommunitySubmissionState.Pending),
-                    sectionWidth = section.Bounds.Width,
-                    sectionHeight = section.Bounds.Height,
-                });
+                allCaptures.Add(await CaptureCultureAsync(options, screenshots, names));
             }
 
-            evidence.Add("ui.screenshots", captures);
-            window.Close();
+            evidence.Add("ui.screenshots", allCaptures);
             status = 0;
         }
         catch (Exception exception)
@@ -416,6 +381,69 @@ internal static class Program
             setExitCode(status);
             Dispatcher.UIThread.Post(() => lifetime.Shutdown(status));
         }
+    }
+
+    /// <summary>Renders the real settings window (marketplace section) in one UI culture.</summary>
+    private static async Task<object> CaptureCultureAsync(
+        Options options,
+        string screenshots,
+        (string Culture, string Top, string Full, string Bottom) names)
+    {
+        var localizer = LocalizationService.CreateDefault(names.Culture, showMissingKeys: false, enablePseudoLocale: false);
+        LocalizationRuntime.Current = localizer;
+        var settingsStore = new InMemoryUiSettingsStore(AppSettings.Default);
+        var controller = new SettingsController(AppSettings.Default, settingsStore, NullAppLogger.Instance);
+        var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Marketplace);
+        window.Show();
+        var captures = new List<object>();
+        try
+        {
+            await Task.Delay(1800);
+            Dispatcher.UIThread.RunJobs();
+
+            var content = window.Content as Control
+                ?? throw new InvalidOperationException("The settings window has no content.");
+            captures.Add(Capture(content, Path.Combine(screenshots, names.Top)));
+
+            var section = FindDescendant<MarketplaceSectionView>(window);
+            if (section is not null)
+            {
+                // Render the whole section (real production view) at its arranged size: one tall image that
+                // contains the signed catalog cards AND the community submit/review/rating block.
+                await Task.Delay(400);
+                Dispatcher.UIThread.RunJobs();
+                captures.Add(Capture(section, Path.Combine(screenshots, names.Full)));
+                captures.Add(new
+                {
+                    culture = names.Culture,
+                    community = section.Community.Store.RootDirectory,
+                    listingCount = section.Community.Store.Load().Plugins.Count,
+                    pendingCount = section.Community.Store.Load().Submissions.Count(
+                        static submission => submission.State == CommunitySubmissionState.Pending),
+                    sectionWidth = section.Bounds.Width,
+                    sectionHeight = section.Bounds.Height,
+                });
+
+                var scroll = section.FindAncestorOfType<ScrollViewer>();
+                if (scroll is not null)
+                {
+                    var maxOffset = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
+                    captures.Add(new { culture = names.Culture, scrollExtent = scroll.Extent.Height, scrollViewport = scroll.Viewport.Height, maxOffset });
+                    scroll.Offset = new Vector(0, maxOffset);
+                    await Task.Delay(700);
+                    Dispatcher.UIThread.RunJobs();
+                    captures.Add(Capture(content, Path.Combine(screenshots, names.Bottom)));
+                }
+            }
+        }
+        finally
+        {
+            window.Close();
+            await Task.Delay(400);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        return new { culture = names.Culture, captures };
     }
 
     private static object Capture(Control content, string path)
