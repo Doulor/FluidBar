@@ -1451,6 +1451,51 @@ public sealed class SkiaIslandHost : IDisposable
                 placement.Y + (shell.Top - slackDip) * scale,
                 placement.X + (shell.Right + slackDip) * scale,
                 placement.Y + (shell.Bottom + slackDip) * scale));
+
+            // The preview rail sits below the shell, so without its own region the hook treats the
+            // clicks as desktop and the pills/dots never receive input.
+            if (state.Archipelago.Visible && state.Archipelago.Opacity > 0.01)
+            {
+                var strip = SkiaIslandHitTest.MeasureStrip(state);
+                var minX = float.MaxValue;
+                var minY = float.MaxValue;
+                var maxX = float.MinValue;
+                var maxY = float.MinValue;
+                void Include(SKRect rect)
+                {
+                    if (rect.Width <= 0 || rect.Height <= 0)
+                    {
+                        return;
+                    }
+
+                    minX = Math.Min(minX, rect.Left);
+                    minY = Math.Min(minY, rect.Top);
+                    maxX = Math.Max(maxX, rect.Right);
+                    maxY = Math.Max(maxY, rect.Bottom);
+                }
+
+                Include(strip.Previous);
+                Include(strip.Current);
+                Include(strip.Next);
+                foreach (var dot in strip.DotsLeft)
+                {
+                    Include(dot);
+                }
+
+                foreach (var dot in strip.DotsRight)
+                {
+                    Include(dot);
+                }
+
+                if (maxX > minX && maxY > minY)
+                {
+                    hookRects.Add(new IslandMouseHook.Rect(
+                        placement.X + (minX - slackDip) * scale,
+                        placement.Y + (minY - slackDip) * scale,
+                        placement.X + (maxX + slackDip) * scale,
+                        placement.Y + (maxY + slackDip) * scale));
+                }
+            }
         }
 
         _mouseHook?.SetRegions(hookRects);
