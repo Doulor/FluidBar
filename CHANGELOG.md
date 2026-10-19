@@ -113,3 +113,9 @@
 - 紧凑岛改为**按下即展开**（拖动移动作为次级手势），避免 click-vs-drag 让单击感觉无响应；命中区域保留 8 DIP 防御性 padding。
 - 测试：1478 passed / 0 failed；Release smoke 330 帧/0 失败。
 - 注意：如果桌面上还有旧版 FluidBar 进程/自启动项，请先全部退出再运行新 exe。
+
+### 2026-10-19 14:40 — 真实数据源接入（修复"贴图/假剪切板"）
+- 根因：`SkiaPlatformActions` 构造函数在 `_focus` 赋值前订阅 `_focus.SnapshotChanged`，抛 NullReferenceException；`AppBootstrap` 捕获后回退到 `DesignIslandDataSource`（演示数据），所以剪贴板/通知都是假的。
+- 修复：调整构造顺序；`SkiaPlatformActions` 实现 `IIslandDataSource`，`Snapshot()` 映射真实剪贴板历史、GSMTC 媒体、电池/充电/专注状态；通知/Agent/任务不再伪造，返回空列表。
+- 剪贴板行复制改为按索引取**完整文本**（不再复制渲染预览）；媒体播放/seek/音量/亮度/主题继续走真实平台服务。
+- 验证：`actions created` 日志确认真实数据源已启用；1478 tests（PluginHost 偶发 flaky）；Release 构建通过。

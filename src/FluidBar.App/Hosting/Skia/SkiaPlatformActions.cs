@@ -1,5 +1,7 @@
 using FluidBar.App.Settings;
+using FluidBar.App.State;
 using FluidBar.Core.Diagnostics;
+using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Clipboard;
 using FluidBar.Platform.Windows.CoreIntegration;
 using FluidBar.Platform.Windows.Diagnostics;
@@ -27,14 +29,16 @@ namespace FluidBar.App.Hosting.Skia;
 /// failures, and <see cref="Invoke"/> only reads a snapshot or dispatches a task.
 /// </para>
 /// </summary>
-public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposable
+public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSource, IAsyncDisposable
 {
     private readonly SettingsController _settings;
+    private readonly TimeProvider _time;
     private readonly IAppLogger _logger;
     private readonly IPlatformLogger _platformLogger;
     private readonly PlatformCounters _counters;
     private readonly PlatformMessageHost _messageHost;
     private readonly VolumeMonitor _volume;
+    private readonly BatteryMonitor _battery;
     private readonly BrightnessMonitor _brightness;
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
@@ -71,9 +75,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         _platformLogger = new AppLoggerPlatformAdapter(_logger);
         _counters = new PlatformCounters();
         var time = timeProvider ?? TimeProvider.System;
+        _time = time;
 
         _messageHost = new PlatformMessageHost(_platformLogger, _counters);
         _volume = new VolumeMonitor(_platformLogger, _counters, time);
+        _battery = new BatteryMonitor(_messageHost, _platformLogger, _counters, null, time);
         _brightness = new BrightnessMonitor(_platformLogger, _counters, time);
         _artworkCache = new ArtworkCache();
         _artworkTempStore = new ArtworkTempStore(
@@ -82,6 +88,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
             time);
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
+        _media.SnapshotChanged += OnSnapshotChanged;
+        _clipboard.SnapshotChanged += OnSnapshotChanged;
+        _battery.SnapshotChanged += OnSnapshotChanged;
 
         var toggles = quickToggles ?? IslandQuickToggleServices.CreateDefault(_platformLogger, _counters, time);
         _wifi = toggles.Wifi;
@@ -151,6 +160,95 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
     /// </summary>
     public event Action<IslandPlatformAction>? DeferredActionRequested;
 
+    /// <inheritdoc />
+    public event EventHandler? Changed;
+
+    /// <inheritdoc />
+    public IslandContent Snapshot()
+    {
+        var battery = _battery.Current;
+        var focus = _focus.Current;
+        var media = _media.Current;
+        var clipboard = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
+        return new IslandContent
+        {
+            Now = _time.GetLocalNow(),
+            BatteryPercent = battery is { HasBattery: true } ? battery.Percent : null,
+            IsCharging = battery?.IsCharging ?? false,
+            FocusOn = focus?.IsActive ?? false,
+            Media = media is { IsEmpty: false } ? MapMedia(media) : null,
+            Clipboard = clipboard.Take(8).Select(MapClipboard).ToImmutableArray(),
+            Notifications = [],
+            Agents = [],
+            Tasks = [],
+            UnreadCount = 0,
+        };
+    }
+
+    /// <inheritdoc />
+    public void Start() => StartInBackground();
+
+    /// <inheritdoc />
+    public void Stop()
+    {
+        // Lifecycle is owned by the App composition; DisposeAsync stops every service.
+    }
+
+    private void OnSnapshotChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
+        => Changed?.Invoke(this, EventArgs.Empty);
+
+    private MediaSessionData MapMedia(MediaSnapshot media)
+    {
+        var duration = media.Duration > TimeSpan.Zero ? media.Duration : TimeSpan.Zero;
+        var position = media.Position > duration ? duration : media.Position;
+        var progress = duration.TotalMilliseconds > 0
+            ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
+            : 0;
+        return new MediaSessionData
+        {
+            Title = media.Title,
+            Artist = media.Artist,
+            Album = media.Album,
+            Source = media.SourceDisplayName ?? string.Empty,
+            ProgressPercent = progress,
+            PositionText = FormatTime(position),
+            DurationText = FormatTime(duration),
+            IsPlaying = media.IsPlaying,
+            TrackIndex = 0,
+            TrackCount = 0,
+        };
+    }
+
+    private ClipboardItemData MapClipboard(ClipboardEntry entry)
+    {
+        var preview = entry.Kind switch
+        {
+            ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(entry.Text) => entry.Text!,
+            ClipboardContentKind.Files => string.Join(", ", entry.FilePaths.Take(3)),
+            ClipboardContentKind.Image => "Image",
+            _ => "(empty)",
+        };
+        return new ClipboardItemData
+        {
+            Preview = preview.ReplaceLineEndings(" ").Trim(),
+            Meta = RelativeTime(entry.CapturedAtUtc),
+            Pinned = false,
+            IsImage = entry.Kind == ClipboardContentKind.Image,
+        };
+    }
+
+    private static string FormatTime(TimeSpan value)
+        => value.TotalHours >= 1 ? $"{(int)value.TotalHours}:{value.Minutes:00}:{value.Seconds:00}" : $"{value.Minutes}:{value.Seconds:00}";
+
+    private string RelativeTime(DateTimeOffset captured)
+    {
+        var delta = _time.GetUtcNow() - captured;
+        if (delta.TotalSeconds < 60) return "now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes} min";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours} h";
+        return $"{(int)delta.TotalDays} d";
+    }
+
     /// <summary>Whether the best-effort start has been kicked off.</summary>
     public bool IsStarted => Volatile.Read(ref _started) != 0;
 
@@ -168,6 +266,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
 
         await StartOneAsync("message-host", () => _messageHost.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("volume", () => _volume.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("battery", () => _battery.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("brightness", () => _brightness.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("wifi-radio", () => _wifi.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("bluetooth-radio", () => _bluetooth.StartAsync(cancellationToken)).ConfigureAwait(false);
@@ -204,7 +303,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
                 action, "notification activation is App-owned; the Windows notification listener exposes no activate API"),
             IslandPlatformActionKind.NotificationDismiss => Defer(
                 action, "notification dismissal is App-owned; Windows exposes no public toast-dismiss API"),
-            IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action.Text),
+            IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => Defer(
                 action, "clipboard pinning is App-owned; ClipboardService has no pin state"),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -372,8 +471,17 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         return IslandActionResult.Handled;
     }
 
-    private IslandActionResult CopyClipboard(string? text)
+    private IslandActionResult CopyClipboard(in IslandPlatformAction action)
     {
+        var text = action.Text;
+        if (action.Index >= 0)
+        {
+            var history = _clipboard.GetHistory();
+            if (action.Index < history.Count && !string.IsNullOrWhiteSpace(history[action.Index].Text))
+            {
+                text = history[action.Index].Text;
+            }
+        }
         if (string.IsNullOrWhiteSpace(text))
         {
             return Unsupported("the clipboard row has no text to copy (image/file rows are not supported)");
@@ -466,6 +574,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         await StopOneAsync("wifi-radio", () => _wifi.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("brightness", () => _brightness.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("volume", () => _volume.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("battery", () => _battery.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("message-host", () => _messageHost.DisposeAsync().AsTask()).ConfigureAwait(false);
         _artworkTempStore.Dispose();
     }
@@ -483,3 +592,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IAsyncDisposab
         }
     }
 }
+
+
+
+

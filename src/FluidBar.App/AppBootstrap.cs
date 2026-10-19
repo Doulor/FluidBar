@@ -128,7 +128,7 @@ internal sealed class AppBootstrap
                 {
                     Localizer = _localizer!,
                     Settings = _settings!,
-                    Data = _data!,
+                    Data = (IIslandDataSource?)_platformActions ?? _data!,
                     Logger = _logger,
                     PlatformActions = _platformActions,
                     TargetFrameRate = 120,
@@ -570,5 +570,8 @@ internal sealed class AppBootstrap
         _lifetime.Shutdown();
     }
 }
+
+
+
 
 
