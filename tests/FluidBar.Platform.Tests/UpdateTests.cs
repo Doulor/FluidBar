@@ -163,6 +163,22 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public void ManifestParser_PublishedAtKeepsTheFeedOffset()
+    {
+        // Feed timestamps are ISO-8601; parsing must be culture-invariant and round-trip so the offset
+        // in the feed is preserved instead of being reinterpreted by the machine's current culture.
+        const string json = """
+        [{"tag_name":"v2.0.0","prerelease":false,"assets":[],
+          "published_at":"2026-10-01T00:00:00.1234567+02:00"}]
+        """;
+        var release = ReleaseManifestParser.SelectRelease(json, UpdateChannel.Stable, "x");
+        Assert.NotNull(release);
+        var expected = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.FromHours(2)).AddTicks(1234567);
+        Assert.Equal(expected, release!.PublishedAt);
+        Assert.Equal(TimeSpan.FromHours(2), release.PublishedAt!.Value.Offset);
+    }
+
+    [Fact]
     public void ManifestParser_PrereleaseChannelPicksNewest()
     {
         var release = ReleaseManifestParser.SelectRelease(Manifest, UpdateChannel.Prerelease, @"FluidBar.*\.exe$");

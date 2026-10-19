@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -116,8 +117,12 @@ public static class ReleaseManifestParser
             releasePage = htmlUri;
         }
 
+        // Feed timestamps are ISO-8601/RFC-3339. Parse them with the invariant culture and round-trip
+        // semantics: the current culture must never reinterpret a release date (e.g. non-Gregorian
+        // calendars or different date separators), and the feed offset must be preserved as-is.
         DateTimeOffset? publishedAt = null;
-        if (DateTimeOffset.TryParse(GetString(element, "published_at"), out var parsedPublished))
+        if (DateTimeOffset.TryParse(GetString(element, "published_at"), CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out var parsedPublished))
         {
             publishedAt = parsedPublished;
         }

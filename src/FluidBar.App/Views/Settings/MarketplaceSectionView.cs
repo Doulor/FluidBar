@@ -89,16 +89,54 @@ public sealed class MarketplaceSectionView : StackPanel
         _channel = channel;
         _community = community ?? CommunityMarketplaceService.CreateDefault();
         Spacing = 0;
-        _marketplace.Changed += (_, _) => Refresh();
-        _community.Changed += (_, _) =>
-        {
-            if (VisualRoot is null)
-            {
-                return;
-            }
 
+        // Subscribe only while the section is on screen. The signed-catalog service is long-lived (one
+        // per app), so a ctor subscription without an unsubscribe would root every closed settings
+        // window (and keep rebuilding detached UI trees) for the rest of the process lifetime.
+        AttachedToVisualTree += OnSectionAttached;
+        DetachedFromVisualTree += OnSectionDetached;
+    }
+
+    private void OnSectionAttached(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        _marketplace.Changed -= OnMarketplaceChanged;
+        _marketplace.Changed += OnMarketplaceChanged;
+        _community.Changed -= OnCommunityChanged;
+        _community.Changed += OnCommunityChanged;
+    }
+
+    private void OnSectionDetached(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        _marketplace.Changed -= OnMarketplaceChanged;
+        _community.Changed -= OnCommunityChanged;
+    }
+
+    private void OnMarketplaceChanged(object? sender, EventArgs e) => RefreshOnUiThread();
+
+    private void OnCommunityChanged(object? sender, EventArgs e)
+    {
+        if (VisualRoot is null)
+        {
+            return;
+        }
+
+        RefreshOnUiThread();
+    }
+
+    /// <summary>
+    /// The catalog/community services raise <c>Changed</c> on whatever thread finished the IO (network
+    /// poll or thread-pool continuation), while the rebuild mutates Avalonia controls. Marshal to the UI
+    /// thread instead of touching the visual tree from a worker thread.
+    /// </summary>
+    private void RefreshOnUiThread()
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
             Refresh();
-        };
+            return;
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
     }
 
     /// <summary>The device-local community marketplace backing this section.</summary>
@@ -123,7 +161,23 @@ public sealed class MarketplaceSectionView : StackPanel
     private static AppSurfaceColors FromSurfaces(AppSurfaceColors surfaces) => surfaces;
 
     /// <summary>Rebuilds the plugin list (signed catalog + device-local community marketplace).</summary>
-    public async void Refresh() => await ReloadAsync();
+    /// <remarks>
+    /// Kept as the event-handler entry point (async void) for compatibility, but a rebuild must never
+    /// surface as an unhandled exception on the UI thread: reload errors are already reflected in the
+    /// section status by <see cref="ReloadAsync"/>; a failure while building a detached tree is traced
+    /// and dropped (the window that owned this view is already closed).
+    /// </remarks>
+    public async void Refresh()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine("marketplace section refresh failed: " + ex);
+        }
+    }
 
     /// <summary>
     /// Reloads both catalogs and rebuilds the section. Awaitable so tests and the harness can render a
