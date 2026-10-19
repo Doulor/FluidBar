@@ -79,7 +79,7 @@ internal sealed class TransientStripRenderer : IDisposable
 
         var leftBlock = _leftDots > 0 ? (_leftDots * DotPitch) - (float)IslandMetrics.DotGap : 0;
         var rightBlock = _rightDots > 0 ? (_rightDots * DotPitch) - (float)IslandMetrics.DotGap : 0;
-        var islands = (float)((IslandMetrics.MiniNeighbourSize * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
+        var islands = (float)((IslandMetrics.MiniNeighbourWidth * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
         var total = leftBlock + (_leftDots > 0 ? BlockGap : 0) + islands + (_rightDots > 0 ? BlockGap : 0) + rightBlock;
 
         // The strip lives in the host's bottom band, not immediately below the shell: in dock mode
@@ -102,18 +102,19 @@ internal sealed class TransientStripRenderer : IDisposable
             cursor += BlockGap - (float)IslandMetrics.DotGap;
         }
 
-        var neighbour = (float)IslandMetrics.MiniNeighbourSize;
-        var neighbourY = top + (((float)IslandMetrics.StripHeight - neighbour) / 2);
-        _prev = new SKRect(cursor, neighbourY, cursor + neighbour, neighbourY + neighbour);
-        cursor += neighbour + (float)IslandMetrics.MiniGap;
+        var neighbourWidth = (float)IslandMetrics.MiniNeighbourWidth;
+        var neighbourHeight = (float)IslandMetrics.MiniNeighbourHeight;
+        var neighbourY = top + (((float)IslandMetrics.StripHeight - neighbourHeight) / 2);
+        _prev = new SKRect(cursor, neighbourY, cursor + neighbourWidth, neighbourY + neighbourHeight);
+        cursor += neighbourWidth + (float)IslandMetrics.MiniGap;
 
         var currentHeight = (float)IslandMetrics.MiniCurrentHeight;
         var currentY = top + (((float)IslandMetrics.StripHeight - currentHeight) / 2);
         _current = new SKRect(cursor, currentY, cursor + (float)IslandMetrics.MiniCurrentWidth, currentY + currentHeight);
         cursor += (float)IslandMetrics.MiniCurrentWidth + (float)IslandMetrics.MiniGap;
 
-        _next = new SKRect(cursor, neighbourY, cursor + neighbour, neighbourY + neighbour);
-        cursor += neighbour;
+        _next = new SKRect(cursor, neighbourY, cursor + neighbourWidth, neighbourY + neighbourHeight);
+        cursor += neighbourWidth;
 
         if (_rightDots > 0)
         {
@@ -260,7 +261,11 @@ internal sealed class TransientStripRenderer : IDisposable
         for (var i = 0; i < _leftDots; i++)
         {
             var target = _page - 2 - i;
-            if (target >= 0 && _dotsLeft[i].Inflate((float)IslandMetrics.DotHitSize / 2).Contains(px, py))
+            // Prototype hit area is 7×15 per dot: inflating by 6 in both axes made neighbouring hit
+            // rects overlap (4 DIP gaps) and stole the far dot's click.
+            var leftHit = _dotsLeft[i];
+            leftHit.Inflate(2f, 6f);
+            if (target >= 0 && leftHit.Contains(px, py))
             {
                 return new IslandHitTarget(IslandHitKind.DotLeft, target);
             }
@@ -269,7 +274,9 @@ internal sealed class TransientStripRenderer : IDisposable
         for (var i = 0; i < _rightDots; i++)
         {
             var target = _page + 2 + i;
-            if (target < PagerConstants.PageCount && _dotsRight[i].Inflate((float)IslandMetrics.DotHitSize / 2).Contains(px, py))
+            var rightHit = _dotsRight[i];
+            rightHit.Inflate(2f, 6f);
+            if (target < PagerConstants.PageCount && rightHit.Contains(px, py))
             {
                 return new IslandHitTarget(IslandHitKind.DotRight, target);
             }
@@ -321,9 +328,9 @@ internal sealed class TransientStripRenderer : IDisposable
 
         DrawIsland(canvas, _current, active: true, alpha);
         var labelAlpha = alpha * (1f - (0.35f * pulse));
-        var labelArea = new SKRect(_current.Left + 22, _current.Top, _current.Right - 7, _current.Bottom);
+        var labelArea = new SKRect(_current.Left + 20, _current.Top, _current.Right - 6, _current.Bottom);
         _text.Draw(canvas, _label, IslandType.MiniLabel, labelArea,
-            Alpha(_theme.Accent, labelAlpha), TextAlign.Left, labelAlpha);
+            Alpha(_theme.Foreground, labelAlpha), TextAlign.Left, labelAlpha);
         canvas.Restore();
     }
 

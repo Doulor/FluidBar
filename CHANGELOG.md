@@ -155,6 +155,13 @@
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
 
+### 2026-10-19 23:10 — 下方小岛条按原型对齐
+- **小岛尺寸/形状对齐 prototype2**：左右预览岛由 26×26 改为 **40×24 胶囊**，当前岛 64×24 → **76×24**（短标题不再被截断），远点间距 5 → **4**，当前岛标签由强调色改为**白色**。
+- **远点点击修复**：远点命中区原来两个方向都按 6px 膨胀（12×12），在 4px 间距下相邻命中区重叠，点最远的点会命中相邻点。改为原型的 **7×15** 命中区（水平 ±2、垂直 ±6），岛测试恢复全绿。
+- 与上一项合计：`AppSettings.PanelRadius`（16–36）贯通渲染、外观改动即时重绘、插件不可用文案本地化。
+- 全量 **1490 passed / 0 failed**。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `DA8A34E9D28137987EB6297A54EDB118D7C6796B43F03BE7492EE893B6F9DD59`。
+
 ### 2026-10-19 22:55 — 设置：大面板圆角可调 + 插件错误本地化
 - **大面板圆角**：新增 `AppSettings.PanelRadius`（16–36 DIP，默认 28，持久化到 `appearance.panelRadius`），经 `LayoutTokens.RadiiFor` → `SkiaIslandMotion.PanelRadius` → `IslandRenderState.ShellRadii` 贯通到灵动岛渲染；外观页新增「大面板圆角」滑杆（16px / 28px 拐角实测不同）。顺带修复外观类设置改动后灵动岛不重绘的问题（`OnSettingsChanged` 现在重建渲染状态并请求整帧）。
 - **插件不可用文案本地化**：运行时改为返回 `Settings.Plugins.ErrorPlatformServiceUnavailable` 键，插件页解析为中文/英文，不再直接显示英文诊断。

@@ -62,14 +62,17 @@ public static class IslandMetrics
     /// <summary>Compact trailing chip height (20 DIP).</summary>
     public const double CompactChipHeight = 20;
 
-    /// <summary>Detached previous/next mini-island size (26×26 DIP).</summary>
-    public const double MiniNeighbourSize = 26;
+    /// <summary>Detached previous/next mini-island width (40 DIP, prototype capsule).</summary>
+    public const double MiniNeighbourWidth = 40;
 
-    /// <summary>Detached current mini-island width (64 DIP).</summary>
-    public const double MiniCurrentWidth = 64;
+    /// <summary>Detached previous/next mini-island height (24 DIP).</summary>
+    public const double MiniNeighbourHeight = 24;
 
-    /// <summary>Detached current mini-island height (28 DIP).</summary>
-    public const double MiniCurrentHeight = 28;
+    /// <summary>Detached current mini-island width (76 DIP; fits the short page label).</summary>
+    public const double MiniCurrentWidth = 76;
+
+    /// <summary>Detached current mini-island height (24 DIP).</summary>
+    public const double MiniCurrentHeight = 24;
 
     /// <summary>Gap between detached islands (8 DIP).</summary>
     public const double MiniGap = 8;
@@ -77,8 +80,8 @@ public static class IslandMetrics
     /// <summary>Far-page dot diameter (3 DIP).</summary>
     public const double DotSize = 3;
 
-    /// <summary>Gap between far-page dots (5 DIP).</summary>
-    public const double DotGap = 5;
+    /// <summary>Gap between far-page dots (4 DIP, prototype).</summary>
+    public const double DotGap = 4;
 
     /// <summary>Dot hit target size (12 DIP; dots are tiny, the hit target is not).</summary>
     public const double DotHitSize = 12;

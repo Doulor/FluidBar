@@ -114,7 +114,7 @@ public static class SkiaIslandHitTest
         const float blockGap = 8f;
         var leftBlock = leftDots > 0 ? (leftDots * dotPitch) - (float)IslandMetrics.DotGap : 0;
         var rightBlock = rightDots > 0 ? (rightDots * dotPitch) - (float)IslandMetrics.DotGap : 0;
-        var islands = (float)((IslandMetrics.MiniNeighbourSize * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
+        var islands = (float)((IslandMetrics.MiniNeighbourWidth * 2) + IslandMetrics.MiniCurrentWidth + (IslandMetrics.MiniGap * 2));
         var total = leftBlock + (leftDots > 0 ? blockGap : 0) + islands + (rightDots > 0 ? blockGap : 0) + rightBlock;
 
         // The strip lives in the host's bottom band, not immediately below the shell: in dock mode
@@ -139,18 +139,19 @@ public static class SkiaIslandHitTest
             cursor += blockGap - (float)IslandMetrics.DotGap;
         }
 
-        var neighbour = (float)IslandMetrics.MiniNeighbourSize;
-        var neighbourY = top + (((float)IslandMetrics.StripHeight - neighbour) / 2);
-        var previous = new SKRect(cursor, neighbourY, cursor + neighbour, neighbourY + neighbour);
-        cursor += neighbour + (float)IslandMetrics.MiniGap;
+        var neighbourWidth = (float)IslandMetrics.MiniNeighbourWidth;
+        var neighbourHeight = (float)IslandMetrics.MiniNeighbourHeight;
+        var neighbourY = top + (((float)IslandMetrics.StripHeight - neighbourHeight) / 2);
+        var previous = new SKRect(cursor, neighbourY, cursor + neighbourWidth, neighbourY + neighbourHeight);
+        cursor += neighbourWidth + (float)IslandMetrics.MiniGap;
 
         var currentHeight = (float)IslandMetrics.MiniCurrentHeight;
         var currentY = top + (((float)IslandMetrics.StripHeight - currentHeight) / 2);
         var current = new SKRect(cursor, currentY, cursor + (float)IslandMetrics.MiniCurrentWidth, currentY + currentHeight);
         cursor += (float)IslandMetrics.MiniCurrentWidth + (float)IslandMetrics.MiniGap;
 
-        var next = new SKRect(cursor, neighbourY, cursor + neighbour, neighbourY + neighbour);
-        cursor += neighbour;
+        var next = new SKRect(cursor, neighbourY, cursor + neighbourWidth, neighbourY + neighbourHeight);
+        cursor += neighbourWidth;
 
         if (rightDots > 0)
         {
