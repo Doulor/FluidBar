@@ -35,6 +35,13 @@
 构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
 （Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
+## 2026-10-20 05:35 检查点（市场/关于复核 + 媒体真机二次攻坚）
+
+- **设置面板收口**：市场页修掉 3 个真实缺陷（featured 卡缺暖色径向层且层序反了 → 下半部暗到与页底同色；chips 与网格之间多 10px；滚动条不占 gutter 导致内容偏宽 9px）；关于页不再插入空状态行、失败文案中性化、6 种更新状态 × 中英齐备。设置窗口在 FontScale 1.0/1.6 下渲染字节完全相同。
+- **媒体真机回归**（酷狗正在播放）：修掉『封面永远不显示』的两个真根因——① 快照发布早于封面入缓存且结构签名不含 ArtworkKey；② 酷狗缓存为 WebP 且文件夹全角/半角与标题不一致。现在紧凑胶囊与展开页都显示真实专辑图；进度 1:50→2:13→2:36 三帧推进；逐行歌词随进度滚动；岛上 暂停/恢复/上一首/下一首 全部真机生效。另修：歌词身份行（『歌名 - 歌手』）被当歌词、Next 与当前行重复时不隐藏；播放态改读无障碍树「播放/暂停」图标可见性，隐藏时间文本也能 1s 内反映。
+- 测试：**1860 passed / 0 failed**（Core 567 · Island 274 · Ui 250 · Platform 498 · Sdk 167 · PluginHost 39 · Integration 31 · Builtin 23 · Architecture 11）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `3757257F21E6F54F57CF48C2461A5EB691B71132373FB50368A53AD8B7043994`，HEAD `8778c8e`。
+
 ## 2026-10-20 04:50 检查点（多 agent 通宵轮：原型对齐 + 插件攻坚）
 
 多 agent 协同完成 6 批工作流（marketplace-flows / island-audit / rail-pixel / settings-pixel / media-lyrics / settings-audit / island-polish / island-body）。
