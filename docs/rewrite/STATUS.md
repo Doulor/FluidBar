@@ -1,6 +1,6 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-19 16:40（Asia/Shanghai）
+> 最后更新：2026-10-20 03:45（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
@@ -32,8 +32,17 @@
 | UI | 184 | ✅ |
 | Architecture | 11 | ✅ |
 
-构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1482 passed / 0 failed**
-（Core 494 · Platform 409 · SDK 152 · UI 188 · Island 135 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
+构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
+（Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
+
+## 2026-10-20 03:45 检查点（原型对齐 + 插件升级）
+
+- **设置面板**：通用页（4 行 + 快捷键组，副标题同原型）、外观页（5 行 + 实时预览 + 预览头 `28 px · 96%`）、插件页（搜索左对齐、行标题单行、发布者与能力合并成一行）已与 prototype2 截图逐项对齐；原型之外的能力（跟随系统、更新方式、调色板、字号、动效强度、匿名数据说明）保留在「高级」页。
+- **下方小岛条**：预览岛 26×26、当前岛 73×28、岛间距 8、远点↔岛 7、弹簧 T0.32/ζ0.85、自动隐藏 900 ms（全部取自原型 README 实测值）。
+- **小胶囊媒体**：补上真实封面（`CompactModel.Artwork/ArtworkKey` + 共享 `ArtworkImageCache`），进度改读媒体快照，无时间轴时不画进度条。
+- **代理插件**：新增 `AgentKind.DeepSeek`，识别 deepseek / deepseek-harness / dsh / harness，代理页显示「DeepSeek Harness」。
+- **媒体页**：浏览器视频不再匹配歌词（只有暴露专辑元数据的浏览器来源才查歌词），无歌词时不画空歌词卡。
+- 测试：**1493 passed / 0 failed**；Release `build/release/win-x64/FluidBar.exe` SHA256 `09D27B54…43BA`。
 
 ## Spike 结论
 
