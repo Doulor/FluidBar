@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Delivery-acceptance evidence harness (developer/QA tool, not shipped): renders the real settings
+    window for all seven sections, drives the production settings store through a create → update →
+    flush → fresh-instance read-back cycle, and captures the marketplace section against the data the
+    marketplace evidence run just wrote. Screenshots are real production views (Avalonia RenderTargetBitmap).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWindowsForms>false</UseWindowsForms>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FluidBar.Acceptance.Evidence</RootNamespace>
+    <AssemblyName>FluidBar.Acceptance.Evidence</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluidBar.App\FluidBar.App.csproj" />
+  </ItemGroup>
+
+</Project>
