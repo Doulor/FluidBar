@@ -289,6 +289,15 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         _lyricsTrackKey = media.TrackKey;
         _lyricsDocument = null;
+
+        // Browser media sessions are usually videos; matching their title/artist against lyric
+        // catalogs produced unrelated lines (e.g. a video's "下一步" caption). Only browsers that
+        // expose album metadata (music sites) are treated as music.
+        if (IsBrowserSource(media.SourceAppUserModelId) && string.IsNullOrWhiteSpace(media.Album))
+        {
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(media.Title) || string.IsNullOrWhiteSpace(media.Artist))
         {
             return;
@@ -297,6 +306,30 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _lyrics.CancelPending(media.TrackKey);
         _ = LoadLyricsAsync(media);
     }
+
+    /// <summary>Whether the media source is a browser (video-first unless it exposes an album).</summary>
+    private static bool IsBrowserSource(string? appUserModelId)
+    {
+        if (string.IsNullOrWhiteSpace(appUserModelId))
+        {
+            return false;
+        }
+
+        foreach (var browser in BrowserSources)
+        {
+            if (appUserModelId.Contains(browser, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static readonly string[] BrowserSources =
+    [
+        "msedge", "chrome", "firefox", "opera", "brave", "vivaldi", "chromium", "safari",
+    ];
 
     private async Task LoadLyricsAsync(MediaSnapshot media)
     {

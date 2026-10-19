@@ -247,17 +247,22 @@ internal sealed partial class PageRenderer : IDisposable
         _text.Draw(canvas, media.Album, IslandType.MediaAlbum, PageLayout.MediaAlbum(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
 
-        var lyricCard = PageLayout.MediaLyricCard(page);
-        DrawCard(canvas, lyricCard, 10);
-        _text.Draw(canvas, media.LyricLine, IslandType.Lyric,
-            new SKRect(lyricCard.Left + 10, lyricCard.Top + 7, lyricCard.Right - 10, lyricCard.Top + 21),
-            _theme.Foreground, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
-            new SKRect(lyricCard.Left + 10, lyricCard.Top + 24, lyricCard.Left + 40, lyricCard.Top + 36),
-            _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.NextLyricLine, IslandType.LyricNext,
-            new SKRect(lyricCard.Left + 42, lyricCard.Top + 24, lyricCard.Right - 10, lyricCard.Top + 36),
-            _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        // The lyric card only makes sense when a lyric line exists; an empty card with just the
+        // "Next" label looked broken for video sessions without lyrics.
+        if (!string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine))
+        {
+            var lyricCard = PageLayout.MediaLyricCard(page);
+            DrawCard(canvas, lyricCard, 10);
+            _text.Draw(canvas, media.LyricLine, IslandType.Lyric,
+                new SKRect(lyricCard.Left + 10, lyricCard.Top + 7, lyricCard.Right - 10, lyricCard.Top + 21),
+                _theme.Foreground, TextAlign.Left, _opacity);
+            _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
+                new SKRect(lyricCard.Left + 10, lyricCard.Top + 24, lyricCard.Left + 40, lyricCard.Top + 36),
+                _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+            _text.Draw(canvas, media.NextLyricLine, IslandType.LyricNext,
+                new SKRect(lyricCard.Left + 42, lyricCard.Top + 24, lyricCard.Right - 10, lyricCard.Top + 36),
+                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
 
         // Window-title fallback sources have no timeline: hide the seek row instead of drawing 0:00.
         if (media.HasTimeline)
