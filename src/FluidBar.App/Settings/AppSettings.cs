@@ -174,11 +174,11 @@ public sealed record AppSettings
     /// <summary>Fallback accent color (<c>#RRGGBB</c>).</summary>
     public string AccentFallback { get; init; } = "#4CC9F0";
 
-    /// <summary>Shell fill opacity (0.85–1.0; text-bearing states must stay ≥0.85).</summary>
-    public double FillOpacity { get; init; } = LayoutTokens.FillOpacity;
+    /// <summary>Shell fill opacity (0.85–1.0; text-bearing states must stay ≥0.85; prototype2 default 0.97).</summary>
+    public double FillOpacity { get; init; } = 0.97;
 
-    /// <summary>Expanded panel corner radius in DIP (16–36; compact pills stay stadiums).</summary>
-    public double PanelRadius { get; init; } = 28;
+    /// <summary>Expanded panel corner radius in DIP (16–36; compact pills stay stadiums; prototype2 default 30).</summary>
+    public double PanelRadius { get; init; } = 30;
 
     /// <summary>Text scale for island content (0.8–1.6).</summary>
     public double FontScale { get; init; } = 1.0;

@@ -113,10 +113,21 @@ internal sealed class SquirclePathCache : IDisposable
 /// then blitted. No live <c>SKImageFilter</c> runs per frame. During a size morph the key is bucketed at
 /// 0.5 DIP; settled frames reuse one image. Bounded LRU so a long drag cannot grow memory.
 /// </summary>
+/// <summary>
+/// One CSS <c>box-shadow</c> layer: blur radius expressed as Gaussian sigma, y offset, spread and alpha.
+/// Prototype2 paints the shell with two layers: <c>0 18px 44px -16px rgba(0,0,0,.78)</c> and
+/// <c>0 3px 10px -4px rgba(0,0,0,.42)</c> (CSS blur 44/10 → sigma 22/5).
+/// </summary>
+internal readonly record struct ShadowLayer(double SigmaDip, double OffsetYDip, double SpreadDip, byte Alpha)
+{
+    /// <summary>Whether this layer contributes any paint.</summary>
+    public bool IsVisible => Alpha > 0 && SigmaDip >= 0;
+}
+
 internal sealed class ShadowCache : IDisposable
 {
-    /// <summary>Transparent margin baked around the shadow in DIP.</summary>
-    public const double MarginDip = 40;
+    /// <summary>Transparent margin baked around the shadow in DIP (covers the prototype's 44 px blur).</summary>
+    public const double MarginDip = 56;
 
     private readonly Dictionary<Key, Entry> _cache = [];
     private readonly LinkedList<Key> _lru = [];
@@ -155,11 +166,10 @@ internal sealed class ShadowCache : IDisposable
         CornerRadii radii,
         float scale,
         SKColor color,
-        double sigmaDip,
-        double offsetYDip,
-        byte alpha)
+        in ShadowLayer primary,
+        in ShadowLayer secondary = default)
     {
-        var key = Key.From(width, height, radii, scale, color, sigmaDip, offsetYDip, alpha);
+        var key = Key.From(width, height, radii, scale, color, primary, secondary);
         if (_cache.TryGetValue(key, out var entry))
         {
             _lru.Remove(entry.Node);
@@ -167,7 +177,7 @@ internal sealed class ShadowCache : IDisposable
             return entry.Image;
         }
 
-        var image = Build(width, height, radii, scale, color, sigmaDip, offsetYDip, alpha);
+        var image = Build(width, height, radii, scale, color, primary, secondary);
         var node = _lru.AddFirst(key);
         _cache[key] = new Entry(image, node);
         Builds++;
@@ -208,9 +218,8 @@ internal sealed class ShadowCache : IDisposable
         CornerRadii radii,
         float scale,
         SKColor color,
-        double sigmaDip,
-        double offsetYDip,
-        byte alpha)
+        in ShadowLayer primary,
+        in ShadowLayer secondary)
     {
         var margin = MarginDip;
         var pixelWidth = Math.Max(1, (int)Math.Ceiling((width + (margin * 2)) * scale));
@@ -221,26 +230,68 @@ internal sealed class ShadowCache : IDisposable
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
 
-        using var path = SquirclePathCache.Build(width, height, radii);
+        canvas.Save();
+        canvas.Scale(scale);
+
+        // CSS paints the first listed box-shadow on top; draw the smaller/darker layer first so the
+        // large soft layer composites over it (matching the browser result).
+        if (secondary.IsVisible)
+        {
+            DrawLayer(canvas, width, height, radii, color, margin, secondary);
+        }
+
+        if (primary.IsVisible)
+        {
+            DrawLayer(canvas, width, height, radii, color, margin, primary);
+        }
+
+        canvas.Restore();
+        return surface.Snapshot();
+    }
+
+    private static void DrawLayer(
+        SKCanvas canvas,
+        double width,
+        double height,
+        CornerRadii radii,
+        SKColor color,
+        double margin,
+        in ShadowLayer layer)
+    {
+        // CSS spread inflates (positive) or insets (negative) the shadow box; radii follow the spread
+        // and never go below zero.
+        var spread = layer.SpreadDip;
+        var shadowWidth = width + (spread * 2);
+        var shadowHeight = height + (spread * 2);
+        if (shadowWidth <= 0 || shadowHeight <= 0)
+        {
+            return;
+        }
+
+        var shadowRadii = new CornerRadii(
+            Math.Max(0, radii.TopLeft + spread),
+            Math.Max(0, radii.TopRight + spread),
+            Math.Max(0, radii.BottomRight + spread),
+            Math.Max(0, radii.BottomLeft + spread));
+
+        using var path = SquirclePathCache.Build(shadowWidth, shadowHeight, shadowRadii);
         using var paint = new SKPaint
         {
             IsAntialias = true,
             Color = color,
             ImageFilter = SKImageFilter.CreateDropShadowOnly(
                 0,
-                (float)(offsetYDip * scale),
-                (float)(sigmaDip * scale),
-                (float)(sigmaDip * scale),
-                color.WithAlpha(alpha),
+                (float)layer.OffsetYDip,
+                (float)layer.SigmaDip,
+                (float)layer.SigmaDip,
+                color.WithAlpha(layer.Alpha),
                 null),
         };
 
         canvas.Save();
-        canvas.Scale(scale);
-        canvas.Translate((float)margin, (float)margin);
+        canvas.Translate((float)(margin + spread), (float)(margin + spread));
         canvas.DrawPath(path, paint);
         canvas.Restore();
-        return surface.Snapshot();
     }
 
     public void Dispose()
@@ -266,7 +317,12 @@ internal sealed class ShadowCache : IDisposable
         SKColor Color,
         long Sigma,
         long Offset,
-        byte Alpha)
+        long Spread,
+        byte Alpha,
+        long Sigma2,
+        long Offset2,
+        long Spread2,
+        byte Alpha2)
     {
         public static Key From(
             double width,
@@ -274,9 +330,8 @@ internal sealed class ShadowCache : IDisposable
             CornerRadii radii,
             float scale,
             SKColor color,
-            double sigmaDip,
-            double offsetYDip,
-            byte alpha) => new(
+            in ShadowLayer primary,
+            in ShadowLayer secondary) => new(
             (long)Math.Round(width * 2),
             (long)Math.Round(height * 2),
             (long)Math.Round(radii.TopLeft * 2),
@@ -285,9 +340,14 @@ internal sealed class ShadowCache : IDisposable
             (long)Math.Round(radii.BottomLeft * 2),
             (long)Math.Round(scale * 1000),
             color,
-            (long)Math.Round(sigmaDip * 100),
-            (long)Math.Round(offsetYDip * 100),
-            alpha);
+            (long)Math.Round(primary.SigmaDip * 100),
+            (long)Math.Round(primary.OffsetYDip * 100),
+            (long)Math.Round(primary.SpreadDip * 100),
+            primary.Alpha,
+            (long)Math.Round(secondary.SigmaDip * 100),
+            (long)Math.Round(secondary.OffsetYDip * 100),
+            (long)Math.Round(secondary.SpreadDip * 100),
+            secondary.Alpha);
     }
 
     private sealed record Entry(SKImage Image, LinkedListNode<Key> Node);

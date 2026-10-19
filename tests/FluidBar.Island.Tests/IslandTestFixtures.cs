@@ -442,8 +442,11 @@ internal static class IslandTestFixtures
         return File.Exists(path) ? SKBitmap.Decode(path) : null;
     }
 
-    /// <summary>Counts pixels above <paramref name="alphaThreshold"/> outside a host-local DIP rectangle.</summary>
-    public static int CountOpaqueOutside(SKBitmap bitmap, SKRect dipRect, float scale, byte alphaThreshold = 128)
+    /// <summary>
+    /// Counts (nearly) opaque pixels outside a host-local DIP rectangle. The threshold stays above the
+    /// prototype2 shell shadow (max 199 alpha) so the two-layer CSS shadow does not read as content.
+    /// </summary>
+    public static int CountOpaqueOutside(SKBitmap bitmap, SKRect dipRect, float scale, byte alphaThreshold = 250)
     {
         var left = (int)Math.Floor(dipRect.Left * scale);
         var top = (int)Math.Floor(dipRect.Top * scale);

@@ -4,9 +4,10 @@ using SkiaSharp;
 namespace FluidBar.Island.Tests;
 
 /// <summary>
-/// Regression coverage for the rejected accent rim: the shell outline must be a near-neutral hairline
-/// (white @11 % over the obsidian fill), never the user accent, and the baked shadow must stay black.
-/// The tests sample the actual edge band of live renders and of the stored goldens.
+/// Regression coverage for the rejected accent rim: prototype2 declares <c>.island { border: 0 }</c>, so
+/// the shell has no outline at all — the edge band must read as the near-neutral fill (never the user
+/// accent) and the baked shadow must stay neutral. The tests sample the actual edge band of live
+/// renders and of the stored goldens, one pixel inside the silhouette (it is anti-aliased, no rim).
 /// </summary>
 public sealed class ShellOutlineTests
 {
@@ -29,7 +30,7 @@ public sealed class ShellOutlineTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public void Live_render_shell_edge_is_a_neutral_hairline(string name)
+    public void Live_render_shell_edge_is_a_neutral_rimless_fill(string name)
     {
         var state = IslandTestFixtures.GoldenState(name);
         using var renderer = new IslandRenderer(state.Theme ?? IslandTestFixtures.Theme);
@@ -47,7 +48,7 @@ public sealed class ShellOutlineTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public void Stored_golden_shell_edge_is_a_neutral_hairline(string name)
+    public void Stored_golden_shell_edge_is_a_neutral_rimless_fill(string name)
     {
         using var golden = IslandTestFixtures.TryLoadGolden(name + ".png");
         if (golden is null)
@@ -103,12 +104,14 @@ public sealed class ShellOutlineTests
         var top = (int)Math.Round(shell.Top * scale);
         var right = (int)Math.Round(shell.Right * scale);
         var bottom = (int)Math.Round(shell.Bottom * scale);
-        var verticalInset = (int)Math.Round(Math.Min(10f, shell.Height * 0.25f) * scale);
-        var horizontalInset = (int)Math.Round(Math.Min(10f, shell.Width * 0.25f) * scale);
+        var verticalInset = (int)Math.Round(Math.Min(24f, shell.Height * 0.25f) * scale);
+        var horizontalInset = (int)Math.Round(Math.Min(24f, shell.Width * 0.25f) * scale);
 
+        // Sample just inside the silhouette: prototype2 has no border, so the outermost pixel is the
+        // anti-aliased fill edge and carries less alpha than the band one pixel in.
         for (var y = top + verticalInset; y <= bottom - verticalInset; y += 2)
         {
-            for (var dx = -1; dx <= 1; dx++)
+            for (var dx = 2; dx <= 4; dx++)
             {
                 Accumulate(bitmap.GetPixel(left + dx, y));
             }
@@ -116,7 +119,7 @@ public sealed class ShellOutlineTests
 
         for (var x = left + horizontalInset; x <= right - horizontalInset; x += 2)
         {
-            for (var dy = -1; dy <= 1; dy++)
+            for (var dy = 2; dy <= 4; dy++)
             {
                 Accumulate(bitmap.GetPixel(x, top + dy));
             }
@@ -126,7 +129,7 @@ public sealed class ShellOutlineTests
 
         void Accumulate(SKColor color)
         {
-            if (color.Alpha < 160)
+            if (color.Alpha < 120)
             {
                 return;
             }

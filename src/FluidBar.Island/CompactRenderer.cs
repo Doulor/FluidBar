@@ -39,10 +39,14 @@ internal sealed class CompactRenderer : IDisposable
         _numbers = numbers;
     }
 
-    public void Draw(SKCanvas canvas, in IslandRenderState state)
+    /// <summary>Draws the compact layer at <paramref name="opacity"/> (host motion drives the fade).</summary>
+    /// <param name="canvas">Host-local DIP canvas.</param>
+    /// <param name="state">Render state.</param>
+    /// <param name="opacity">Layer opacity 0..1.</param>
+    public void Draw(SKCanvas canvas, in IslandRenderState state, float opacity)
     {
         _theme = state.Theme;
-        _opacity = (float)Math.Clamp(state.Opacity * state.ContentOpacity, 0, 1);
+        _opacity = Math.Clamp(opacity, 0, 1);
         _phase = state.MotionPhase;
         _reduced = state.ReducedMotion;
         if (_opacity <= 0.01f)
@@ -93,19 +97,21 @@ internal sealed class CompactRenderer : IDisposable
 
     private void DrawIdle(SKCanvas canvas, CompactModel model, float width, float height)
     {
-        // Idle shell is only 132 DIP wide (LayoutTokens.IdleSize), so the clock slot, the status dot
-        // and the date column must share it: the old 70/76/88 split left the date just 32 DIP and
-        // "10月 20" / "Oct 18" were always ellipsised to "10月 ...". Measured clock is ~31 DIP, so the
-        // dot moves to 64 and the date owns everything from 72 to the trailing inset.
-        _text.Draw(canvas, model.ClockText ?? "00:00", IslandType.CompactClock,
-            new SKRect(12, 0, 58, height), _theme.Foreground, TextAlign.Left, _opacity);
+        // prototype2 .pill-idle: padding 0 12, gap 7; 13.5 DIP display clock, 5 DIP green dot, then a
+        // 10.5 DIP date. The layout is measured, not hard-coded, so a localized clock keeps the gaps.
+        var clock = model.ClockText ?? "00:00";
+        var clockWidth = Math.Min(64f, _text.Measure(clock, IslandType.CompactClock));
+        _text.Draw(canvas, clock, IslandType.CompactClock,
+            new SKRect(12, 0, 12 + clockWidth, height), _theme.Foreground, TextAlign.Left, _opacity);
 
+        var dotX = 12 + clockWidth + 7 + 2.5f;
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.Success, _opacity);
-        canvas.DrawCircle(64, height / 2, 2.5f, _fill);
+        canvas.DrawCircle(dotX, height / 2, 2.5f, _fill);
 
+        var dateLeft = dotX + 2.5f + 7;
         _text.Draw(canvas, model.DateText, IslandType.CompactSmall,
-            new SKRect(72, 0, width - 10, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+            new SKRect(dateLeft, 0, width - 10, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
     }
 
     // ----------------------------------------------------------------- media
@@ -116,23 +122,29 @@ internal sealed class CompactRenderer : IDisposable
         var art = new SKRect(8, (height - 28) / 2, 36, (height + 28) / 2);
         DrawArt(canvas, art, 8, accent, model.Artwork, model.ArtworkKey);
 
-        var textWidth = Math.Max(0, width - 44 - 8 - 26 - 8 - 22);
-        var titleArea = new SKRect(44, 6, 44 + textWidth, 22);
-        var subtitleArea = new SKRect(44, 22, 44 + textWidth, 36);
-        _text.Draw(canvas, model.Title, IslandType.CardTitle, titleArea, _theme.Foreground, TextAlign.Left, _opacity);
-        _text.Draw(canvas, model.Subtitle, IslandType.CardSubtitle, subtitleArea, _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        // prototype2 .pill-media: padding 0 10 0 8, gap 9; 28 DIP artwork, 13/600 title, 10/400
+        // subtitle, 20×15 wave, 26 DIP translucent play button, full-width 1.5 DIP progress bar.
+        var wave = new SKRect(width - 65, (height - 15) / 2, width - 45, (height + 15) / 2);
+        var textRight = wave.Left - 9;
+        _text.Draw(canvas, model.Title, IslandType.CompactMediaTitle,
+            new SKRect(45, 5.5f, textRight, 21), _theme.Foreground, TextAlign.Left, _opacity);
+        _text.Draw(canvas, model.Subtitle, IslandType.CompactMediaSub,
+            new SKRect(45, 21, textRight, 35), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
 
-        var wave = new SKRect(width - 60, 13, width - 38, 27);
         DrawWave(canvas, wave, accent, model.IsActive);
 
-        var play = new SKRect(width - 34, 7, width - 8, 33);
-        DrawIcon(canvas, model.IsActive ? IconKind.Pause : IconKind.Play, play.Deflate(4), _theme.Foreground);
+        var play = new SKRect(width - 36, (height - 26) / 2, width - 10, (height + 26) / 2);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(SKColors.White.WithAlpha(26), _opacity);
+        canvas.DrawCircle(play.MidX, play.MidY, play.Width / 2, _fill);
+        DrawIcon(canvas, model.IsActive ? IconKind.Pause : IconKind.Play, play.Deflate(7), _theme.Foreground);
 
         // No timeline = no bar at all (an always-empty 0 % bar read as a stuck progress).
         if (model.ProgressPercent >= 0)
         {
-            var track = new SKRect(8, height - 2, width - 8, height);
-            DrawTrack(canvas, track, Math.Clamp(model.ProgressPercent / 100.0, 0, 1), accent, _theme.HudTrack);
+            var track = new SKRect(0, height - 1.5f, width, height);
+            DrawTrack(canvas, track, Math.Clamp(model.ProgressPercent / 100.0, 0, 1), accent,
+                SKColors.White.WithAlpha(20));
         }
     }
 
@@ -154,69 +166,79 @@ internal sealed class CompactRenderer : IDisposable
                     _ => IconKind.VolumeHigh,
                 };
 
-        DrawIcon(canvas, icon, new SKRect(12, (height - 17) / 2, 29, (height + 17) / 2), accent);
+        // prototype2 .pill-hud: padding 0 13, gap 8; 17 DIP secondary icon, 10.5 DIP label,
+        // 89×3 DIP track (radius 3) at x 67 and a 13/600 value inset 13 DIP from the right edge.
+        DrawIcon(canvas, icon, new SKRect(13, (height - 17) / 2, 30, (height + 17) / 2),
+            muted ? accent : _theme.ForegroundSecondary);
 
         var label = model.Title ?? (kind == ActivityKind.Brightness ? "Brightness" : "Volume");
-        _text.Draw(canvas, muted ? "Muted" : label, IslandType.CompactCaption,
-            new SKRect(35, 0, 65, height), muted ? accent : _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        _text.Draw(canvas, muted ? "Muted" : label, IslandType.CompactSmall,
+            new SKRect(38, 0, 67, height), muted ? accent : _theme.ForegroundSecondary, TextAlign.Left, _opacity);
 
-        DrawTrack(canvas, new SKRect(71, (height / 2) - 1.5f, 156, (height / 2) + 1.5f), level / 100.0,
-            accent, _theme.HudTrack);
+        DrawTrack(canvas, new SKRect(67, (height / 2) - 1.5f, 156, (height / 2) + 1.5f), level / 100.0,
+            accent, SKColors.White.WithAlpha(36));
 
-        _text.Draw(canvas, model.Badge ?? _numbers.Percent(level), IslandType.CompactValue,
-            new SKRect(168, 0, width - 12, height), muted ? accent : _theme.Foreground, TextAlign.Right, _opacity);
+        _text.Draw(canvas, model.Badge ?? _numbers.Percent(level), IslandType.CompactHudValue,
+            new SKRect(156, 0, width - 13, height), muted ? accent : _theme.Foreground, TextAlign.Right, _opacity);
     }
 
     // ---------------------------------------------------------- notification
 
     private void DrawNotification(SKCanvas canvas, CompactModel model, float width, float height)
     {
+        // prototype2 .pill-notif: padding 0 10 0 8, gap 8; 20 DIP app glyph (radius 6, app colour, white
+        // icon), 11.5 DIP text (app 600 white · title secondary), 16 DIP accent badge with a dark 9/700
+        // number inset 10 DIP from the right edge.
         var hasChip = !string.IsNullOrEmpty(model.VerificationCode);
         var chipWidth = hasChip ? 46f : 0f;
         var hasBadge = !hasChip && model.UnreadCount > 0;
-        var right = width - 12 - (hasChip ? chipWidth + 8 : hasBadge ? 22 : 0);
+        var trailing = hasChip ? chipWidth + 8 : hasBadge ? 24 : 0;
+        var right = width - 10 - trailing;
 
-        var iconArea = new SKRect(12, (height - 20) / 2, 32, (height + 20) / 2);
-        DrawIcon(canvas, model.Icon ?? IconKind.Bell, iconArea.Deflate(4),
-            _accents.Get(model.AccentHex, _theme.Accent));
+        var accent = _accents.Get(model.AccentHex, _theme.Accent);
+        var glyph = new SKRect(8, (height - 20) / 2, 28, (height + 20) / 2);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(accent, _opacity);
+        canvas.DrawRoundRect(glyph, 6, 6, _fill);
+        DrawIcon(canvas, model.Icon ?? IconKind.Bell, glyph.Deflate(4), SKColors.White);
 
-        var area = new SKRect(40, 0, right, height);
+        var area = new SKRect(36, 0, right, height);
         var app = model.AppName;
         if (!string.IsNullOrEmpty(app))
         {
-            var appLayout = _text.GetLayout(app, IslandType.CompactSmallSemiBold, area.Width);
+            var appLayout = _text.GetLayout(app, IslandType.CompactNoticeStrong, area.Width);
             _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
                 _theme.Foreground, TextAlign.Left, _opacity);
-            var separator = area.Left + appLayout.Width + 4;
+            var separator = area.Left + appLayout.Width + 5;
             if (separator < area.Right - 12)
             {
-                _text.Draw(canvas, "·", IslandType.CompactSmall,
+                _text.Draw(canvas, "·", IslandType.CompactNotice,
                     new SKRect(separator, area.Top, separator + 8, area.Bottom), _theme.ForegroundSecondary,
                     TextAlign.Left, _opacity);
-                _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactSmall,
-                    new SKRect(separator + 10, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
+                _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNotice,
+                    new SKRect(separator + 8, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
                     TextAlign.Left, _opacity);
             }
         }
         else
         {
-            _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactSmallSemiBold, area,
+            _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNoticeStrong, area,
                 _theme.Foreground, TextAlign.Left, _opacity);
         }
 
         if (hasChip)
         {
-            var chip = new SKRect(width - 12 - chipWidth, (height - 20) / 2, width - 12, (height + 20) / 2);
+            var chip = new SKRect(width - 10 - chipWidth, (height - 20) / 2, width - 10, (height + 20) / 2);
             DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
         }
         else if (hasBadge)
         {
-            var badge = new SKRect(width - 12 - 16, (height - 16) / 2, width - 12, (height + 16) / 2);
+            var badge = new SKRect(width - 10 - 16, (height - 16) / 2, width - 10, (height + 16) / 2);
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(_theme.Accent, 0.20f * _opacity);
+            _fill.Color = Alpha(_theme.Accent, _opacity);
             canvas.DrawRoundRect(badge, 8, 8, _fill);
-            _text.Draw(canvas, _numbers.Number(model.UnreadCount), IslandType.CompactTiny, badge,
-                _theme.Accent, TextAlign.Center, _opacity);
+            _text.Draw(canvas, _numbers.Number(model.UnreadCount), IslandType.CompactBadge, badge,
+                _theme.Background, TextAlign.Center, _opacity);
         }
     }
 
@@ -224,19 +246,24 @@ internal sealed class CompactRenderer : IDisposable
 
     private void DrawClipboard(SKCanvas canvas, CompactModel model, float width, float height)
     {
-        DrawIcon(canvas, model.Icon ?? IconKind.Clipboard, new SKRect(16, (height - 16) / 2, 32, (height + 16) / 2),
-            _accents.Get(model.AccentHex, _theme.Success));
+        // prototype2 .pill-clip: padding 0 12 0 9, gap 8; 20 DIP accent-tinted slot (radius 6) with a
+        // 12 DIP accent icon, 11/600 white label, 3 DIP tertiary dot, 10.5 DIP secondary preview.
+        var accent = _accents.Get(model.AccentHex, _theme.Accent);
+        var slot = new SKRect(9, (height - 20) / 2, 29, (height + 20) / 2);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(accent, 0.13f * _opacity);
+        canvas.DrawRoundRect(slot, 6, 6, _fill);
+        DrawIcon(canvas, model.Icon ?? IconKind.Clipboard, slot.Deflate(4), accent);
 
         var label = model.Badge ?? "Copied";
-        _text.Draw(canvas, label, IslandType.CompactSmallSemiBold,
-            new SKRect(40, 0, 88, height), _theme.Success, TextAlign.Left, _opacity);
+        _text.Draw(canvas, label, IslandType.CompactClipLabel,
+            new SKRect(37, 0, 76, height), _theme.Foreground, TextAlign.Left, _opacity);
 
-        _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.ForegroundTertiary, _opacity);
-        canvas.DrawCircle(90, height / 2, 1.5f, _fill);
+        canvas.DrawCircle(77.5f, height / 2, 1.5f, _fill);
 
         _text.Draw(canvas, model.Body ?? model.Title, IslandType.CompactSmall,
-            new SKRect(98, 0, width - 12, height), _theme.Foreground, TextAlign.Left, _opacity);
+            new SKRect(85, 0, width - 12, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
     }
 
     // ------------------------------------------------------------------ agent
@@ -418,16 +445,19 @@ internal sealed class CompactRenderer : IDisposable
 
     private void DrawWave(SKCanvas canvas, SKRect area, SKColor accent, bool active)
     {
+        // prototype2 .wave: five 2 DIP bars, 1.6 DIP gaps, fully rounded caps, accent colour.
         var heights = active ? ActiveWave : IdleWave;
-        const float gap = 2f;
-        var barWidth = Math.Max(1.5f, (area.Width - (gap * 4)) / 5);
+        const float gap = 1.6f;
+        const float barWidth = 2f;
+        var total = (heights.Length * barWidth) + ((heights.Length - 1) * gap);
+        var startX = area.Left + ((area.Width - total) / 2);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(active ? accent : _theme.ForegroundTertiary, _opacity);
         for (var i = 0; i < heights.Length; i++)
         {
             var wobble = active && !_reduced ? 0.85 + (0.15 * Math.Sin((_phase * 3) + i)) : 1.0;
             var height = area.Height * heights[i] * (float)wobble;
-            var x = area.Left + (i * (barWidth + gap));
+            var x = startX + (i * (barWidth + gap));
             var y = area.MidY - (height / 2);
             canvas.DrawRoundRect(new SKRect(x, y, x + barWidth, y + height), barWidth / 2, barWidth / 2, _fill);
         }

@@ -84,20 +84,39 @@ public sealed record IslandTheme
     /// <summary>HUD track colour.</summary>
     public SKColor HudTrack { get; init; } = new(0x23, 0x23, 0x2A);
 
-    /// <summary>Shell fill opacity (0.85 minimum for text-bearing states).</summary>
-    public double FillOpacity { get; init; } = 0.96;
+    /// <summary>Shell fill opacity (prototype2 default <c>--island-fill: 0.97</c>).</summary>
+    public double FillOpacity { get; init; } = 0.97;
 
     /// <summary>Shadow colour.</summary>
     public SKColor ShadowColor { get; init; } = SKColors.Black;
 
-    /// <summary>Shadow opacity.</summary>
-    public double ShadowOpacity { get; init; } = 0.35;
+    // Prototype2 paints the shell with two box-shadow layers (styles.css .island):
+    //   0 18px 44px -16px rgba(0,0,0,.78), 0 3px 10px -4px rgba(0,0,0,.42)
+    // CSS blur radius maps to a Gaussian sigma of blur / 2.
 
-    /// <summary>Shadow offset Y in DIP.</summary>
-    public double ShadowOffsetY { get; init; } = 8;
+    /// <summary>Outer shadow opacity (prototype2 0.78).</summary>
+    public double ShadowOpacity { get; init; } = 0.78;
 
-    /// <summary>Shadow blur radius in DIP (sigma = blur / 2).</summary>
-    public double ShadowBlur { get; init; } = 24;
+    /// <summary>Outer shadow offset Y in DIP (prototype2 18).</summary>
+    public double ShadowOffsetY { get; init; } = 18;
+
+    /// <summary>Outer shadow blur radius in DIP (prototype2 44; sigma = blur / 2).</summary>
+    public double ShadowBlur { get; init; } = 44;
+
+    /// <summary>Outer shadow spread in DIP (prototype2 −16).</summary>
+    public double ShadowSpread { get; init; } = -16;
+
+    /// <summary>Close shadow opacity (prototype2 0.42).</summary>
+    public double ShadowOpacity2 { get; init; } = 0.42;
+
+    /// <summary>Close shadow offset Y in DIP (prototype2 3).</summary>
+    public double ShadowOffsetY2 { get; init; } = 3;
+
+    /// <summary>Close shadow blur radius in DIP (prototype2 10; sigma = blur / 2).</summary>
+    public double ShadowBlur2 { get; init; } = 10;
+
+    /// <summary>Close shadow spread in DIP (prototype2 −4).</summary>
+    public double ShadowSpread2 { get; init; } = -4;
 
     /// <summary>Whether the surface is light (text/hairline contrast helpers).</summary>
     public bool IsLight => Mode == IslandThemeMode.Light;
@@ -123,7 +142,11 @@ public sealed record IslandTheme
         HudTrack = new SKColor(0xE2, 0xE5, 0xEA),
         FillOpacity = 0.97,
         ShadowColor = new SKColor(0x18, 0x28, 0x3A),
-        ShadowOpacity = 0.22,
+        // Prototype2 light shell: 0 18px 44px -18px rgba(24,40,56,.52), 0 3px 10px -5px rgba(24,40,56,.22).
+        ShadowOpacity = 0.52,
+        ShadowSpread = -18,
+        ShadowOpacity2 = 0.22,
+        ShadowSpread2 = -5,
     };
 
     /// <summary>Returns the standard theme for a mode.</summary>

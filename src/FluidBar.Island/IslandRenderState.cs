@@ -43,8 +43,41 @@ public readonly record struct IslandRenderState
     /// <summary>Whole-shell opacity (hide fade); 0 hides and disables hit-testing.</summary>
     public double Opacity { get; init; } = 1;
 
-    /// <summary>Opacity of the compact/expanded content layer (host derives it from shell height).</summary>
+    /// <summary>Legacy combined content opacity (host diagnostics/compat; layers use their own fields).</summary>
     public double ContentOpacity { get; init; } = 1;
+
+    /// <summary>
+    /// Compact layer opacity from the host motion driver (prototype2 <c>.compact-layer</c>: fades out
+    /// over 90 ms ease-in when the panel opens, back over 140 ms ease-out + 40 ms delay when it closes).
+    /// <see langword="null"/> keeps the legacy <see cref="Form"/>-based visibility (fixtures/tests).
+    /// </summary>
+    public double? CompactLayerOpacity { get; init; }
+
+    /// <summary>
+    /// Expanded layer opacity from the host motion driver (prototype2 <c>.expanded-layer</c>: 220 ms
+    /// ease-out with a 90 ms delay on expand, 140 ms ease-out on collapse). <see langword="null"/> keeps
+    /// the legacy <see cref="Form"/>-based visibility.
+    /// </summary>
+    public double? ExpandedLayerOpacity { get; init; }
+
+    /// <summary>
+    /// Chrome (page number/title/settings/collapse) opacity from the host motion driver
+    /// (prototype2 <c>.pager-title</c> / <c>.pager-collapse</c>: 160 ms ease-out, 90 ms delay on expand).
+    /// <see langword="null"/> keeps the legacy <see cref="Form"/>-based visibility.
+    /// </summary>
+    public double? ChromeOpacity { get; init; }
+
+    /// <summary>Resolved compact layer opacity (legacy fallback: visible unless fully expanded).</summary>
+    public double ResolvedCompactLayerOpacity => Math.Clamp(
+        CompactLayerOpacity ?? (Form == ShellForm.Expanded ? 0 : 1), 0, 1);
+
+    /// <summary>Resolved expanded layer opacity (legacy fallback: visible only when fully expanded).</summary>
+    public double ResolvedExpandedLayerOpacity => Math.Clamp(
+        ExpandedLayerOpacity ?? (Form == ShellForm.Expanded ? 1 : 0), 0, 1);
+
+    /// <summary>Resolved chrome opacity (legacy fallback: visible only when fully expanded).</summary>
+    public double ResolvedChromeOpacity => Math.Clamp(
+        ChromeOpacity ?? (Form == ShellForm.Expanded ? 1 : 0), 0, 1);
 
     /// <summary>Transient vertical nudge in DIP (new-activity kick); 0 when reduced motion.</summary>
     public double NudgeOffsetY { get; init; }
@@ -52,7 +85,10 @@ public readonly record struct IslandRenderState
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
     public double PressScale { get; init; } = 1;
 
-    /// <summary>Number of ghost pills behind the compact shell (0–2).</summary>
+    /// <summary>
+    /// Stacked activity count behind the primary (0–2). Data/stacking only: prototype2 has no ghost
+    /// pill element, so the renderer paints nothing behind the shell for this value.
+    /// </summary>
     public int GhostCount { get; init; }
 
     /// <summary>Continuous pager position, committed page and gesture flags.</summary>
@@ -140,7 +176,8 @@ public readonly record struct IslandRenderState
             Form = ShellForm.Expanded,
             ShellWidth = LayoutTokens.ExpandedWidth,
             ShellHeight = LayoutTokens.ExpandedHeight,
-            ShellRadii = LayoutTokens.RadiiFor(ShellForm.Expanded, mode, LayoutTokens.ExpandedHeight),
+            ShellRadii = LayoutTokens.RadiiFor(
+                ShellForm.Expanded, mode, LayoutTokens.ExpandedHeight, IslandMetrics.ExpandedPanelRadius),
             ShellOrigin = host.ShellLocalOffset,
             Pager = pager,
             Pages = pages,

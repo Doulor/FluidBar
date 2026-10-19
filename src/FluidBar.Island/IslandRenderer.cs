@@ -20,9 +20,6 @@ public sealed record IslandRendererOptions
     /// <summary>Draw the baked soft shadow (disable for pixel-overflow tests).</summary>
     public bool EnableShadow { get; init; } = true;
 
-    /// <summary>Enable the incoming-page scale/parallax (honours reduced motion).</summary>
-    public bool EnableParallax { get; init; } = true;
-
     /// <summary>Record frame timings in <see cref="IslandRenderer.Stats"/>.</summary>
     public bool TrackTimings { get; init; } = true;
 }
@@ -328,22 +325,24 @@ public sealed class IslandRenderer : IDisposable
         canvas.Save();
         canvas.Translate(shell.Left, shell.Top);
 
-        if (state.Form != ShellForm.Expanded)
-        {
-            DrawGhosts(canvas, state, opacity);
-        }
-
         DrawShellBody(canvas, state, path, opacity);
 
+        // Prototype2 layers the compact surface and the expanded panel as siblings, each with its own
+        // CSS transition; both are painted while a transition is in flight. There is no ghost stack:
+        // prototype2's stacking strategy has no visual counterpart, so nothing behind the shell is drawn.
         canvas.Save();
         canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
-        if (state.Form == ShellForm.Expanded)
+        var compactOpacity = (float)Math.Clamp(opacity * state.ResolvedCompactLayerOpacity, 0, 1);
+        if (compactOpacity > 0.002f)
         {
-            DrawExpanded(canvas, state, opacity);
+            _compact.Draw(canvas, state, compactOpacity);
         }
-        else
+
+        var expandedOpacity = (float)Math.Clamp(opacity * state.ResolvedExpandedLayerOpacity, 0, 1);
+        if (expandedOpacity > 0.002f)
         {
-            _compact.Draw(canvas, state);
+            var chromeOpacity = (float)Math.Clamp(opacity * state.ResolvedChromeOpacity, 0, 1);
+            DrawExpanded(canvas, state, expandedOpacity, chromeOpacity);
         }
 
         canvas.Restore();
@@ -405,12 +404,9 @@ public sealed class IslandRenderer : IDisposable
             _glassPaint.Shader = null;
         }
 
-        _stroke.Style = SKPaintStyle.Stroke;
-        _stroke.StrokeWidth = (float)LayoutTokens.HairlineWidth;
-        // Neutral hairline only (LineStrong: white @11 % in Dark). Never tint the shell outline with
-        // Accent: the approved obsidian look rejects accent rims/bloom (see ShellOutlineTests).
-        _stroke.Color = Alpha(_theme.LineStrong, opacity);
-        canvas.DrawPath(path, _stroke);
+        // Prototype2 declares `.island { border: 0 }`: the shell has no rim/outline at all. The old
+        // LineStrong hairline is gone so the silhouette is pure fill + shadow (see ShellOutlineTests,
+        // which still guards against an accent-tinted rim ever coming back).
     }
 
     private SKShader GetGlassShader(float height)
@@ -431,58 +427,48 @@ public sealed class IslandRenderer : IDisposable
         return _glassShader;
     }
 
-    private void DrawGhosts(SKCanvas canvas, in IslandRenderState state, float opacity)
-    {
-        var count = Math.Clamp(state.GhostCount, 0, LayoutTokens.MaxGhosts);
-        if (count == 0)
-        {
-            return;
-        }
-
-        var width = (float)state.ShellWidth;
-        var height = (float)state.ShellHeight;
-        for (var i = 0; i < count; i++)
-        {
-            var scale = i == 0 ? LayoutTokens.GhostScale1 : LayoutTokens.GhostScale2;
-            var offsetY = i == 0 ? LayoutTokens.GhostOffsetY1 : LayoutTokens.GhostOffsetY2;
-            var alpha = i == 0 ? LayoutTokens.GhostOpacity1 : LayoutTokens.GhostOpacity2;
-            var ghostWidth = width * (float)scale;
-            var ghostHeight = height * (float)scale;
-            var x = (width - ghostWidth) / 2;
-            var path = _paths.Get(ghostWidth, ghostHeight, CornerRadii.Uniform(Math.Min(state.ShellRadii.Max, ghostHeight / 2)));
-            canvas.Save();
-            canvas.Translate(x, (float)offsetY);
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.Color = Alpha(_theme.Background, (float)alpha * opacity);
-            canvas.DrawPath(path, _fill);
-            _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeWidth = 1;
-            _stroke.Color = Alpha(_theme.LineStrong, (float)alpha * opacity);
-            canvas.DrawPath(path, _stroke);
-            canvas.Restore();
-        }
-    }
-
     private void DrawShadow(SKCanvas canvas, in IslandRenderState state, SKRect shell, float dpiScale, float opacity)
     {
         var dock = state.Mode == IslandMode.Dock;
-        var offsetY = dock ? LayoutTokens.DockShadowOffsetY : _theme.ShadowOffsetY;
-        var blur = dock ? LayoutTokens.DockShadowBlur : _theme.ShadowBlur;
-        var alpha = dock ? LayoutTokens.DockShadowOpacity : _theme.ShadowOpacity;
+        ShadowLayer primary;
+        ShadowLayer secondary;
+        if (dock)
+        {
+            // Dock keeps its compact token shadow (single layer, spec 3.5).
+            primary = new ShadowLayer(
+                LayoutTokens.DockShadowBlur / 2,
+                LayoutTokens.DockShadowOffsetY,
+                0,
+                (byte)Math.Clamp(LayoutTokens.DockShadowOpacity * 255, 0, 255));
+            secondary = default;
+        }
+        else
+        {
+            // Prototype2's two-layer shell shadow; CSS blur / 2 = Gaussian sigma.
+            primary = new ShadowLayer(
+                _theme.ShadowBlur / 2,
+                _theme.ShadowOffsetY,
+                _theme.ShadowSpread,
+                (byte)Math.Clamp(_theme.ShadowOpacity * 255, 0, 255));
+            secondary = new ShadowLayer(
+                _theme.ShadowBlur2 / 2,
+                _theme.ShadowOffsetY2,
+                _theme.ShadowSpread2,
+                (byte)Math.Clamp(_theme.ShadowOpacity2 * 255, 0, 255));
+        }
+
         var image = _shadows.Get(
             state.ShellWidth,
             state.ShellHeight,
             state.ShellRadii,
             dpiScale,
             _theme.ShadowColor,
-            blur / 2,
-            offsetY,
-            (byte)Math.Clamp(alpha * 255, 0, 255));
+            primary,
+            secondary);
         _shadows.Draw(canvas, image, shell, opacity);
     }
 
-    private void DrawExpanded(SKCanvas canvas, in IslandRenderState state, float opacity)
+    private void DrawExpanded(SKCanvas canvas, in IslandRenderState state, float layerOpacity, float chromeOpacity)
     {
         var content = new SKRect(
             (float)IslandMetrics.ContentLeft,
@@ -495,8 +481,9 @@ public sealed class IslandRenderer : IDisposable
             : 0;
         var pitch = FluidBar.Core.Interaction.PagerConstants.PagePitchDip;
         var offset = (float)(pagePosition * pitch);
-        var contentOpacity = (float)Math.Clamp(state.Opacity * state.ContentOpacity, 0, 1);
 
+        // Prototype2 moves a single flex track with translate3d(-offset * 400px); the pages themselves
+        // are never scaled, faded or parallaxed. Keep the transition a pure horizontal translation.
         canvas.Save();
         canvas.ClipRect(content);
         for (var page = 0; page < FluidBar.Core.Interaction.PagerConstants.PageCount; page++)
@@ -508,33 +495,14 @@ public sealed class IslandRenderer : IDisposable
                 continue;
             }
 
-            var distance = page - pagePosition;
-            var influence = Math.Min(Math.Abs(distance), 1.0);
-            var scale = 1f;
-            var parallax = 0f;
-            if (_options.EnableParallax && !state.ReducedMotion)
-            {
-                scale = 1f - (float)(0.015 * influence);
-                parallax = (float)(6.0 * influence * Math.Sign(distance));
-            }
-
             canvas.Save();
             canvas.ClipRect(pageRect);
-            if (Math.Abs(scale - 1) > 0.0001f || Math.Abs(parallax) > 0.01f)
-            {
-                var centerX = pageRect.MidX + parallax;
-                var centerY = pageRect.MidY;
-                canvas.Translate(centerX, centerY);
-                canvas.Scale(scale, scale);
-                canvas.Translate(-pageRect.MidX, -centerY);
-            }
-
-            _pages.DrawPage(canvas, state, page, pageRect, contentOpacity);
+            _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
             canvas.Restore();
         }
 
         canvas.Restore();
-        _pages.DrawChrome(canvas, state, content, opacity);
+        _pages.DrawChrome(canvas, state, content, chromeOpacity);
     }
 
     // ------------------------------------------------------------------ hit-test helpers

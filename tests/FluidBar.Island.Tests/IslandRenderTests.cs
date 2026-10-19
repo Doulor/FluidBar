@@ -162,7 +162,7 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
-    public void Page_transition_scales_and_parallaxes_the_incoming_page()
+    public void Page_transition_translates_the_track_without_scaling_or_fading_the_pages()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var settled = IslandTestFixtures.Expanded(0);
@@ -170,11 +170,47 @@ public sealed class IslandRenderTests
 
         using var settledBitmap = renderer.RenderToBitmap(settled, IslandTestFixtures.Scale);
         using var transitionBitmap = renderer.RenderToBitmap(transition, IslandTestFixtures.Scale);
-        Assert.NotEqual(settledBitmap.Width, 0);
-        Assert.NotEqual(transitionBitmap.Width, 0);
+        Assert.NotEqual(0, settledBitmap.Width);
+        Assert.NotEqual(0, transitionBitmap.Width);
 
         var shell = IslandMetrics.ShellRect(settled);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(transitionBitmap, shell, IslandTestFixtures.Scale));
+
+        // Prototype2 only applies translate3d(-offset * 400px) to the pager track: page 0 content in the
+        // transition frame must be pixel-identical to the settled frame shifted by 0.4 * 400 DIP. A
+        // scale or parallax (the old invented effect) would break this equality.
+        var content = IslandMetrics.ContentRect(shell);
+        var shift = (int)Math.Round(0.4 * 400 * IslandTestFixtures.Scale);
+        var compared = 0;
+        var mismatches = 0;
+        for (var y = (int)((content.Top + 60) * IslandTestFixtures.Scale);
+             y < (int)((content.Bottom - 40) * IslandTestFixtures.Scale);
+             y += 3)
+        {
+            for (var x = (int)(content.Left * IslandTestFixtures.Scale);
+                 x < (int)((content.Left + 200) * IslandTestFixtures.Scale);
+                 x += 3)
+            {
+                var moving = transitionBitmap.GetPixel(x, y);
+                var reference = settledBitmap.GetPixel(x + shift, y);
+                if (moving.Alpha < 150 || reference.Alpha < 150)
+                {
+                    continue;
+                }
+
+                compared++;
+                var delta = Math.Max(
+                    Math.Max(Math.Abs(moving.Red - reference.Red), Math.Abs(moving.Green - reference.Green)),
+                    Math.Max(Math.Abs(moving.Blue - reference.Blue), Math.Abs(moving.Alpha - reference.Alpha)));
+                if (delta > 2)
+                {
+                    mismatches++;
+                }
+            }
+        }
+
+        Assert.True(compared > 300, $"expected enough solid page pixels to compare, got {compared}");
+        Assert.Equal(0, mismatches);
     }
 
     [Fact]

@@ -4,7 +4,7 @@ namespace FluidBar.Island;
 
 /// <summary>
 /// Expanded page renderer: the approved prototype's home (clock/weather/toggles/now-playing/sliders/
-/// battery) and media (artwork/metadata/lyrics/seek/transport) pages at the 400×252 content size, plus
+/// battery) and media (artwork/metadata/lyrics/seek/transport) pages at the 400×260 content size, plus
 /// a compact placeholder for the remaining pages and the shared title/collapse chrome.
 /// </summary>
 internal sealed partial class PageRenderer : IDisposable
@@ -43,20 +43,22 @@ internal sealed partial class PageRenderer : IDisposable
             return;
         }
 
+        // Prototype2 `.pager-title`: page number 8.5 DIP @ 32 % white, title 10 DIP @ 72 % white, both
+        // left aligned at the content inset (left 20 / top 11).
         var page = Math.Clamp(state.PageIndex, 0, PageNumbers.Length - 1);
         _text.Draw(canvas, PageNumbers[page], IslandType.PageNumber, PageLayout.PageNumberRect(content),
-            _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+            _theme.Foreground.WithAlpha(82), TextAlign.Left, _opacity);
         _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
-            _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+            _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
 
         // The island had no in-island route to the settings window (only the global hotkey, which
         // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
         // gear next to the collapse chevron on every page; the same rectangle is the click target and
         // the UI Automation button, so pointer and screen-reader users find one control, not two.
         IconSet.Draw(canvas, IconKind.Settings, PageLayout.SettingsRect(content).Deflate(5.5f),
-            Alpha(_theme.ForegroundSecondary, _opacity), _icon);
+            Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
         IconSet.Draw(canvas, IconKind.ChevronDown, PageLayout.CollapseRect(content).Deflate(5),
-            Alpha(_theme.ForegroundSecondary, _opacity), _icon);
+            Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
     }
 
     /// <summary>Draws one page at <paramref name="pageRect"/> (host-local DIP).</summary>

@@ -1416,6 +1416,12 @@ public sealed class SkiaIslandController : IDisposable
             ShellOrigin = _motion.ShellOrigin,
             Opacity = _motion.Opacity,
             ContentOpacity = expanded ? _motion.ExpandedContentOpacity : _motion.CompactContentOpacity,
+            // Prototype2 renders the compact layer and the expanded layer as two siblings with their own
+            // CSS transitions; the chrome (title/collapse) fades independently. All three come from the
+            // motion driver's CSS-equivalent tweens so the host never has to re-derive them.
+            CompactLayerOpacity = _motion.CompactContentOpacity,
+            ExpandedLayerOpacity = _motion.ExpandedContentOpacity,
+            ChromeOpacity = _motion.ChromeOpacity,
             NudgeOffsetY = _motion.NudgeOffsetY,
             PressScale = _motion.PressScale,
             GhostCount = expanded ? 0 : _motion.Target.GhostCount,

@@ -35,8 +35,14 @@ public static class IslandMetrics
     /// <summary>Expanded content width (400 DIP).</summary>
     public const double ContentWidth = LayoutTokens.ContentWidth;
 
-    /// <summary>Expanded content height (252 DIP).</summary>
-    public const double ContentHeight = LayoutTokens.ContentUsableHeight;
+    /// <summary>
+    /// Expanded content height (260 DIP): prototype2's <c>.expanded-layer { inset: 12px 20px }</c> inside
+    /// the 440 × 284 shell. (Core's legacy 16 DIP vertical inset is superseded by the prototype.)
+    /// </summary>
+    public const double ContentHeight = LayoutTokens.ExpandedHeight - (2 * ContentTop);
+
+    /// <summary>Prototype2 expanded panel radius default (30 DIP; setting range 16–36).</summary>
+    public const double ExpandedPanelRadius = 30;
 
     /// <summary>Page body top inside the content rect (28 DIP; the title overlay owns the first row).</summary>
     public const double PageBodyTop = 28;
@@ -195,11 +201,32 @@ public static class IslandType
     /// <summary>Dashboard date.</summary>
     public static readonly TextStyle Date = new(FontRole.Ui, 10f);
 
-    /// <summary>Compact clock.</summary>
-    public static readonly TextStyle CompactClock = new(FontRole.MonoSemiBold, 13.5f);
+    /// <summary>Compact clock (prototype2 <c>.idle-time</c>: display 13.5 DIP / 650).</summary>
+    public static readonly TextStyle CompactClock = new(FontRole.DisplaySemiBold, 13.5f);
 
     /// <summary>Compact title (13.5 DIP).</summary>
     public static readonly TextStyle CompactTitle = new(FontRole.UiSemiBold, 13.5f);
+
+    /// <summary>Compact media title (prototype2 13 DIP / 600).</summary>
+    public static readonly TextStyle CompactMediaTitle = new(FontRole.UiSemiBold, 13f);
+
+    /// <summary>Compact media subtitle (prototype2 10 DIP / 400).</summary>
+    public static readonly TextStyle CompactMediaSub = new(FontRole.Ui, 10f);
+
+    /// <summary>Compact notification app name / body (prototype2 11.5 DIP).</summary>
+    public static readonly TextStyle CompactNotice = new(FontRole.Ui, 11.5f);
+
+    /// <summary>Compact notification app name, semibold (prototype2 11.5 DIP / 600).</summary>
+    public static readonly TextStyle CompactNoticeStrong = new(FontRole.UiSemiBold, 11.5f);
+
+    /// <summary>Compact unread badge number (prototype2 9 DIP / 700).</summary>
+    public static readonly TextStyle CompactBadge = new(FontRole.UiSemiBold, 9f);
+
+    /// <summary>Compact clipboard label (prototype2 11 DIP / 600).</summary>
+    public static readonly TextStyle CompactClipLabel = new(FontRole.UiSemiBold, 11f);
+
+    /// <summary>Compact HUD value (prototype2 13 DIP / 600).</summary>
+    public static readonly TextStyle CompactHudValue = new(FontRole.UiSemiBold, 13f);
 
     /// <summary>Compact caption (11 DIP).</summary>
     public static readonly TextStyle CompactCaption = new(FontRole.Ui, 11f);
@@ -347,8 +374,8 @@ public static class PageLayout
 {
     // ---- chrome ---------------------------------------------------------------------------
 
-    /// <summary>Collapse chevron hit rectangle (content-local DIP).</summary>
-    public static SKRect CollapseRect(SKRect content) => new(content.Right - 24, content.Top - 4, content.Right, content.Top + 20);
+    /// <summary>Collapse chevron hit rectangle (prototype2 `.pager-collapse`: 24×24 at right 14 / top 8).</summary>
+    public static SKRect CollapseRect(SKRect content) => new(content.Right - 18, content.Top - 4, content.Right + 6, content.Top + 20);
 
     /// <summary>
     /// Settings gear hit rectangle (content-local DIP), immediately left of the collapse chevron.
@@ -356,13 +383,13 @@ public static class PageLayout
     /// paint and hit-test share this rectangle and the UIA button at
     /// <c>SkiaIslandUiaElementIds.Settings</c> uses the same bounds.
     /// </summary>
-    public static SKRect SettingsRect(SKRect content) => new(content.Right - 52, content.Top - 4, content.Right - 28, content.Top + 20);
+    public static SKRect SettingsRect(SKRect content) => new(content.Right - 50, content.Top - 4, content.Right - 26, content.Top + 20);
 
-    /// <summary>Page number rectangle (content-local DIP).</summary>
-    public static SKRect PageNumberRect(SKRect content) => new(content.Left, content.Top - 4, content.Left + 18, content.Top + 12);
+    /// <summary>Page number rectangle (prototype2 `.pager-title`: left 20, top 11, 14 DIP tall).</summary>
+    public static SKRect PageNumberRect(SKRect content) => new(content.Left, content.Top - 1, content.Left + 16, content.Top + 13);
 
-    /// <summary>Page title rectangle (content-local DIP); stops before the settings gear.</summary>
-    public static SKRect PageTitleRect(SKRect content) => new(content.Left + 22, content.Top - 4, content.Right - 56, content.Top + 12);
+    /// <summary>Page title rectangle (prototype2: starts after the number + 7 DIP gap).</summary>
+    public static SKRect PageTitleRect(SKRect content) => new(content.Left + 18, content.Top - 1, content.Right - 56, content.Top + 13);
 
     // ---- home -----------------------------------------------------------------------------
 
@@ -456,8 +483,8 @@ public static class PageLayout
 
     // ---- expanded list pages (notifications / clipboard / agent) --------------------------
 
-    /// <summary>Scrollable list body height (page body 28..244 DIP).</summary>
-    public const float ListBodyHeight = 216;
+    /// <summary>Scrollable list body height (page body 28..260 DIP; prototype2 `.scroll-area` fills 232).</summary>
+    public const float ListBodyHeight = 232;
 
     /// <summary>Notification row height (40 DIP).</summary>
     public const float NotificationRowHeight = 40;
@@ -484,7 +511,7 @@ public static class PageLayout
     public const float ListActionSize = 22;
 
     /// <summary>Scrollable list body rectangle (page-local DIP).</summary>
-    public static SKRect ListBody(SKRect page) => new(page.Left + 16, page.Top + 28, page.Right - 16, page.Top + 244);
+    public static SKRect ListBody(SKRect page) => new(page.Left + 16, page.Top + 28, page.Right - 16, page.Top + 260);
 
     /// <summary>Notification row rectangle for an index at a scroll offset.</summary>
     public static SKRect NotificationRow(SKRect page, int index, float scrollOffset = 0)
@@ -562,10 +589,10 @@ public static class PageLayout
     // ---- widgets page ---------------------------------------------------------------------
 
     /// <summary>Calendar card rectangle (200 DIP wide, fills the body band).</summary>
-    public static SKRect WidgetsCalendar(SKRect page) => new(page.Left + 16, page.Top + 28, page.Left + 216, page.Top + 244);
+    public static SKRect WidgetsCalendar(SKRect page) => new(page.Left + 16, page.Top + 28, page.Left + 216, page.Top + 260);
 
     /// <summary>Right widget column rectangle (160 DIP wide).</summary>
-    public static SKRect WidgetsSide(SKRect page) => new(page.Left + 224, page.Top + 28, page.Right - 16, page.Top + 244);
+    public static SKRect WidgetsSide(SKRect page) => new(page.Left + 224, page.Top + 28, page.Right - 16, page.Top + 260);
 
     /// <summary>Weather card rectangle (54 DIP high).</summary>
     public static SKRect WidgetsWeather(SKRect page) => new(page.Left + 224, page.Top + 28, page.Right - 16, page.Top + 82);
@@ -574,7 +601,7 @@ public static class PageLayout
     public static SKRect WidgetsStats(SKRect page) => new(page.Left + 224, page.Top + 88, page.Right - 16, page.Top + 162);
 
     /// <summary>Task card rectangle (76 DIP high).</summary>
-    public static SKRect WidgetsNotes(SKRect page) => new(page.Left + 224, page.Top + 168, page.Right - 16, page.Top + 244);
+    public static SKRect WidgetsNotes(SKRect page) => new(page.Left + 224, page.Top + 168, page.Right - 16, page.Top + 260);
 
     /// <summary>Calendar month navigation button rectangle (18 DIP square).</summary>
     public static SKRect WidgetsCalendarNav(SKRect page, bool previous)

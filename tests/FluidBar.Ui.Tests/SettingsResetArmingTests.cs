@@ -53,7 +53,7 @@ public sealed class SettingsResetArmingTests
             window.MouseUp(center, MouseButton.Left, RawInputModifiers.None);
 
             Assert.Equal("obsidian", controller.Current.Palette);
-            Assert.Equal(28, Math.Round(controller.Current.PanelRadius));
+            Assert.Equal(30, Math.Round(controller.Current.PanelRadius));
             Assert.Equal("float", controller.Current.Mode);
             Assert.False(controller.Current.Advanced.FrameStats);
             Assert.False(controller.Current.Advanced.SafeMode);
