@@ -26,6 +26,7 @@ public sealed class IslandMouseHook : IDisposable
     private HookProc? _proc;
     private IntPtr _hook;
     private bool _inside;
+    private bool _pressed;
     private int _disposed;
     private Timer? _watchdog;
     private long _lastEventTimestamp;
@@ -48,6 +49,13 @@ public sealed class IslandMouseHook : IDisposable
 
     /// <summary>Pointer moved inside an island rectangle.</summary>
     public event Action<float, float>? PointerMoved;
+
+    /// <summary>
+    /// Pointer moved inside an island rectangle with the left button held. Layered windows only get a
+    /// drag when they receive the press and capture the mouse; the hook consumes the press, so the
+    /// host rebuilds the drag gesture from these moves.
+    /// </summary>
+    public event Action<float, float>? PointerDragged;
 
     /// <summary>
     /// Pointer moved from inside an island rectangle to outside it. The hook is the only input path
@@ -229,12 +237,19 @@ public sealed class IslandMouseHook : IDisposable
         switch ((int)wParam)
         {
             case WmLButtonDown:
+                _pressed = true;
                 PointerPressed?.Invoke(x, y);
                 return new IntPtr(1);
             case WmLButtonUp:
+                _pressed = false;
                 PointerReleased?.Invoke(x, y);
                 return new IntPtr(1);
             case WmMouseMove:
+                if (_pressed)
+                {
+                    PointerDragged?.Invoke(x, y);
+                }
+
                 PointerMoved?.Invoke(x, y);
                 return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
             case WmMouseWheel:

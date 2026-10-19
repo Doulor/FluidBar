@@ -91,6 +91,9 @@ public sealed class SkiaIslandHost : IDisposable
     private bool _started;
     private bool _disposed;
     private bool _rendering;
+    private bool _hookDragActive;
+    private float _hookDragX;
+    private float _hookDragY;
     private long _frames;
     private long _dirtyFrames;
     private long _commits;
@@ -432,6 +435,7 @@ public sealed class SkiaIslandHost : IDisposable
         _mouseHook.PointerPressed += OnHookPointerPressed;
         _mouseHook.PointerReleased += OnHookPointerReleased;
         _mouseHook.PointerMoved += OnHookPointerMoved;
+        _mouseHook.PointerDragged += OnHookPointerDragged;
         _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
         // Started at the end of StartAsync, after the controller has a render state and the first
@@ -1109,10 +1113,78 @@ public sealed class SkiaIslandHost : IDisposable
         => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerPressed(x, y));
 
     private void OnHookPointerReleased(float screenX, float screenY)
-        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerReleased(x, y));
+    {
+        if (!_hookDragActive)
+        {
+            PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerReleased(x, y));
+            return;
+        }
+
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _hookDragActive = false;
+            _controller.HandleDragEnded(_hookDragX, _hookDragY, NowMs());
+            EnsureFrameLoop();
+        });
+    }
 
     private void OnHookPointerMoved(float screenX, float screenY)
         => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerMoved(x, y));
+
+    /// <summary>
+    /// Rebuilds the expanded panel's pager drag from hook moves (the hook consumes the press, so the
+    /// layered window never gets the capture it would need to report <c>Dragged</c> itself).
+    /// </summary>
+    private void OnHookPointerDragged(float screenX, float screenY)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_disposed || !TryMapHookPoint(screenX, screenY, out var x, out var y))
+            {
+                return;
+            }
+
+            _hookDragX = x;
+            _hookDragY = y;
+            if (!_hookDragActive)
+            {
+                _hookDragActive = _controller.HandleDragStarted(x, y, NowMs()) == SkiaDragKind.Pager;
+            }
+
+            if (_hookDragActive)
+            {
+                _controller.HandleDragMoved(x, y, NowMs());
+                EnsureFrameLoop();
+            }
+        });
+    }
+
+    private bool TryMapHookPoint(float screenX, float screenY, out float xDip, out float yDip)
+    {
+        foreach (var entry in _windows)
+        {
+            var placement = entry.Host.Placement.WindowPixel;
+            var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+            if (screenX < placement.X || screenX >= placement.X + placement.Width
+                || screenY < placement.Y || screenY >= placement.Y + placement.Height)
+            {
+                continue;
+            }
+
+            xDip = (float)((screenX - placement.X) / scale);
+            yDip = (float)((screenY - placement.Y) / scale);
+            return true;
+        }
+
+        xDip = 0;
+        yDip = 0;
+        return false;
+    }
 
     private void OnHookWheel(int notches)
     {

@@ -152,4 +152,5 @@
 - 展开时按下指针会同步 hover 状态，避免“展开后在光标下自动收起”。
 - 测试：**1484 passed / 0 failed**（Core 495 · Platform 409 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 - 胶片条自动隐藏 1000 → **1200 ms**（设计区间上限），切换动画可读性更好。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `B99C91200F8754D76726765C5B21CE18D782CE013EA52ED19CC48AF0273C2555`。
+- **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
