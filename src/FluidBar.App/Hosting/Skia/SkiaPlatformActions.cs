@@ -787,7 +787,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                     AgentEventKind.WaitingForInput => StatusTone.Warning,
                     _ => StatusTone.Info,
                 },
-                TimeText = string.Empty,
+                // Rows previously had no timestamp at all; a local HH:mm is locale neutral and cheap.
+                TimeText = entry.Timestamp.ToLocalTime().ToString("HH:mm"),
                 Detail = entry.Message,
             });
         }
