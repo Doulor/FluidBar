@@ -66,6 +66,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly WeatherService _weather;
     private readonly TaskListService _tasks;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
+    private bool _weatherCityLockedByEnvironment;
     private INotificationSource? _pluginNotificationSource;
     private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
@@ -83,8 +84,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <param name="logger">App logger for control/service failures.</param>
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger = null, TimeProvider? timeProvider = null,
-        ILocalizer? localizer = null)
-        : this(settings, logger, timeProvider, quickToggles: null, localizer)
+        ILocalizer? localizer = null, string? weatherCity = null)
+        : this(settings, logger, timeProvider, quickToggles: null, localizer, weatherCity: weatherCity)
     {
     }
 
@@ -98,9 +99,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <param name="quickToggles">Quick-toggle services, or null to build the production ones.</param>
     /// <param name="weatherOptions">Weather monitor options (env seams by default; tests inject a fake handler/cache).</param>
     /// <param name="taskOptions">Task file options (env seam by default; tests point at a temp file).</param>
+    /// <param name="weatherCity">Settings-persisted weather city (empty = automatic); the environment variable still wins.</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger, TimeProvider? timeProvider,
         IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null,
-        WeatherServiceOptions? weatherOptions = null, TaskListOptions? taskOptions = null)
+        WeatherServiceOptions? weatherOptions = null, TaskListOptions? taskOptions = null,
+        string? weatherCity = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer;
@@ -167,9 +170,23 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         // Widgets page real data: Open-Meteo (no key) with a %APPDATA% cache, and the local tasks.json.
         // Both are monitors: they run on their own background pollers and never block the UI thread.
-        _weather = new WeatherService(_platformLogger, _counters,
-            weatherOptions ?? WeatherServiceOptions.FromEnvironment(localizer?.Culture), time);
+        var resolvedWeatherOptions = weatherOptions
+            ?? WeatherServiceOptions.FromEnvironment(localizer?.Culture);
+        if (weatherOptions is null)
+        {
+            // "FLUIDBAR_WEATHER_CITY" stays the explicit override; otherwise the settings page value wins.
+            _weatherCityLockedByEnvironment =
+                !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FLUIDBAR_WEATHER_CITY"));
+            var configuredCity = string.IsNullOrWhiteSpace(weatherCity) ? settings.Current.WeatherCity : weatherCity;
+            if (!_weatherCityLockedByEnvironment && !string.IsNullOrWhiteSpace(configuredCity))
+            {
+                resolvedWeatherOptions = resolvedWeatherOptions with { City = configuredCity.Trim() };
+            }
+        }
+
+        _weather = new WeatherService(_platformLogger, _counters, resolvedWeatherOptions, time);
         _weather.SnapshotChanged += OnWidgetDataChanged;
+        _settings.Changed += OnSettingsChanged;
         _tasks = new TaskListService(_platformLogger, _counters,
             taskOptions ?? TaskListOptions.FromEnvironment(), time);
         _tasks.SnapshotChanged += OnWidgetDataChanged;
@@ -314,6 +331,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Agents = MapAgents(_agentInbox.Current),
             Tasks = tasks.Tasks,
             TasksEmptyHint = tasks.EmptyHint,
+            TasksMoreText = tasks.MoreText,
+            TasksProgressText = tasks.ProgressText,
             WeatherTemp = weather.TemperatureText,
             WeatherConditionText = weather.ConditionText,
             WeatherHighLow = weather.HighLowText,
@@ -343,6 +362,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         EnsureLyricsForCurrentSession();
         EnsureMediaTick();
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Settings changed: the widgets weather follows the "weather city" field live.</summary>
+    private void OnSettingsChanged(AppSettings previous, AppSettings current)
+    {
+        if (_weatherCityLockedByEnvironment
+            || string.Equals(previous.WeatherCity, current.WeatherCity, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _weather.SetCity(current.WeatherCity);
     }
 
     /// <summary>Weather or task data changed (widgets page repaint).</summary>
@@ -1159,6 +1190,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return;
         }
 
+        _settings.Changed -= OnSettingsChanged;
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
         await StopOneAsync("notifications", () => _notifications.DisposeAsync().AsTask()).ConfigureAwait(false);

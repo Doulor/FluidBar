@@ -6,7 +6,7 @@ using FluidBar.Platform.Windows.Threading;
 namespace FluidBar.Platform.Windows.Weather;
 
 /// <summary>Configuration for <see cref="WeatherService"/> (no API key: Open-Meteo + a public IP-location lookup).</summary>
-public sealed class WeatherServiceOptions
+public sealed record WeatherServiceOptions
 {
     /// <summary>Default cache file (<c>%APPDATA%\\FluidBar\\weather.json</c>).</summary>
     public static string DefaultCachePath => Path.Combine(
@@ -94,6 +94,7 @@ public sealed class WeatherService : PlatformMonitor<WeatherSnapshot>
     private readonly bool _ownsHttp;
     private BackgroundPoller? _poller;
     private WeatherCacheDocument? _cache;
+    private string? _cityOverride;
     private int _fetching;
     private int _disposed;
 
@@ -102,8 +103,35 @@ public sealed class WeatherService : PlatformMonitor<WeatherSnapshot>
         : base("weather", logger, counters, timeProvider ?? TimeProvider.System)
     {
         _options = options ?? new WeatherServiceOptions();
+        _cityOverride = string.IsNullOrWhiteSpace(_options.City) ? null : _options.City.Trim();
         _http = _options.Http ?? CreateHttpClient();
         _ownsHttp = _options.Http is null;
+    }
+
+    /// <summary>City currently in use (null = automatic IP location).</summary>
+    public string? CityOverride => Volatile.Read(ref _cityOverride);
+
+    /// <summary>
+    /// Changes the configured city at runtime (the settings page writes it): the next refresh geocodes the
+    /// new place, and an empty value returns to automatic IP location. A place that cannot be geocoded
+    /// degrades honestly (unavailable / last known reading) instead of inventing coordinates.
+    /// </summary>
+    /// <param name="city">Place name, or null/empty for automatic location.</param>
+    public void SetCity(string? city)
+    {
+        var normalized = string.IsNullOrWhiteSpace(city) ? null : city.Trim();
+        if (string.Equals(normalized, _cityOverride, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _cityOverride = normalized;
+        Logger.LogInfo(PlatformLogCategory.Monitor, "weather.city-changed",
+            "Weather city changed; refreshing the reading.", new Dictionary<string, object?>
+            {
+                ["city"] = normalized ?? "auto",
+            });
+        RequestRefresh();
     }
 
     /// <summary>Options in effect (cache path/city/interval).</summary>
@@ -281,7 +309,7 @@ public sealed class WeatherService : PlatformMonitor<WeatherSnapshot>
 
     private async Task<GeoLocation?> ResolveLocationAsync(CancellationToken cancellationToken)
     {
-        var city = _options.City?.Trim();
+        var city = _cityOverride;
         if (!string.IsNullOrEmpty(city))
         {
             var url = $"{_options.GeocodingBaseUrl}/v1/search?name={Uri.EscapeDataString(city)}" +

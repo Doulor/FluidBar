@@ -337,7 +337,8 @@ internal sealed class AppBootstrap
 
         try
         {
-            var actions = new SkiaPlatformActions(_settings, _logger, localizer: _localizer);
+            var actions = new SkiaPlatformActions(_settings, _logger, timeProvider: null,
+                quickToggles: null, localizer: _localizer, weatherCity: _settings.Current.WeatherCity);
             actions.StartInBackground();
             return actions;
         }

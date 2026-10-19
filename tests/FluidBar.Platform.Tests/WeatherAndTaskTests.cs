@@ -258,6 +258,74 @@ public sealed class WeatherTests
         Assert.DoesNotContain(handler.Requests, url => url.Contains("forecast", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task UnknownCity_KeepsTheLastSuccessfulReadingFromTheCache()
+    {
+        using var temp = new TempWeatherWorkspace();
+        var working = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("search", StringComparison.Ordinal)
+            ? Json(GeocodingJson)
+            : request.RequestUri.Host.Contains("ipwho", StringComparison.OrdinalIgnoreCase)
+                ? Json(IpLocationJson)
+                : Json(ForecastJson));
+        await using (var first = CreateService(temp, working))
+        {
+            var online = await first.RefreshAsync();
+            Assert.Equal(WeatherStatus.Ok, online.Status);
+        }
+
+        var broken = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("search", StringComparison.Ordinal)
+            ? Json("""{ "results": [] }""")
+            : Json(ForecastJson));
+        var options = new WeatherServiceOptions
+        {
+            City = "Nowhere-12345",
+            CachePath = temp.CachePath,
+            Http = broken.CreateClient(),
+        };
+        await using var second = CreateService(temp, broken, options);
+
+        var degraded = await second.RefreshAsync();
+
+        // The unusable city never fabricates coordinates: the last successful cached reading stays, flagged
+        // as cached so the card appends its age.
+        Assert.Equal(WeatherStatus.Cached, degraded.Status);
+        Assert.True(degraded.HasReading);
+        Assert.NotNull(degraded.TemperatureC);
+        // ForecastJson serves 21.4 °C; the cache must replay exactly that value.
+        Assert.InRange(degraded.TemperatureC!.Value, 21.35, 21.45);
+        Assert.DoesNotContain(broken.Requests, url => url.Contains("forecast", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SetCity_SwitchesFromAutomaticLocationToGeocoding()
+    {
+        using var temp = new TempWeatherWorkspace();
+        var handler = new StubHandler(request =>
+        {
+            var uri = request.RequestUri!;
+            return uri.AbsolutePath.Contains("search", StringComparison.Ordinal) ? Json(GeocodingJson)
+                : uri.Host.Contains("ipwho", StringComparison.OrdinalIgnoreCase) ? Json(IpLocationJson)
+                : Json(ForecastJson);
+        });
+        await using var service = CreateService(temp, handler);
+
+        // Automatic first (IP lookup), then the settings page switches the city at runtime.
+        var automatic = await service.RefreshAsync();
+        Assert.Equal(WeatherStatus.Ok, automatic.Status);
+        Assert.Null(service.CityOverride);
+        Assert.Contains(handler.Requests, url => url.Contains("ipwho.is", StringComparison.Ordinal));
+
+        service.SetCity("Shanghai");
+        Assert.Equal("Shanghai", service.CityOverride);
+        var configured = await service.RefreshAsync();
+
+        Assert.Equal(WeatherStatus.Ok, configured.Status);
+        Assert.Contains(handler.Requests, url => url.Contains("search?name=Shanghai", StringComparison.Ordinal));
+
+        service.SetCity(string.Empty);
+        Assert.Null(service.CityOverride);
+    }
+
     private static WeatherService CreateService(TempWeatherWorkspace temp, StubHandler handler, WeatherServiceOptions? options = null)
         => new(NullPlatformLogger.Instance, new PlatformCounters(),
             options ?? new WeatherServiceOptions

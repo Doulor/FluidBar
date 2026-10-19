@@ -289,12 +289,30 @@ public static class PageMetricsLayout
         return new SKRect(page.Left + 224, top, page.Right - 16, top + Math.Max(74, height));
     }
 
-    /// <summary>Widgets tasks card (right column; grows with the task row pitch).</summary>
-    public static SKRect WidgetsNotes(SKRect page, in FontScaleMetrics metrics)
+    /// <summary>Task rows the widgets card paints; longer files get the localized "N more" line.</summary>
+    public const int MaxPaintedTaskRows = 8;
+
+    /// <summary>Widgets task row pitch (label line height plus the fixed gap).</summary>
+    public static float WidgetsTaskPitch(in FontScaleMetrics metrics) => 15 + metrics.LineGrow(IslandType.TaskLabel);
+
+    /// <summary>Widgets tasks card sized for three rows (historical height; fixtures/goldens unchanged).</summary>
+    public static SKRect WidgetsNotes(SKRect page, in FontScaleMetrics metrics) => WidgetsNotes(page, metrics, 0);
+
+    /// <summary>
+    /// Widgets tasks card grown to the painted row count (at least three rows keep the historical height,
+    /// at most <see cref="MaxPaintedTaskRows"/>); the page scroll offset then reveals the taller card.
+    /// </summary>
+    /// <param name="page">Page rect.</param>
+    /// <param name="metrics">Font-scale metrics.</param>
+    /// <param name="taskCount">Tasks the card will paint.</param>
+    public static SKRect WidgetsNotes(SKRect page, in FontScaleMetrics metrics, int taskCount)
     {
         var top = WidgetsStats(page, metrics).Bottom + 6;
-        var pitch = 15 + metrics.LineGrow(IslandType.TaskLabel);
-        var content = 7 + 14 + metrics.LineGrow(IslandType.NotesHead) + 10 + (3 * pitch) - pitch + (15 + metrics.LineGrow(IslandType.TaskLabel)) + 4;
+        var pitch = WidgetsTaskPitch(metrics);
+        // Painted rows plus one optional "N more" line may extend the card.
+        var rows = Math.Max(3, Math.Clamp(taskCount, 0, MaxPaintedTaskRows + 1));
+        var content = 7 + 14 + metrics.LineGrow(IslandType.NotesHead) + 10
+            + ((rows - 1) * pitch) + (15 + metrics.LineGrow(IslandType.TaskLabel)) + 4;
         return new SKRect(page.Left + 224, top, page.Right - 16, top + Math.Max(92, content));
     }
 
@@ -302,19 +320,22 @@ public static class PageMetricsLayout
     public static SKRect WidgetsTaskRow(SKRect page, int index, in FontScaleMetrics metrics)
     {
         var card = WidgetsNotes(page, metrics);
-        var pitch = 15 + metrics.LineGrow(IslandType.TaskLabel);
+        var pitch = WidgetsTaskPitch(metrics);
         var top = card.Top + 24 + (index * pitch);
         return new SKRect(card.Left + 10, top, card.Right - 10, top + pitch);
     }
 
     /// <summary>Height of the taller widgets column (the calendar stays 232 DIP; the right column grows).</summary>
-    public static float WidgetsContentExtent(SKRect page, in FontScaleMetrics metrics)
-        => Math.Max(BodyHeight, WidgetsNotes(page, metrics).Bottom - (page.Top + BodyTop));
+    /// <param name="page">Page rect.</param>
+    /// <param name="metrics">Font-scale metrics.</param>
+    /// <param name="taskCount">Tasks the card will paint (0 keeps the three-row height).</param>
+    public static float WidgetsContentExtent(SKRect page, in FontScaleMetrics metrics, int taskCount = 0)
+        => Math.Max(BodyHeight, WidgetsNotes(page, metrics, taskCount).Bottom - (page.Top + BodyTop));
 
     // ---------------------------------------------------------------- extents
 
     /// <summary>Scroll extent of a page's body content (DIP below the title gutter).</summary>
-    public static float ContentExtent(SKRect page, int pageIndex, in FontScaleMetrics metrics)
+    public static float ContentExtent(SKRect page, int pageIndex, in FontScaleMetrics metrics, int itemCount = 0)
     {
         switch (pageIndex)
         {
@@ -327,20 +348,20 @@ public static class PageMetricsLayout
             case 4:
                 return BodyHeight; // list pages clamp their own model scroll offset
             case 5:
-                return WidgetsContentExtent(page, metrics);
+                return WidgetsContentExtent(page, metrics, itemCount);
             default:
                 return BodyHeight;
         }
     }
 
     /// <summary>Maximum scroll offset for a page (0 when the content fits the body).</summary>
-    public static float MaxScroll(SKRect page, int pageIndex, in FontScaleMetrics metrics)
-        => Math.Max(0, ContentExtent(page, pageIndex, metrics) - BodyHeight);
+    public static float MaxScroll(SKRect page, int pageIndex, in FontScaleMetrics metrics, int itemCount = 0)
+        => Math.Max(0, ContentExtent(page, pageIndex, metrics, itemCount) - BodyHeight);
 
     /// <summary>Clamps a page scroll offset.</summary>
-    public static float ClampScroll(SKRect page, int pageIndex, double offset, in FontScaleMetrics metrics)
+    public static float ClampScroll(SKRect page, int pageIndex, double offset, in FontScaleMetrics metrics, int itemCount = 0)
     {
-        var max = MaxScroll(page, pageIndex, metrics);
+        var max = MaxScroll(page, pageIndex, metrics, itemCount);
         var value = double.IsFinite(offset) ? (float)offset : 0;
         return Math.Clamp(value, 0, max);
     }
@@ -534,7 +555,7 @@ public static class PageMetricsLayout
                     return IslandPageControl.CalendarNext;
                 }
 
-                for (var i = 0; i < Math.Clamp(itemCount, 0, 3); i++)
+                for (var i = 0; i < Math.Clamp(itemCount, 0, MaxPaintedTaskRows); i++)
                 {
                     if (WidgetsTaskRow(scrolled, i, metrics).Contains(x, y))
                     {

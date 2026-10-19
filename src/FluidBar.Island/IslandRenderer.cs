@@ -511,7 +511,8 @@ public sealed class IslandRenderer : IDisposable
                     1 => state.Pages.Media.ScrollOffset,
                     _ => state.Pages.Widgets.ScrollOffset,
                 };
-                var clamped = PageMetricsLayout.ClampScroll(pageRect, page, scroll, metrics);
+                var itemCount = page == 5 ? state.Pages.Widgets.Tasks?.Count ?? 0 : 0;
+                var clamped = PageMetricsLayout.ClampScroll(pageRect, page, scroll, metrics, itemCount);
                 var body = PageMetricsLayout.Body(pageRect);
                 canvas.Save();
                 canvas.ClipRect(body);
@@ -577,7 +578,9 @@ public sealed class IslandRenderer : IDisposable
             2 => (float)pages.Notifications.ScrollOffset,
             3 => (float)pages.Clipboard.ScrollOffset,
             4 => (float)pages.Agent.ScrollOffset,
-            5 => PageMetricsLayout.ClampScroll(pageRect, 5, pages.Widgets.ScrollOffset, metrics),
+            // The widgets card grows with the task rows, so the clamp needs the row count.
+            5 => PageMetricsLayout.ClampScroll(pageRect, 5, pages.Widgets.ScrollOffset, metrics,
+                pages.Widgets.Tasks?.Count ?? 0),
             _ => 0f,
         };
     }

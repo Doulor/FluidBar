@@ -232,6 +232,47 @@ public static class SettingsSectionBuilder
         return panel;
     }
 
+    /// <summary>Single-line text row; commits on Enter or when the field loses focus (never per keystroke).</summary>
+    private static Control TextFieldRow(SettingsWindowContext ctx, string label, string? description, string value,
+        string placeholder, Action<string> commit)
+    {
+        var palette = ctx.Palette;
+        var box = new TextBox
+        {
+            Text = value,
+            Watermark = placeholder,
+            Width = 220,
+            MinHeight = 0,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = palette.FieldBrush,
+            BorderBrush = palette.LineBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 5, 10, 5),
+            Foreground = palette.ForegroundBrush,
+            FontSize = 12,
+        };
+
+        void Commit()
+        {
+            var text = (box.Text ?? string.Empty).Trim();
+            if (!string.Equals(text, value, StringComparison.Ordinal))
+            {
+                commit(text);
+            }
+        }
+
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Commit();
+            }
+        };
+        return SettingsWidgets.Row(label, description, box, palette);
+    }
+
     private static Control HotkeyRow(SettingsWindowContext ctx, string label, string value, Action<string> commit,
         bool last = false)
     {
@@ -489,6 +530,11 @@ public static class SettingsSectionBuilder
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChange),
                     ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChangeHint), settings.PeekOnTrackChange,
                     value => ctx.Settings.Update(s => s with { PeekOnTrackChange = value })),
+                // Widgets page weather: empty = locate automatically (IP); a value is geocoded by Open-Meteo.
+                TextFieldRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.WeatherCity),
+                    ctx.Localizer.Get(LocKeys.Settings.Island.WeatherCityHint), settings.WeatherCity,
+                    ctx.Localizer.Get(LocKeys.Settings.Island.WeatherCityPlaceholder),
+                    value => ctx.Settings.Update(s => s with { WeatherCity = value })),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Island.DisplayOn.Desc),
                     [
@@ -1126,6 +1172,7 @@ public static class SettingsSectionBuilder
                 Anchor = AppSettings.Default.Anchor,
                 DisplayOn = AppSettings.Default.DisplayOn,
                 PeekOnTrackChange = AppSettings.Default.PeekOnTrackChange,
+                WeatherCity = AppSettings.Default.WeatherCity,
                 Placement = AppSettings.Default.Placement,
                 Dock = AppSettings.Default.Dock,
                 Plugins = AppSettings.Default.Plugins,

@@ -428,6 +428,30 @@ public static partial class LocKeys
             public const string NoEvents = "Page.Widgets.NoEvents";
             /// <summary><c>Page.Widgets.AddTask</c></summary>
             public const string AddTask = "Page.Widgets.AddTask";
+            /// <summary><c>Page.Widgets.TasksMore</c></summary>
+            public const string TasksMore = "Page.Widgets.TasksMore";
+            /// <summary>Weather condition labels for the widgets card.</summary>
+            public static class Weather
+            {
+                /// <summary><c>Page.Widgets.Weather.Clear</c></summary>
+                public const string Clear = "Page.Widgets.Weather.Clear";
+                /// <summary><c>Page.Widgets.Weather.PartlyCloudy</c></summary>
+                public const string PartlyCloudy = "Page.Widgets.Weather.PartlyCloudy";
+                /// <summary><c>Page.Widgets.Weather.Cloudy</c></summary>
+                public const string Cloudy = "Page.Widgets.Weather.Cloudy";
+                /// <summary><c>Page.Widgets.Weather.Fog</c></summary>
+                public const string Fog = "Page.Widgets.Weather.Fog";
+                /// <summary><c>Page.Widgets.Weather.Drizzle</c></summary>
+                public const string Drizzle = "Page.Widgets.Weather.Drizzle";
+                /// <summary><c>Page.Widgets.Weather.Rain</c></summary>
+                public const string Rain = "Page.Widgets.Weather.Rain";
+                /// <summary><c>Page.Widgets.Weather.Snow</c></summary>
+                public const string Snow = "Page.Widgets.Weather.Snow";
+                /// <summary><c>Page.Widgets.Weather.Thunderstorm</c></summary>
+                public const string Thunderstorm = "Page.Widgets.Weather.Thunderstorm";
+                /// <summary><c>Page.Widgets.Weather.Unknown</c></summary>
+                public const string Unknown = "Page.Widgets.Weather.Unknown";
+            }
             /// <summary>Keys in the 'Task' area.</summary>
             public static class Task
             {
@@ -640,6 +664,12 @@ public static partial class LocKeys
             public const string AutoHideMsHint = "Settings.Island.AutoHideMsHint";
             /// <summary><c>Settings.Island.PeekOnTrackChange</c></summary>
             public const string PeekOnTrackChange = "Settings.Island.PeekOnTrackChange";
+            /// <summary><c>Settings.Island.WeatherCity</c></summary>
+            public const string WeatherCity = "Settings.Island.WeatherCity";
+            /// <summary><c>Settings.Island.WeatherCityHint</c></summary>
+            public const string WeatherCityHint = "Settings.Island.WeatherCityHint";
+            /// <summary><c>Settings.Island.WeatherCityPlaceholder</c></summary>
+            public const string WeatherCityPlaceholder = "Settings.Island.WeatherCityPlaceholder";
             /// <summary>Keys in the 'Motion' area.</summary>
             public static class Motion
             {

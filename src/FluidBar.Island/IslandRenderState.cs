@@ -888,6 +888,9 @@ public sealed record WidgetsPageModel
     /// <summary>Localized "unavailable" caption painted when no task source is available.</summary>
     public string? TasksEmptyText { get; init; }
 
+    /// <summary>Localized "N more" line painted after the last visible row when the file has more tasks.</summary>
+    public string? TasksOverflowText { get; init; }
+
     /// <summary>Task row index under the pointer (-1 = none).</summary>
     public int HoverIndex { get; init; } = -1;
 

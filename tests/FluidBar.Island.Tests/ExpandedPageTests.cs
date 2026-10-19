@@ -254,6 +254,129 @@ public sealed class ExpandedPageTests
             $"page {pageIndex}: the empty-state icon/title/hint should paint");
     }
 
+    [Fact]
+    public void Widgets_task_card_grows_with_the_rows_and_scrolls_to_the_last_one()
+    {
+        var state = IslandTestFixtures.Expanded(5);
+        var page = IslandMetrics.PageRect(state, 5);
+        var metrics = FontScaleMetrics.One;
+
+        var three = PageMetricsLayout.WidgetsNotes(page, metrics, 3);
+        Assert.Equal(three.Height, PageMetricsLayout.WidgetsNotes(page, metrics, 0).Height, 0.01f);
+        var six = PageMetricsLayout.WidgetsNotes(page, metrics, 6);
+        var extraRows = six.Height - three.Height;
+        // Rows grow by the task pitch; the three-row card also has a 12 DIP floor over its content.
+        Assert.True(extraRows >= (3 * PageMetricsLayout.WidgetsTaskPitch(metrics)) - 12.5f,
+            $"six rows should grow the card: {three.Height} -> {six.Height}");
+
+        Assert.Equal(0, PageMetricsLayout.MaxScroll(page, 5, metrics, 3), 0.01f);
+        var scroll = PageMetricsLayout.MaxScroll(page, 5, metrics, 6);
+        Assert.True(scroll > 0, "six task rows must make the widgets page scrollable");
+
+        var row = PageMetricsLayout.WidgetsTaskRow(page, 5, metrics);
+        var control = PageMetricsLayout.HitTest(5, page, row.MidX, row.MidY - scroll, metrics, scroll, 6, out var index);
+        Assert.Equal(IslandPageControl.TaskToggle, control);
+        Assert.Equal(5, index);
+
+        // The "N more" hint row is text, never a toggle target.
+        var hint = PageMetricsLayout.WidgetsTaskRow(page, PageMetricsLayout.MaxPaintedTaskRows, metrics);
+        var hintControl = PageMetricsLayout.HitTest(5, page, hint.MidX, hint.MidY - scroll, metrics, scroll, 10, out _);
+        Assert.Equal(IslandPageControl.None, hintControl);
+    }
+
+    [Fact]
+    public void Widgets_page_renders_longer_task_lists_inside_the_shell()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var baseState = IslandTestFixtures.Expanded(5);
+        var tasks = Enumerable.Range(1, 10)
+            .Select(i => new WidgetTaskModel($"Task {i}", i % 2 == 0))
+            .ToList();
+        var state = baseState with
+        {
+            Pages = baseState.Pages with
+            {
+                Widgets = baseState.Pages.Widgets with
+                {
+                    Tasks = tasks,
+                    TasksOverflowText = "2 more",
+                    TasksProgressText = "5/10",
+                },
+            },
+        };
+
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
+
+        using var threeRows = renderer.RenderToBitmap(IslandTestFixtures.Expanded(5), IslandTestFixtures.Scale);
+        Assert.NotEqual(Encode(threeRows), Encode(bitmap));
+    }
+
+    [Fact]
+    public void Widgets_page_scroll_offset_reveals_the_lower_task_rows()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var baseState = IslandTestFixtures.Expanded(5);
+        var tasks = Enumerable.Range(1, 10).Select(i => new WidgetTaskModel($"Task {i}")).ToList();
+        var page = IslandMetrics.PageRect(baseState, 5);
+        var max = PageMetricsLayout.MaxScroll(page, 5, FontScaleMetrics.One, tasks.Count);
+        Assert.True(max > 0, "ten task rows must overflow the 232 DIP body");
+
+        IslandRenderState State(double scroll) => baseState with
+        {
+            Pages = baseState.Pages with
+            {
+                Widgets = baseState.Pages.Widgets with
+                {
+                    Tasks = tasks,
+                    TasksOverflowText = "2 more",
+                    ScrollOffset = scroll,
+                },
+            },
+        };
+
+        using var top = renderer.RenderToBitmap(State(0), IslandTestFixtures.Scale);
+        using var bottom = renderer.RenderToBitmap(State(max), IslandTestFixtures.Scale);
+        Assert.NotEqual(Encode(top), Encode(bottom));
+
+        // The pinned "N more" line is part of the card: removing it changes the render too.
+        var withoutHint = State(0) with
+        {
+            Pages = State(0).Pages with
+            {
+                Widgets = State(0).Pages.Widgets with { TasksOverflowText = null },
+            },
+        };
+        using var noHint = renderer.RenderToBitmap(withoutHint, IslandTestFixtures.Scale);
+        Assert.NotEqual(Encode(top), Encode(noHint));
+    }
+
+    [Theory]
+    [InlineData(0.8)]
+    [InlineData(1.2)]
+    [InlineData(1.6)]
+    public void Widgets_task_card_stays_inside_the_shell_at_every_font_scale(double scale)
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var baseState = IslandTestFixtures.WithFontScale(IslandTestFixtures.Expanded(5), scale);
+        var tasks = Enumerable.Range(1, 6).Select(i => new WidgetTaskModel($"Task {i}")).ToList();
+        var state = baseState with
+        {
+            Pages = baseState.Pages with
+            {
+                Widgets = baseState.Pages.Widgets with { Tasks = tasks },
+            },
+        };
+
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
+
+        var metrics = FontScaleMetrics.From(scale);
+        var page = IslandMetrics.PageRect(state, 5);
+        Assert.True(PageMetricsLayout.ContentExtent(page, 5, metrics, 6)
+            >= PageMetricsLayout.WidgetsContentExtent(page, metrics, 3) - 0.01f);
+    }
+
     private static int CountPaintedPixels(SKBitmap bitmap, SKRect dipRect)
     {
         var left = Math.Max(0, (int)Math.Floor(dipRect.Left * IslandTestFixtures.Scale));

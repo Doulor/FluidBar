@@ -36,7 +36,7 @@ public sealed class WidgetContentMapperTests
         Assert.Equal("18°", view.TemperatureText);
         Assert.Equal("24° / 16°", view.HighLowText);
         Assert.Equal("SE 11 km/h", view.WindText);
-        Assert.Null(view.ConditionText);
+        Assert.Equal("Overcast", view.ConditionText);
         Assert.Equal(WidgetWeatherGlyph.CloudSun, view.Glyph);
     }
 
@@ -56,7 +56,7 @@ public sealed class WidgetContentMapperTests
             Reading(status: WeatherStatus.Cached, updatedAt: Now.AddHours(-3)), Now);
 
         Assert.Equal("18°", view.TemperatureText);
-        Assert.Equal("3 h", view.ConditionText);
+        Assert.Equal("Overcast · 3 h", view.ConditionText);
     }
 
     [Fact]
@@ -87,16 +87,35 @@ public sealed class WidgetContentMapperTests
     }
 
     [Fact]
-    public void MapTasks_RendersTheFirstThreeRowsAndCountsDone()
+    public void MapTasks_RendersEveryRowUpToTheCardCap()
     {
         var view = WidgetContentMapper.MapTasks(
             Tasks(("One", true), ("Two", false), ("Three", true), ("Four", false)));
 
-        Assert.Equal(3, view.Tasks.Length);
+        Assert.Equal(4, view.Tasks.Length);
         Assert.Equal("One", view.Tasks[0].Title);
         Assert.True(view.Tasks[0].Done);
         Assert.Equal(2, view.DoneCount);
         Assert.Null(view.EmptyHint);
+        Assert.Null(view.MoreText);
+        Assert.Equal("2/4", view.ProgressText);
+        Assert.Equal(4, view.TotalCount);
+    }
+
+    [Fact]
+    public void MapTasks_LongerFile_CapsTheRowsAndReportsTheRemainder()
+    {
+        var items = Enumerable.Range(1, 10)
+            .Select(i => (Title: $"Task {i}", Done: i <= 3))
+            .ToArray();
+
+        var view = WidgetContentMapper.MapTasks(Tasks(items));
+
+        Assert.Equal(WidgetContentMapper.MaxRenderedTasks, view.Tasks.Length);
+        Assert.Equal(3, view.DoneCount);
+        Assert.Equal("3/10", view.ProgressText);
+        Assert.Equal(10, view.TotalCount);
+        Assert.Equal("2 more", view.MoreText);
     }
 
     [Fact]
@@ -135,7 +154,27 @@ public sealed class WidgetContentMapperTests
                 Reading(status: WeatherStatus.Cached, updatedAt: Now.AddMinutes(-5)), Now, localizer);
         });
 
-        Assert.Equal("5 分钟前", label.ConditionText);
+        Assert.Equal("阴 · 5 分钟前", label.ConditionText);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task MapWeather_UsesTheLocalizedConditionLabels()
+    {
+        var labels = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return (
+                Cloudy: WidgetContentMapper.MapWeather(Reading(condition: WeatherCondition.Cloudy), Now, localizer).ConditionText,
+                Rain: WidgetContentMapper.MapWeather(Reading(condition: WeatherCondition.Rain), Now, localizer).ConditionText,
+                Clear: WidgetContentMapper.MapWeather(Reading(condition: WeatherCondition.Clear), Now, localizer).ConditionText,
+                Unknown: WidgetContentMapper.MapWeather(Reading(condition: WeatherCondition.Unknown), Now, localizer).ConditionText);
+        });
+
+        Assert.Equal("阴", labels.Cloudy);
+        Assert.Equal("雨", labels.Rain);
+        Assert.Equal("晴", labels.Clear);
+        Assert.Equal("天气", labels.Unknown);
         await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
 }

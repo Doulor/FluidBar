@@ -323,7 +323,9 @@ public static class SkiaIslandStateBuilder
             CalendarDays = days,
             CalendarEventText = localizer.Get(LocKeys.Page.Widgets.NoEvents),
             TasksTitle = localizer.Get(LocKeys.Page.Widgets.Tasks),
-            TasksProgressText = tasks.Length == 0 ? null : $"{done}/{tasks.Length}",
+            TasksProgressText = content.TasksProgressText
+                ?? (tasks.Length == 0 ? null : $"{done}/{tasks.Length}"),
+            TasksOverflowText = content.TasksMoreText,
             TodayLabel = localizer.Get(LocKeys.Page.Widgets.Today),
             Tasks = tasks,
             Stats = stats,
@@ -393,7 +395,8 @@ public static class SkiaIslandStateBuilder
             // Widgets weather/task text: a new temperature or a task hint must repaint the page.
             .Append(content.WeatherTemp).Append('|').Append(content.WeatherConditionText).Append('|')
             .Append(content.WeatherHighLow).Append('|').Append(content.WeatherWind).Append('|')
-            .Append((int)content.WeatherGlyph).Append('|').Append(content.TasksEmptyHint).Append('|');
+            .Append((int)content.WeatherGlyph).Append('|').Append(content.TasksEmptyHint).Append('|')
+            .Append(content.TasksMoreText).Append('|').Append(content.TasksProgressText).Append('|');
 
         AppendNotifications(builder, content.Notifications);
         AppendClipboard(builder, content.Clipboard);

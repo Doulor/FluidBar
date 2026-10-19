@@ -796,7 +796,8 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 state: new UiaElementState { IsOffscreen = false }));
         }
 
-        for (var i = 0; i < Math.Min(3, model.Tasks.Count); i++)
+        var paintedTasks = Math.Min(PageMetricsLayout.MaxPaintedTaskRows, model.Tasks.Count);
+        for (var i = 0; i < paintedTasks; i++)
         {
             var task = model.Tasks[i];
             children.Add(Node(
@@ -812,6 +813,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                     ItemStatus = task.Done ? L("Common.Done", "Done") : L("Common.Open", "Open"),
                 },
                 help: L("Island.Accessibility.TaskHelp", "Press Enter to toggle the task.")));
+        }
+
+        if (paintedTasks > 0 && !string.IsNullOrEmpty(model.TasksOverflowText))
+        {
+            children.Add(Node(
+                "island.page.5.tasks.more",
+                UiaElementRole.Text,
+                model.TasksOverflowText,
+                ToRect(PageLayout.WidgetsTaskRow(page, paintedTasks))));
         }
 
         return children;

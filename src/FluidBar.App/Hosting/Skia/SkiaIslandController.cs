@@ -1471,7 +1471,7 @@ public sealed class SkiaIslandController : IDisposable
         var max2 = ListMaxScroll(pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4);
         var max3 = ListMaxScroll(pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6);
         var max4 = ListMaxScroll(pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6);
-        var max5 = PageMetricsLayout.MaxScroll(pageRect, 5, metrics);
+        var max5 = PageMetricsLayout.MaxScroll(pageRect, 5, metrics, _pages.Widgets.Tasks?.Count ?? 0);
         _pageScroll[0] = Math.Clamp(_pageScroll[0], 0, max0);
         _pageScroll[1] = Math.Clamp(_pageScroll[1], 0, max1);
         _pageScroll[2] = Math.Clamp(_pageScroll[2], 0, max2);
@@ -1510,7 +1510,7 @@ public sealed class SkiaIslandController : IDisposable
             2 => ListMaxScroll(_pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
             3 => ListMaxScroll(_pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
             4 => ListMaxScroll(_pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
-            5 => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics),
+            5 => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics, _pages.Widgets.Tasks?.Count ?? 0),
             _ => 0,
         };
     }

@@ -235,6 +235,12 @@ public sealed record IslandContent
     /// <summary>Localized caption for the task card when the task file is missing/invalid/empty.</summary>
     public string? TasksEmptyHint { get; init; }
 
+    /// <summary>Localized "N more" line when the task file has more rows than the card paints.</summary>
+    public string? TasksMoreText { get; init; }
+
+    /// <summary>"done/total" header label for the task card (file totals, not the painted subset).</summary>
+    public string? TasksProgressText { get; init; }
+
     /// <summary>System stat rows for the widgets card (CPU/RAM/battery); empty when unsampleable.</summary>
     public ImmutableArray<WidgetStatData> Stats { get; init; } = [];
 

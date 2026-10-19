@@ -727,7 +727,13 @@ internal sealed partial class PageRenderer
 
     private void DrawWidgetTasks(SKCanvas canvas, WidgetsPageModel model, SKRect page)
     {
-        var card = PageMetricsLayout.WidgetsNotes(page, _metrics);
+        var tasks = model.Tasks;
+        var total = tasks?.Count ?? 0;
+        // Paint every task up to the cap; a longer file gets a localized "N more" line instead of silently
+        // hiding rows. The card grows with the painted rows and the page scroll offset reveals it.
+        var painted = Math.Min(PageMetricsLayout.MaxPaintedTaskRows, total);
+        var hasOverflow = painted > 0 && !string.IsNullOrEmpty(model.TasksOverflowText);
+        var card = PageMetricsLayout.WidgetsNotes(page, _metrics, painted + (hasOverflow ? 1 : 0));
         DrawCard(canvas, card, 11);
         var headHeight = 14 + _metrics.LineGrow(IslandType.NotesHead);
         _text.Draw(
@@ -748,17 +754,16 @@ internal sealed partial class PageRenderer
             TextAlign.Right,
             _opacity);
 
-        var tasks = model.Tasks;
-        var count = tasks is null ? 0 : Math.Min(3, tasks.Count);
-        if (count == 0)
+        if (painted == 0)
         {
             // The task card is the tallest body area; without rows only the header was painted, so the
             // card looked like an empty placeholder.
             DrawCardCaption(canvas, new SKRect(card.Left, card.Top + 22, card.Right, card.Bottom - 6),
                 model.TasksEmptyText, card.Left);
+            return;
         }
 
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < painted; i++)
         {
             var task = tasks![i];
             var row = PageMetricsLayout.WidgetsTaskRow(page, i, _metrics);
@@ -798,6 +803,34 @@ internal sealed partial class PageRenderer
                 IslandType.TaskLabel,
                 new SKRect(row.Left + 17, row.Top, row.Right, row.Bottom),
                 task.Done ? _theme.ForegroundTertiary : _theme.ForegroundSecondary,
+                TextAlign.Left,
+                _opacity);
+        }
+
+        if (hasOverflow)
+        {
+            // Pinned to the last fully visible row slot while the card is taller than the body, so the
+            // "N more" line is visible without scrolling; once the page scrolls it settles into its
+            // natural row (the canvas is translated by the scroll offset by the renderer).
+            var hint = PageMetricsLayout.WidgetsTaskRow(page, painted, _metrics);
+            var pitch = PageMetricsLayout.WidgetsTaskPitch(_metrics);
+            var bodyBottom = PageMetricsLayout.Body(page).Bottom;
+            var maxScroll = PageMetricsLayout.MaxScroll(page, 5, _metrics, total);
+            var scroll = (float)Math.Clamp(
+                double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
+            // Page coordinates that render at the bottom of the visible band for the current scroll.
+            var pinnedTop = bodyBottom - pitch + scroll;
+            var top = hint.Top - scroll <= bodyBottom ? hint.Top : pinnedTop;
+            var rect = new SKRect(hint.Left, top, hint.Right, top + pitch);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Background, 0.86f * _opacity);
+            canvas.DrawRoundRect(new SKRect(rect.Left, rect.MidY - 9, rect.Right, rect.MidY + 9), 4, 4, _fill);
+            _text.Draw(
+                canvas,
+                model.TasksOverflowText,
+                IslandType.TaskLabel,
+                new SKRect(rect.Left + 17, rect.Top, rect.Right, rect.Bottom),
+                _theme.ForegroundTertiary,
                 TextAlign.Left,
                 _opacity);
         }

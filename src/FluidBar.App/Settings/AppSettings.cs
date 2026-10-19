@@ -218,6 +218,12 @@ public sealed record AppSettings
     /// <summary>Peek when the track changes (default off).</summary>
     public bool PeekOnTrackChange { get; init; }
 
+    /// <summary>
+    /// Weather city used by the widgets page ("Beijing"). Empty keeps the automatic IP-based location.
+    /// The <c>FLUIDBAR_WEATHER_CITY</c> environment variable still overrides it at composition time.
+    /// </summary>
+    public string WeatherCity { get; init; } = string.Empty;
+
     /// <summary>Display targeting.</summary>
     public DisplayTarget DisplayOn { get; init; } = DisplayTarget.Primary;
 
@@ -397,6 +403,7 @@ public sealed record AppSettings
         Stacking = Enum.IsDefined(Stacking) ? Stacking : StackingStrategySetting.Stacked,
         AutoCollapseMs = Math.Clamp(AutoCollapseMs, 0, 60000),
         AutoHideMs = Math.Clamp(AutoHideMs, 0, 3_600_000),
+        WeatherCity = NormalizeWeatherCity(WeatherCity),
         DisplayOn = Enum.IsDefined(DisplayOn) ? DisplayOn : DisplayTarget.Primary,
         Plugins = Plugins with
         {
@@ -450,6 +457,7 @@ public sealed record AppSettings
                 AutoCollapseMs = AutoCollapseMs,
                 AutoHideMs = AutoHideMs,
                 PeekOnTrackChange = PeekOnTrackChange,
+                WeatherCity = WeatherCity,
                 DisplayOn = DisplayOn switch
                 {
                     DisplayTarget.All => "all",
@@ -517,6 +525,7 @@ public sealed record AppSettings
                 AutoCollapseMs = document.Island?.AutoCollapseMs ?? defaults.AutoCollapseMs,
                 AutoHideMs = document.Island?.AutoHideMs ?? defaults.AutoHideMs,
                 PeekOnTrackChange = document.Island?.PeekOnTrackChange ?? defaults.PeekOnTrackChange,
+                WeatherCity = document.Island?.WeatherCity ?? defaults.WeatherCity,
                 DisplayOn = document.Island?.DisplayOn switch
                 {
                     "all" => DisplayTarget.All,
@@ -550,6 +559,15 @@ public sealed record AppSettings
             return null;
         }
     }
+
+    private static string NormalizeWeatherCity(string? value)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        return text.Length <= MaxWeatherCityLength ? text : text[..MaxWeatherCityLength];
+    }
+
+    /// <summary>Safety cap for the weather-city setting (a place name, not free text).</summary>
+    public const int MaxWeatherCityLength = 64;
 
     private static string NormalizeHotkey(string? value, string fallback)
     {
@@ -711,6 +729,7 @@ internal sealed class IslandJson
     public int? AutoCollapseMs { get; set; }
     public int? AutoHideMs { get; set; }
     public bool? PeekOnTrackChange { get; set; }
+    public string? WeatherCity { get; set; }
     public string? DisplayOn { get; set; }
 }
 

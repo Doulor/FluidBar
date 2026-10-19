@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Settings weather-city evidence harness (developer/QA tool, not shipped): renders the REAL settings
+    window (island section) in zh-Hans and en-US to PNG so the weather-city row can be reviewed without
+    launching the island. Uses the same RenderTargetBitmap capture path as the marketplace harness.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWindowsForms>false</UseWindowsForms>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>FluidBar.SettingsEvidence</RootNamespace>
+    <AssemblyName>FluidBar.SettingsEvidence</AssemblyName>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluidBar.App\FluidBar.App.csproj" />
+  </ItemGroup>
+
+</Project>

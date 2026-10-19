@@ -806,7 +806,7 @@ public static class PageLayout
                     return IslandPageControl.CalendarNext;
                 }
 
-                for (var i = 0; i < Math.Clamp(itemCount, 0, 3); i++)
+                for (var i = 0; i < Math.Clamp(itemCount, 0, PageMetricsLayout.MaxPaintedTaskRows); i++)
                 {
                     if (WidgetsTaskRow(pageRect, i).Contains(x, y))
                     {

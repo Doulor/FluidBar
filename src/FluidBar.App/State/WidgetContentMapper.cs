@@ -21,7 +21,7 @@ public enum WidgetWeatherGlyph
 
 /// <summary>Weather card values; every string is null when no real reading exists.</summary>
 /// <param name="TemperatureText">Current temperature ("18°").</param>
-/// <param name="ConditionText">Secondary line: the age of the cached reading when it is stale, else null.</param>
+/// <param name="ConditionText">Localized condition ("Partly cloudy"), plus " · age" for a cached reading.</param>
 /// <param name="HighLowText">Today's high/low ("21° / 11°").</param>
 /// <param name="WindText">Wind line ("NW 12 km/h").</param>
 /// <param name="Glyph">Icon chosen from the WMO weather code.</param>
@@ -37,10 +37,19 @@ public readonly record struct WidgetWeatherView(
 }
 
 /// <summary>Task card values.</summary>
-/// <param name="Tasks">Rows to paint (at most three).</param>
+/// <param name="Tasks">Rows to paint (first <see cref="WidgetContentMapper.MaxRenderedTasks"/> of the file).</param>
 /// <param name="EmptyHint">Caption for the explicit empty state (missing/invalid file).</param>
 /// <param name="DoneCount">Completed tasks in the file.</param>
-public readonly record struct WidgetTaskView(ImmutableArray<WidgetTaskData> Tasks, string? EmptyHint, int DoneCount);
+/// <param name="MoreText">Localized "N more" line when the file has more rows than the card paints.</param>
+/// <param name="ProgressText">"done/total" for the card header (file totals, not just the painted rows).</param>
+/// <param name="TotalCount">Tasks in the file.</param>
+public readonly record struct WidgetTaskView(
+    ImmutableArray<WidgetTaskData> Tasks,
+    string? EmptyHint,
+    int DoneCount,
+    string? MoreText = null,
+    string? ProgressText = null,
+    int TotalCount = 0);
 
 /// <summary>
 /// Maps the platform weather/task snapshots onto the island widgets page. Pure: formatting only, no I/O
@@ -49,8 +58,8 @@ public readonly record struct WidgetTaskView(ImmutableArray<WidgetTaskData> Task
 /// </summary>
 public static class WidgetContentMapper
 {
-    /// <summary>Rows the task card paints.</summary>
-    public const int MaxRenderedTasks = 3;
+    /// <summary>Rows the task card paints (the page scrolls when the card grows past the 232 DIP body).</summary>
+    public const int MaxRenderedTasks = 8;
 
     /// <summary>Maps a weather snapshot to card text; all-null when there is no reading.</summary>
     /// <param name="snapshot">Weather snapshot (null before the service produced one).</param>
@@ -63,13 +72,16 @@ public static class WidgetContentMapper
             return default;
         }
 
-        var condition = snapshot.Status == WeatherStatus.Cached && snapshot.UpdatedAt is { } updatedAt
-            ? FormatAge(updatedAt, now, localizer)
-            : null;
+        var condition = FormatCondition(snapshot.Condition, localizer);
+        // The secondary line always names the condition; a cached reading appends its age so it never
+        // looks fresher than it is ("多云 · 2 小时前").
+        var detail = snapshot.Status == WeatherStatus.Cached && snapshot.UpdatedAt is { } updatedAt
+            ? $"{condition} · {FormatAge(updatedAt, now, localizer)}"
+            : condition;
 
         return new WidgetWeatherView(
             FormatTemperature(temperature),
-            condition,
+            detail,
             FormatHighLow(snapshot.HighC, snapshot.LowC),
             FormatWind(snapshot.WindKph, snapshot.WindDirectionDeg),
             ResolveGlyph(snapshot));
@@ -89,7 +101,8 @@ public static class WidgetContentMapper
             return new WidgetTaskView([], $"{unavailable} · {name}", 0);
         }
 
-        var rows = ImmutableArray.CreateBuilder<WidgetTaskData>(Math.Min(MaxRenderedTasks, snapshot!.Count));
+        var total = snapshot!.Count;
+        var rows = ImmutableArray.CreateBuilder<WidgetTaskData>(Math.Min(MaxRenderedTasks, total));
         foreach (var item in snapshot.Items)
         {
             if (rows.Count >= MaxRenderedTasks)
@@ -100,8 +113,52 @@ public static class WidgetContentMapper
             rows.Add(new WidgetTaskData { Title = item.Title, Done = item.Done });
         }
 
-        return new WidgetTaskView(rows.MoveToImmutable(), null, snapshot.DoneCount);
+        var more = Math.Max(0, total - rows.Count);
+        var moreText = more > 0
+            ? localizer?.Format(LocKeys.Page.Widgets.TasksMore, ("count", more)) ?? $"{more} more"
+            : null;
+        return new WidgetTaskView(
+            rows.MoveToImmutable(),
+            null,
+            snapshot.DoneCount,
+            moreText,
+            $"{snapshot.DoneCount}/{total}",
+            total);
     }
+
+    /// <summary>Localized condition label for the weather card ("Partly cloudy" / "多云").</summary>
+    /// <param name="condition">Coarse condition from the WMO code.</param>
+    /// <param name="localizer">Localizer; English fallbacks when null (tests/headless).</param>
+    public static string FormatCondition(WeatherCondition condition, ILocalizer? localizer = null)
+        => localizer?.Get(ConditionKey(condition)) ?? ConditionFallback(condition);
+
+    /// <summary>Catalog key for one condition.</summary>
+    /// <param name="condition">Coarse condition from the WMO code.</param>
+    public static string ConditionKey(WeatherCondition condition) => condition switch
+    {
+        WeatherCondition.Clear => LocKeys.Page.Widgets.Weather.Clear,
+        WeatherCondition.PartlyCloudy => LocKeys.Page.Widgets.Weather.PartlyCloudy,
+        WeatherCondition.Cloudy => LocKeys.Page.Widgets.Weather.Cloudy,
+        WeatherCondition.Fog => LocKeys.Page.Widgets.Weather.Fog,
+        WeatherCondition.Drizzle => LocKeys.Page.Widgets.Weather.Drizzle,
+        WeatherCondition.Rain => LocKeys.Page.Widgets.Weather.Rain,
+        WeatherCondition.Snow => LocKeys.Page.Widgets.Weather.Snow,
+        WeatherCondition.Thunderstorm => LocKeys.Page.Widgets.Weather.Thunderstorm,
+        _ => LocKeys.Page.Widgets.Weather.Unknown,
+    };
+
+    private static string ConditionFallback(WeatherCondition condition) => condition switch
+    {
+        WeatherCondition.Clear => "Clear",
+        WeatherCondition.PartlyCloudy => "Partly cloudy",
+        WeatherCondition.Cloudy => "Overcast",
+        WeatherCondition.Fog => "Fog",
+        WeatherCondition.Drizzle => "Drizzle",
+        WeatherCondition.Rain => "Rain",
+        WeatherCondition.Snow => "Snow",
+        WeatherCondition.Thunderstorm => "Thunderstorm",
+        _ => "Weather",
+    };
 
     /// <summary>Picks one of the island's three weather glyphs from the WMO-derived condition.</summary>
     /// <param name="snapshot">Weather snapshot.</param>
