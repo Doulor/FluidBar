@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
@@ -26,6 +27,10 @@ public sealed class IslandMouseHook : IDisposable
     private IntPtr _hook;
     private bool _inside;
     private int _disposed;
+    private Timer? _watchdog;
+    private long _lastEventTimestamp;
+    private int _cursorX;
+    private int _cursorY;
 
     /// <summary>Creates the hook; call <see cref="StartAsync"/> once.</summary>
     public IslandMouseHook(PlatformMessageHost host, IPlatformLogger logger, PlatformCounters counters)
@@ -74,6 +79,92 @@ public sealed class IslandMouseHook : IDisposable
         {
             _logger.LogWarning(PlatformLogCategory.Platform, "island.mouse-hook-failed",
                 "SetWindowsHookEx(WH_MOUSE_LL) failed: " + Marshal.GetLastWin32Error());
+            return;
+        }
+
+        // Windows silently removes a low-level hook whose callback misses its timeout (a busy message
+        // thread is enough). The island must never end up deaf, so a watchdog compares the real cursor
+        // position with the last callback: if the pointer moved but no callback arrived, the hook was
+        // dropped and is reinstalled on the host thread.
+        _lastEventTimestamp = Stopwatch.GetTimestamp();
+        GetCursorPos(out var cursor);
+        _cursorX = cursor.X;
+        _cursorY = cursor.Y;
+        _watchdog = new Timer(static state => ((IslandMouseHook)state!).CheckHealth(), this,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void CheckHealth()
+    {
+        if (Volatile.Read(ref _disposed) != 0 || _hook == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (!GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        var moved = cursor.X != _cursorX || cursor.Y != _cursorY;
+        _cursorX = cursor.X;
+        _cursorY = cursor.Y;
+        var idleMs = (Stopwatch.GetTimestamp() - Interlocked.Read(ref _lastEventTimestamp))
+            * 1000.0 / Stopwatch.Frequency;
+        if (moved && idleMs > 800)
+        {
+            Reinstall("the pointer moved without any hook callback");
+        }
+    }
+
+    private void Reinstall(string reason)
+    {
+        _ = ReinstallAsync(reason);
+    }
+
+    private async Task ReinstallAsync(string reason)
+    {
+        try
+        {
+            await _host.InvokeAsync(() =>
+            {
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    return;
+                }
+
+                var previous = _hook;
+                if (previous != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(previous);
+                    _hook = IntPtr.Zero;
+                }
+
+                _proc ??= HookCallback;
+                var reinstalled = SetWindowsHookExW(WhMouseLl, _proc, GetModuleHandleW(null), 0);
+                if (reinstalled == IntPtr.Zero)
+                {
+                    _logger.LogWarning(PlatformLogCategory.Platform, "island.mouse-hook-reinstall-failed",
+                        "Reinstalling WH_MOUSE_LL failed: " + Marshal.GetLastWin32Error());
+                    return;
+                }
+
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    UnhookWindowsHookEx(reinstalled);
+                    return;
+                }
+
+                _hook = reinstalled;
+                Interlocked.Exchange(ref _lastEventTimestamp, Stopwatch.GetTimestamp());
+                _logger.LogWarning(PlatformLogCategory.Platform, "island.mouse-hook-reinstalled",
+                    "Reinstalled WH_MOUSE_LL because " + reason + ".");
+            }, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(PlatformLogCategory.Platform, "island.mouse-hook-reinstall-failed",
+                "Reinstalling WH_MOUSE_LL failed: " + ex.Message);
         }
     }
 
@@ -101,6 +192,8 @@ public sealed class IslandMouseHook : IDisposable
             return;
         }
 
+        _watchdog?.Dispose();
+        _watchdog = null;
         var hook = _hook;
         _hook = IntPtr.Zero;
         if (hook != IntPtr.Zero)
@@ -116,6 +209,7 @@ public sealed class IslandMouseHook : IDisposable
             return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
         }
 
+        Interlocked.Exchange(ref _lastEventTimestamp, Stopwatch.GetTimestamp());
         var data = Marshal.PtrToStructure<MsllHookStruct>(lParam);
         var x = data.pt.X;
         var y = data.pt.Y;
@@ -198,6 +292,9 @@ public sealed class IslandMouseHook : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnhookWindowsHookEx(IntPtr hook);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out Point point);
 
     [DllImport("user32.dll")]
     private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);

@@ -135,5 +135,7 @@
 - 首页音量/亮度不再写死演示值（62/78）：`IslandContent` 新增 `VolumePercent`/`IsMuted`/`BrightnessPercent`，`SkiaPlatformActions` 映射真实 WASAPI 音量与 DDC/CI 亮度并订阅其变化；未知时渲染 "—" 且轨道归零（不伪造数字）。设计态 `DesignIslandDataSource` 保留 62/78 供预览/测试。
 - `MonitorService` 枚举前显式 `SetThreadDpiAwarenessContext(PMv2)`：显示器枚举不再受调用线程 DPI 上下文影响（线程池线程/消息线程下曾可能拿到 96 DPI 的虚拟化工作区）。
 - 全量测试 **1482 passed / 0 failed**（Core 494 · Platform 409 · SDK 152 · UI 188 · Island 135 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
-- 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `1DE62352DA64E7179F3AFA7A0A485DB39678813A285458642F115FA29C431BAA`。
-- 真实鼠标回归（DPI-aware 取证脚本）：窗口 732×576 @150% → 点击药丸弹簧展开 660×424 → 悬停 4s 保持 → 点右上 chevron 收起 196×52；首页显示真实音量 60 / 亮度 "—" / 电量 99% 充电 / Wi-Fi 开。
+- 最终 Release：`build/release/win-x64/FluidBar.exe` 56.5 MB，SHA256 `EF745D4D43554345F7C2A69DC29F8438B77C1147377C801E373579D2754E2EBB`。
+- 真实鼠标回归（DPI-aware 取证脚本）：窗口 732×576 @150% → 点击药丸弹簧展开 660×424 → 悬停 4s 保持 → 移开 3.8s 自动收起 196×52 → 再展开 → chevron 收起；首页显示真实音量 60 / 亮度 "—" / 电量 99% 充电 / Wi-Fi 开。
+- 鼠标钩子自愈：`IslandMouseHook` 独立消息线程（避免和剪贴板/显示消息排队导致 WH_MOUSE_LL 回调超时被系统摘除）+ 1s 看门狗（光标位置变化但 800ms 内没有回调 → 重新安装钩子）。60s 连续 6 轮点击/热键回归全部通过。
+- 注意：`FLUIDBAR_SMOKE=1` 会把 `settings.ui.json` 的 `autoCollapseMs` 改成 0（smoke 需要），跑完冒烟记得改回 2600，否则展开态不会自动收起。

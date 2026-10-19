@@ -12,7 +12,7 @@ FluidBar 2.0 是从零重写的 Windows 灵动岛：默认 iOS 风格小岛，�
 
 ## 运行
 
-- 发布产物：`build/release/win-x64/FluidBar.exe`（framework-dependent single-file，56.5 MB，SHA256 `1DE62352DA64E7179F3AFA7A0A485DB39678813A285458642F115FA29C431BAA`，2026-10-19 17:05 重新发布）
+- 发布产物：`build/release/win-x64/FluidBar.exe`（framework-dependent single-file，56.5 MB，SHA256 `EF745D4D43554345F7C2A69DC29F8438B77C1147377C801E373579D2754E2EBB`，2026-10-19 17:25 重新发布）
 - 或从源码：`dotnet run --project src/FluidBar.App`（开发） / `tools/release/publish.ps1`
 - 默认宿主：Win32 分层窗口 + Skia（`FLUIDBAR_HOST=skia` 强制；`avalonia` 回退旧宿主）
 - 设置/市场：托盘菜单或 `Ctrl+Alt+S`（若被占用回退 `Ctrl+Alt+Shift+S`）

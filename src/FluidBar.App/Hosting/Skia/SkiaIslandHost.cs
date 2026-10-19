@@ -80,6 +80,7 @@ public sealed class SkiaIslandHost : IDisposable
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
+    private PlatformMessageHost? _mouseHookHost;
     private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
     private RegionSignature _regionSignature;
@@ -387,6 +388,12 @@ public sealed class SkiaIslandHost : IDisposable
             _mouseHook = null;
         }
 
+        if (_mouseHookHost is not null)
+        {
+            _ = _mouseHookHost.DisposeAsync();
+            _mouseHookHost = null;
+        }
+
         if (_messageHost is not null)
         {
             _ = _messageHost.DisposeAsync();
@@ -410,7 +417,13 @@ public sealed class SkiaIslandHost : IDisposable
         _monitorService = new MonitorService(_messageHost, _platformLogger, _platformCounters, _time);
         await _monitorService.StartAsync(cancellationToken).ConfigureAwait(true);
         _monitorService.MonitorsChanged += OnMonitorsChanged;
-        _mouseHook = new IslandMouseHook(_messageHost, _platformLogger, _platformCounters);
+
+        // The mouse hook gets its own message thread: a WH_MOUSE_LL callback must return within the
+        // Windows hook timeout, so it must never queue behind clipboard/display work on the shared
+        // monitor host.
+        _mouseHookHost = new PlatformMessageHost(_platformLogger, _platformCounters);
+        await _mouseHookHost.StartAsync(cancellationToken).ConfigureAwait(true);
+        _mouseHook = new IslandMouseHook(_mouseHookHost, _platformLogger, _platformCounters);
         _mouseHook.PointerPressed += OnHookPointerPressed;
         _mouseHook.PointerReleased += OnHookPointerReleased;
         _mouseHook.PointerMoved += OnHookPointerMoved;
