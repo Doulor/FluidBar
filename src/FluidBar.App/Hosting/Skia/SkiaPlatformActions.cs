@@ -13,6 +13,7 @@ using FluidBar.Platform.Windows.Focus;
 using FluidBar.Platform.Windows.Media;
 using FluidBar.Platform.Windows.Media.Lyrics;
 using FluidBar.Platform.Windows.Monitors;
+using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
 using FluidBar.Platform.Windows.Threading;
 
@@ -59,6 +60,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly LyricsCache _lyricsCache;
     private readonly LyricsService _lyrics;
     private readonly SkiaSystemStats _systemStats;
+    private readonly NotificationService _notifications;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
     private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
@@ -67,6 +69,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private string _lyricsTrackKey = string.Empty;
     private int _started;
     private int _disposed;
+
+    /// <summary>Rows the island notification page keeps (five are visible; the rest stay bounded).</summary>
+    private const int PageNotificationLimit = NotificationContentMapper.DefaultMaxItems;
 
     /// <summary>Creates the adapter; call <see cref="StartAsync"/> or <see cref="StartInBackground"/> once.</summary>
     /// <param name="settings">Live App settings (theme quick toggle + persistence).</param>
@@ -139,6 +144,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             _platformLogger,
             _counters);
         _systemStats = new SkiaSystemStats(time);
+
+        // The island page needs the toast list (bounded recent + close sync), not just the last event:
+        // it owns a listener instance with seeding enabled. The built-in notification plugin keeps its
+        // own listener for the compact pill (new arrivals only); both read the same Windows list.
+        _notifications = new NotificationService(_platformLogger, _counters, new NotificationServiceOptions
+        {
+            MaxRecentNotifications = PageNotificationLimit,
+            SeedRecentFromExisting = true,
+            PollInterval = TimeSpan.FromMilliseconds(2000),
+        }, time);
+        _notifications.SnapshotChanged += OnNotificationsChanged;
+
         var today = time.GetLocalNow();
         _calendarMonth = new DateOnly(today.Year, today.Month, 1);
 
@@ -249,7 +266,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = clipboard.Take(8).Select(MapClipboard).ToImmutableArray(),
-            Notifications = [],
+            // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
+            // arrival and by the user closing a toast in Action Center.
+            Notifications = NotificationContentMapper.Map(
+                _notifications.Current, PageNotificationLimit, now, _localizer),
             Agents = MapAgents(_agentInbox.Current),
             Tasks = [],
             // The widgets page owns the calendar locally: the month grid needs no platform service, so
@@ -258,7 +278,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             WeekdayHeaders = BuildWeekdayHeaders(culture),
             CalendarDays = BuildCalendarDays(_calendarMonth, today),
             Stats = _systemStats.Build(batteryPercent, Localized(LocKeys.Battery.Title, "Battery")),
-            UnreadCount = 0,
+            UnreadCount = Math.Clamp(_notifications.Current?.Recent.Length ?? 0, 0, 99),
         };
     }
 
@@ -277,6 +297,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         EnsureMediaTick();
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>Toast list changed (new toast, closed toast, or the service's polling fallback tick).</summary>
+    private void OnNotificationsChanged(object? sender, SnapshotEventArgs<NotificationsSnapshot> args)
+        => Changed?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// Starts (or stops) the 1 Hz media refresh. While a session is playing the progress bar and the
@@ -626,6 +650,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("notifications", () => _notifications.StartAsync(cancellationToken)).ConfigureAwait(false);
         _systemStats.Prime();
         ScheduleClockTick();
     }
@@ -702,9 +727,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.MediaQueue => Unsupported(
                 "no media queue service exists (the GSMTC snapshot exposes no queue)"),
             IslandPlatformActionKind.NotificationActivate => Defer(
-                action, "notification activation is App-owned; the Windows notification listener exposes no activate API"),
-            IslandPlatformActionKind.NotificationDismiss => Defer(
-                action, "notification dismissal is App-owned; Windows exposes no public toast-dismiss API"),
+                action, "no public Windows API activates another app's toast; open the toast from Action Center instead"),
+            IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -930,6 +954,25 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private static string BuildAgentHookCommand(string inboxDirectory)
         => "pwsh -NoProfile -Command \"$j=@{schemaVersion=1;agent='claude-code';event='Stop';title='Claude Code';timestamp=(Get-Date).ToString('o')}|ConvertTo-Json -Compress;Set-Content -LiteralPath (Join-Path '" + inboxDirectory + "' ('claude-'+[guid]::NewGuid().ToString('N')+'.json')) -Value $j\"";
 
+    /// <summary>
+    /// Removes one notification row. Windows has no public API to dismiss another app's toast, so this
+    /// removes the row from the island list only; closing it in Action Center then keeps it gone (the
+    /// service's close-sync prune).
+    /// </summary>
+    private IslandActionResult DismissNotification(int index)
+    {
+        var recent = _notifications.Current?.Recent ?? ImmutableArray<NotificationEntry>.Empty;
+        if (index < 0 || index >= Math.Min(PageNotificationLimit, recent.Length))
+        {
+            return Unsupported("the notification row no longer exists");
+        }
+
+        var entry = recent[index];
+        return _notifications.RemoveLocally(entry.Id)
+            ? IslandActionResult.Handled
+            : Unsupported("the notification is no longer in the listener list");
+    }
+
     private IslandActionResult CopyClipboard(in IslandPlatformAction action)
     {
         var text = action.Text;
@@ -1028,6 +1071,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
+        await StopOneAsync("notifications", () => _notifications.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("media", () => _media.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("focus-assist", () => _focus.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-radio", () => _bluetooth.DisposeAsync().AsTask()).ConfigureAwait(false);

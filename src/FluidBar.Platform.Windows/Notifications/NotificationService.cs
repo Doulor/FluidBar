@@ -20,6 +20,22 @@ public sealed class NotificationServiceOptions
 
     /// <summary>Maximum notifications surfaced per change batch.</summary>
     public int MaxBatch { get; init; } = 20;
+
+    /// <summary>
+    /// Seeds <see cref="NotificationsSnapshot.Recent"/> with the toasts already in the system list when
+    /// the service starts. Off by default: consumers that surface *new* arrivals as activities must not
+    /// replay the back catalogue (the App's notification page opts in).
+    /// </summary>
+    public bool SeedRecentFromExisting { get; init; }
+
+    /// <summary>
+    /// Poll interval used when <c>UserNotificationListener.NotificationChanged</c> cannot be subscribed
+    /// on this machine (0x80070490); the same read path still returns the current toast list.
+    /// </summary>
+    public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>Whether to fall back to polling when the change event is unavailable.</summary>
+    public bool EnablePollingFallback { get; init; } = true;
 }
 
 /// <summary>
@@ -37,6 +53,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     private UserNotificationListener? _listener;
     private ImmutableArray<NotificationEntry> _recent = ImmutableArray<NotificationEntry>.Empty;
     private NotificationAccessState _access = NotificationAccessState.Unavailable;
+    private ITimer? _pollTimer;
+    private bool _pollingFallback;
     private int _processing;
     private int _subscribed;
 
@@ -65,7 +83,13 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     protected override async ValueTask OnStartAsync(CancellationToken cancellationToken)
     {
         _history.Reset();
-        _recent = ImmutableArray<NotificationEntry>.Empty;
+        lock (_stateGate)
+        {
+            _recent = ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        StopPolling();
+        _pollingFallback = false;
 
         UserNotificationListener listener;
         try
@@ -132,20 +156,19 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     private async Task AttachAndPrimeAsync(UserNotificationListener listener, CancellationToken cancellationToken)
     {
-        if (Interlocked.Exchange(ref _subscribed, 1) == 0)
-        {
-            listener.NotificationChanged += OnNotificationChanged;
-        }
+        SubscribeOrEnablePolling(listener);
 
+        IReadOnlyList<UserNotification> notifications = Array.Empty<UserNotification>();
         try
         {
-            var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast).AsTask(cancellationToken)
+            notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast).AsTask(cancellationToken)
                 .ConfigureAwait(false);
             _history.Prime(notifications.Select(notification => notification.Id));
             _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.primed",
                 "Notification listener primed.", new Dictionary<string, object?>
                 {
                     ["existing"] = notifications.Count,
+                    ["mode"] = _pollingFallback ? "polling" : "events",
                 });
         }
         catch (Exception ex)
@@ -154,6 +177,108 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                 "Could not prime the notification listener; existing toasts may be replayed once.", ex);
             _history.Prime(Array.Empty<uint>());
         }
+
+        if (_options.SeedRecentFromExisting && notifications.Count > 0)
+        {
+            SeedRecent(notifications);
+        }
+
+        if (_pollingFallback)
+        {
+            StartPolling();
+        }
+    }
+
+    /// <summary>
+    /// Subscribes to <c>NotificationChanged</c>; on machines where WinRT rejects the subscription
+    /// (0x80070490 ERROR_NOT_FOUND) it switches to the polling fallback instead of failing the monitor.
+    /// </summary>
+    private void SubscribeOrEnablePolling(UserNotificationListener listener)
+    {
+        try
+        {
+            if (Interlocked.Exchange(ref _subscribed, 1) == 0)
+            {
+                listener.NotificationChanged += OnNotificationChanged;
+            }
+        }
+        catch (Exception ex)
+        {
+            _counters.IncrementNotificationEvents();
+            _logger.LogWarning(PlatformLogCategory.Notifications, "notifications.events-unavailable",
+                "UserNotificationListener.NotificationChanged is unavailable; polling for notification changes instead.", ex);
+            if (_options.EnablePollingFallback)
+            {
+                _pollingFallback = true;
+            }
+
+            Interlocked.Exchange(ref _subscribed, 0);
+        }
+    }
+
+    private void StartPolling()
+    {
+        if (_pollTimer is not null)
+        {
+            return;
+        }
+
+        var interval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.FromMilliseconds(1500);
+        _pollTimer = TimeProvider.CreateTimer(
+            static state => ((NotificationService)state!).OnPollTick(),
+            this,
+            interval,
+            interval);
+        _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.polling-started",
+            "Notification polling fallback started.", new Dictionary<string, object?>
+            {
+                ["intervalMs"] = (int)interval.TotalMilliseconds,
+            });
+    }
+
+    private void StopPolling()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+
+    private void OnPollTick()
+    {
+        if (State != PlatformMonitorState.Running)
+        {
+            return;
+        }
+
+        _ = ProcessChangesSafeAsync();
+    }
+
+    /// <summary>Fills the recent list from the toasts already present when the page opens.</summary>
+    private void SeedRecent(IReadOnlyList<UserNotification> notifications)
+    {
+        var max = Math.Max(1, _options.MaxRecentNotifications);
+        var entries = notifications
+            .Select(CreateCandidate)
+            .Where(candidate => candidate is not null)
+            .Select(candidate => candidate!)
+            .OrderByDescending(candidate => candidate.CreatedAt)
+            .Take(max)
+            .Select(candidate => new NotificationEntry(candidate.Id, candidate.AppName, candidate.Title,
+                candidate.Body, candidate.CreatedAt,
+                VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}")))
+            .ToImmutableArray();
+
+        var seeded = NotificationListReducer.Bounded(entries, max);
+        lock (_stateGate)
+        {
+            _recent = seeded;
+        }
+
+        Publish(new NotificationsSnapshot(NotificationAccessState.Allowed, seeded));
+        _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.seeded",
+            "Notification page seeded with the existing toast list.", new Dictionary<string, object?>
+            {
+                ["count"] = seeded.Length,
+            });
     }
 
     private void OnNotificationChanged(UserNotificationListener sender, UserNotificationChangedEventArgs args)
@@ -189,40 +314,33 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             var candidates = notifications.Select(CreateCandidate).Where(candidate => candidate is not null)
                 .Select(candidate => candidate!).ToList();
             var added = _history.Process(candidates);
-            if (added.Count == 0)
-            {
-                return;
-            }
 
+            // Close sync: toasts the user removed from Action Center are no longer returned by the
+            // listener, so the recent list must drop them (before this, only additions were handled and
+            // a closed toast stayed on the island page forever).
+            var liveIds = new HashSet<uint>(notifications.Select(notification => notification.Id));
+            var previousCount = 0;
             lock (_stateGate)
             {
-                var builder = ImmutableArray.CreateBuilder<NotificationEntry>(
-                    Math.Min(_options.MaxRecentNotifications, _recent.Length + added.Count));
-                for (var index = added.Count - 1; index >= 0; index--)
+                previousCount = _recent.Length;
+                var pruned = NotificationListReducer.Prune(_recent, liveIds);
+                var merged = NotificationListReducer.Merge(pruned, added, _options.MaxRecentNotifications);
+                if (NotificationListReducer.SequenceEqual(merged, _recent))
                 {
-                    builder.Add(added[index]);
+                    return;
                 }
 
-                foreach (var entry in _recent)
-                {
-                    if (builder.Count >= _options.MaxRecentNotifications)
-                    {
-                        break;
-                    }
-
-                    builder.Add(entry);
-                }
-
-                _recent = builder.MoveToImmutable();
+                _recent = merged;
             }
 
             Publish(new NotificationsSnapshot(NotificationAccessState.Allowed, _recent));
             _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.received",
-                "New notification(s) captured.", new Dictionary<string, object?>
+                "Notification list changed.", new Dictionary<string, object?>
                 {
-                    ["count"] = added.Count,
-                    ["latestApp"] = added[^1].AppName,
-                    ["verificationCode"] = added[^1].VerificationCode is not null,
+                    ["added"] = added.Count,
+                    ["removed"] = Math.Max(0, previousCount + added.Count - _recent.Length),
+                    ["latestApp"] = added.Count > 0 ? added[^1].AppName : null,
+                    ["verificationCode"] = added.Count > 0 && added[^1].VerificationCode is not null,
                 });
         }
         catch (Exception ex)
@@ -271,6 +389,40 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         return value.Length <= maxLength ? value : value[..maxLength];
     }
 
+    /// <summary>
+    /// Removes one toast from the island's recent list. Windows exposes no public API to dismiss another
+    /// app's toast, so the Action Center entry (if still open) disappears only when the user closes it;
+    /// the next poll then keeps it out of the list as well.
+    /// </summary>
+    /// <param name="id">Toast id from <see cref="NotificationsSnapshot.Recent"/>.</param>
+    /// <returns>True when the entry existed and was removed.</returns>
+    public bool RemoveLocally(uint id)
+    {
+        var removed = false;
+        lock (_stateGate)
+        {
+            var next = NotificationListReducer.Remove(_recent, id);
+            if (next.Length != _recent.Length)
+            {
+                _recent = next;
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
+            Publish(new NotificationsSnapshot(AccessState, _recent));
+            _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.dismissed-locally",
+                "Notification removed from the island list.", new Dictionary<string, object?>
+                {
+                    ["id"] = id,
+                    ["remaining"] = _recent.Length,
+                });
+        }
+
+        return removed;
+    }
+
     private void SetAccess(NotificationAccessState access, bool publish)
     {
         lock (_stateGate)
@@ -294,6 +446,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     protected override async ValueTask OnStopAsync(CancellationToken cancellationToken)
     {
+        StopPolling();
+        _pollingFallback = false;
         var listener = _listener;
         _listener = null;
         if (listener is not null && Interlocked.Exchange(ref _subscribed, 0) != 0)

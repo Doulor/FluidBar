@@ -197,12 +197,28 @@ public sealed class SkiaPlatformActionsTests
         IslandPlatformAction? raised = null;
         actions.DeferredActionRequested += action => raised = action;
 
-        var result = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, Index: 2));
+        // Notification dismissal is handled locally now (the toast list is real); activation still has
+        // no public Windows API and stays an App-owned deferred action.
+        var result = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, Index: 2));
 
         Assert.Equal(IslandActionOutcome.Deferred, result.Outcome);
         Assert.NotNull(raised);
-        Assert.Equal(IslandPlatformActionKind.NotificationDismiss, raised!.Value.Kind);
+        Assert.Equal(IslandPlatformActionKind.NotificationActivate, raised!.Value.Kind);
         Assert.Equal(2, raised.Value.Index);
+
+        settings.Dispose();
+    }
+
+    [Fact]
+    public async Task NotificationDismiss_WithoutAListenerRow_IsUnsupported()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        // The listener is not started here, so there is no row to dismiss: report it, never fake success.
+        AssertUnsupported(
+            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, Index: 0)),
+            "no longer exists");
 
         settings.Dispose();
     }

@@ -41,8 +41,10 @@ internal sealed partial class PageRenderer
         for (var i = first; i < count; i++)
         {
             var row = PageMetricsLayout.NotificationRow(page, i, scroll, m);
-            if (row.Top >= body.Bottom)
+            if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
+                // Real toasts made this visible: the list does not scroll (the wheel pages instead), so
+                // a row that only half fits the body would be painted as a clipped sliver forever.
                 break;
             }
 
@@ -98,7 +100,8 @@ internal sealed partial class PageRenderer
         var lineTop = row.Top + 5;
         var lineBottom = row.Top + 21;
         var app = item.AppName;
-        var appWidth = string.IsNullOrEmpty(app) ? 0 : Math.Min(70, _text.Measure(app, IslandType.RowApp));
+        // 70 DIP cut "Windows PowerShell" to "Windows Powers…"; 84 still leaves the title ~240 DIP.
+        var appWidth = string.IsNullOrEmpty(app) ? 0 : Math.Min(84, _text.Measure(app, IslandType.RowApp));
         if (appWidth > 0)
         {
             _text.Draw(
@@ -178,7 +181,7 @@ internal sealed partial class PageRenderer
         for (var i = first; i < count; i++)
         {
             var row = PageMetricsLayout.ClipboardRow(page, i, scroll, m);
-            if (row.Top >= body.Bottom)
+            if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
                 break;
             }
@@ -349,7 +352,7 @@ internal sealed partial class PageRenderer
         for (var i = first; i < count; i++)
         {
             var row = PageMetricsLayout.AgentRow(page, i, scroll, m);
-            if (row.Top >= body.Bottom)
+            if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
                 break;
             }

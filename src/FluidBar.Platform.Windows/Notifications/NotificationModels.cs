@@ -247,3 +247,167 @@ public sealed class NotificationHistory
         }
     }
 }
+
+/// <summary>
+/// Pure helpers for the bounded "recent notifications" list: newest first, deduplicated by toast id and
+/// capped. Kept separate from <see cref="NotificationService"/> so the list semantics (arrival, close
+/// sync, cap) are unit-testable without a WinRT listener.
+/// </summary>
+public static class NotificationListReducer
+{
+    /// <summary>
+    /// Prepends <paramref name="added"/> (oldest-first batch) to <paramref name="existing"/> (newest
+    /// first), removing duplicate ids and truncating to <paramref name="maxEntries"/>.
+    /// </summary>
+    public static ImmutableArray<NotificationEntry> Merge(
+        ImmutableArray<NotificationEntry> existing,
+        IReadOnlyList<NotificationEntry> added,
+        int maxEntries)
+    {
+        if (maxEntries <= 0)
+        {
+            return ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        var builder = ImmutableArray.CreateBuilder<NotificationEntry>(
+            Math.Min(maxEntries, existing.IsDefaultOrEmpty ? added.Count : existing.Length + added.Count));
+        var seen = new HashSet<uint>(builder.Capacity);
+
+        // "added" is ordered oldest -> newest; prepend newest first.
+        for (var index = added.Count - 1; index >= 0; index--)
+        {
+            if (seen.Add(added[index].Id))
+            {
+                builder.Add(added[index]);
+                if (builder.Count >= maxEntries)
+                {
+                    return builder.ToImmutable();
+                }
+            }
+        }
+
+        if (existing.IsDefaultOrEmpty)
+        {
+            return builder.ToImmutable();
+        }
+
+        foreach (var entry in existing)
+        {
+            if (seen.Add(entry.Id))
+            {
+                builder.Add(entry);
+                if (builder.Count >= maxEntries)
+                {
+                    break;
+                }
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>Drops entries whose toast id is no longer present in the system list (user closed it).</summary>
+    public static ImmutableArray<NotificationEntry> Prune(
+        ImmutableArray<NotificationEntry> entries,
+        IReadOnlySet<uint> liveIds)
+    {
+        ArgumentNullException.ThrowIfNull(liveIds);
+        if (entries.IsDefaultOrEmpty)
+        {
+            return ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        var kept = new List<NotificationEntry>(entries.Length);
+        var removed = 0;
+        foreach (var entry in entries)
+        {
+            if (liveIds.Contains(entry.Id))
+            {
+                kept.Add(entry);
+            }
+            else
+            {
+                removed++;
+            }
+        }
+
+        return removed == 0 ? entries : [.. kept];
+    }
+
+    /// <summary>Deduplicates by id, preserves the given order (newest first) and caps the list.</summary>
+    public static ImmutableArray<NotificationEntry> Bounded(
+        IEnumerable<NotificationEntry> entries,
+        int maxEntries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        if (maxEntries <= 0)
+        {
+            return ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        var builder = ImmutableArray.CreateBuilder<NotificationEntry>(Math.Min(maxEntries, 8));
+        var seen = new HashSet<uint>();
+        foreach (var entry in entries)
+        {
+            if (!seen.Add(entry.Id))
+            {
+                continue;
+            }
+
+            builder.Add(entry);
+            if (builder.Count >= maxEntries)
+            {
+                break;
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>Drops one entry (the island's local dismiss; the OS toast cannot be removed by us).</summary>
+    public static ImmutableArray<NotificationEntry> Remove(ImmutableArray<NotificationEntry> entries, uint id)
+    {
+        if (entries.IsDefaultOrEmpty)
+        {
+            return ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        var index = -1;
+        for (var i = 0; i < entries.Length; i++)
+        {
+            if (entries[i].Id == id)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        return index < 0 ? entries : entries.RemoveAt(index);
+    }
+
+    /// <summary>True when both lists carry the same entries in the same order (publish suppression).</summary>
+    public static bool SequenceEqual(
+        ImmutableArray<NotificationEntry> left,
+        ImmutableArray<NotificationEntry> right)
+    {
+        if (left.IsDefaultOrEmpty || right.IsDefaultOrEmpty)
+        {
+            return left.IsDefaultOrEmpty && right.IsDefaultOrEmpty;
+        }
+
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (!Equals(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
