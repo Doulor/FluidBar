@@ -127,6 +127,8 @@ internal enum PlayerTimelineSource
 /// <param name="PositionSampledAtUtc">When <paramref name="Position"/> was sampled, or <see cref="DateTimeOffset.MinValue"/>.</param>
 /// <param name="HasTimeline">True when the player state file supplied a real position.</param>
 /// <param name="IsMuted">Player mute flag when the state file exposes one.</param>
+/// <param name="TimelineSource">Where the position came from (drives the pause-detection window).</param>
+/// <param name="IsPlayingHint">Play/pause observed directly on the player's UI, when available.</param>
 internal sealed record WindowMediaCandidate(
     string ProcessName,
     string Title,
@@ -138,7 +140,8 @@ internal sealed record WindowMediaCandidate(
     DateTimeOffset PositionSampledAtUtc = default,
     bool HasTimeline = false,
     bool IsMuted = false,
-    PlayerTimelineSource TimelineSource = PlayerTimelineSource.None);
+    PlayerTimelineSource TimelineSource = PlayerTimelineSource.None,
+    bool? IsPlayingHint = null);
 
 /// <summary>
 /// Fallback media source for players that never register with Windows SMTC (e.g. KuGou). It finds the

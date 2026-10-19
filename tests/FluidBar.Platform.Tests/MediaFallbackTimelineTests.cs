@@ -271,6 +271,40 @@ public sealed class LyricsTimelineSelectorTests
     [InlineData("", true)]
     public void IsCreditLine_DetectsMetadataLines(string text, bool expected)
         => Assert.Equal(expected, LyricsTimelineSelector.IsCreditLine(text));
+    [Fact]
+    public void Select_SkipsTrackIdentityHeaderLines()
+    {
+        var document = Document(
+            "[00:00.00]Whiplash - William Black",
+            "[00:05.00]Yeah this feelings something dangerous",
+            "[00:09.00]But I can't turn back now");
+
+        var pair = LyricsTimelineSelector.Select(document, TimeSpan.FromSeconds(6), "Whiplash", "William Black");
+
+        Assert.Equal("Yeah this feelings something dangerous", pair.Current);
+        Assert.Equal("But I can't turn back now", pair.Next);
+    }
+
+    [Fact]
+    public void Select_HidesARepeatedNextLine()
+    {
+        var document = Document("[00:05.00]Just trying to get to you", "[00:09.00]Just trying to get to you");
+
+        var pair = LyricsTimelineSelector.Select(document, TimeSpan.FromSeconds(6));
+
+        Assert.Equal("Just trying to get to you", pair.Current);
+        Assert.Null(pair.Next);
+    }
+
+    [Theory]
+    [InlineData("Whiplash - William Black", "Whiplash", "William Black", true)]
+    [InlineData("William Black - Whiplash", "Whiplash", "William Black", true)]
+    [InlineData("Whiplash -  William Black", "Whiplash", "William Black", true)]
+    [InlineData("Whiplash（Live） - William Black", "Whiplash", "William Black", false)]
+    [InlineData("another line", "Whiplash", "William Black", false)]
+    [InlineData("Whiplash", "Whiplash", null, true)]
+    public void IsTrackIdentityLine_ComparesFoldedText(string line, string title, string? artist, bool expected)
+        => Assert.Equal(expected, LyricsTimelineSelector.IsTrackIdentityLine(line, title, artist));
 }
 
 /// <summary>Lyrics served from the player's own .krc cache (offline, exact match).</summary>
@@ -465,5 +499,119 @@ public sealed class FallbackPlaybackTrackerTests
 
         Assert.True(tracker.IsPlaying);
         Assert.True(tracker.Observe("track", true, TimeSpan.FromSeconds(10), Start.AddSeconds(60)));
+    }
+}
+
+/// <summary>Play/pause resolution from the accessibility transport glyphs.</summary>
+public sealed class AccessibilityPlaybackStateTests
+{
+    [Theory]
+    [InlineData(false, false, null)]
+    [InlineData(true, true, null)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, true)]
+    public void Resolve_UsesTheVisibleGlyph(bool playVisible, bool pauseVisible, bool? expected)
+        => Assert.Equal(expected, AccessibilityPlaybackState.Resolve(playVisible, pauseVisible));
+}
+
+/// <summary>Cover lookup in the player's own album cache (width-folded title matching).</summary>
+public sealed class KugouArtworkCacheTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(),
+        "fluidbar-art-" + Guid.NewGuid().ToString("N"));
+
+    public KugouArtworkCacheTests()
+    {
+        Directory.CreateDirectory(_root);
+        KugouArtworkCache.InvalidateIndex();
+    }
+
+    [Fact]
+    public void Fold_MapsFullWidthFormsToHalfWidth()
+    {
+        // The player stores "Untamed（失 控）" without the space the window title has before the paren,
+        // so folding keeps that difference and Matches() closes it with a whitespace-free comparison.
+        Assert.Equal("untamed(失 控)", KugouArtworkCache.Fold("Untamed（失 控）"));
+        Assert.Equal("a b", KugouArtworkCache.Fold("A\u3000B"));
+    }
+
+    [Theory]
+    [InlineData("Untamed（失 控）", "untamed (失 控)", true)]
+    [InlineData("Untamed (失 控)", "untamed (失 控)", true)]
+    [InlineData("untamed (失控)", "untamed (失 控)", true)]
+    [InlineData("Some Other Song", "untamed (失 控)", false)]
+    [InlineData("", "untamed (失 控)", false)]
+    public void Matches_FoldsTypographyAndSpacing(string folderTitle, string trackTitle, bool expected)
+        => Assert.Equal(expected, KugouArtworkCache.Matches(folderTitle, trackTitle));
+
+    [Fact]
+    public void FindBestFile_FindsTheWidthFoldedFolderAndPrefersTheLargest()
+    {
+        var folder = Path.Combine(_root, "Untamed（失 控）_203532254", "120");
+        Directory.CreateDirectory(folder);
+        var small = Path.Combine(folder, "small.jpg");
+        var large = Path.Combine(folder, "large.jpg");
+        File.WriteAllBytes(small, Jpeg(120, 120));
+        File.WriteAllBytes(large, Jpeg(300, 300));
+        KugouArtworkCache.InvalidateIndex();
+
+        var found = KugouArtworkCache.FindBestFile(_root, "Untamed (失 控)");
+
+        Assert.Equal(large, found);
+    }
+
+    [Fact]
+    public void FindBestFile_ReturnsNullForAnotherTrack()
+    {
+        var folder = Path.Combine(_root, "Some Other Song_1", "120");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "cover.jpg"), Jpeg(120, 120));
+        KugouArtworkCache.InvalidateIndex();
+
+        Assert.Null(KugouArtworkCache.FindBestFile(_root, "Untamed (失 控)"));
+    }
+
+    [Fact]
+    public void TryRead_RejectsOversizedOrInvalidFiles()
+    {
+        var folder = Path.Combine(_root, "Klinn_1", "120");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "bad.jpg"), new byte[] { 1, 2, 3, 4 });
+        KugouArtworkCache.InvalidateIndex();
+
+        // KugouArtworkCache.TryRead resolves the real player cache, not this root; the header rejection
+        // path is covered through FindBestFile + the shared ImageHeaderReader tests.
+        Assert.Equal(Path.Combine(folder, "bad.jpg"), KugouArtworkCache.FindBestFile(_root, "Klinn"));
+        Assert.Null(ImageHeaderReader.TryReadDimensions(new byte[] { 1, 2, 3, 4 }));
+    }
+
+    private static byte[] Jpeg(int width, int height)
+    {
+        var data = new byte[32];
+        data[0] = 0xFF;
+        data[1] = 0xD8;
+        data[2] = 0xFF;
+        data[3] = 0xC0;
+        data[4] = 0x00;
+        data[5] = 0x11;
+        data[6] = 0x08;
+        data[7] = (byte)(height >> 8);
+        data[8] = (byte)height;
+        data[9] = (byte)(width >> 8);
+        data[10] = (byte)width;
+        return data;
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            KugouArtworkCache.InvalidateIndex();
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup.
+        }
     }
 }

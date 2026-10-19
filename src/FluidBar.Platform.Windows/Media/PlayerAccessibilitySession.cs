@@ -133,6 +133,41 @@ internal sealed class PlayerAccessibilitySession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads the play/pause state from the visible transport glyph, or false when the tree cannot tell.
+    /// </summary>
+    public bool TryReadPlaybackState(out bool isPlaying)
+    {
+        isPlaying = false;
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            if (_playButtons.Count == 0 && _pauseButtons.Count == 0)
+            {
+                RebuildLocked();
+            }
+
+            var resolved = AccessibilityPlaybackState.Resolve(HasVisible(_playButtons), HasVisible(_pauseButtons));
+            if (resolved is null)
+            {
+                // A track change rebuilds the transport row: retry once with a fresh walk.
+                RebuildLocked();
+                resolved = AccessibilityPlaybackState.Resolve(HasVisible(_playButtons), HasVisible(_pauseButtons));
+                if (resolved is null)
+                {
+                    return false;
+                }
+            }
+
+            isPlaying = resolved.Value;
+            return true;
+        }
+    }
+
     /// <summary>Reads the position/duration the player shows, or false when the tree moved on.</summary>
     public bool TryReadTimeline(out PlayerTimeline timeline)
     {

@@ -369,6 +369,9 @@ public static class SkiaIslandStateBuilder
             .Append(primary?.VerificationCode).Append('|').Append(primary?.AccentColorHex).Append('|')
             .Append(island.OverflowCount).Append('|')
             .Append(media?.Title).Append('|').Append(media?.Artist).Append('|').Append(media?.Album).Append('|')
+            // Cover art arrives after the metadata (asynchronous fetch); without it here the page models
+            // keep the placeholder for the whole track because nothing else changes.
+            .Append(media?.ArtworkKey).Append('|')
             .Append(content.BatteryPercent).Append('|').Append(content.IsCharging).Append('|')
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
             .Append(content.UnreadCount).Append('|')

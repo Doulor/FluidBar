@@ -17,8 +17,7 @@ internal static class KugouArtworkCache
 
     private static readonly TimeSpan IndexLifetime = TimeSpan.FromMinutes(2);
     private static readonly object Gate = new();
-    private static string[]? _directories;
-    private static DateTimeOffset _indexBuiltAt = DateTimeOffset.MinValue;
+    private static readonly Dictionary<string, CachedDirectoryIndex> DirectoryCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reads cover bytes for a track title, or null when the player cached none.</summary>
     public static byte[]? TryRead(string? title)
@@ -69,25 +68,28 @@ internal static class KugouArtworkCache
         }
     }
 
-    /// <summary>Finds the largest cached cover whose folder starts with the track title (pure-ish; tested).</summary>
+    /// <summary>Finds the largest cached cover for a track title (pure-ish; unit-tested).</summary>
+    /// <remarks>
+    /// The cache folder is named <c>{title}_{songId}</c>, but the player writes the title in its own
+    /// typography: "Untamed（失 控）_203532254" for the track the window title reports as
+    /// "Untamed (失 控)". Matching therefore folds full-width punctuation/space and falls back to a
+    /// whitespace-free comparison, otherwise a perfectly cached cover is never found.
+    /// </remarks>
     internal static string? FindBestFile(string albumImageRoot, string? title)
     {
-        var normalized = Normalize(title);
-        if (normalized.Length == 0)
+        var target = Normalize(title);
+        if (target.Length == 0)
         {
             return null;
         }
 
-        var prefix = normalized + "_";
         var candidates = Directories(albumImageRoot);
         string? bestPath = null;
         long bestLength = -1;
         foreach (var directory in candidates)
         {
-            var name = Path.GetFileName(directory);
-            if (name.Length == 0
-                || (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                    && !name.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+            var folderTitle = FolderTitle(Path.GetFileName(directory));
+            if (!Matches(folderTitle, target))
             {
                 continue;
             }
@@ -120,6 +122,100 @@ internal static class KugouArtworkCache
         return bestPath;
     }
 
+    /// <summary>True when a cache folder title denotes the queried track title.</summary>
+    internal static bool Matches(string? folderTitle, string? normalizedTitle)
+    {
+        var foldedFolder = Fold(folderTitle);
+        var foldedTitle = Fold(normalizedTitle);
+        if (foldedFolder.Length == 0 || foldedTitle.Length == 0)
+        {
+            return false;
+        }
+
+        if (foldedFolder.Equals(foldedTitle, StringComparison.Ordinal)
+            || foldedFolder.StartsWith(foldedTitle, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return Compact(foldedFolder).Equals(Compact(foldedTitle), StringComparison.Ordinal);
+    }
+
+    /// <summary>Drops the "_songId" suffix the player appends to the cache folder.</summary>
+    private static string FolderTitle(string? folderName)
+    {
+        if (string.IsNullOrWhiteSpace(folderName))
+        {
+            return string.Empty;
+        }
+
+        var separator = folderName.LastIndexOf('_');
+        if (separator > 0)
+        {
+            var suffix = folderName[(separator + 1)..];
+            if (suffix.Length > 0 && suffix.All(char.IsAsciiDigit))
+            {
+                return folderName[..separator];
+            }
+        }
+
+        return folderName;
+    }
+
+    /// <summary>Case-insensitive width folding: full-width forms become their half-width equivalents.</summary>
+    internal static string Fold(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var character in value.Trim())
+        {
+            switch (character)
+            {
+                case >= '\uFF01' and <= '\uFF5E':
+                    builder.Append((char)(character - 0xFEE0));
+                    break;
+                case '\u3000':
+                    builder.Append(' ');
+                    break;
+                case '\u3001':
+                    builder.Append(',');
+                    break;
+                case '\u3002':
+                    builder.Append('.');
+                    break;
+                case '\u2018' or '\u2019':
+                    builder.Append('\'');
+                    break;
+                case '\u201C' or '\u201D':
+                    builder.Append('"');
+                    break;
+                default:
+                    builder.Append(character);
+                    break;
+            }
+        }
+
+        return builder.ToString().ToLowerInvariant();
+    }
+
+    private static string Compact(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var character in value)
+        {
+            if (!char.IsWhiteSpace(character))
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
+    }
+
     private static IEnumerable<string> EnumerateImages(string directory)
     {
         string[] files;
@@ -147,13 +243,16 @@ internal static class KugouArtworkCache
         }
     }
 
+    private readonly record struct CachedDirectoryIndex(string[] Directories, DateTimeOffset BuiltAt);
+
     private static string[] Directories(string albumImageRoot)
     {
         lock (Gate)
         {
-            if (_directories is not null && DateTimeOffset.UtcNow - _indexBuiltAt < IndexLifetime)
+            if (DirectoryCache.TryGetValue(albumImageRoot, out var cached)
+                && DateTimeOffset.UtcNow - cached.BuiltAt < IndexLifetime)
             {
-                return _directories;
+                return cached.Directories;
             }
         }
 
@@ -173,11 +272,19 @@ internal static class KugouArtworkCache
 
         lock (Gate)
         {
-            _directories = directories;
-            _indexBuiltAt = DateTimeOffset.UtcNow;
+            DirectoryCache[albumImageRoot] = new CachedDirectoryIndex(directories, DateTimeOffset.UtcNow);
         }
 
         return directories;
+    }
+
+    /// <summary>Clears the cached folder index (tests, or when the player's cache is rebuilt).</summary>
+    internal static void InvalidateIndex()
+    {
+        lock (Gate)
+        {
+            DirectoryCache.Clear();
+        }
     }
 
     private static string? Root()
@@ -209,9 +316,10 @@ internal static class KugouArtworkCache
         }
 
         // Windows file names cannot contain these; the player strips/replaces them when naming folders.
+        var folded = Fold(title);
         var invalid = Path.GetInvalidFileNameChars();
-        var builder = new System.Text.StringBuilder(title.Length);
-        foreach (var character in title.Trim())
+        var builder = new System.Text.StringBuilder(folded.Length);
+        foreach (var character in folded)
         {
             builder.Append(Array.IndexOf(invalid, character) >= 0 ? '_' : character);
         }

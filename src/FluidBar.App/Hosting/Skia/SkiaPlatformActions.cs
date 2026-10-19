@@ -413,7 +413,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return (null, null);
         }
 
-        var pair = LyricsTimelineSelector.Select(document, position);
+        var pair = LyricsTimelineSelector.Select(document, position, media.Title, media.Artist);
         return (pair.Current, pair.Next);
     }
 
@@ -464,6 +464,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var artwork = _artworkCache.TryGet(media.TrackKey, out var artworkEntry) && artworkEntry is not null
             ? artworkEntry.Data
             : null;
+
         var (lyricLine, nextLyricLine) = ResolveLyrics(media, position);
 
         // A fallback source can know the position without knowing the track length (KuGou persists the
@@ -1058,5 +1059,3 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 }
-
-

@@ -24,6 +24,16 @@ public static class LyricsTimelineSelector
 {
     /// <summary>Selects the current and next line at <paramref name="position"/>.</summary>
     public static LyricPair Select(LyricsDocument? document, TimeSpan position)
+        => Select(document, position, null, null);
+
+    /// <summary>
+    /// Selects the current and next line, ignoring lines that only repeat the track identity.
+    /// </summary>
+    /// <param name="document">Parsed lyrics.</param>
+    /// <param name="position">Playback position.</param>
+    /// <param name="title">Track title (used to reject "title - artist" header lines).</param>
+    /// <param name="artist">Track artist (used together with <paramref name="title"/>).</param>
+    public static LyricPair Select(LyricsDocument? document, TimeSpan position, string? title, string? artist)
     {
         if (document is null || document.IsEmpty)
         {
@@ -33,20 +43,34 @@ public static class LyricsTimelineSelector
         var lines = document.Lines;
         var index = document.FindLineIndex(position);
 
-        var currentIndex = FindLine(lines, index, forward: false);
+        var currentIndex = FindLine(lines, index, forward: false, title, artist);
         if (currentIndex < 0)
         {
             // Before the first sung line: still offer the first line as "next" so the card is not empty.
-            var first = FindLine(lines, index + 1, forward: true);
+            var first = FindLine(lines, index + 1, forward: true, title, artist);
             return first < 0 ? default : new LyricPair(null, lines[first].Text);
         }
 
-        var nextIndex = FindLine(lines, currentIndex + 1, forward: true);
-        return new LyricPair(lines[currentIndex].Text, nextIndex < 0 ? null : lines[nextIndex].Text);
+        var nextIndex = FindLine(lines, currentIndex + 1, forward: true, title, artist);
+        var current = lines[currentIndex].Text;
+        var next = nextIndex < 0 ? null : lines[nextIndex].Text;
+
+        // Lyric files repeat a line for emphasis; showing the same text twice looks like a stuck card.
+        if (next is not null && string.Equals(next.Trim(), current.Trim(), StringComparison.Ordinal))
+        {
+            next = null;
+        }
+
+        return new LyricPair(current, next);
     }
 
     /// <summary>Walks from <paramref name="start"/> towards the start/end until a real lyric line.</summary>
     public static int FindLine(ImmutableArray<LyricsLine> lines, int start, bool forward)
+        => FindLine(lines, start, forward, null, null);
+
+    /// <summary>Walks towards the start/end until a line that is neither a credit nor the track identity.</summary>
+    public static int FindLine(ImmutableArray<LyricsLine> lines, int start, bool forward, string? title,
+        string? artist)
     {
         if (lines.IsDefaultOrEmpty)
         {
@@ -57,7 +81,7 @@ public static class LyricsTimelineSelector
         {
             for (var index = Math.Max(0, start); index < lines.Length; index++)
             {
-                if (!IsCreditLine(lines[index].Text))
+                if (!IsCreditLine(lines[index].Text) && !IsTrackIdentityLine(lines[index].Text, title, artist))
                 {
                     return index;
                 }
@@ -68,13 +92,68 @@ public static class LyricsTimelineSelector
 
         for (var index = Math.Min(start, lines.Length - 1); index >= 0; index--)
         {
-            if (!IsCreditLine(lines[index].Text))
+            if (!IsCreditLine(lines[index].Text) && !IsTrackIdentityLine(lines[index].Text, title, artist))
             {
                 return index;
             }
         }
 
         return -1;
+    }
+
+    /// <summary>
+    /// True when the line is just the track identity ("Whiplash - William Black"). Some catalogues store
+    /// the header that way as a timed line; painting it looked like the island had the wrong lyric.
+    /// </summary>
+    public static bool IsTrackIdentityLine(string? text, string? title, string? artist)
+    {
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var folded = FoldForCompare(text);
+        var foldedTitle = FoldForCompare(title);
+        var foldedArtist = FoldForCompare(artist);
+        if (foldedTitle.Length == 0 || folded.Length < foldedTitle.Length)
+        {
+            return false;
+        }
+
+        if (foldedArtist.Length == 0)
+        {
+            return folded.Equals(foldedTitle, StringComparison.Ordinal);
+        }
+
+        return folded.Equals(foldedTitle + "-" + foldedArtist, StringComparison.Ordinal)
+               || folded.Equals(foldedArtist + "-" + foldedTitle, StringComparison.Ordinal);
+    }
+
+    private static string FoldForCompare(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var character in value)
+        {
+            if (char.IsWhiteSpace(character))
+            {
+                continue;
+            }
+
+            builder.Append(character switch
+            {
+                >= '！' and <= '～' => (char)(character - 0xFEE0),
+                '、' => ',',
+                '。' => '.',
+                _ => character,
+            });
+        }
+
+        return builder.ToString().ToLowerInvariant();
     }
 
     /// <summary>Credit/metadata tokens that lyric catalogues append as timed lines (zh and en).</summary>

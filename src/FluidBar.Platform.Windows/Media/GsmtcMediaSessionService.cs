@@ -177,7 +177,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         Interlocked.Exchange(ref _fallbackMissCount, 0);
 
         candidate = EnrichWithAccessibility(candidate);
-        var playing = DetermineFallbackPlaying(candidate);
+        var playing = candidate.IsPlayingHint ?? DetermineFallbackPlaying(candidate);
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
@@ -212,14 +212,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _counters.IncrementMediaSnapshotChanges();
         }
 
-        if (changed || positionMoved)
-        {
-            Publish(snapshot);
-        }
-
+        // Attach the cover *before* publishing: the App builds its page models from this snapshot, and
+        // the models are only rebuilt when their content signature changes — a cover that arrived one
+        // event later would keep the placeholder until the next track.
         if (changed)
         {
             TryAttachFallbackArtwork(candidate);
+        }
+
+        if (changed || positionMoved)
+        {
+            Publish(snapshot);
         }
     }
 
@@ -249,12 +252,25 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             session = _accessibility;
         }
 
-        if (session is null || !session.TryReadTimeline(out var timeline))
+        if (session is null)
         {
             return candidate;
         }
 
-        return candidate with
+        // The transport glyph tells play/pause even in player modes that hide the time text; prefer it
+        // over the position heuristic, which needs a full settings write (~30 s) to see a pause.
+        var enriched = candidate;
+        if (session.TryReadPlaybackState(out var isPlaying))
+        {
+            enriched = enriched with { IsPlayingHint = isPlaying };
+        }
+
+        if (!session.TryReadTimeline(out var timeline))
+        {
+            return enriched;
+        }
+
+        return enriched with
         {
             Position = timeline.Position,
             Duration = timeline.Duration,
