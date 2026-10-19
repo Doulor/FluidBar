@@ -80,6 +80,7 @@ public sealed class SkiaIslandHost : IDisposable
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
+    private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
     private RegionSignature _regionSignature;
     private string? _primaryMonitorId;
@@ -380,6 +381,12 @@ public sealed class SkiaIslandHost : IDisposable
             _monitorService = null;
         }
 
+        if (_mouseHook is not null)
+        {
+            _mouseHook.Dispose();
+            _mouseHook = null;
+        }
+
         if (_messageHost is not null)
         {
             _ = _messageHost.DisposeAsync();
@@ -403,6 +410,12 @@ public sealed class SkiaIslandHost : IDisposable
         _monitorService = new MonitorService(_messageHost, _platformLogger, _platformCounters, _time);
         await _monitorService.StartAsync(cancellationToken).ConfigureAwait(true);
         _monitorService.MonitorsChanged += OnMonitorsChanged;
+        _mouseHook = new IslandMouseHook(_messageHost, _platformLogger, _platformCounters);
+        _mouseHook.PointerPressed += OnHookPointerPressed;
+        _mouseHook.PointerReleased += OnHookPointerReleased;
+        _mouseHook.PointerMoved += OnHookPointerMoved;
+        _mouseHook.Wheel += OnHookWheel;
+        await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
     }
 
     private static List<CoreMonitorInfo> EnumerateCoreMonitors(MonitorSet? set)
@@ -1070,6 +1083,66 @@ public sealed class SkiaIslandHost : IDisposable
         }
     }
 
+    private void OnHookPointerPressed(float screenX, float screenY)
+        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerPressed(x, y));
+
+    private void OnHookPointerReleased(float screenX, float screenY)
+        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerReleased(x, y));
+
+    private void OnHookPointerMoved(float screenX, float screenY)
+        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerMoved(x, y));
+
+    private void OnHookWheel(int notches)
+    {
+        if (notches == 0)
+        {
+            return;
+        }
+
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _controller.HandleWheel(
+                -notches * FluidBar.Core.Interaction.PagerConstants.WheelNotchDip,
+                horizontal: false,
+                shift: false);
+            EnsureFrameLoop();
+        });
+    }
+
+    private void PostHookPointer(float screenX, float screenY,
+        Action<SkiaIslandController, float, float> action)
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            foreach (var entry in _windows)
+            {
+                var placement = entry.Host.Placement.WindowPixel;
+                var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+                if (screenX < placement.X || screenX >= placement.X + placement.Width
+                    || screenY < placement.Y || screenY >= placement.Y + placement.Height)
+                {
+                    continue;
+                }
+
+                action(_controller, (float)((screenX - placement.X) / scale),
+                    (float)((screenY - placement.Y) / scale));
+                EnsureDeadlineTicker();
+                EnsureFrameLoop();
+                return;
+            }
+        });
+    }
+
     private void OnStateChanged()
     {
         if (_disposed)
@@ -1246,10 +1319,26 @@ public sealed class SkiaIslandHost : IDisposable
         }
 
         _regionSignature = signature;
+        var hookRects = new List<IslandMouseHook.Rect>(_windows.Count);
         foreach (var entry in _windows)
         {
             ApplyHitRegion(entry.Host, state);
+            if (!state.IsVisible)
+            {
+                continue;
+            }
+
+            var shell = IslandMetrics.ShellRect(state);
+            var placement = entry.Host.Placement.WindowPixel;
+            var scale = entry.Host.Scale;
+            hookRects.Add(new IslandMouseHook.Rect(
+                placement.X + shell.Left * scale,
+                placement.Y + shell.Top * scale,
+                placement.X + (shell.Left + shell.Width) * scale,
+                placement.Y + (shell.Top + shell.Height) * scale));
         }
+
+        _mouseHook?.SetRegions(hookRects);
     }
 
     private static void ApplyHitRegion(LayeredWindowHost host, in IslandRenderState state)
@@ -1475,6 +1564,7 @@ public sealed class SkiaIslandHost : IDisposable
         }
     }
 }
+
 
 
 
