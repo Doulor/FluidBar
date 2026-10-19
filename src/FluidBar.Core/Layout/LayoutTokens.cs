@@ -145,7 +145,7 @@ public static class LayoutTokens
     public const int ArchipelagoRevealDelayMs = 300;
 
     /// <summary>Idle time after the last drag/wheel activity before the archipelago hides (1200 ms).</summary>
-    public const int ArchipelagoHideDelayMs = 1200;
+    public const int ArchipelagoHideDelayMs = 900;
 
     /// <summary>
     /// Total vertical band the detached archipelago adds below the legacy 332 DIP host

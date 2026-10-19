@@ -477,10 +477,10 @@ public class LayoutTests
             ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.FromSeconds(10), false, false, TimeSpan.Zero));
         Assert.Equal(
             ArchipelagoRevealAction.None,
-            ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.Zero, true, false, TimeSpan.FromMilliseconds(1199)));
+            ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.Zero, true, false, TimeSpan.FromMilliseconds(899)));
         Assert.Equal(
             ArchipelagoRevealAction.Hide,
-            ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.Zero, true, false, TimeSpan.FromMilliseconds(1200)));
+            ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.Zero, true, false, TimeSpan.FromMilliseconds(900)));
         Assert.Equal(
             ArchipelagoRevealAction.None,
             ArchipelagoRevealPolicy.Evaluate(true, false, TimeSpan.Zero, true, true, TimeSpan.FromSeconds(10)));
@@ -504,7 +504,7 @@ public class LayoutTests
         Assert.Equal(352, LayoutTokens.ArchipelagoTrackWidth, Eps);
         Assert.Equal(56, LayoutTokens.ArchipelagoSlotPitch, Eps);
         Assert.Equal(300, LayoutTokens.ArchipelagoRevealDelayMs);
-        Assert.Equal(1200, LayoutTokens.ArchipelagoHideDelayMs);
+        Assert.Equal(900, LayoutTokens.ArchipelagoHideDelayMs);
 
         var floatHost = HostSurface.ForMode(IslandMode.Float);
         var flushHost = HostSurface.ForMode(IslandMode.Flush);

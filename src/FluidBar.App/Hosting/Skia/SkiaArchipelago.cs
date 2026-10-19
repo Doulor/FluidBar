@@ -17,8 +17,8 @@ public sealed class SkiaArchipelago : IDisposable
     /// <summary>Hot-zone dwell before reveal (Core 300 ms).</summary>
     public const int RevealDelayMs = ArchipelagoRevealPolicy.RevealDelayMs;
 
-    /// <summary>Idle time before auto-hide (1200 ms: the design band's ceiling, so the switch animation stays readable).</summary>
-    public const int HideDelayMs = 1200;
+    /// <summary>Idle time before auto-hide (900 ms after the last activity, per the prototype).</summary>
+    public const int HideDelayMs = 900;
 
     /// <summary>Translate distance in DIP at the hidden end of the reveal spring.</summary>
     public const double HiddenTranslateYDip = 8;
@@ -39,7 +39,7 @@ public sealed class SkiaArchipelago : IDisposable
     public SkiaArchipelago(MotionProfile? profile = null)
     {
         var resolved = profile ?? MotionProfile.Default;
-        var parameters = resolved.ResolveParameters(MotionTokens.Hover);
+        var parameters = resolved.ResolveParameters(MotionTokens.Rail);
         _reveal = new Spring(parameters, 0);
         _translate = new Spring(parameters, HiddenTranslateYDip);
         _scale = new Spring(parameters, HiddenScale);

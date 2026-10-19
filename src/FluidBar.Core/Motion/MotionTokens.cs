@@ -35,6 +35,9 @@ public static class MotionTokens
     /// <summary>Rail indicator / horizontal page motion.</summary>
     public static MotionToken Tab { get; } = new("motion.tab", new SpringParameters(0.34, 0.92), "rail indicator / page x");
 
+    /// <summary>Preview-island morph spring (prototype RAIL_SPRING: T 0.32 s, ζ 0.85).</summary>
+    public static MotionToken Rail { get; } = new("motion.rail", new SpringParameters(0.32, 0.85), "preview island morph");
+
     /// <summary>New-event vertical nudge.</summary>
     public static MotionToken Nudge { get; } = new("motion.nudge", new SpringParameters(0.26, 0.55), "new event -6 DIP vertical kick");
 
