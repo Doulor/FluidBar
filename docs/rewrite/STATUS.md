@@ -35,6 +35,16 @@
 构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
 （Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
+## 2026-10-20 06:30 检查点（通知真实数据 + 单实例收敛 + 小组件真实数据）
+
+- **通知**：找到根因——本机 `UserNotificationListener.NotificationChanged` 订阅抛 `COMException 0x80070490`，导致 `NotificationService` 启动即 Failed，**通知胶囊从未工作过**（不只是页面空）。改为事件失败时降级 2s 轮询、从操作中心种子、关闭同步剪枝、岛内 dismiss 真实生效；真实 WinRT toast 端到端验证（到达/插入/关闭同步）。
+- **监听收敛**：页面与插件原本各持一个 NotificationService（≈1.17 次读/秒），现 App 内仅一处实例，插件拿只读视图 `NewArrivalsNotificationSource`（种子对页可见、对插件不可见），日志实证 `activeInstances=1`、严格 2000ms tick → 0.50 次/秒。
+- **小组件真实数据**：天气接 Open-Meteo（无 key）+ 原子缓存 + IP/城市定位，实测与同刻 API 一致（Tokyo 20°、Beijing 11°）；离线有缓存显示「上次值 + N 分钟前」、无缓存显示「不可用」，**绝不编造**。任务接 `tasks.json`，`TaskToggle` 真实原子写回，失败时原文件不动。
+- 测试：**1875 passed / 0 failed**（Core 567 · Platform 556 · Ui 276 · Island 275 · Sdk 167 · PluginHost 39 · Integration 31 · Builtin 23 · Architecture 11）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `B33E2668C4EAA75B47FFDEE8C0449B1CEF9D6268398C03568A4CB651A856E272`。
+
+剩余（已知）：天气条件文案需新增 locale 键；任务卡仅绘前 3 行；城市设置需接到设置页（当前 options + `FLUIDBAR_WEATHER_CITY`）；托盘图标锁屏下无彩色证据；1.6 字号首屏需滚动（改 440×284 契约属产品决策）。
+
 ## 2026-10-20 05:35 检查点（市场/关于复核 + 媒体真机二次攻坚）
 
 - **设置面板收口**：市场页修掉 3 个真实缺陷（featured 卡缺暖色径向层且层序反了 → 下半部暗到与页底同色；chips 与网格之间多 10px；滚动条不占 gutter 导致内容偏宽 9px）；关于页不再插入空状态行、失败文案中性化、6 种更新状态 × 中英齐备。设置窗口在 FontScale 1.0/1.6 下渲染字节完全相同。
