@@ -1339,18 +1339,23 @@ public static class SettingsSectionBuilder
 
         if (updateService is not null)
         {
+            // An idle update service yields no status line: the prototype has no empty placeholder row.
             var (statusText, statusColor) = DescribeUpdate(updateService, ctx.Localizer);
-            pane.Children.Add(new TextBlock
+            if (!string.IsNullOrWhiteSpace(statusText))
             {
-                Text = statusText,
-                FontSize = SettingsMetrics.LicenseSize,
-                Foreground = new SolidColorBrush(statusColor),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                TextAlignment = TextAlignment.Center,
-                TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 430,
-                Margin = new Thickness(0, 8, 0, 0),
-            });
+                pane.Children.Add(new TextBlock
+                {
+                    Text = statusText,
+                    FontSize = SettingsMetrics.LicenseSize,
+                    Foreground = new SolidColorBrush(statusColor),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextAlignment = TextAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 430,
+                    Margin = new Thickness(0, 8, 0, 0),
+                });
+            }
+
             pane.Children.Add(new TextBlock
             {
                 Text = ctx.Localizer.Format(LocKeys.Settings.About.Update.Feed,

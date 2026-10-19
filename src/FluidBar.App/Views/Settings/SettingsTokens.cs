@@ -61,6 +61,11 @@ internal static class SettingsMetrics
     // ---- pane & typography (2411-2462) -------------------------------------------------------
     public const double PanePadX = 30;
     public const double PanePadY = 24;
+    /// <summary><c>.settings-pane::-webkit-scrollbar</c> width.</summary>
+    public const double PaneScrollBarWidth = 6;
+
+    /// <summary>Gutter Chrome reserves for the prototype's overlay scrollbar (measured on shot-11).</summary>
+    public const double PaneScrollBarGutter = 9;
     public const double HeadSize = 22;
     public const double HeadLineHeight = 1.2;
     public const double HeadTracking = -0.02;

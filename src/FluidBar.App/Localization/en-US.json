@@ -430,7 +430,7 @@
     "Settings.About.Update.Downloading": "Downloading version {version}…",
     "Settings.About.Update.Ready": "Version {version} downloaded and verified",
     "Settings.About.Update.RestartRequired": "Restart FluidBar to finish the update",
-    "Settings.About.Update.Failed": "Update check failed: {reason}",
+    "Settings.About.Update.Failed": "Update failed: {reason}",
     "Settings.About.Update.Download": "Download update",
     "Settings.About.Update.Install": "Restart and install",
     "Settings.About.Update.Discard": "Later",

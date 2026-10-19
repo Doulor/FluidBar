@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
@@ -388,8 +389,63 @@ public sealed class SettingsWindow : Window, ILocalizable
         _content.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         _content.Padding = new Thickness(SettingsMetrics.PanePadX, SettingsMetrics.PanePadY,
             SettingsMetrics.PanePadX, SettingsMetrics.PanePadY);
+        ApplyPaneScrollBarStyle();
         Grid.SetColumn(_content, 1);
         return _content;
+    }
+
+    /// <summary>
+    /// .settings-pane scrollbar: 6 px wide, 4 px radius thumb at rgba(255,255,255,.16), transparent track.
+    /// The Fluent default is wider and brighter, which is visible in the prototype comparison.
+    /// </summary>
+    private void ApplyPaneScrollBarStyle()
+    {
+        var thumb = new SolidColorBrush(Color.FromArgb(41, 255, 255, 255));
+        var thumbHover = new SolidColorBrush(Color.FromArgb(66, 255, 255, 255));
+        _content.AllowAutoHide = false;
+        // Fluent's scrollbar paints its thumb from theme resources; provide the prototype values so the
+        // pane scrollbar matches .settings-pane (thumb rgba(255,255,255,.16), transparent track).
+        foreach (var key in new[]
+                 {
+                     "ScrollBarThumbFill", "ScrollBarThumbFillPointerOver", "ScrollBarThumbFillPressed",
+                     "ScrollBarTrackFill", "ScrollBarBackground",
+                 })
+        {
+            _content.Resources[key] = thumb;
+        }
+
+        _content.Styles.Add(new Style(x => x.OfType<ScrollBar>())
+        {
+            Setters =
+            {
+                new Setter(WidthProperty, SettingsMetrics.PaneScrollBarGutter),
+                new Setter(MinWidthProperty, SettingsMetrics.PaneScrollBarGutter),
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.Transparent),
+                new Setter(TemplatedControl.ForegroundProperty, thumb),
+            },
+        });
+        _content.Styles.Add(new Style(x => x.OfType<ScrollBar>().Template().OfType<Thumb>())
+        {
+            Setters =
+            {
+                new Setter(WidthProperty, SettingsMetrics.PaneScrollBarWidth),
+                // The prototype's thumb is 6 px inside a wider overlay gutter.
+                new Setter(MarginProperty, new Thickness((SettingsMetrics.PaneScrollBarGutter - SettingsMetrics.PaneScrollBarWidth) / 2, 0)),
+                new Setter(CornerRadiusProperty, new CornerRadius(4)),
+                new Setter(TemplatedControl.BackgroundProperty, thumb),
+                // Windows renders the prototype's overlay scrollbar at half strength while idle
+                // (measured in shot-11: thumb ≈ rgba(255,255,255,.08) over the pane fill).
+                new Setter(OpacityProperty, 0.23),
+            },
+        });
+        _content.Styles.Add(new Style(x => x.OfType<ScrollBar>().Template().OfType<Thumb>().Class(":pointerover"))
+        {
+            Setters = { new Setter(TemplatedControl.BackgroundProperty, thumbHover) },
+        });
+        _content.Styles.Add(new Style(x => x.OfType<ScrollBar>().Template().OfType<Thumb>().Template().OfType<Border>())
+        {
+            Setters = { new Setter(Border.BackgroundProperty, thumb) },
+        });
     }
 
     private void RebuildNav()

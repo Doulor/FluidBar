@@ -204,10 +204,10 @@ public sealed class MarketplaceSectionView : StackPanel
         }
         else
         {
+            // .market-cats already ends with the prototype's 10px bottom margin; .market-grid adds none.
             var grid = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,*"),
-                Margin = new Thickness(0, 10, 0, 0),
             };
             for (var i = 0; i < plugins.Count; i++)
             {
@@ -495,6 +495,23 @@ public sealed class MarketplaceSectionView : StackPanel
                     new GradientStop(Color.Parse("#0C1A22"), 0),
                     new GradientStop(Color.Parse("#0A0F16"), 0.58),
                     new GradientStop(Color.Parse("#070A0E"), 1),
+                },
+            },
+        });
+        // Second prototype glow: radial-gradient(100% 120% at 62% 110%, rgba(217,119,87,.18), transparent 60%)
+        // — without it the card's lower half fades into the pane background.
+        host.Children.Add(new Border
+        {
+            Background = new RadialGradientBrush
+            {
+                Center = new RelativePoint(0.62, 1.10, RelativeUnit.Relative),
+                GradientOrigin = new RelativePoint(0.62, 1.10, RelativeUnit.Relative),
+                RadiusX = new RelativeScalar(1.0, RelativeUnit.Relative),
+                RadiusY = new RelativeScalar(1.2, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(46, 217, 119, 87), 0),
+                    new GradientStop(Color.FromArgb(0, 217, 119, 87), 0.6),
                 },
             },
         });

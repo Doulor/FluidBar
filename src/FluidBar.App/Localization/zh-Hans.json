@@ -430,7 +430,7 @@
     "Settings.About.Update.Downloading": "正在下载 {version}…",
     "Settings.About.Update.Ready": "新版本 {version} 已下载并通过校验",
     "Settings.About.Update.RestartRequired": "重启 FluidBar 完成安装",
-    "Settings.About.Update.Failed": "检查更新失败：{reason}",
+    "Settings.About.Update.Failed": "更新失败：{reason}",
     "Settings.About.Update.Download": "下载更新",
     "Settings.About.Update.Install": "重启并安装",
     "Settings.About.Update.Discard": "稍后",
