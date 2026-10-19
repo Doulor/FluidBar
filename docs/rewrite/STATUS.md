@@ -35,6 +35,14 @@
 构建：`dotnet build FluidBar.sln` = 0 errors；`dotnet test FluidBar.sln -m:1` = **1493 passed / 0 failed**
 （Core 495 · Platform 418 · SDK 152 · UI 188 · Island 136 · PluginHost 39 · Builtin 23 · Integration 31 · Architecture 11）。
 
+## 2026-10-20 07:10 检查点（小组件收尾，本轮终态）
+
+- 天气条件文案本地化（9 个条件键 + 复数键）、灵动岛设置页新增「天气城市」输入框（留空自动，实测 beijing → 真实北京天气）、任务卡支持最多 8 行并显示「还有 N 项」、三档字号复查无溢出。
+- 测试：**1893 passed / 0 failed**（Core 567 · Platform 558 · Ui 283 · Island 281 · Sdk 167 · PluginHost 39 · Integration 31 · Builtin 23 · Architecture 11）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `F785C488363C9D23AEC66C80E658D256DD5FF124FFE7D4F8DBCE72A151D0B783`。
+
+- 本轮终态：夜间共 17 个工作流全部合并；剩余未完成项见下方 05:35 与 04:50 检查点。
+
 ## 2026-10-20 06:30 检查点（通知真实数据 + 单实例收敛 + 小组件真实数据）
 
 - **通知**：找到根因——本机 `UserNotificationListener.NotificationChanged` 订阅抛 `COMException 0x80070490`，导致 `NotificationService` 启动即 Failed，**通知胶囊从未工作过**（不只是页面空）。改为事件失败时降级 2s 轮询、从操作中心种子、关闭同步剪枝、岛内 dismiss 真实生效；真实 WinRT toast 端到端验证（到达/插入/关闭同步）。
