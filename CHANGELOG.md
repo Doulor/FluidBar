@@ -155,6 +155,13 @@
 - **拖拽翻页恢复**：全局钩子吞掉按下事件后，分层窗口拿不到鼠标捕获，pager 拖动一直失效；现在钩子在按住期间转发 `PointerDragged`，宿主用同一套 `HandleDragStarted/Moved/Ended` 重建拖拽手势。实测按住拖动 300px 从 04 翻到 05，胶片条同步出现。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `65A793359FFEA8A2F11F65F34F7A9E770837FA7E61954B784348CF3C01360F97`。
 
+### 2026-10-20 01:35 — 设置窗口密度对齐原型
+- **键帽**：22 DIP 高、圆角 5 → **18 DIP 高、圆角 4、8 px 字号、20 最小宽**（原型快捷键 chip 为 24×16 CSS）。
+- **行密度**：设置行最小高度 53 → **46**，行内上下留白 8 → 6，让首页信息量与原型一致（原型整页无滚动条）。
+- 这轮同时确认了小胶囊封面/进度与小岛条尺寸（见上一条目）。
+- 全量 **1490 passed / 0 failed**。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `94D2FBA8EEE34A0C327DEF8AD3E4CBDBD4F84DDEBB76BBC4A83CC678F80510C6`。
+
 ### 2026-10-20 01:05 — 小胶囊封面/进度 + 小岛条按原型尺寸
 - **小胶囊媒体封面**：`CompactModel` 之前完全没有封面字段，媒体活动只画了渐变占位图 + 音符图标。现在补上 `Artwork`/`ArtworkKey`，从 `IslandPresenter.ResolveMedia` 取真实封面字节，`CompactRenderer` 复用 `ArtworkImageCache` 裁圆绘制（与媒体页同一套图）。
 - **小胶囊进度条恒为 0**：进度以前只取活动负载里的 `ProgressPercent`（常有缺失），现在改为取媒体快照的真实进度；`HasTimeline=false` 时**不再画空进度条**（之前画的就是那条永远为 0 的杠）。

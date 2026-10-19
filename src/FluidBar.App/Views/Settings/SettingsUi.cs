@@ -18,8 +18,10 @@ internal static class SettingsMetrics
     public const double NavItemHeight = 36;
     public const double PanePaddingX = 30;
     public const double PanePaddingY = 24;
-    public const double RowMinHeight = 53;
+    public const double RowMinHeight = 46;
     public const double RowGap = 18;
+    /// <summary>Prototype keycap chip (24 x 16 CSS px).</summary>
+    public const double KeycapHeight = 18;
     public const double HeadSize = 22;
     public const double DescSize = 11;
     public const double RowTitleSize = 12;
@@ -460,7 +462,7 @@ internal static class SettingsWidgets
         {
             VerticalAlignment = VerticalAlignment.Center,
             Spacing = 3,
-            Margin = new Thickness(0, 8, SettingsMetrics.RowGap, 8),
+            Margin = new Thickness(0, 6, SettingsMetrics.RowGap, 6),
         };
         text.Children.Add(new TextBlock
         {
@@ -560,17 +562,17 @@ internal static class SettingsWidgets
     public static Control Keycap(string text, IBrush secondary, IBrush raised, IBrush lineStrong)
         => new Border
         {
-            MinWidth = 22,
-            Height = 22,
-            Padding = new Thickness(6, 0, 6, 0),
-            CornerRadius = new CornerRadius(5),
+            MinWidth = 20,
+            Height = SettingsMetrics.KeycapHeight,
+            Padding = new Thickness(5, 0, 5, 0),
+            CornerRadius = new CornerRadius(4),
             Background = raised,
             BorderBrush = lineStrong,
             BorderThickness = new Thickness(1),
             Child = new TextBlock
             {
                 Text = text,
-                FontSize = 8.5,
+                FontSize = 8,
                 Foreground = secondary,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
