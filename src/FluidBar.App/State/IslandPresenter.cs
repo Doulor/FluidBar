@@ -59,9 +59,8 @@ public static class IslandPresenter
             {
                 Style = CompactStyle.Idle,
                 ClockText = content.Now.ToString("HH:mm", localizer.CurrentCulture),
-                DateText = localizer.CurrentCulture.TwoLetterISOLanguageName == "zh"
-                    ? content.Now.ToString("M月d日", localizer.CurrentCulture)
-                    : content.Now.ToString("MMM d", localizer.CurrentCulture),
+                // "M月d日" overflowed the idle pill and ellipsised to "10月..."; keep the compact form.
+                DateText = content.Now.ToString("MMM d", localizer.CurrentCulture),
                 BatteryPercent = content.BatteryPercent,
                 IsCharging = content.IsCharging,
                 Icon = IconKind.Clock,
