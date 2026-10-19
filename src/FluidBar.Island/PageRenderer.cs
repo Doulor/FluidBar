@@ -264,7 +264,8 @@ internal sealed partial class PageRenderer : IDisposable
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
 
-        // Window-title fallback sources have no timeline: hide the seek row instead of drawing 0:00.
+        // Window-title fallback sources have no track length; the player still reports the position,
+        // so the elapsed time is drawn without a progress track instead of hiding the row entirely.
         if (media.HasTimeline)
         {
             var seek = PageLayout.MediaSeekTrack(page);
@@ -278,6 +279,14 @@ internal sealed partial class PageRenderer : IDisposable
             _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
                 new SKRect(row.Left, row.Top + 3, row.Left + 30, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Left, _opacity);
             _text.Draw(canvas, media.DurationText, IslandType.SeekTime,
+                new SKRect(row.Right - 30, row.Top + 3, row.Right, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+        }
+        else if (!string.IsNullOrEmpty(media.PositionText) && media.PositionText != "—")
+        {
+            var row = PageLayout.MediaSeekRow(page);
+            _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
+                new SKRect(row.Left, row.Top + 3, row.Left + 30, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+            _text.Draw(canvas, "—", IslandType.SeekTime,
                 new SKRect(row.Right - 30, row.Top + 3, row.Right, row.Top + 19), _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
 

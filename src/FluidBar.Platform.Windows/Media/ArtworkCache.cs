@@ -26,6 +26,11 @@ public static class ImageHeaderReader
             return ReadJpeg(data);
         }
 
+        if (data.Length >= 30 && IsWebP(data))
+        {
+            return ReadWebP(data);
+        }
+
         if (data.Length >= 10 && IsGif(data))
         {
             return ReadGif(data);
@@ -52,6 +57,11 @@ public static class ImageHeaderReader
             return "image/jpeg";
         }
 
+        if (data.Length >= 30 && IsWebP(data))
+        {
+            return "image/webp";
+        }
+
         if (data.Length >= 3 && IsGif(data))
         {
             return "image/gif";
@@ -63,6 +73,54 @@ public static class ImageHeaderReader
         }
 
         return "application/octet-stream";
+    }
+
+    /// <summary>True for a RIFF/WEBP container (KuGou stores its cached cover art as WebP).</summary>
+    private static bool IsWebP(ReadOnlySpan<byte> data)
+        => data.Length >= 30
+           && data[0] == (byte)'R' && data[1] == (byte)'I' && data[2] == (byte)'F' && data[3] == (byte)'F'
+           && data[8] == (byte)'W' && data[9] == (byte)'E' && data[10] == (byte)'B' && data[11] == (byte)'P';
+
+    /// <summary>
+    /// Reads the canvas size from a WebP container: VP8X carries the canvas size explicitly, lossy VP8
+    /// and lossless VP8L pack it into their first chunk.
+    /// </summary>
+    private static ImageDimensions? ReadWebP(ReadOnlySpan<byte> data)
+    {
+        var chunk = (char)data[12] + ((char)data[13]).ToString() + (char)data[14] + (char)data[15];
+        switch (chunk)
+        {
+            case "VP8X":
+                // 4-byte flags, then 3-byte canvas width-1 and 3-byte canvas height-1 (little-endian).
+                var canvasWidth = 1 + (data[24] | (data[25] << 8) | (data[26] << 16));
+                var canvasHeight = 1 + (data[27] | (data[28] << 8) | (data[29] << 16));
+                return IsSane(canvasWidth, canvasHeight) ? new ImageDimensions(canvasWidth, canvasHeight) : null;
+
+            case "VP8 ":
+                // Chunk payload: 3-byte frame tag, 3-byte start code, then 14-bit width/height.
+                if (data[23] != 0x9D || data[24] != 0x01 || data[25] != 0x2A)
+                {
+                    return null;
+                }
+
+                var lossyWidth = (data[26] | (data[27] << 8)) & 0x3FFF;
+                var lossyHeight = (data[28] | (data[29] << 8)) & 0x3FFF;
+                return IsSane(lossyWidth, lossyHeight) ? new ImageDimensions(lossyWidth, lossyHeight) : null;
+
+            case "VP8L":
+                if (data[20] != 0x2F)
+                {
+                    return null;
+                }
+
+                var bits = (uint)(data[21] | (data[22] << 8) | (data[23] << 16) | (data[24] << 24));
+                var losslessWidth = (int)(bits & 0x3FFF) + 1;
+                var losslessHeight = (int)((bits >> 14) & 0x3FFF) + 1;
+                return IsSane(losslessWidth, losslessHeight) ? new ImageDimensions(losslessWidth, losslessHeight) : null;
+
+            default:
+                return null;
+        }
     }
 
     private static bool IsGif(ReadOnlySpan<byte> data)

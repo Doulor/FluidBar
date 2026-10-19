@@ -9,11 +9,21 @@ namespace FluidBar.Platform.Windows.Media.Lyrics;
 public sealed record LyricsLine(TimeSpan Time, string Text, string? Translation = null);
 
 /// <summary>Immutable parsed lyrics document.</summary>
+/// <param name="Title">Track title reported by the lyric source (may be empty).</param>
+/// <param name="Artist">Artist reported by the lyric source (may be empty).</param>
+/// <param name="Source">Provider that produced the document.</param>
+/// <param name="Lines">Timed lines, sorted by time.</param>
+/// <param name="Duration">
+/// Track length implied by the source (end of the last timed line, or the length reported by the
+/// search result). Zero when the source carries none — the island then keeps hiding the seek row
+/// instead of drawing a made-up duration.
+/// </param>
 public sealed record LyricsDocument(
     string Title,
     string Artist,
     string Source,
-    ImmutableArray<LyricsLine> Lines)
+    ImmutableArray<LyricsLine> Lines,
+    TimeSpan Duration = default)
 {
     public static readonly LyricsDocument Empty = new(string.Empty, string.Empty, "none", ImmutableArray<LyricsLine>.Empty);
 

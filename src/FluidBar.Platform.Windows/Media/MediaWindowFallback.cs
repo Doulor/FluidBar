@@ -103,12 +103,42 @@ internal static class AudioSessionProbe
     }
 }
 
+/// <summary>Where the fallback timeline came from (drives how often it must refresh to look "alive").</summary>
+internal enum PlayerTimelineSource
+{
+    /// <summary>No position available.</summary>
+    None,
+
+    /// <summary>Position persisted by the player in its settings file (rewritten every ~30 s).</summary>
+    StateFile,
+
+    /// <summary>Position read from the player's accessibility tree (updated every second).</summary>
+    Accessibility,
+}
+
 /// <summary>Media snapshot derived from a player window title (players without SMTC/GSMTC support).</summary>
 /// <param name="ProcessName">Player process name (lower-case, for diagnostics).</param>
 /// <param name="Title">Track title parsed from the window title.</param>
 /// <param name="Artist">Artist/playlist line parsed from the window title (may be empty).</param>
 /// <param name="TrackKey">Stable key for caches.</param>
-internal sealed record WindowMediaCandidate(string ProcessName, string Title, string Artist, string TrackKey);
+/// <param name="ProcessId">Owning process id (used to attach the accessibility transport).</param>
+/// <param name="Position">Playback position read from the player (zero when unknown).</param>
+/// <param name="Duration">Track length when the player exposes one.</param>
+/// <param name="PositionSampledAtUtc">When <paramref name="Position"/> was sampled, or <see cref="DateTimeOffset.MinValue"/>.</param>
+/// <param name="HasTimeline">True when the player state file supplied a real position.</param>
+/// <param name="IsMuted">Player mute flag when the state file exposes one.</param>
+internal sealed record WindowMediaCandidate(
+    string ProcessName,
+    string Title,
+    string Artist,
+    string TrackKey,
+    int ProcessId = 0,
+    TimeSpan Position = default,
+    TimeSpan Duration = default,
+    DateTimeOffset PositionSampledAtUtc = default,
+    bool HasTimeline = false,
+    bool IsMuted = false,
+    PlayerTimelineSource TimelineSource = PlayerTimelineSource.None);
 
 /// <summary>
 /// Fallback media source for players that never register with Windows SMTC (e.g. KuGou). It finds the
@@ -180,7 +210,7 @@ internal static class MediaWindowFallback
             var candidate = Parse(processName, windowTitle);
             if (candidate is not null)
             {
-                return candidate;
+                return EnrichWithPlayerState(processName, candidate with { ProcessId = process.Id });
             }
         }
 
@@ -244,6 +274,61 @@ internal static class MediaWindowFallback
             artist,
             "win|" + processName.ToLowerInvariant() + "|" + title + "|" + artist);
     }
+
+    /// <summary>
+    /// Adds the timeline the player persists in its own settings file. KuGou exposes no SMTC session,
+    /// but it rewrites <c>KuGou.ini</c> with the current title and playback position every ~30 s; the
+    /// window title is authoritative for metadata (it changes immediately) so the position is only
+    /// used when the file already describes the track the window is showing.
+    /// </summary>
+    private static WindowMediaCandidate EnrichWithPlayerState(string processName, WindowMediaCandidate candidate)
+    {
+        var rule = FindRule(processName);
+        if (rule is null || !IsKugouRule(rule))
+        {
+            return candidate;
+        }
+
+        var state = PlayerPlaybackStateReader.TryReadKugou(DateTimeOffset.UtcNow);
+        if (state is null)
+        {
+            return candidate;
+        }
+
+        var stateCandidate = Parse(processName, state.RawTitle);
+        if (stateCandidate is null)
+        {
+            return candidate;
+        }
+
+        if (!string.Equals(stateCandidate.Title, candidate.Title, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(stateCandidate.Artist, candidate.Artist, StringComparison.OrdinalIgnoreCase))
+        {
+            // Track changed between the last settings write and now: the stored position belongs to
+            // the previous song, so it must not be attached to this one.
+            return candidate;
+        }
+
+        return candidate with
+        {
+            Position = state.Position,
+            PositionSampledAtUtc = state.SampledAtUtc,
+            HasTimeline = true,
+            IsMuted = state.IsMuted,
+            TimelineSource = PlayerTimelineSource.StateFile,
+        };
+    }
+
+    /// <summary>True for the KuGou rules (the only player that persists a readable playback position).</summary>
+    internal static bool IsKugouProcessName(string processName)
+    {
+        var rule = FindRule(processName);
+        return rule is not null && IsKugouRule(rule);
+    }
+
+    private static bool IsKugouRule(PlayerRule rule)
+        => rule.Process.Contains("kugou", StringComparison.OrdinalIgnoreCase)
+           || rule.Process.Contains("kgmusic", StringComparison.OrdinalIgnoreCase);
 
     private static PlayerRule? FindRule(string processName)
     {

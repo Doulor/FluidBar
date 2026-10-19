@@ -142,6 +142,33 @@ public sealed class ImageHeaderTests
     }
 
     [Fact]
+    public void TryReadDimensions_ReadsWebP()
+    {
+        // VP8X: canvas size is stored as width-1 / height-1 (24-bit little-endian).
+        var vp8x = new byte[30];
+        "RIFF"u8.CopyTo(vp8x);
+        "WEBP"u8.CopyTo(vp8x.AsSpan(8));
+        "VP8X"u8.CopyTo(vp8x.AsSpan(12));
+        vp8x[24] = 119;      // 120 - 1
+        vp8x[27] = 89;       // 90 - 1
+        Assert.Equal(new ImageDimensions(120, 90), ImageHeaderReader.TryReadDimensions(vp8x));
+        Assert.Equal("image/webp", ImageHeaderReader.DetectContentType(vp8x));
+
+        // VP8L: 14-bit (width-1) then 14-bit (height-1), little-endian bit packing.
+        var vp8l = new byte[30];
+        "RIFF"u8.CopyTo(vp8l);
+        "WEBP"u8.CopyTo(vp8l.AsSpan(8));
+        "VP8L"u8.CopyTo(vp8l.AsSpan(12));
+        vp8l[20] = 0x2F;
+        var bits = (uint)((64 - 1) | ((48 - 1) << 14));
+        vp8l[21] = (byte)bits;
+        vp8l[22] = (byte)(bits >> 8);
+        vp8l[23] = (byte)(bits >> 16);
+        vp8l[24] = (byte)(bits >> 24);
+        Assert.Equal(new ImageDimensions(64, 48), ImageHeaderReader.TryReadDimensions(vp8l));
+    }
+
+    [Fact]
     public void TryReadDimensions_RejectsGarbage()
     {
         Assert.Null(ImageHeaderReader.TryReadDimensions(ReadOnlySpan<byte>.Empty));

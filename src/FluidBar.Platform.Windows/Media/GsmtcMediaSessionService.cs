@@ -34,6 +34,10 @@ public sealed class MediaArtworkEventArgs : EventArgs
 public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, IMediaSessionSource
 {
     private static readonly TimeSpan EventRefreshDebounce = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>Consecutive empty fallback polls that mean the player is really gone (~3 s).</summary>
+    private const int FallbackMissThreshold = 3;
+
     private static readonly TimeSpan ArtworkFetchTimeout = TimeSpan.FromSeconds(10);
     private const int MaxArtworkBytes = 4 * 1024 * 1024;
 
@@ -48,19 +52,42 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
     private GlobalSystemMediaTransportControlsSession? _session;
     private BackgroundPoller? _fallbackPoller;
+    private readonly IMediaKeySender? _mediaKeySender;
+    private readonly FallbackPlaybackTracker _fallbackPlayback = new();
+    private readonly object _accessibilityGate = new();
+    private PlayerAccessibilitySession? _accessibility;
+    private int _accessibilityProcessId;
+    private int _fallbackMissCount;
     private volatile bool _fallbackActive;
     private CancellationTokenSource? _artworkCts;
     private int _refreshPending;
     private DateTimeOffset _lastRefreshTimestamp = DateTimeOffset.MinValue;
 
+    /// <param name="logger">Platform logger.</param>
+    /// <param name="counters">Shared diagnostics counters.</param>
+    /// <param name="artworkCache">Byte cache for album art.</param>
+    /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
+    /// <param name="mediaKeySender">
+    /// Media-key sender used by the window-title fallback (players without SMTC expose no transport
+    /// channel through GSMTC). Null uses the Win32 <c>SendInput</c> implementation.
+    /// </param>
     public GsmtcMediaSessionService(IPlatformLogger logger, PlatformCounters counters,
-        ArtworkCache? artworkCache = null, TimeProvider? timeProvider = null)
+        ArtworkCache? artworkCache = null, TimeProvider? timeProvider = null,
+        IMediaKeySender? mediaKeySender = null)
         : base("media", logger, counters, timeProvider ?? TimeProvider.System)
     {
         _logger = logger ?? NullPlatformLogger.Instance;
         _counters = counters ?? new PlatformCounters();
         _artworkCache = artworkCache ?? new ArtworkCache();
+        _mediaKeySender = mediaKeySender ?? new SystemMediaKeySender();
     }
+
+    /// <summary>
+    /// Channel the next transport command would use. The window-title fallback has no SMTC session, so
+    /// its commands travel as system media keys; tests/diagnostics read this without touching input.
+    /// </summary>
+    public TransportRouteDecision CurrentTransportRoute
+        => FallbackTransportPolicy.Decide(_session is not null, _fallbackActive, _mediaKeySender is not null);
 
     /// <summary>The bounded artwork cache (App fetches bytes through this and decodes once).</summary>
     public ArtworkCache ArtworkCache => _artworkCache;
@@ -100,6 +127,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         _fallbackPoller?.Dispose();
         _fallbackPoller = null;
         _fallbackActive = false;
+        ReleaseAccessibility();
         DetachSession();
         CancelArtworkFetch();
         Publish(MediaSnapshot.Empty);
@@ -128,6 +156,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var candidate = MediaWindowFallback.FindCandidate();
         if (candidate is null)
         {
+            // A track change briefly makes the player unresolvable (its audio session and window title
+            // are rewritten). Only a run of empty polls really means "nothing is playing", otherwise the
+            // island flickers to the empty state and transport commands are dropped mid-switch.
+            if (Interlocked.Increment(ref _fallbackMissCount) < FallbackMissThreshold)
+            {
+                return;
+            }
+
+            ResetFallbackPlayback();
             if (_fallbackActive)
             {
                 _fallbackActive = false;
@@ -137,33 +174,128 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return;
         }
 
+        Interlocked.Exchange(ref _fallbackMissCount, 0);
+
+        candidate = EnrichWithAccessibility(candidate);
+        var playing = DetermineFallbackPlaying(candidate);
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
             candidate.Title,
             candidate.Artist,
             string.Empty,
-            MediaPlaybackState.Playing,
-            IsPlaying: true,
-            TimeSpan.Zero,
-            // No timeline on this path: keep the timestamp at MinValue so the App does not interpolate
-            // a position that does not exist.
-            DateTimeOffset.MinValue,
-            TimeSpan.Zero,
+            playing ? MediaPlaybackState.Playing : MediaPlaybackState.Paused,
+            playing,
+            // KuGou persists its position in KuGou.ini; without it the fallback publishes no timeline
+            // (kept at MinValue so the App never interpolates a position that does not exist).
+            candidate.HasTimeline ? candidate.Position : TimeSpan.Zero,
+            candidate.HasTimeline ? candidate.PositionSampledAtUtc : DateTimeOffset.MinValue,
+            candidate.HasTimeline ? candidate.Duration : TimeSpan.Zero,
             CanSeek: false,
-            CanGoNext: false,
-            CanGoPrevious: false,
+            // Media keys still reach a player that registered no SMTC session, so next/previous are
+            // real capabilities of this path (SMTC simply does not advertise them).
+            CanGoNext: _mediaKeySender is not null,
+            CanGoPrevious: _mediaKeySender is not null,
             candidate.TrackKey);
 
-        var changed = !string.Equals(Current?.BuildContentSignature(), snapshot.BuildContentSignature(),
+        var previous = Current;
+        var changed = !string.Equals(previous?.BuildContentSignature(), snapshot.BuildContentSignature(),
             StringComparison.Ordinal);
+        // The settings file is rewritten every ~30 s: republish whenever the position anchor moved so
+        // the App can interpolate between writes (progress bar + lyric highlight follow it).
+        var positionMoved = candidate.HasTimeline
+                            && previous is { PositionUpdatedAtUtc: var sampled } && sampled > DateTimeOffset.MinValue
+                            && (previous.Position - candidate.Position).Duration() >= TimeSpan.FromMilliseconds(500);
         _fallbackActive = true;
         if (changed)
         {
             _counters.IncrementMediaSnapshotChanges();
+        }
+
+        if (changed || positionMoved)
+        {
             Publish(snapshot);
         }
+
+        if (changed)
+        {
+            TryAttachFallbackArtwork(candidate);
+        }
     }
+
+    /// <summary>
+    /// Overlays the timeline the player exposes through MSAA. KuGou does not publish SMTC data, but its
+    /// accessibility tree carries the live "mm:ss/mm:ss" text, which is both finer-grained (updated
+    /// every second) and more accurate (real duration) than the position it persists every 30 s.
+    /// </summary>
+    private WindowMediaCandidate EnrichWithAccessibility(WindowMediaCandidate candidate)
+    {
+        if (candidate.ProcessId <= 0 || !MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
+        {
+            ReleaseAccessibility();
+            return candidate;
+        }
+
+        PlayerAccessibilitySession? session;
+        lock (_accessibilityGate)
+        {
+            if (_accessibility is null || _accessibilityProcessId != candidate.ProcessId)
+            {
+                ReleaseAccessibilityLocked();
+                _accessibility = PlayerAccessibilitySession.TryCreate(candidate.ProcessId);
+                _accessibilityProcessId = _accessibility is null ? 0 : candidate.ProcessId;
+            }
+
+            session = _accessibility;
+        }
+
+        if (session is null || !session.TryReadTimeline(out var timeline))
+        {
+            return candidate;
+        }
+
+        return candidate with
+        {
+            Position = timeline.Position,
+            Duration = timeline.Duration,
+            PositionSampledAtUtc = _timeProviderNow(),
+            HasTimeline = true,
+            TimelineSource = PlayerTimelineSource.Accessibility,
+        };
+    }
+
+    private void ReleaseAccessibility()
+    {
+        lock (_accessibilityGate)
+        {
+            ReleaseAccessibilityLocked();
+        }
+    }
+
+    private void ReleaseAccessibilityLocked()
+    {
+        _accessibility?.Dispose();
+        _accessibility = null;
+        _accessibilityProcessId = 0;
+    }
+
+    /// <summary>
+    /// Decides whether the fallback player is playing. KuGou keeps its audio session "active" while
+    /// muted or paused, so the only honest signal is the position it persists (see
+    /// <see cref="FallbackPlaybackTracker"/>).
+    /// </summary>
+    private bool DetermineFallbackPlaying(WindowMediaCandidate candidate)
+    {
+        // A frozen position only means "paused" after the source has refreshed without moving; the
+        // accessibility timeline refreshes every second, the settings file every ~30 s.
+        var staleAfter = candidate.TimelineSource == PlayerTimelineSource.Accessibility
+            ? FallbackPlaybackTracker.AccessibilityStaleAfter
+            : FallbackPlaybackTracker.StateFileStaleAfter;
+        return _fallbackPlayback.Observe(candidate.TrackKey, candidate.HasTimeline, candidate.Position,
+            candidate.PositionSampledAtUtc, staleAfter);
+    }
+
+    private void ResetFallbackPlayback() => _fallbackPlayback.Reset();
 
     /// <summary>Requests a coalesced refresh (called by GSMTC events; never blocks the WinRT callback thread).</summary>
     public Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -255,6 +387,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         CancellationToken cancellationToken)
     {
         _fallbackActive = false;
+        ResetFallbackPlayback();
         lock (_sessionGate)
         {
             if (!ReferenceEquals(_session, session))
@@ -417,19 +550,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return;
             }
 
-            var handler = ArtworkAvailable;
-            if (handler is not null)
-            {
-                try
-                {
-                    handler(this, new MediaArtworkEventArgs(trackKey, entry));
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(PlatformLogCategory.Media, "media.artwork-subscriber-failed",
-                        "An artwork subscriber threw.", ex);
-                }
-            }
+            PublishArtwork(trackKey, entry);
 
             _logger.LogDebug(PlatformLogCategory.Media, "media.artwork-ready",
                 "Artwork cached.", new Dictionary<string, object?>
@@ -448,6 +569,57 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _logger.LogWarning(PlatformLogCategory.Media, "media.artwork-fetch-failed",
                 "Fetching album artwork failed.", ex);
         }
+    }
+
+    /// <summary>Raises <see cref="ArtworkAvailable"/>; a throwing subscriber never breaks the fetch.</summary>
+    private void PublishArtwork(string trackKey, ArtworkEntry entry)
+    {
+        var handler = ArtworkAvailable;
+        if (handler is null)
+        {
+            return;
+        }
+
+        try
+        {
+            handler(this, new MediaArtworkEventArgs(trackKey, entry));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(PlatformLogCategory.Media, "media.artwork-subscriber-failed",
+                "An artwork subscriber threw.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Attaches the cover the fallback player cached for this song. Runs only when the track changes,
+    /// so the folder scan never happens on the 1 Hz poll.
+    /// </summary>
+    private void TryAttachFallbackArtwork(WindowMediaCandidate candidate)
+    {
+        if (string.IsNullOrEmpty(candidate.TrackKey) || _artworkCache.TryGet(candidate.TrackKey, out _))
+        {
+            return;
+        }
+
+        if (!MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
+        {
+            return;
+        }
+
+        var bytes = KugouArtworkCache.TryRead(candidate.Title);
+        if (bytes is null)
+        {
+            return;
+        }
+
+        var entry = _artworkCache.Add(candidate.TrackKey, bytes);
+        if (entry is null)
+        {
+            return;
+        }
+
+        PublishArtwork(candidate.TrackKey, entry);
     }
 
     private static async Task<byte[]?> ReadThumbnailAsync(IRandomAccessStreamReference thumbnail,
@@ -505,44 +677,111 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Last time a snapshot's content actually changed (diagnostics).</summary>
     public DateTimeOffset LastRefreshTimestamp => _lastRefreshTimestamp;
 
-    /// <summary>Toggles play/pause on the active session.</summary>
+    /// <summary>
+    /// Toggles play/pause. With a GSMTC session the session is asked directly; on the window-title
+    /// fallback the command travels as the system media key, which is the only channel a player that
+    /// registers no SMTC session still answers.
+    /// </summary>
     public async Task<bool> TogglePlayPauseAsync(CancellationToken cancellationToken = default)
     {
         var session = _session;
-        return session is not null && await session.TryTogglePlayPauseAsync().AsTask(cancellationToken)
-            .ConfigureAwait(false);
+        return session is not null
+            ? await session.TryTogglePlayPauseAsync().AsTask(cancellationToken).ConfigureAwait(false)
+            : TryFallbackTransport(MediaKeyCommand.TogglePlayPause);
     }
 
-    /// <summary>Starts playback on the active session.</summary>
+    /// <summary>Starts playback on the active session (media key on the fallback path).</summary>
     public async Task<bool> PlayAsync(CancellationToken cancellationToken = default)
     {
         var session = _session;
-        return session is not null && await session.TryPlayAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        return session is not null
+            ? await session.TryPlayAsync().AsTask(cancellationToken).ConfigureAwait(false)
+            : TryFallbackTransport(MediaKeyCommand.TogglePlayPause);
     }
 
-    /// <summary>Pauses the active session.</summary>
+    /// <summary>Pauses the active session (media key on the fallback path).</summary>
     public async Task<bool> PauseAsync(CancellationToken cancellationToken = default)
     {
         var session = _session;
-        return session is not null && await session.TryPauseAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        return session is not null
+            ? await session.TryPauseAsync().AsTask(cancellationToken).ConfigureAwait(false)
+            : TryFallbackTransport(MediaKeyCommand.TogglePlayPause);
     }
 
-    /// <summary>Skips to the next track on the active session.</summary>
+    /// <summary>Skips to the next track on the active session (media key on the fallback path).</summary>
     public async Task<bool> NextAsync(CancellationToken cancellationToken = default)
     {
         var session = _session;
-        return session is not null && await session.TrySkipNextAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        return session is not null
+            ? await session.TrySkipNextAsync().AsTask(cancellationToken).ConfigureAwait(false)
+            : TryFallbackTransport(MediaKeyCommand.NextTrack);
     }
 
-    /// <summary>Skips to the previous track on the active session.</summary>
+    /// <summary>Skips to the previous track on the active session (media key on the fallback path).</summary>
     public async Task<bool> PreviousAsync(CancellationToken cancellationToken = default)
     {
         var session = _session;
-        return session is not null && await session.TrySkipPreviousAsync().AsTask(cancellationToken)
-            .ConfigureAwait(false);
+        return session is not null
+            ? await session.TrySkipPreviousAsync().AsTask(cancellationToken).ConfigureAwait(false)
+            : TryFallbackTransport(MediaKeyCommand.PreviousTrack);
     }
 
-    /// <summary>Seeks the active session. Only the active session is targeted (never another app).</summary>
+    /// <summary>
+    /// Routes a transport command to the system media keys. Returns false (and logs why) when no
+    /// fallback snapshot is live or the input queue refuses the key — never a silent fake success.
+    /// </summary>
+    private bool TryFallbackTransport(MediaKeyCommand command)
+    {
+        PlayerAccessibilitySession? session;
+        lock (_accessibilityGate)
+        {
+            session = _accessibility;
+        }
+
+        // A live accessibility session is itself proof that a fallback player is there, even if the last
+        // poll raced with a track switch.
+        var fallbackLive = _fallbackActive || session is not null;
+        var decision = FallbackTransportPolicy.Decide(hasSession: false, fallbackActive: fallbackLive,
+            accessibilityAvailable: session is not null, senderAvailable: _mediaKeySender is not null);
+        if (!decision.IsExecutable)
+        {
+            _logger.LogDebug(PlatformLogCategory.Media, "media.transport-unavailable",
+                "Transport command ignored: " + decision.Reason);
+            return false;
+        }
+
+        // Preferred channel first (accessibility), then the generic media key as a last resort. A press
+        // that the player ignores must never be reported as success, so both channels must fail before
+        // the command returns false.
+        if (session is not null && session.TryInvoke(command, _fallbackPlayback.IsPlaying))
+        {
+            _logger.LogInfo(PlatformLogCategory.Media, "media.transport-accessibility",
+                $"Pressed '{command}' through the player accessibility tree.");
+            _fallbackPoller?.TriggerNow();
+            return true;
+        }
+
+        if (_mediaKeySender is not null)
+        {
+            if (_mediaKeySender.TrySend(command))
+            {
+                _logger.LogInfo(PlatformLogCategory.Media, "media.transport-media-key",
+                    $"Sent media key '{command}' to the fallback player.");
+                _fallbackPoller?.TriggerNow();
+                return true;
+            }
+
+            _logger.LogWarning(PlatformLogCategory.Media, "media.transport-failed",
+                $"Media key '{command}' could not be injected: {_mediaKeySender.LastFailureReason}");
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Seeks the active session. Only the active session is targeted (never another app); the
+    /// window-title fallback exposes no seek API, so it reports false instead of pretending.
+    /// </summary>
     public async Task<bool> SeekAsync(TimeSpan position, CancellationToken cancellationToken = default)
     {
         var session = _session;

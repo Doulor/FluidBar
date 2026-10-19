@@ -129,6 +129,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _lyrics = new LyricsService(
             new ILyricsProvider[]
             {
+                // The player's own cache wins: it is offline and exactly the lyric the player shows,
+                // which removes the "wrong song" matches the online catalogues produce for KuGou.
+                new KugouLocalLyricsProvider(timeProvider: time, logger: _platformLogger),
                 new NeteaseLyricsProvider(_lyricsHttp, _platformLogger),
                 new KugouLyricsProvider(_lyricsHttp, _platformLogger),
             },
@@ -410,108 +413,27 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return (null, null);
         }
 
-        var lines = document.Lines;
-        var index = document.FindLineIndex(position);
-
-        // Lyric files often start with credit lines ("作词: X", "Composer: X") that were parsed as timed lines;
-        // painting them as the current lyric looked like the island was showing the wrong song.
-        var currentIndex = FindLyricIndex(lines, index, forward: false);
-        currentIndex = currentIndex < 0 ? FindLyricIndex(lines, index + 1, forward: true) : currentIndex;
-        if (currentIndex < 0)
-        {
-            return (null, null);
-        }
-
-        var nextIndex = FindLyricIndex(lines, currentIndex + 1, forward: true);
-        return (lines[currentIndex].Text, nextIndex < 0 ? null : lines[nextIndex].Text);
+        var pair = LyricsTimelineSelector.Select(document, position);
+        return (pair.Current, pair.Next);
     }
 
-    /// <summary>Walks the lyric lines from <paramref name="start"/> towards the start/end until a real lyric line.</summary>
-    private static int FindLyricIndex(ImmutableArray<LyricsLine> lines, int start, bool forward)
+    /// <summary>
+    /// Track length for sources that expose none of their own (the window-title fallback). The lyric
+    /// source for the same track knows it, which is real data for this song — not an invented number.
+    /// </summary>
+    private TimeSpan LyricDurationFor(MediaSnapshot media)
     {
-        if (forward)
-        {
-            for (var i = Math.Max(0, start); i < lines.Length; i++)
-            {
-                if (!IsLyricCredit(lines[i].Text))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        for (var i = Math.Min(start, lines.Length - 1); i >= 0; i--)
-        {
-            if (!IsLyricCredit(lines[i].Text))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    /// <summary>Credit/metadata tokens that lyric catalogs append as timed lines (zh and en).</summary>
-    private static readonly string[] LyricCreditTokens =
-    [
-        "作词", "作曲", "编曲", "演唱", "原唱", "翻唱", "歌手", "制作人", "制作", "监制", "出品",
-        "混音", "录音", "母带", "和声", "合音", "伴奏", "后期", "封面", "海报", "设计", "策划", "统筹",
-        "发行", "版权", "词曲", "编配",
-        "lyric", "lyrics", "composer", "music", "arranger", "producer", "vocals", "vocal",
-        "artist", "mix", "mastering", "written", "words", "cover", "recorded", "recording",
-        "engineer", "studio", "credits", "lrc",
-    ];
-
-    /// <summary>Separators that join several credit roles in one prefix ("混音/录音: ...").</summary>
-    private static readonly char[] LyricCreditSeparators = ['/', '、', '&', ',', ';', ' ', '·', '|', '-', '+'];
-
-    /// <summary>Whether a lyric line is a credit/metadata line instead of sung text.</summary>
-    private static bool IsLyricCredit(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return true;
-        }
-
-        var trimmed = text.Trim();
-        var colon = trimmed.IndexOfAny([':', '：']);
-        if (colon <= 0 || colon > 24)
-        {
-            return false;
-        }
-
-        var prefix = trimmed[..colon].Trim().ToLowerInvariant();
-        if (prefix.Length == 0)
-        {
-            return false;
-        }
-
-        // Roles are often concatenated ("混音/录音", "作词 & 作曲"), so match token by token.
-        foreach (var token in prefix.Split(LyricCreditSeparators, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var candidate = token.Trim();
-            if (candidate.Length == 0)
-            {
-                continue;
-            }
-
-            foreach (var credit in LyricCreditTokens)
-            {
-                if (candidate.StartsWith(credit, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        var document = _lyricsDocument;
+        return document is not null
+               && document.Duration > TimeSpan.Zero
+               && string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal)
+            ? document.Duration
+            : TimeSpan.Zero;
     }
 
     private MediaSessionData MapMedia(MediaSnapshot media)
     {
-        var duration = media.Duration > TimeSpan.Zero ? media.Duration : TimeSpan.Zero;
+        var duration = media.Duration > TimeSpan.Zero ? media.Duration : LyricDurationFor(media);
 
         // Interpolate from the last sampled position: the platform layer has no frame clock, so
         // between GSMTC events the position only advances because we add the elapsed wall time.
@@ -544,6 +466,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             : null;
         var (lyricLine, nextLyricLine) = ResolveLyrics(media, position);
 
+        // A fallback source can know the position without knowing the track length (KuGou persists the
+        // position but no duration): show the elapsed time instead of pretending nothing is known.
+        var hasDuration = duration > TimeSpan.Zero;
+        var hasElapsed = hasDuration || position > TimeSpan.Zero;
+
         return new MediaSessionData
         {
             Title = media.Title,
@@ -551,9 +478,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Album = media.Album,
             Source = media.SourceDisplayName ?? string.Empty,
             ProgressPercent = progress,
-            PositionText = duration > TimeSpan.Zero ? FormatTime(position) : "—",
-            DurationText = duration > TimeSpan.Zero ? FormatTime(duration) : "—",
-            HasTimeline = duration > TimeSpan.Zero,
+            PositionText = hasElapsed ? FormatTime(position) : "—",
+            DurationText = hasDuration ? FormatTime(duration) : "—",
+            HasTimeline = hasDuration,
             IsPlaying = media.IsPlaying,
             Artwork = artwork,
             ArtworkKey = artwork is null ? null : media.TrackKey,
@@ -1131,7 +1058,5 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 }
-
-
 
 
