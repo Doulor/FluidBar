@@ -309,6 +309,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <inheritdoc />
     public IslandContent Snapshot()
     {
+        var dumpEnabled = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FLUIDBAR_VERIFY_DUMP"));
         var battery = _battery.Current;
         var focus = _focus.Current;
         var network = _network.Current;
@@ -324,7 +325,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         // return explicit empty values when nothing real exists, so the cards never show invented data.
         var weather = WidgetContentMapper.MapWeather(_weather.Current, now, _localizer);
         var tasks = WidgetContentMapper.MapTasks(_tasks.Current, _localizer, _tasks.FilePath);
-        return new IslandContent
+        var snapshot = new IslandContent
         {
             Now = now,
             BatteryPercent = batteryPercent,
@@ -364,6 +365,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Stats = _systemStats.Build(batteryPercent, Localized(LocKeys.Battery.Title, "Battery")),
             UnreadCount = Math.Clamp(_notifications.Current?.Recent.Length ?? 0, 0, 99),
         };
+        if (dumpEnabled)
+        {
+            WriteVerifyRecord(snapshot, media is { IsEmpty: false } ? media : null);
+        }
+
+        return snapshot;
     }
 
     /// <inheritdoc />
@@ -738,6 +745,67 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private TimeSpan _positionSample = TimeSpan.MinValue;
     private DateTimeOffset _positionSampleAt = DateTimeOffset.MinValue;
     private long _lastRereadAtMs = -1;
+    private long _lastVerifyDumpMs = -1;
+
+    /// <summary>
+    /// End-to-end verification record: what the platform reported versus what the island publishes
+    /// (artwork presence/hash included), so cover, play-state and progress mismatches can be attributed
+    /// after a real playback session.
+    /// </summary>
+    private void WriteVerifyRecord(IslandContent? content, MediaSnapshot? media)
+    {
+        if (media is null)
+        {
+            return;
+        }
+
+        var nowMs = (long)(_time.GetTimestamp() * 1000.0 / _time.TimestampFrequency);
+        if (_lastVerifyDumpMs >= 0 && nowMs - _lastVerifyDumpMs < 100)
+        {
+            return;
+        }
+
+        _lastVerifyDumpMs = nowMs;
+        try
+        {
+            var directory = Environment.GetEnvironmentVariable("FLUIDBAR_VERIFY_DUMP");
+            if (string.IsNullOrEmpty(directory))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(directory);
+            var artwork = _artworkCache.TryGet(media.TrackKey, out var entry) ? entry?.Data : null;
+            var hash = artwork is { Length: > 0 }
+                ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(artwork), 0, 6)
+                : null;
+            var record = new
+            {
+                at = DateTimeOffset.UtcNow,
+                trackKey = media.TrackKey,
+                title = media.Title,
+                artist = media.Artist,
+                channel = media.TrackKey.StartsWith("win:", StringComparison.Ordinal) ? "msaa-fallback" : "gsmtc",
+                hasArtwork = artwork is { Length: > 0 },
+                artworkHash = hash,
+                artworkBytes = artwork?.Length ?? 0,
+                platformPlaying = media.IsPlaying,
+                platformPositionMs = media.Position.TotalMilliseconds,
+                platformDurationMs = media.Duration.TotalMilliseconds,
+                publishedPlaying = _publishedPlaying,
+                publishedPositionMs = _positionClock.PositionAt(nowMs),
+                mappedPositionMs = content?.Media?.PositionMs ?? -1,
+                mappedDurationMs = content?.Media?.DurationMs ?? -1,
+                mappedProgress = content?.Media?.ProgressPercent ?? -1,
+                optimisticPending = _optimisticPlay.IsPending,
+            };
+            File.AppendAllText(Path.Combine(directory, "content.jsonl"),
+                System.Text.Json.JsonSerializer.Serialize(record) + "\n");
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     /// <summary>
     /// Playback position at "now".

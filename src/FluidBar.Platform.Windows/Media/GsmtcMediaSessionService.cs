@@ -99,7 +99,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private readonly ArtworkFetcher? _artworkFetcher;
     private ArtworkFetcher? _defaultArtworkFetcher;
-    private int _artworkFetchRunning;
+
+    /// <summary>Track keys whose cover lookup was already started (bounded; prevents retry storms).</summary>
+    private readonly HashSet<string> _artworkLookups = new(StringComparer.Ordinal);
 
     /// <summary>Active cover lookup (created on first use when the host did not inject one).</summary>
     private ArtworkFetcher? ActiveArtworkFetcher
@@ -699,15 +701,26 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </summary>
     private void StartArtworkLookup(WindowMediaCandidate candidate)
     {
-        if (Interlocked.CompareExchange(ref _artworkFetchRunning, 1, 0) != 0)
+        // One lookup per track, not one globally: the old global latch silently skipped every song that
+        // changed while a previous lookup was still in flight (fast skipping through a playlist lost most
+        // covers). The fetcher already single-flights per key and caps concurrency.
+        lock (_artworkLookups)
         {
-            return;
+            if (!_artworkLookups.Add(candidate.TrackKey))
+            {
+                return;
+            }
+
+            if (_artworkLookups.Count > 256)
+            {
+                _artworkLookups.Clear();
+                _artworkLookups.Add(candidate.TrackKey);
+            }
         }
 
         var fetcher = ActiveArtworkFetcher;
         if (fetcher is null || !fetcher.HasSources)
         {
-            Interlocked.Exchange(ref _artworkFetchRunning, 0);
             return;
         }
 
@@ -746,10 +759,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             {
                 _logger.LogWarning(PlatformLogCategory.Media, "media.artwork-fetch-failed",
                     "Cover lookup failed: " + ex.Message);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _artworkFetchRunning, 0);
             }
         });
     }
