@@ -1,5 +1,6 @@
 using HarfBuzzSharp;
 using SkiaSharp;
+using System.Globalization;
 
 namespace FluidBar.Island;
 
@@ -41,8 +42,18 @@ public enum TextAlign
     Right,
 }
 
-/// <summary>A font role + size pair (size in DIP; fractional sizes are supported).</summary>
-public readonly record struct TextStyle(FontRole Role, float Size);
+/// <summary>
+/// A font role + size pair (size in DIP; fractional sizes are supported). Optional typography
+/// fields carry the iOS line box, tracking and tabular-number flag; existing two-argument call
+/// sites stay valid and are resolved through <see cref="TypographyScale.Apply"/>.
+/// </summary>
+public readonly record struct TextStyle(
+    FontRole Role,
+    float Size,
+    float? LineHeight = null,
+    float Tracking = 0f,
+    bool Tabular = false,
+    string? Token = null);
 
 /// <summary>One measured/laid-out string: shaped runs, cached text blobs and line metrics.</summary>
 public sealed class TextLayout : IDisposable
@@ -59,7 +70,7 @@ public sealed class TextLayout : IDisposable
     /// <summary>Measured width in DIP.</summary>
     public required float Width { get; init; }
 
-    /// <summary>Line height (primary font spacing) in DIP.</summary>
+    /// <summary>Line box height (token line height when supplied; otherwise primary font spacing) in DIP.</summary>
     public required float Height { get; init; }
 
     /// <summary>Primary font ascent (negative) in DIP.</summary>
@@ -120,7 +131,7 @@ public sealed class TextEngine : IDisposable
         (0x20000, 0x2FA1F),
     ];
 
-    private readonly Dictionary<(FontRole Role, float Size), SKFont> _fonts = [];
+    private readonly Dictionary<(FontRole Role, float Size, bool Tabular), SKFont> _fonts = [];
     private readonly Dictionary<(SKTypeface Typeface, float Size), SKFont> _runFonts = [];
     private readonly Dictionary<int, SKTypeface?> _fallbacks = [];
     private readonly Dictionary<TextKey, CacheEntry> _cache = [];
@@ -243,8 +254,12 @@ public sealed class TextEngine : IDisposable
         }
     }
 
-    /// <summary>Line height of a style in DIP.</summary>
-    public float LineHeight(TextStyle style) => GetFont(style).Spacing;
+    /// <summary>Line height of a style in DIP (including a token line box when present).</summary>
+    public float LineHeight(TextStyle style)
+    {
+        var resolved = TypographyScale.Apply(style);
+        return resolved.LineHeight ?? GetFont(resolved).Spacing;
+    }
 
     /// <summary>Measures a single line (ellipsis-trimmed to <paramref name="maxWidth"/> when set).</summary>
     public float Measure(string text, TextStyle style, float maxWidth = float.PositiveInfinity)
@@ -253,8 +268,10 @@ public sealed class TextEngine : IDisposable
     /// <summary>Gets a cached layout (LRU). Warm hits are allocation-free.</summary>
     public TextLayout GetLayout(string text, TextStyle style, float maxWidth)
     {
+        style = TypographyScale.Apply(style);
         var bucket = maxWidth >= float.PositiveInfinity ? int.MaxValue : (int)MathF.Round(maxWidth * 2);
-        var key = new TextKey(text, style.Role, style.Size, bucket);
+        var key = new TextKey(
+            text, style.Role, style.Size, style.LineHeight, style.Tracking, style.Tabular, style.Token, bucket);
         if (_cache.TryGetValue(key, out var entry))
         {
             _hits++;
@@ -380,18 +397,26 @@ public sealed class TextEngine : IDisposable
             blobs[i] = CreateBlob(run, style, out var runWidth, out var runGlyphs);
             offsets[i] = x;
             x += runWidth;
+            if (style.Tracking != 0 && i < runs.Count - 1)
+            {
+                x += style.Tracking;
+            }
+
             glyphs += runGlyphs;
         }
 
         _glyphs += glyphs;
+        var lineHeight = style.LineHeight ?? primaryFont.Spacing;
+        var halfLeading = (lineHeight - primaryFont.Spacing) / 2f;
         return new TextLayout
         {
             Text = trimmed,
             Blobs = blobs,
             Offsets = offsets,
             Width = x,
-            Height = primaryFont.Spacing,
-            Ascent = primaryFont.Metrics.Ascent,
+            Height = lineHeight,
+            // The baseline is centred inside the token line box, not the font's tight spacing.
+            Ascent = primaryFont.Metrics.Ascent - halfLeading,
             GlyphCount = glyphs,
             Trimmed = trimmedFlag,
             RunCount = runs.Count,
@@ -445,6 +470,10 @@ public sealed class TextEngine : IDisposable
         for (var i = 0; i < runs.Count; i++)
         {
             width += MeasureRun(runs[i], style);
+            if (style.Tracking != 0 && i < runs.Count - 1)
+            {
+                width += style.Tracking;
+            }
         }
 
         return width;
@@ -476,6 +505,11 @@ public sealed class TextEngine : IDisposable
 
     private List<Run> Segment(string text, TextStyle style, SKFont primaryFont)
     {
+        if (style.Tracking != 0)
+        {
+            return SegmentTracked(text, style, primaryFont);
+        }
+
         var runs = new List<Run>(2);
         var start = 0;
         SKTypeface? current = null;
@@ -503,6 +537,31 @@ public sealed class TextEngine : IDisposable
         if (current is not null)
         {
             runs.Add(new Run(text[start..], GetRunFont(current, style.Size), shaped));
+        }
+
+        return runs;
+    }
+
+    /// <summary>
+    /// Splits a run into text elements when tracking is non-zero. Each element gets its own blob so
+    /// the extra advance can be inserted between clusters without breaking surrogate pairs or emoji
+    /// ZWJ sequences; tracking 0 keeps the original whole-run fast path (and exact prior pixels).
+    /// </summary>
+    private List<Run> SegmentTracked(string text, TextStyle style, SKFont primaryFont)
+    {
+        var runs = new List<Run>(text.Length);
+        var enumerator = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+        while (enumerator.MoveNext())
+        {
+            var element = (string)enumerator.Current;
+            if (element.Length == 0)
+            {
+                continue;
+            }
+
+            var cp = char.ConvertToUtf32(element, 0);
+            var (typeface, shaped) = ResolveTypeface(cp, style, primaryFont);
+            runs.Add(new Run(element, GetRunFont(typeface, style.Size), shaped));
         }
 
         return runs;
@@ -581,18 +640,26 @@ public sealed class TextEngine : IDisposable
 
     private SKFont GetFont(TextStyle style)
     {
-        if (_fonts.TryGetValue((style.Role, style.Size), out var font))
+        if (_fonts.TryGetValue((style.Role, style.Size, style.Tabular), out var font))
         {
             return font;
         }
 
-        font = new SKFont(GetPrimaryTypeface(style), style.Size)
+        // Tabular digits are painted with a monospaced face even when the semantic role is a UI
+        // weight; that keeps every digit at the same advance without relying on OpenType support.
+        var typeface = style.Tabular
+            ? (style.Role is FontRole.UiSemiBold or FontRole.DisplaySemiBold or FontRole.DisplayBold
+                or FontRole.MonoSemiBold
+                ? _monoSemibold
+                : _mono)
+            : GetPrimaryTypeface(style);
+        font = new SKFont(typeface, style.Size)
         {
             Edging = SKFontEdging.Antialias,
             Subpixel = false,
             Hinting = SKFontHinting.Normal,
         };
-        _fonts[(style.Role, style.Size)] = font;
+        _fonts[(style.Role, style.Size, style.Tabular)] = font;
         return font;
     }
 
@@ -732,7 +799,15 @@ public sealed class TextEngine : IDisposable
         _ownedTypefaces.Clear();
     }
 
-    private readonly record struct TextKey(string Text, FontRole Role, float Size, int MaxWidthHalf);
+    private readonly record struct TextKey(
+        string Text,
+        FontRole Role,
+        float Size,
+        float? LineHeight,
+        float Tracking,
+        bool Tabular,
+        string? Token,
+        int MaxWidthHalf);
 
     private sealed record CacheEntry(TextLayout Layout, LinkedListNode<TextKey> Node);
 

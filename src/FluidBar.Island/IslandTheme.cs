@@ -67,6 +67,15 @@ public sealed record IslandTheme
     /// <summary>User accent (default cyan).</summary>
     public SKColor Accent { get; init; } = new(0x4C, 0xC9, 0xF0);
 
+    /// <summary>Semantic primary text alias for typography call sites.</summary>
+    public SKColor TextPrimary => Foreground;
+
+    /// <summary>Semantic secondary text alias for subtitles and metadata.</summary>
+    public SKColor TextSecondary => ForegroundSecondary;
+
+    /// <summary>Semantic tertiary text alias for hints and micro labels.</summary>
+    public SKColor TextTertiary => ForegroundTertiary;
+
     /// <summary>Media/track accent (prototype pink).</summary>
     public SKColor TrackAccent { get; init; } = new(0xF0, 0x6A, 0xB0);
 

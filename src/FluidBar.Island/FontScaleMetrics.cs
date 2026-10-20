@@ -29,8 +29,21 @@ public readonly record struct FontScaleMetrics(double Scale)
     /// <param name="scale">Requested scale.</param>
     public static FontScaleMetrics From(double scale) => new(Math.Clamp(double.IsFinite(scale) ? scale : 1.0, MinScale, MaxScale));
 
-    /// <summary>Scales a base text style (0.8 shrinks, 1.6 grows; role is preserved).</summary>
-    public TextStyle Style(TextStyle style) => new(style.Role, (float)(style.Size * Value));
+    /// <summary>
+    /// Scales a base text style (0.8 shrinks, 1.6 grows; role is preserved). Resolve the semantic
+    /// token first, then scale its size, line box and tracking together so 1.6x keeps the same
+    /// typographic identity instead of re-resolving a bigger legacy size to a different token.
+    /// </summary>
+    public TextStyle Style(TextStyle style)
+    {
+        var resolved = TypographyScale.Apply(style);
+        return resolved with
+        {
+            Size = (float)(resolved.Size * Value),
+            LineHeight = resolved.LineHeight.HasValue ? (float?)(resolved.LineHeight.Value * Value) : null,
+            Tracking = (float)(resolved.Tracking * Value),
+        };
+    }
 
     /// <summary>Scales a base length that should follow the font (insets, stacked text bands).</summary>
     public float Length(float baseValue) => (float)(baseValue * Value);
