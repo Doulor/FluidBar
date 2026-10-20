@@ -138,6 +138,12 @@ public sealed class SkiaIslandController : IDisposable
     private bool _pointerInside;
     private bool _pointerInHotZone;
     private bool _pointerOnStrip;
+
+    // Approach reveal: the hover band below the shell reveals the rail on entry and keeps it up while
+    // the pointer stays. Both flags are edge-triggered, so a high-frequency stream of moves only costs
+    // one rectangle test per event and never schedules a repaint while the pointer stays inside.
+    private bool _pointerInHoverBand;
+    private bool _pointerWasInHoverBand;
     private DateTimeOffset? _hotZoneEnteredAt;
     private bool _syncingPage;
     private bool _started;
@@ -937,6 +943,32 @@ public sealed class SkiaIslandController : IDisposable
             _hotZoneEnteredAt = null;
         }
 
+        // Approach reveal: only the enter/leave edge changes state. Entering the band starts the rail
+        // reveal immediately (the springs animate it); leaving arms the normal 900 ms hide delay from
+        // that moment instead of from the last wheel/click. Inside the band nothing is invalidated, so
+        // a stream of moves costs a rectangle test and nothing else.
+        if (_pointerInHoverBand && !_pointerWasInHoverBand)
+        {
+            if (_archipelago.IsVisible)
+            {
+                // Already up (wheel/click revealed it earlier): only refresh the idle timer, so
+                // boundary jitter costs nothing and cannot schedule a repaint.
+                _archipelago.NoteActivity(now);
+            }
+            else
+            {
+                _archipelago.Reveal(now);
+                InvalidateDirty(StripDamage());
+                FrameRequested?.Invoke();
+            }
+        }
+        else if (!_pointerInHoverBand && _pointerWasInHoverBand)
+        {
+            _archipelago.NoteActivity(now);
+        }
+
+        _pointerWasInHoverBand = _pointerInHoverBand;
+
         if (_pager.IsDragging)
         {
             _pager.DragTo(xDip, NowMs());
@@ -986,6 +1018,13 @@ public sealed class SkiaIslandController : IDisposable
         InvalidateFull();
     }
 
+    /// <summary>
+    /// Whether the pointer is currently in the approach band below the shell. The layered window loses
+    /// mouse tracking there (the transparent band is click-through), so the host must let the hook own
+    /// the pointer state instead of treating the window's leave as "pointer left the island".
+    /// </summary>
+    public bool IsPointerInHoverBand => _pointerInHoverBand;
+
     /// <summary>Pointer left the window.</summary>
     public void HandlePointerLeft()
     {
@@ -994,6 +1033,8 @@ public sealed class SkiaIslandController : IDisposable
         _hoverPage = -1;
         _pointerInHotZone = false;
         _pointerOnStrip = false;
+        _pointerInHoverBand = false;
+        _pointerWasInHoverBand = false;
         _hotZoneEnteredAt = null;
         _railHover = MiniRailSlot.None;
         _railPressed = MiniRailSlot.None;
@@ -2535,6 +2576,13 @@ public sealed class SkiaIslandController : IDisposable
         var stripTop = HostSurface.ForMode(_renderState.Mode).ArchipelagoTopLocal;
         var strip = new VisualRect(shell.MidX - 200, stripTop, 400, IslandMetrics.StripHeight);
         _pointerOnStrip = _archipelago.IsVisible && _pointerInside && strip.Contains(_pointerX, _pointerY);
+
+        // Approach band: one rectangle test per move event (no region rebuild, no hit-test pass).
+        var hoverBand = ArchipelagoHoverBand.For(_renderState);
+        _pointerInHoverBand = _pointerInside
+            && State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing
+            && !hoverBand.IsEmpty
+            && hoverBand.Contains(_pointerX, _pointerY);
     }
 
     /// <summary>
@@ -2585,7 +2633,7 @@ public sealed class SkiaIslandController : IDisposable
 
         var expanded = State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing;
         var dwell = _hotZoneEnteredAt is { } start ? now - start : TimeSpan.Zero;
-        _archipelago.Update(now, expanded, _pointerInHotZone, _pointerOnStrip, dwell, _pager.IsDragging);
+        _archipelago.Update(now, expanded, _pointerInHotZone, _pointerOnStrip, dwell, _pager.IsDragging, _pointerInHoverBand);
     }
 
     private long NowMs() => (long)(_time.GetTimestamp() * 1000.0 / _time.TimestampFrequency);

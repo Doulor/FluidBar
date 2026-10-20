@@ -112,13 +112,18 @@ public sealed class SkiaArchipelago : IDisposable
     /// <param name="pointerOnStrip">Whether the pointer is over the revealed strip (keeps it alive).</param>
     /// <param name="hotZoneDwell">How long the pointer has dwelt in the hot zone.</param>
     /// <param name="isDragging">Whether a pager drag is in flight (blocks auto-hide).</param>
+    /// <param name="pointerInHoverBand">
+    /// Whether the pointer is in the approach band below the shell: the rail stays revealed while the
+    /// pointer is near it (the 900 ms hide delay starts when the pointer leaves the band).
+    /// </param>
     public void Update(
         DateTimeOffset now,
         bool expanded,
         bool pointerInHotZone,
         bool pointerOnStrip,
         TimeSpan hotZoneDwell,
-        bool isDragging)
+        bool isDragging,
+        bool pointerInHoverBand = false)
     {
         if (!expanded)
         {
@@ -132,7 +137,7 @@ public sealed class SkiaArchipelago : IDisposable
             return;
         }
 
-        if (!_visible || isDragging || pointerInHotZone || pointerOnStrip)
+        if (!_visible || isDragging || pointerInHotZone || pointerOnStrip || pointerInHoverBand)
         {
             return;
         }

@@ -98,6 +98,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     // Reused buffer for the global-hook rectangles: they are rebuilt every frame while the preview
     // rail springs, so the animated pills stay inside the click-consuming envelope without allocating.
     private readonly List<IslandMouseHook.Rect> _hookRects = [];
+
+    // Watch-only rectangles (hover band below the shell): movement is forwarded so the rail can reveal
+    // on approach, clicks stay with the desktop. Rebuilt with the hook rectangles, never per move.
+    private readonly List<IslandMouseHook.Rect> _watchRects = [];
     private string? _primaryMonitorId;
     private string? _cursorMonitorId;
     private ITimer? _followMouseTimer;
@@ -720,6 +724,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         };
         host.PointerLeft += () =>
         {
+            // The window region ends where the shell/strip do, so moving into the transparent approach
+            // band raises a window leave even though the pointer is still approaching the island. The
+            // hook keeps forwarding moves there and already marked the band, so keep the state.
+            if (_controller.IsPointerInHoverBand)
+            {
+                return;
+            }
+
             _controller.HandlePointerLeft();
             EnsureDeadlineTicker();
             EnsureFrameLoop();
@@ -1793,16 +1805,29 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private void RebuildHookRects(in IslandRenderState state)
     {
         _hookRects.Clear();
+        _watchRects.Clear();
         if (state.IsVisible)
         {
             const double slackDip = 2;
             var shell = IslandMetrics.ShellRect(state);
             var stripVisible = state.Archipelago.Visible && state.Archipelago.Opacity > 0.01;
             var strip = stripVisible ? SkiaIslandHitTest.MeasureStrip(state) : default;
+            var hoverBand = ArchipelagoHoverBand.For(state);
             foreach (var entry in _windows)
             {
                 var placement = entry.Host.Placement.WindowPixel;
                 var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+
+                // The band is watch-only: the hook must see the pointer arrive there to reveal the rail,
+                // but a click in the transparent area below the shell still belongs to the desktop.
+                if (!hoverBand.IsEmpty)
+                {
+                    _watchRects.Add(new IslandMouseHook.Rect(
+                        placement.X + (hoverBand.X * scale),
+                        placement.Y + (hoverBand.Y * scale),
+                        placement.X + (hoverBand.Right * scale),
+                        placement.Y + (hoverBand.Bottom * scale)));
+                }
 
                 // Consume clicks only over the island shell (never the whole host surface): the
                 // transparent bleed must stay click-through. A 2 DIP slack absorbs edge rounding so
@@ -1863,6 +1888,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _mouseHook?.SetRegions(_hookRects);
+        _mouseHook?.SetWatchRegions(_watchRects);
     }
 
     private static void ApplyHitRegion(LayeredWindowHost host, in IslandRenderState state)

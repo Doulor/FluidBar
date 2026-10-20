@@ -23,6 +23,11 @@ public sealed class IslandMouseHook : IDisposable
     private readonly PlatformCounters _counters;
     private readonly object _gate = new();
     private readonly List<Rect> _regions = [];
+
+    // Watch-only rectangles: the hook forwards pointer movement from here but never consumes clicks,
+    // so the island can reveal its preview rail when the pointer approaches (hover band) while the
+    // desktop below keeps receiving every click.
+    private readonly List<Rect> _watchRegions = [];
     private HookProc? _proc;
     private IntPtr _hook;
     private bool _inside;
@@ -177,16 +182,25 @@ public sealed class IslandMouseHook : IDisposable
     }
 
     /// <summary>Replaces the screen-pixel rectangles that should consume mouse input.</summary>
-    public void SetRegions(IReadOnlyList<Rect> regions)
+    public void SetRegions(IReadOnlyList<Rect> regions) => Replace(_regions, regions);
+
+    /// <summary>
+    /// Replaces the screen-pixel rectangles that only watch the pointer. Movement inside them is
+    /// forwarded (<see cref="PointerMoved"/>) but clicks and wheel deltas are passed to the desktop,
+    /// so a hover band below the island never steals input.
+    /// </summary>
+    public void SetWatchRegions(IReadOnlyList<Rect> regions) => Replace(_watchRegions, regions);
+
+    private void Replace(List<Rect> target, IReadOnlyList<Rect> regions)
     {
         lock (_gate)
         {
-            _regions.Clear();
+            target.Clear();
             foreach (var region in regions)
             {
                 if (region.Width > 0 && region.Height > 0)
                 {
-                    _regions.Add(region);
+                    target.Add(region);
                 }
             }
         }
@@ -221,8 +235,10 @@ public sealed class IslandMouseHook : IDisposable
         var data = Marshal.PtrToStructure<MsllHookStruct>(lParam);
         var x = data.pt.X;
         var y = data.pt.Y;
-        var inside = Contains(x, y);
-        if (!inside)
+        var kind = ClassifyLocked(x, y);
+        var interactive = kind == HookRegionKind.Interactive;
+        var watching = kind == HookRegionKind.Watch;
+        if (!interactive && !watching)
         {
             if (_inside)
             {
@@ -234,6 +250,30 @@ public sealed class IslandMouseHook : IDisposable
         }
 
         _inside = true;
+        if (!interactive)
+        {
+            // Watch-only band: let the desktop keep the click, but feed the island's hover state so a
+            // pointer approaching the preview rail can reveal it. A drag that started inside the
+            // island keeps tracking (and a release clears the pressed state) even in the band.
+            var message = (int)wParam;
+            if (message == WmMouseMove)
+            {
+                if (_pressed)
+                {
+                    PointerDragged?.Invoke(x, y);
+                }
+
+                PointerMoved?.Invoke(x, y);
+            }
+            else if (message == WmLButtonUp && _pressed)
+            {
+                _pressed = false;
+                PointerReleased?.Invoke(x, y);
+            }
+
+            return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+        }
+
         switch ((int)wParam)
         {
             case WmLButtonDown:
@@ -260,20 +300,55 @@ public sealed class IslandMouseHook : IDisposable
         }
     }
 
-    private bool Contains(int x, int y)
+    private HookRegionKind ClassifyLocked(int x, int y)
     {
         lock (_gate)
         {
-            foreach (var region in _regions)
+            return Classify(_regions, _watchRegions, x, y);
+        }
+    }
+
+    /// <summary>
+    /// Classifies a screen point for the hook: interactive rectangles consume clicks and wheel deltas,
+    /// watch-only rectangles only forward pointer movement (the hover band below the island), and the
+    /// rest is desktop. Half-open edges keep neighbouring rectangles from overlapping.
+    /// </summary>
+    /// <param name="interactive">Rectangles that consume input.</param>
+    /// <param name="watch">Rectangles that only forward movement.</param>
+    /// <param name="x">Screen X in physical pixels.</param>
+    /// <param name="y">Screen Y in physical pixels.</param>
+    internal static HookRegionKind Classify(IReadOnlyList<Rect> interactive, IReadOnlyList<Rect> watch, int x, int y)
+    {
+        foreach (var region in interactive)
+        {
+            if (x >= region.Left && x < region.Right && y >= region.Top && y < region.Bottom)
             {
-                if (x >= region.Left && x < region.Right && y >= region.Top && y < region.Bottom)
-                {
-                    return true;
-                }
+                return HookRegionKind.Interactive;
             }
         }
 
-        return false;
+        foreach (var region in watch)
+        {
+            if (x >= region.Left && x < region.Right && y >= region.Top && y < region.Bottom)
+            {
+                return HookRegionKind.Watch;
+            }
+        }
+
+        return HookRegionKind.Outside;
+    }
+
+    /// <summary>How one screen point is routed by the hook.</summary>
+    internal enum HookRegionKind
+    {
+        /// <summary>Desktop: the hook passes everything through.</summary>
+        Outside,
+
+        /// <summary>Island chrome: clicks, wheel and moves are delivered to the island.</summary>
+        Interactive,
+
+        /// <summary>Hover band: only movement is delivered; clicks and wheel stay with the desktop.</summary>
+        Watch,
     }
 
     /// <summary>Screen-pixel rectangle consumed by the hook.</summary>
