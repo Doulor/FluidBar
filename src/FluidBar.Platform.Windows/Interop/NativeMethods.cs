@@ -769,6 +769,10 @@ internal static partial class NativeMethods
         [DllImport(Lib, SetLastError = true)]
         internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
 
+        /// <summary>Reads the bounding box of a window's region (0 = no region set, 1 = error).</summary>
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern int GetWindowRgnBox(IntPtr hWnd, out RECT lprc);
+
         [DllImport(Lib, SetLastError = true)]
         internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
             uint uFlags);
@@ -1100,6 +1104,14 @@ internal static partial class NativeMethods
 
         [DllImport(Lib)]
         internal static extern int DwmIsCompositionEnabled([MarshalAs(UnmanagedType.Bool)] out bool pfEnabled);
+
+        /// <summary>
+        /// Sets a DWM window attribute (Windows 10 2004+ / Windows 11). Used with
+        /// <c>DWMWA_WINDOW_CORNER_PREFERENCE</c> to stop DWM from adding its own corner rounding on top
+        /// of a window region.
+        /// </summary>
+        [DllImport(Lib)]
+        internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
     }
 
     // ---------------------------------------------------------------------

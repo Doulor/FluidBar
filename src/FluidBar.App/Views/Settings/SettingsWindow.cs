@@ -8,6 +8,7 @@ using Avalonia.Styling;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
+using FluidBar.Platform.Windows.Hosting;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -53,6 +54,8 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly Border _shell;
     private SettingsWindowSection _section;
     private IslandPreview? _preview;
+    private bool _closed;
+    private (int Width, int Height, int Radius)? _cornerRegion;
     private string? _status;
     private SettingsPalette _palette;
 
@@ -168,11 +171,68 @@ public sealed class SettingsWindow : Window, ILocalizable
             _shell.CornerRadius = new CornerRadius(0);
             Background = new SolidColorBrush(_palette.Window);
         }
+
+        // Whatever the compositor did, clip the native window to the painted radius: a rectangular
+        // window surface shows square black wedges outside the rounded content (the reported "black
+        // right angles") as soon as alpha is unavailable. Applied once per size/DPI change, never per
+        // frame; a transparent surface is clipped to the same shape it already paints, so nothing moves.
+        // Layout passes are the honest signal for "the native size or DPI changed"; the region call is
+        // cached on its inputs so this never becomes per-frame work.
+        LayoutUpdated += (_, _) => ApplyCornerRegion();
+        Avalonia.Threading.Dispatcher.UIThread.Post(ApplyCornerRegion, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Clips the native window to the rounded content shape (no-op until the handle exists).</summary>
+    private void ApplyCornerRegion()
+    {
+        if (_closed || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (WindowState == WindowState.Maximized)
+        {
+            // A maximized window is its own rectangle; rounding it would cut the screen edge.
+            if (_cornerRegion is not null)
+            {
+                _ = WindowCornerRegion.Clear(handle, out _);
+                _cornerRegion = null;
+            }
+
+            return;
+        }
+
+        var scaling = RenderScaling <= 0 ? 1.0 : RenderScaling;
+        var width = (int)Math.Ceiling(Bounds.Width * scaling);
+        var height = (int)Math.Ceiling(Bounds.Height * scaling);
+        var radius = WindowCornerRegion.RadiusPx(SettingsMetrics.WindowRadius, scaling);
+        var signature = (width, height, radius);
+        if (_cornerRegion == signature)
+        {
+            return;
+        }
+
+        if (WindowCornerRegion.TryApply(handle, width, height, radius, out var error))
+        {
+            _cornerRegion = signature;
+        }
+        else
+        {
+            // Never fatal: without the region the window just keeps square corners.
+            _cornerRegion = null;
+            System.Diagnostics.Debug.WriteLine($"settings corner region skipped: {error}");
+        }
     }
 
     /// <inheritdoc />
     protected override void OnClosed(EventArgs e)
     {
+        _closed = true;
+        if (TryGetPlatformHandle()?.Handle is { } closingHandle && closingHandle != IntPtr.Zero)
+        {
+            _ = WindowCornerRegion.Clear(closingHandle, out _);
+        }
+
         _settings.Changed -= OnSettingsChanged;
         _localizer.Changed -= OnLocalizerChanged;
         if (_updates is not null)
@@ -221,10 +281,15 @@ public sealed class SettingsWindow : Window, ILocalizable
             ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"),
             Height = SettingsMetrics.TitleBarHeight,
             Margin = new Thickness(SettingsMetrics.TitleBarPadLeft, 0, SettingsMetrics.TitleBarPadRight, 0),
+            // A Grid without a background is not hit-testable, so clicks on the empty part of the title
+            // bar fell through to the rounded shell and BeginMoveDrag never ran (the window could not be
+            // dragged by its title bar). Transparent keeps the pixels unchanged and makes it hit-testable.
+            Background = Brushes.Transparent,
         };
         bar.PointerPressed += (_, e) =>
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            // The close button handles its own press; never start a move drag from it.
+            if (!e.Handled && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 BeginMoveDrag(e);
             }
@@ -305,7 +370,11 @@ public sealed class SettingsWindow : Window, ILocalizable
             closeIcon.Brush = _palette.SecondaryBrush;
             closeIcon.InvalidateVisual();
         };
-        close.PointerPressed += (_, _) => Close();
+        close.PointerPressed += (_, e) =>
+        {
+            e.Handled = true;
+            Close();
+        };
         Grid.SetColumn(close, 4);
         bar.Children.Add(close);
 
@@ -313,6 +382,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         {
             BorderBrush = _palette.LineBrush,
             BorderThickness = new Thickness(0, 0, 0, 1),
+            Background = Brushes.Transparent,
             Child = bar,
         };
     }
