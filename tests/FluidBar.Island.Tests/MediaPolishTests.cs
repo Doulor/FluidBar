@@ -137,6 +137,72 @@ public sealed class MediaPolishTests
         Assert.NotEqual(Hash(a), Hash(b));
     }
 
+    [Fact]
+    public void Play_icon_flips_between_playing_and_paused_in_the_glyph_box()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var state = IslandTestFixtures.Expanded(1);
+        var media = state.Pages.Media;
+        var playing = state with { Pages = state.Pages with { Media = media with { IsPlaying = true } } };
+        var paused = state with { Pages = state.Pages with { Media = media with { IsPlaying = false } } };
+
+        using var a = renderer.RenderToBitmap(playing, IslandTestFixtures.Scale);
+        using var b = renderer.RenderToBitmap(paused, IslandTestFixtures.Scale);
+
+        // Only the glyph box: the pause bars and the play triangle must differ *there*, which is what the
+        // real-machine acceptance shot has to show when a tap toggles the transport.
+        var box = PlayButtonGlyphBox(IslandTestFixtures.Scale);
+        Assert.True(GlyphPixels(a, box) != GlyphPixels(b, box), "the play/pause glyph must change with IsPlaying");
+        Assert.True(GlyphInk(a, box) > 0, "the playing state must paint a glyph");
+        Assert.True(GlyphInk(b, box) > 0, "the paused state must paint a glyph");
+    }
+
+    private static SKRectI PlayButtonGlyphBox(float scale)
+    {
+        // Expanded media page: the play button is the middle transport control (DIP layout × render scale).
+        var page = IslandMetrics.PageRect(IslandTestFixtures.Expanded(1), 1);
+        // Media page transport row: play button box is (page + 31,218) .. (+61,248) in DIP.
+        var left = (int)((page.Left + 31) * scale);
+        var top = (int)((page.Top + 218) * scale);
+        return new SKRectI(
+            left + (int)(30 * scale * 0.3f),
+            top + (int)(30 * scale * 0.3f),
+            left + (int)(30 * scale * 0.7f),
+            top + (int)(30 * scale * 0.7f));
+    }
+
+    private static ulong GlyphPixels(SKBitmap bitmap, SKRectI box)
+    {
+        ulong hash = 1469598103934665603UL;
+        for (var y = box.Top; y < box.Bottom && y < bitmap.Height; y++)
+        {
+            for (var x = box.Left; x < box.Right && x < bitmap.Width; x++)
+            {
+                hash = (hash ^ (uint)bitmap.GetPixel(x, y)) * 1099511628211UL;
+            }
+        }
+
+        return hash;
+    }
+
+    private static int GlyphInk(SKBitmap bitmap, SKRectI box)
+    {
+        var ink = 0;
+        for (var y = box.Top; y < box.Bottom && y < bitmap.Height; y++)
+        {
+            for (var x = box.Left; x < box.Right && x < bitmap.Width; x++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.Red + pixel.Green + pixel.Blue > 300)
+                {
+                    ink++;
+                }
+            }
+        }
+
+        return ink;
+    }
+
     private static IslandRenderState LyricPill(double highlight) => IslandTestFixtures.Compact(
         new CompactActivity(ActivityKind.Media, new CompactModel
         {
