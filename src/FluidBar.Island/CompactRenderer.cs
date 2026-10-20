@@ -24,6 +24,7 @@ internal sealed class CompactRenderer : IDisposable
     private float _opacity = 1;
     private double _phase;
     private bool _reduced;
+    private bool _pressed;
 
     private static readonly CompactModel EmptyModel = new();
     private static readonly float[] ActiveWave = [0.35f, 0.7f, 1f, 0.6f, 0.4f];
@@ -50,6 +51,9 @@ internal sealed class CompactRenderer : IDisposable
         _text.SetScale(state.FontScale);
         _phase = state.MotionPhase;
         _reduced = state.ReducedMotion;
+        // Compact pill = one big button: the shell spring scales it on press, and the renderer adds a
+        // light wash so the pressed frame is readable in a still capture too.
+        _pressed = state.PressedControl != IslandPageControl.None;
         if (_opacity <= 0.01f)
         {
             return;
@@ -133,7 +137,7 @@ internal sealed class CompactRenderer : IDisposable
             // Lyric layout (media setting "lyrics in the pill"): cover + live lyric + wave, no title/artist.
             // The single line is vertically centred in the two-row band and ellipsised by the text engine,
             // so an overlong lyric can never push the wave or the play button.
-            DrawLyricLine(canvas, model,
+            DrawLyricLine(canvas, model, accent,
                 new SKRect(CompactMediaLayout.TextLeft, 5.5f, textRight, height - 5.5f));
         }
         else
@@ -148,6 +152,14 @@ internal sealed class CompactRenderer : IDisposable
 
         DrawWave(canvas, wave, accent, model.IsActive);
 
+        if (_pressed)
+        {
+            // 6 % white wash: visible press feedback without changing the pill's own colours.
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(SKColors.White.WithAlpha(16), _opacity);
+            canvas.DrawRoundRect(new SKRect(0, 0, width, height), height / 2, height / 2, _fill);
+        }
+
         // No timeline = no bar at all (an always-empty 0 % bar read as a stuck progress).
         if (model.ProgressPercent >= 0)
         {
@@ -157,8 +169,8 @@ internal sealed class CompactRenderer : IDisposable
         }
     }
 
-    /// <summary>Draws the live lyric line with its fade-in, clipped to the text column.</summary>
-    private void DrawLyricLine(SKCanvas canvas, CompactModel model, SKRect rect)
+    /// <summary>Draws the live lyric line with its fade-in and karaoke sweep, clipped to the text column.</summary>
+    private void DrawLyricLine(SKCanvas canvas, CompactModel model, SKColor accent, SKRect rect)
     {
         var fade = Math.Clamp(model.LyricFade, 0, 1);
         var alpha = _opacity * fade;
@@ -172,8 +184,10 @@ internal sealed class CompactRenderer : IDisposable
         var line = new SKRect(rect.Left, rect.Top + lift, rect.Right, rect.Bottom + lift);
         canvas.Save();
         canvas.ClipRect(new SKRect(rect.Left - 1, rect.Top - 3, rect.Right + 1, rect.Bottom + 3));
-        _text.Draw(canvas, model.LyricLine, IslandType.CompactMediaTitle, line, _theme.Foreground,
-            TextAlign.Left, alpha);
+        // Without word timing the line paints exactly as before (primary colour, whole line).
+        var baseColor = model.LyricHighlight < 0 ? _theme.Foreground : _theme.ForegroundSecondary;
+        KaraokeText.Draw(_text, canvas, model.LyricLine, model.LyricHighlight, IslandType.CompactMediaTitle,
+            line, baseColor, accent, TextAlign.Left, alpha);
         canvas.Restore();
     }
 

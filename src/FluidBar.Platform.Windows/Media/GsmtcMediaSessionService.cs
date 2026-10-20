@@ -36,7 +36,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private static readonly TimeSpan EventRefreshDebounce = TimeSpan.FromMilliseconds(120);
 
     /// <summary>Consecutive empty fallback polls that mean the player is really gone (~3 s).</summary>
-    private const int FallbackMissThreshold = 3;
+    /// <summary>
+    /// How many empty fallback polls mean "nothing is playing" (a *time* budget, not a tick count: the
+    /// poll runs every 250 ms, so a fixed tick count would drop the session after 750 ms of a track
+    /// switch, which is exactly when the player is briefly unresolvable).
+    /// </summary>
+    private static readonly int FallbackMissThreshold = Math.Max(3,
+        (int)Math.Round(FallbackMissGrace.TotalMilliseconds / FallbackPollInterval.TotalMilliseconds));
+
+    /// <summary>How long the fallback tolerates an unresolvable player before publishing "no session".</summary>
+    public static readonly TimeSpan FallbackMissGrace = TimeSpan.FromSeconds(2.5);
 
     private static readonly TimeSpan ArtworkFetchTimeout = TimeSpan.FromSeconds(10);
     private const int MaxArtworkBytes = 4 * 1024 * 1024;
@@ -52,6 +61,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
     private GlobalSystemMediaTransportControlsSession? _session;
     private BackgroundPoller? _fallbackPoller;
+
+    /// <summary>Window-title fallback poll period (the accessibility read is cheap; 250 ms tracks taps).</summary>
+    public static readonly TimeSpan FallbackPollInterval = TimeSpan.FromMilliseconds(250);
     private readonly IMediaKeySender? _mediaKeySender;
     private readonly FallbackPlaybackTracker _fallbackPlayback = new();
     private readonly object _accessibilityGate = new();
@@ -110,7 +122,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // Players without SMTC support (KuGou, some Chinese players) never appear in GSMTC. A 1 s
         // WASAPI session probe + window-title parser covers them; it only runs while GSMTC has no
         // active session, so the normal path stays fully event-driven.
-        _fallbackPoller = new BackgroundPoller("media-fallback", TimeSpan.FromSeconds(1), PollWindowFallback, _logger);
+        // 250 ms: the MSAA read is a few microseconds and the play/pause glyph is the only fast signal a
+        // fallback player (KuGou) gives us — at 1 s the island's icon lagged visibly behind the tap.
+        _fallbackPoller = new BackgroundPoller("media-fallback", FallbackPollInterval, PollWindowFallback, _logger);
         _fallbackPoller.Start();
     }
 

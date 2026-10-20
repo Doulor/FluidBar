@@ -85,6 +85,30 @@ public readonly record struct IslandRenderState
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
     public double PressScale { get; init; } = 1;
 
+    /// <summary>Control under the pointer (drives the per-button hover feedback).</summary>
+    public IslandPageControl HoverControl { get; init; }
+
+    /// <summary>Page that owns <see cref="HoverControl"/>.</summary>
+    public int HoverPage { get; init; } = -1;
+
+    /// <summary>Control currently held down (drives the per-button press feedback).</summary>
+    public IslandPageControl PressedControl { get; init; }
+
+    /// <summary>Page that owns <see cref="PressedControl"/>.</summary>
+    public int PressedPage { get; init; } = -1;
+
+    /// <summary>Row/index of the pressed control (quick toggles, list buttons).</summary>
+    public int PressedIndex { get; init; } = -1;
+
+    /// <summary>Pointer position in host-local DIP (hover feedback); NaN when the pointer is outside.</summary>
+    public double PointerX { get; init; } = double.NaN;
+
+    /// <summary>Pointer Y in host-local DIP; NaN when the pointer is outside.</summary>
+    public double PointerY { get; init; } = double.NaN;
+
+    /// <summary>Whether the pointer is over the island (hover transitions).</summary>
+    public bool HasPointer { get; init; }
+
     /// <summary>
     /// Stacked activity count behind the primary (0–2). Data/stacking only: prototype2 has no ghost
     /// pill element, so the renderer paints nothing behind the shell for this value.
@@ -424,6 +448,9 @@ public sealed record CompactModel
     /// <summary>Fade-in progress of the current lyric line (0..1) so a line change is not a hard cut.</summary>
     public float LyricFade { get; init; } = 1f;
 
+    /// <summary>Karaoke sweep of the compact lyric line (0..1); negative = no per-word timing.</summary>
+    public double LyricHighlight { get; init; } = -1;
+
     /// <summary>Optional leading icon override.</summary>
     public IconKind? Icon { get; init; }
 
@@ -632,6 +659,12 @@ public sealed record MediaPageModel
     /// <summary>Label in front of the next lyric ("Next").</summary>
     public string? NextLyricLabel { get; init; }
 
+    /// <summary>
+    /// Karaoke sweep of the current line (0..1) from the KRC word timeline; negative means the line has
+    /// no per-word timing and must be painted as a plain line.
+    /// </summary>
+    public double LyricHighlight { get; init; } = -1;
+
     /// <summary>Elapsed time text.</summary>
     public string? PositionText { get; init; }
 
@@ -664,6 +697,12 @@ public sealed record MediaPageModel
 
     /// <summary>Light localized placeholder for the output slot when the source exposes no endpoint.</summary>
     public string? OutputPlaceholder { get; init; }
+
+    /// <summary>Whether the output picker is usable (false: the row is greyed, inert and says why).</summary>
+    public bool OutputAvailable { get; init; }
+
+    /// <summary>Whether the queue view is usable (false: the row is greyed, inert and says why).</summary>
+    public bool QueueAvailable { get; init; }
 
     /// <summary>Light localized placeholder for the queue slot when the source exposes no queue.</summary>
     public string? QueuePlaceholder { get; init; }

@@ -25,9 +25,13 @@ internal sealed class BackgroundPoller : IDisposable
         Action? onStarted = null, Action? onStopped = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (interval < TimeSpan.FromSeconds(1))
+
+        // 200 ms floor: the media fallback poller reads one accessibility glyph and the user-visible
+        // play/pause icon must follow a tap within a couple of frames. Everything else still polls at
+        // >= 1 s; polling faster than 5 Hz is rejected as before.
+        if (interval < TimeSpan.FromMilliseconds(200))
         {
-            throw new ArgumentOutOfRangeException(nameof(interval), "Background polls must be at least 1 s apart.");
+            throw new ArgumentOutOfRangeException(nameof(interval), "Background polls must be at least 200 ms apart.");
         }
 
         _name = name;

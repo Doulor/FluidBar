@@ -109,6 +109,14 @@ public sealed class SkiaIslandController : IDisposable
     private double _clickYDip;
     private bool _windowDragActive;
 
+    // Press/hover feedback: the control held down and the control under the pointer. Both are resolved
+    // by the same hit test the clicks use, so the highlight can never sit on a different rectangle.
+    private IslandPageControl _pressedControl;
+    private int _pressedPage = -1;
+    private int _pressedIndex = -1;
+    private IslandPageControl _hoverControl;
+    private int _hoverPage = -1;
+
     /// <summary>Creates the controller (call <see cref="Start"/> to begin producing content).</summary>
     /// <param name="options">Composition options.</param>
     /// <param name="dispatcher">Optional dispatcher (defaults to a UI-thread synchronization-context dispatcher).</param>
@@ -678,12 +686,40 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         UpdateArchipelago(now);
+        UpdateHoverControl();
+    }
+
+    /// <summary>Resolves the hovered control from the click hit test (hover never drifts from the target).</summary>
+    private void UpdateHoverControl()
+    {
+        var hover = IslandPageControl.None;
+        var page = -1;
+        if (_hasRenderState && _pointerInside)
+        {
+            var hit = SkiaIslandHitTest.Hit(_renderState, _pointerX, _pointerY);
+            if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact)
+            {
+                hover = hit.Control;
+                page = hit.PageIndex;
+            }
+        }
+
+        if (hover == _hoverControl && page == _hoverPage)
+        {
+            return;
+        }
+
+        _hoverControl = hover;
+        _hoverPage = page;
+        InvalidateFull();
     }
 
     /// <summary>Pointer left the window.</summary>
     public void HandlePointerLeft()
     {
         _pointerInside = false;
+        _hoverControl = IslandPageControl.None;
+        _hoverPage = -1;
         _pointerInHotZone = false;
         _pointerOnStrip = false;
         _hotZoneEnteredAt = null;
@@ -738,6 +774,16 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
+
+        // Press feedback for every painted control (transport, toggles, list buttons).
+        if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact)
+        {
+            _pressedControl = hit.Control;
+            _pressedPage = hit.PageIndex;
+            _pressedIndex = hit.Index;
+            InvalidateFull();
+        }
+
         switch (hit.Kind)
         {
             case IslandHitKind.Compact:
@@ -790,6 +836,14 @@ public sealed class SkiaIslandController : IDisposable
     {
         _pointerX = xDip;
         _pointerY = yDip;
+        if (_pressedControl != IslandPageControl.None)
+        {
+            _pressedControl = IslandPageControl.None;
+            _pressedPage = -1;
+            _pressedIndex = -1;
+            InvalidateFull();
+        }
+
         _motion.SetPressed(false);
         if (_pager.IsDragging)
         {
@@ -1627,6 +1681,14 @@ public sealed class SkiaIslandController : IDisposable
             ChromeOpacity = _motion.ChromeOpacity,
             NudgeOffsetY = _motion.NudgeOffsetY,
             PressScale = _motion.PressScale,
+            PressedControl = _pressedControl,
+            PressedPage = _pressedPage,
+            PressedIndex = _pressedIndex,
+            HoverControl = _hoverControl,
+            HoverPage = _hoverPage,
+            HasPointer = _pointerInside,
+            PointerX = _pointerInside ? _pointerX : double.NaN,
+            PointerY = _pointerInside ? _pointerY : double.NaN,
             GhostCount = expanded ? 0 : _motion.Target.GhostCount,
             FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),

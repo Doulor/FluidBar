@@ -160,7 +160,19 @@ public static class SkiaIslandHitTest
             5 => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
-        return PageMetricsLayout.HitTest(page, pageRect, x, y, metrics, scroll, count, out index);
+        var control = PageMetricsLayout.HitTest(page, pageRect, x, y, metrics, scroll, count, out index);
+
+        // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable
+        // and then do nothing. The renderer greys them and prints the localized reason instead.
+        if (page == 1
+            && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable)
+                || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)))
+        {
+            index = -1;
+            return IslandPageControl.None;
+        }
+
+        return control;
     }
 
     private static IslandHitTarget HitStrip(in IslandRenderState state, SKRect shell, float x, float y)

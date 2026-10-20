@@ -23,6 +23,13 @@ internal sealed partial class PageRenderer : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
     private FontScaleMetrics _metrics = FontScaleMetrics.One;
+    private IslandPageControl _pressedControl;
+    private int _pressedPage = -1;
+    private IslandPageControl _hoverControl;
+    private int _hoverPage = -1;
+    private double _pointerX = double.NaN;
+    private double _pointerY = double.NaN;
+    private bool _hasPointer;
 
     public PageRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art, ArtworkImageCache artwork,
         NumberTextCache numbers)
@@ -71,6 +78,13 @@ internal sealed partial class PageRenderer : IDisposable
         _opacity = opacity;
         _text.SetScale(state.FontScale);
         _metrics = _text.Metrics;
+        _pressedControl = state.PressedControl;
+        _pressedPage = state.PressedPage;
+        _hoverControl = state.HoverControl;
+        _hoverPage = state.HoverPage;
+        _pointerX = state.PointerX;
+        _pointerY = state.PointerY;
+        _hasPointer = state.HasPointer;
         if (_opacity <= 0.01f)
         {
             return;
@@ -262,6 +276,8 @@ internal sealed partial class PageRenderer : IDisposable
         }
 
         var m = _metrics;
+        // Accent from the album cover (extracted upstream) drives the art glow, the progress track and
+        // the karaoke sweep; without a cover the theme fallback rules stay in charge.
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
         DrawArt(canvas, PageMetricsLayout.MediaArt(page), 14, accent, large: true, media.Artwork, media.ArtworkKey);
 
@@ -285,9 +301,12 @@ internal sealed partial class PageRenderer : IDisposable
             DrawCard(canvas, lyricCard, 10);
             var lyricTop = lyricCard.Top + 7;
             var lyricBottom = lyricTop + 14 + m.LineGrow(IslandType.Lyric);
-            _text.Draw(canvas, media.LyricLine, IslandType.Lyric,
+            // Karaoke sweep from the KRC word timeline; a line without word timing paints as a plain line
+            // in the primary colour, exactly like before.
+            var baseColor = media.LyricHighlight < 0 ? _theme.Foreground : _theme.ForegroundSecondary;
+            KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
                 new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
-                _theme.Foreground, TextAlign.Left, _opacity);
+                baseColor, accent, TextAlign.Left, _opacity);
             var nextTop = lyricBottom + 3;
             var nextBottom = nextTop + 12 + m.LineGrow(IslandType.LyricNext);
             _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
@@ -317,9 +336,9 @@ internal sealed partial class PageRenderer : IDisposable
         {
             var seek = PageMetricsLayout.MediaSeekTrack(page, m);
             var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
-            DrawTrack(canvas, seek, progress, _theme.Foreground, _theme.LineStrong);
+            DrawTrack(canvas, seek, progress, accent, _theme.LineStrong);
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(_theme.Foreground, _opacity);
+            _fill.Color = Alpha(accent, _opacity);
             canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
 
             _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
@@ -345,21 +364,25 @@ internal sealed partial class PageRenderer : IDisposable
         // or no queue, a light localized placeholder keeps the row balanced: leaving the slots blank read
         // as a half-rendered page.
         var output = PageMetricsLayout.MediaOutput(page, m);
-        var hasOutput = !string.IsNullOrWhiteSpace(media.OutputName);
+        var hasOutput = media.OutputAvailable && !string.IsNullOrWhiteSpace(media.OutputName);
         var outputText = hasOutput ? media.OutputName : media.OutputPlaceholder;
         if (!string.IsNullOrWhiteSpace(outputText))
         {
+            // Disabled state: dimmed icon+label that names the reason (localized) instead of a button
+            // that looks active and does nothing. The hit test refuses the rectangle in that case.
+            var outputAlpha = (hasOutput ? 1f : 0.5f) * _opacity;
             // The glyph only ever appears with a label next to it (never an orphan icon).
             IconSet.Draw(canvas, IconKind.Speaker,
                 new SKRect(output.Left + 4, output.MidY - 6, output.Left + 16, output.MidY + 6),
-                Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+                Alpha(_theme.ForegroundTertiary, outputAlpha), _icon);
             _text.Draw(canvas, outputText, IslandType.Output,
-                new SKRect(output.Left + 20, output.Top, output.Left + 70, output.Bottom),
-                _theme.ForegroundTertiary, TextAlign.Left, (hasOutput ? 1f : 0.8f) * _opacity);
+                new SKRect(output.Left + 20, output.Top, output.Right, output.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Left, outputAlpha);
         }
 
         var queue = PageMetricsLayout.MediaQueue(page, m);
-        if (media.QueueCount > 0)
+        var hasQueue = media.QueueAvailable && media.QueueCount > 0;
+        if (hasQueue)
         {
             IconSet.Draw(canvas, IconKind.Queue,
                 new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
@@ -373,12 +396,13 @@ internal sealed partial class PageRenderer : IDisposable
         }
         else if (!string.IsNullOrWhiteSpace(media.QueuePlaceholder))
         {
+            var queueAlpha = 0.5f * _opacity;
             IconSet.Draw(canvas, IconKind.Queue,
                 new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
-                Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+                Alpha(_theme.ForegroundTertiary, queueAlpha), _icon);
             _text.Draw(canvas, media.QueuePlaceholder, IslandType.Output,
                 new SKRect(queue.Left + 20, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
-                TextAlign.Left, 0.8f * _opacity);
+                TextAlign.Left, queueAlpha);
         }
     }
 
@@ -388,14 +412,38 @@ internal sealed partial class PageRenderer : IDisposable
         var play = PageMetricsLayout.MediaPlay(page, _metrics);
         var next = PageMetricsLayout.MediaNext(page, _metrics);
 
-        IconSet.Draw(canvas, IconKind.Previous, previous.Deflate(7), Alpha(_theme.ForegroundSecondary, _opacity), _icon);
+        // Press feedback: the held button shrinks slightly and brightens; hovering lifts it a touch.
+        // (The old code painted three static glyphs, so a tap gave no visual answer at all.)
+        DrawSkipIcon(canvas, IconKind.Previous, previous, IslandPageControl.Previous);
+        DrawSkipIcon(canvas, IconKind.Next, next, IslandPageControl.Next);
+
+        var playPressed = IsPressed(IslandPageControl.PlayPause);
+        var playHovered = IsHovered(IslandPageControl.PlayPause);
+        var radius = 15f * (playPressed ? 0.9f : playHovered ? 1.04f : 1f);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.Foreground, 0.92f * _opacity);
-        canvas.DrawCircle(play.MidX, play.MidY, 15, _fill);
-        IconSet.Draw(canvas, media.IsPlaying ? IconKind.Pause : IconKind.Play, play.Deflate(8),
-            Alpha(_theme.Background, _opacity), _icon);
-        IconSet.Draw(canvas, IconKind.Next, next.Deflate(7), Alpha(_theme.ForegroundSecondary, _opacity), _icon);
+        _fill.Color = Alpha(_theme.Foreground, (playPressed ? 1f : 0.92f) * _opacity);
+        canvas.DrawCircle(play.MidX, play.MidY, radius, _fill);
+        IconSet.Draw(canvas, media.IsPlaying ? IconKind.Pause : IconKind.Play,
+            play.Deflate(playPressed ? 9f : 8f), Alpha(_theme.Background, _opacity), _icon);
     }
+
+    private void DrawSkipIcon(SKCanvas canvas, IconKind icon, SKRect rect, IslandPageControl control)
+    {
+        var pressed = IsPressed(control);
+        var hovered = IsHovered(control);
+        var inset = pressed ? 8.5f : 7f;
+        var color = pressed || hovered ? _theme.Foreground : _theme.ForegroundSecondary;
+        IconSet.Draw(canvas, icon, rect.Deflate(inset), Alpha(color, (pressed ? 1f : hovered ? 0.92f : 1f) * _opacity),
+            _icon);
+    }
+
+    private bool IsPressed(IslandPageControl control)
+        => _pressedControl == control && (_pressedPage < 0 || _pressedPage == 1);
+
+    /// <summary>Whether the given control is hovered (the controller resolves it from the same hit test
+    /// the clicks use, so the highlight can never sit on a different rectangle than the click target).</summary>
+    private bool IsHovered(IslandPageControl control)
+        => _hasPointer && _hoverControl == control && (_hoverPage < 0 || _hoverPage == 1);
 
     // ------------------------------------------------------------- placeholder
 

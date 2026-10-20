@@ -532,17 +532,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 
-    private (string? Current, string? Next) ResolveLyrics(MediaSnapshot media, TimeSpan position)
+    private (string? Current, string? Next, double Highlight) ResolveLyrics(MediaSnapshot media, TimeSpan position)
     {
         var document = _lyricsDocument;
         if (document is null || document.IsEmpty
             || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
         {
-            return (null, null);
+            return (null, null, -1);
         }
 
-        var pair = LyricsTimelineSelector.Select(document, position, media.Title, media.Artist);
-        return (pair.Current, pair.Next);
+        // SelectDetailed also returns the karaoke sweep of the current line (KRC word timeline).
+        var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
+        return (selection.Current, selection.Next, selection.Highlight);
     }
 
     /// <summary>
@@ -563,10 +564,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var duration = media.Duration > TimeSpan.Zero ? media.Duration : LyricDurationFor(media);
 
+        // Optimistic play state (see SetOptimisticPlaying): until the source agrees, publish the flip.
+        var isPlaying = _optimisticPlay.Resolve(media.IsPlaying, _time.GetUtcNow());
+
         // Interpolate from the last sampled position: the platform layer has no frame clock, so
         // between GSMTC events the position only advances because we add the elapsed wall time.
         var position = media.Position;
-        if (media.IsPlaying && media.PositionUpdatedAtUtc > DateTimeOffset.MinValue)
+        if (isPlaying && media.PositionUpdatedAtUtc > DateTimeOffset.MinValue)
         {
             var elapsed = _time.GetUtcNow() - media.PositionUpdatedAtUtc;
             if (elapsed > TimeSpan.Zero && elapsed < TimeSpan.FromHours(1))
@@ -593,7 +597,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             ? artworkEntry.Data
             : null;
 
-        var (lyricLine, nextLyricLine) = ResolveLyrics(media, position);
+        var (lyricLine, nextLyricLine, lyricHighlight) = ResolveLyrics(media, position);
 
         // A fallback source can know the position without knowing the track length (KuGou persists the
         // position but no duration): show the elapsed time instead of pretending nothing is known.
@@ -610,11 +614,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             PositionText = hasElapsed ? FormatTime(position) : "—",
             DurationText = hasDuration ? FormatTime(duration) : "—",
             HasTimeline = hasDuration,
-            IsPlaying = media.IsPlaying,
+            IsPlaying = isPlaying,
             Artwork = artwork,
             ArtworkKey = artwork is null ? null : media.TrackKey,
             LyricLine = lyricLine,
             NextLyricLine = nextLyricLine,
+            LyricHighlight = lyricHighlight,
             TrackIndex = 0,
             TrackCount = 0,
         };
@@ -808,6 +813,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         ScheduleClockTick();
     }
 
+    // Optimistic play/pause: a fallback player (KuGou) reports its glyph state through the accessibility
+    // poll, so waiting for it made the island icon lag the tap by up to a poll period. The toggle flips
+    // the published state immediately; the real state wins as soon as it agrees (or after 2 s), and a
+    // refused command rolls the flip back instead of leaving a lie on screen.
+    private readonly OptimisticPlayState _optimisticPlay = new();
+
     /// <inheritdoc />
     public IslandActionResult Invoke(in IslandPlatformAction action)
     {
@@ -819,7 +830,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         return action.Kind switch
         {
             IslandPlatformActionKind.MediaTogglePlay => DispatchMedia(
-                () => _media.TogglePlayPauseAsync(), "island.actions.media-toggle"),
+                () => _media.TogglePlayPauseAsync(), "island.actions.media-toggle",
+                optimisticPlaying: _media.Current is { IsEmpty: false } current ? !current.IsPlaying : null),
             IslandPlatformActionKind.MediaPrevious => DispatchMedia(
                 () => _media.PreviousAsync(), "island.actions.media-previous"),
             IslandPlatformActionKind.MediaNext => DispatchMedia(
@@ -845,7 +857,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         };
     }
 
-    private IslandActionResult DispatchMedia(Func<Task<bool>> command, string eventId)
+    private IslandActionResult DispatchMedia(Func<Task<bool>> command, string eventId, bool? optimisticPlaying = null)
     {
         if (_media.State != PlatformMonitorState.Running)
         {
@@ -858,8 +870,39 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return Unsupported("no active GSMTC media session; media transport is ignored until a session exists");
         }
 
-        _ = RunAsync(async () => { await command().ConfigureAwait(false); }, eventId);
+        if (optimisticPlaying is { } optimistic)
+        {
+            SetOptimisticPlaying(optimistic);
+        }
+
+        _ = RunAsync(async () =>
+        {
+            var ok = await command().ConfigureAwait(false);
+            if (!ok && optimisticPlaying is not null)
+            {
+                ClearOptimisticPlaying();
+                _logger.Warning(LogCategories.Platform, eventId,
+                    "The media transport command was refused; the optimistic play state was rolled back.");
+            }
+        }, eventId);
         return IslandActionResult.Handled;
+    }
+
+    private void SetOptimisticPlaying(bool playing)
+    {
+        _optimisticPlay.Set(playing, _time.GetUtcNow());
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ClearOptimisticPlaying()
+    {
+        if (!_optimisticPlay.IsPending)
+        {
+            return;
+        }
+
+        _optimisticPlay.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private IslandActionResult Seek(double fraction)

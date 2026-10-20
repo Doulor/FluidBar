@@ -26,6 +26,9 @@ public sealed class MediaEmptyStateTests
 
     private static MediaPageModel Variant(bool output, bool queue, bool lyrics, bool artwork) => Baseline with
     {
+        // The capability bits gate the slots: values without the capability paint as the disabled caption.
+        OutputAvailable = output,
+        QueueAvailable = queue,
         OutputName = output ? Baseline.OutputName : null,
         QueueCount = queue ? Baseline.QueueCount : 0,
         LyricLine = lyrics ? Baseline.LyricLine : null,

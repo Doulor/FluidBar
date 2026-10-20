@@ -27,6 +27,47 @@ public static class LyricsTimelineSelector
         => Select(document, position, null, null);
 
     /// <summary>
+    /// Current line, next line and the karaoke sweep of the current line (0..1; negative when the line
+    /// carries no per-word timing).
+    /// </summary>
+    /// <param name="document">Parsed lyrics.</param>
+    /// <param name="position">Playback position.</param>
+    /// <param name="title">Track title (rejects "title - artist" header lines).</param>
+    /// <param name="artist">Track artist.</param>
+    public static LyricSelection SelectDetailed(LyricsDocument? document, TimeSpan position, string? title,
+        string? artist)
+    {
+        if (document is null || document.IsEmpty)
+        {
+            return default;
+        }
+
+        var lines = document.Lines;
+        var index = document.FindLineIndex(position);
+        var currentIndex = FindLine(lines, index, forward: false, title, artist);
+        if (currentIndex < 0)
+        {
+            var first = FindLine(lines, index + 1, forward: true, title, artist);
+            return first < 0
+                ? default
+                : new LyricSelection(null, lines[first].Text, LyricKaraoke.NoWordTiming);
+        }
+
+        var current = lines[currentIndex];
+        var nextIndex = FindLine(lines, currentIndex + 1, forward: true, title, artist);
+        var next = nextIndex < 0 ? null : lines[nextIndex].Text;
+        if (next is not null && string.Equals(next.Trim(), current.Text.Trim(), StringComparison.Ordinal))
+        {
+            next = null;
+        }
+
+        return new LyricSelection(
+            current.Text,
+            next,
+            LyricKaraoke.Progress(current, position));
+    }
+
+    /// <summary>
     /// Selects the current and next line, ignoring lines that only repeat the track identity.
     /// </summary>
     /// <param name="document">Parsed lyrics.</param>
@@ -63,6 +104,12 @@ public static class LyricsTimelineSelector
 
         return new LyricPair(current, next);
     }
+
+    /// <summary>Selected line pair plus the karaoke sweep of the current line.</summary>
+    /// <param name="Current">Current line text.</param>
+    /// <param name="Next">Next line text.</param>
+    /// <param name="Highlight">Swept fraction 0..1; negative when the line has no word timing.</param>
+    public readonly record struct LyricSelection(string? Current, string? Next, double Highlight);
 
     /// <summary>Walks from <paramref name="start"/> towards the start/end until a real lyric line.</summary>
     public static int FindLine(ImmutableArray<LyricsLine> lines, int start, bool forward)

@@ -545,7 +545,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             UiaElementRole.Button,
             L("Page.Media.Output", "Audio output"),
             ToRect(PageLayout.MediaOutput(page)),
-            UiaPatternKind.Invoke,
+            // Disabled control: no Invoke pattern — an "invokable but disabled" button is exactly the
+            // dead-but-clickable shape the user complained about. The reason travels in ItemStatus/help.
+            UiaPatternKind.None,
             new UiaElementState
             {
                 IsEnabled = false,
@@ -560,7 +562,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             UiaElementRole.Button,
             L("Page.Media.Queue", "Play queue"),
             ToRect(PageLayout.MediaQueue(page)),
-            UiaPatternKind.Invoke,
+            UiaPatternKind.None,
             new UiaElementState
             {
                 IsEnabled = false,
@@ -1034,10 +1036,12 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 _controller.SetAccessibleSlider(IslandPageControl.Seek, page, request.Value / 100.0);
                 return;
             case "output":
-                _controller.ActivateAccessibleControl(IslandPageControl.Output, page);
+                // Output/queue are inert (no platform capability): the tree marks them disabled and the
+            // executor refuses to dispatch even if a client bypasses that.
+            return;
                 return;
             case "queue":
-                _controller.ActivateAccessibleControl(IslandPageControl.Queue, page);
+                return;
                 return;
             case "card":
                 if (parts.Length > 4 && parts[4] == "play")

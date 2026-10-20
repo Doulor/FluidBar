@@ -46,6 +46,7 @@ public static class SkiaIslandStateBuilder
         ArgumentNullException.ThrowIfNull(localizer);
 
         var kind = island.Primary?.Kind ?? ActivityKind.Idle;
+
         var model = IslandPresenter.ToCompact(island, content, localizer, peeked);
         // The activity payload carries no artwork and a possibly stale progress; the media snapshot
         // has both, so the compact pill mirrors what the media page shows.
@@ -81,7 +82,10 @@ public static class SkiaIslandStateBuilder
             IsMuted = model.IsMuted,
             IsCharging = model.IsCharging,
             ProgressPercent = progress,
-            AccentHex = model.AccentHex ?? media?.AccentHex,
+            // The cover's own accent drives the compact wave/highlight too; without a cover the accent
+            // rule from the source/theme stays in charge.
+            AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? model.AccentHex ?? media?.AccentHex,
+            LyricHighlight = media?.LyricHighlight ?? -1,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
             Icon = MapIcon(model.Icon),
@@ -163,13 +167,14 @@ public static class SkiaIslandStateBuilder
             Album = media?.Album,
             LyricLine = media?.LyricLine,
             NextLyricLine = media?.NextLyricLine,
+            LyricHighlight = media?.LyricHighlight ?? -1,
             NextLyricLabel = localizer.Get(LocKeys.Common.Next),
             PositionText = media?.PositionText,
             DurationText = media?.DurationText,
             ProgressPercent = media?.ProgressPercent ?? 0,
             IsPlaying = media?.IsPlaying ?? false,
             HasTimeline = media?.HasTimeline ?? false,
-            AccentHex = media?.AccentHex,
+            AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? media?.AccentHex,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
             // The source rarely exposes an endpoint/queue, so the slots carry light localized placeholders
@@ -178,6 +183,11 @@ public static class SkiaIslandStateBuilder
             QueueLabel = localizer.Get(LocKeys.Page.Media.QueueLabel),
             OutputPlaceholder = localizer.Get(LocKeys.Page.Media.OutputNone),
             QueuePlaceholder = localizer.Get(LocKeys.Page.Media.QueueNone),
+            // Capability bits: Windows has no per-app output-device API and neither GSMTC nor KuGou's
+            // accessibility tree exposes a queue, so both slots are inert and say so (greyed by the
+            // renderer, refused by the hit test, disabled in the automation tree).
+            OutputAvailable = false,
+            QueueAvailable = false,
             NoLyricsText = localizer.Get(LocKeys.Page.Media.NoLyrics),
             EmptyTitle = localizer.Get(LocKeys.Media.NoSession),
             EmptyHint = localizer.Get(LocKeys.Media.NoSessionHint),

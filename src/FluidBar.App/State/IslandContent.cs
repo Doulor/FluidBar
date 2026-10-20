@@ -54,6 +54,12 @@ public sealed record MediaSessionData
     /// <summary>Next lyric line.</summary>
     public string? NextLyricLine { get; init; }
 
+    /// <summary>
+    /// Karaoke sweep of <see cref="LyricLine"/> (0..1) from the KRC word timeline; negative when the
+    /// lyric source has no per-word timing.
+    /// </summary>
+    public double LyricHighlight { get; init; } = -1;
+
     /// <summary>Track index for "n of m" displays, 1-based; 0 when unknown.</summary>
     public int TrackIndex { get; init; }
 

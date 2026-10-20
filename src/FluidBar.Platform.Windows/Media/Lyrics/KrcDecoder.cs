@@ -138,14 +138,15 @@ public static class KrcDecoder
                     continue;
                 }
 
-                var body = StripWordTags(line[(close + 1)..]).Trim();
+                var (body, words) = ParseWords(line[(close + 1)..]);
+                body = body.Trim();
                 if (body.Length == 0)
                 {
                     continue;
                 }
 
                 var start = TimeSpan.FromMilliseconds(startMs);
-                builder.Add(new LyricsLine(start, body));
+                builder.Add(new LyricsLine(start, body, null, words));
                 var end = TimeSpan.FromMilliseconds(startMs + Math.Max(0, lineMs));
                 if (end > duration)
                 {
@@ -184,36 +185,89 @@ public static class KrcDecoder
         return new KrcLyrics(document, duration);
     }
 
-    /// <summary>Removes the per-word timing tags (<c>&lt;offset,length,extra&gt;</c>) from a lyric line.</summary>
-    private static string StripWordTags(string text)
+    /// <summary>
+    /// Splits a KRC line body into text and per-word spans (<c>&lt;offsetMs,length,extra&gt;word</c>).
+    /// </summary>
+    /// <remarks>
+    /// The spans are what makes karaoke highlighting possible; the previous implementation threw them
+    /// away and only kept the plain text. Defensive behaviour for real files: negative offsets are
+    /// clamped to 0, lengths are clamped to the remaining text, out-of-order spans are sorted by offset
+    /// (stable), and a line without tags returns an empty span list (callers fall back to the whole line).
+    /// </remarks>
+    internal static (string Text, ImmutableArray<LyricWord> Words) ParseWords(string text)
     {
+        if (string.IsNullOrEmpty(text))
+        {
+            return (string.Empty, ImmutableArray<LyricWord>.Empty);
+        }
+
         if (text.IndexOf('<') < 0)
         {
-            return text;
+            return (text, ImmutableArray<LyricWord>.Empty);
         }
 
         var builder = new StringBuilder(text.Length);
-        var insideTag = false;
-        foreach (var character in text)
+        var spans = new List<(int Offset, int Length, string Text)>();
+        var index = 0;
+        var pendingOffset = -1;
+        var pendingLength = 0;
+        while (index < text.Length)
         {
-            if (character == '<')
+            if (text[index] == '<')
             {
-                insideTag = true;
+                var end = text.IndexOf('>', index + 1);
+                if (end < 0)
+                {
+                    break;
+                }
+
+                var tag = text[(index + 1)..end];
+                var parts = tag.Split(',');
+                if (parts.Length >= 2
+                    && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var offset)
+                    && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var length))
+                {
+                    pendingOffset = Math.Max(0, offset);
+                    pendingLength = Math.Max(0, length);
+                }
+
+                index = end + 1;
                 continue;
             }
 
-            if (character == '>' && insideTag)
+            var runStart = index;
+            while (index < text.Length && text[index] != '<')
             {
-                insideTag = false;
+                index++;
+            }
+
+            var run = text[runStart..index];
+            if (run.Length == 0)
+            {
                 continue;
             }
 
-            if (!insideTag)
+            builder.Append(run);
+            if (pendingOffset >= 0)
             {
-                builder.Append(character);
+                // The tag's length counts characters starting at the tag: keep the span inside its run.
+                var length = Math.Min(pendingLength, run.Length);
+                spans.Add((pendingOffset, length > 0 ? length : run.Length, run[..Math.Min(run.Length, Math.Max(1, length))]));
+                pendingOffset = -1;
             }
         }
 
-        return builder.ToString();
+        var body = builder.ToString();
+        if (spans.Count == 0)
+        {
+            return (body, ImmutableArray<LyricWord>.Empty);
+        }
+
+        // Real files occasionally list spans out of order: sort stably by offset, then clamp lengths.
+        var words = spans
+            .OrderBy(static span => span.Offset)
+            .Select(span => new LyricWord(span.Offset, Math.Clamp(span.Length, 1, Math.Max(1, body.Length)), span.Text))
+            .ToImmutableArray();
+        return (body, words);
     }
 }
