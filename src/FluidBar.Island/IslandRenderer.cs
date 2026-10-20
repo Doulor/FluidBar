@@ -807,6 +807,26 @@ public sealed class IslandRenderer : IDisposable
             return;
         }
 
+        var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
+        if (cover is null)
+        {
+            // No artwork: the fallback is a disc, not the rounded square well. Without artwork the
+            // well would become the silhouette of the whole ball, and a satellite has to read as a
+            // circle no matter what it carries.
+            var discRadius = (ball.Width / 2f) - (SplitSatelliteStyle.InnerFrameInsetDip * surface.DpiScale);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.MaskFilter = null;
+            _fill.Color = Alpha(_theme.BackgroundInset, alpha);
+            canvas.DrawCircle(ball.MidX, ball.MidY, discRadius, _fill);
+            var noteSize = discRadius * 1.05f;
+            IconSet.Draw(canvas, IconKind.Media,
+                new SKRect(ball.MidX - (noteSize / 2), ball.MidY - (noteSize / 2),
+                    ball.MidX + (noteSize / 2), ball.MidY + (noteSize / 2)),
+                Alpha(SKColors.White, alpha), _icon);
+            return;
+        }
+
         // Contact shadow of the cover inside the ball: a soft dark rim under the well.
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
@@ -817,7 +837,6 @@ public sealed class IslandRenderer : IDisposable
             frame.Width, frame.Height, frameRadius, frameRadius, _fill);
         _fill.MaskFilter = null;
 
-        var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
         canvas.Save();
         using (var clip = new SKPath())
         {
@@ -830,19 +849,6 @@ public sealed class IslandRenderer : IDisposable
                 var imageRect = IslandMetrics.SplitIsletContainRect(frame, cover.Width, cover.Height);
                 _icon.Color = Alpha(SKColors.White, alpha);
                 canvas.DrawImage(cover, imageRect, _icon);
-            }
-            else
-            {
-                // No artwork: the well itself is the single element (a neutral note sits inside it).
-                _fill.Style = SKPaintStyle.Fill;
-                _fill.Shader = null;
-                _fill.Color = Alpha(_theme.BackgroundInset, alpha);
-                canvas.DrawRoundRect(frame, frameRadius, frameRadius, _fill);
-                var iconSize = frame.Width * 0.52f;
-                IconSet.Draw(canvas, IconKind.Media,
-                    new SKRect(frame.MidX - (iconSize / 2), frame.MidY - (iconSize / 2),
-                        frame.MidX + (iconSize / 2), frame.MidY + (iconSize / 2)),
-                    Alpha(SKColors.White, alpha), _icon);
             }
 
             // Recessed inner shade: the top of the cover sits in shadow.
