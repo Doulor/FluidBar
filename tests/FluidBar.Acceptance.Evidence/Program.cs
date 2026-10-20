@@ -216,6 +216,12 @@ internal static class Program
                     ?? throw new InvalidOperationException("settings window has no content");
                 var name = $"{index:00}-settings-{section.ToString().ToLowerInvariant()}.png";
                 captured.Add(Capture(content, Path.Combine(screenshots, name)));
+                if (section == SettingsWindowSection.General
+                    && Environment.GetEnvironmentVariable("FLUIDBAR_TOKEN_SAMPLE") == "1")
+                {
+                    // Task-36 evidence: 2x render so the tertiary hint glyphs have solid token pixels.
+                    captured.Add(Capture(content, Path.Combine(screenshots, "01-settings-general@2x.png"), 192));
+                }
                 captured.Add(new
                 {
                     section = section.ToString(),
@@ -260,16 +266,17 @@ internal static class Program
     private static IEnumerable<Control> Descendants(Control root)
         => root.GetVisualDescendants().OfType<Control>();
 
-    private static object Capture(Control content, string path)
+    private static object Capture(Control content, string path, double dpi = 96)
     {
-        var width = (int)Math.Ceiling(content.Bounds.Width);
-        var height = (int)Math.Ceiling(content.Bounds.Height);
+        var scale = dpi / 96.0;
+        var width = (int)Math.Ceiling(content.Bounds.Width * scale);
+        var height = (int)Math.Ceiling(content.Bounds.Height * scale);
         if (width <= 0 || height <= 0)
         {
             throw new InvalidOperationException($"control has no size ({width}x{height})");
         }
 
-        using var bitmap = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96));
+        using var bitmap = new RenderTargetBitmap(new PixelSize(width, height), new Vector(dpi, dpi));
         bitmap.Render(content);
         bitmap.Save(path);
         return new { path, width, height, bytes = new FileInfo(path).Length };

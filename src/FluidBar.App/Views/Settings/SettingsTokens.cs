@@ -1,6 +1,7 @@
 using Avalonia.Media;
 using FluidBar.App.Settings;
 using FluidBar.App.Theme;
+using FluidBar.Core.Layout;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -318,7 +319,7 @@ public sealed class SettingsPalette
             LineStrong = Color.FromArgb(33, 17, 24, 39);
             Foreground = Color.Parse("#151A21");
             Secondary = Color.Parse("#59626F");
-            Tertiary = Color.Parse("#666D78");
+            Tertiary = Color.Parse(TextTokens.TertiaryLight);
             Active = Color.Parse("#1B2028");
             ActiveForeground = Colors.White;
         }
@@ -332,7 +333,7 @@ public sealed class SettingsPalette
             LineStrong = Color.FromArgb(28, 255, 255, 255);
             Foreground = Color.Parse("#F4F4F6");
             Secondary = Color.Parse("#9B9BA5");
-            Tertiary = Color.Parse("#86868F");
+            Tertiary = Color.Parse(TextTokens.TertiaryDark);
             Active = Color.Parse("#F5F5F7");
             ActiveForeground = Color.Parse("#0B0B0D");
         }
@@ -419,3 +420,4 @@ public sealed class SettingsPalette
     /// <summary>Prototype <c>.sw-mark</c> / <c>.about-mark</c> tile.</summary>
     public Color Mark => Color.Parse("#070709");
 }
+

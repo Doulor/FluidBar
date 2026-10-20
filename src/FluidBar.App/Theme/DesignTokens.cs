@@ -35,7 +35,7 @@ public readonly record struct IslandColors(
         Color.Parse("#1CFFFFFF"),
         Colors.White,
         Color.Parse("#9B9BA5"),
-        Color.Parse("#6E6E78"));
+        Color.Parse(TextTokens.TertiaryDark));
 
     /// <summary>Graphite palette <c>#1C1C1E</c>.</summary>
     public static IslandColors Graphite { get; } = Obsidian with
@@ -115,7 +115,7 @@ public readonly record struct AppSurfaceColors(
         Color.Parse("#1FFFFFFF"),
         Color.Parse("#F4F4F6"),
         Color.Parse("#9B9BA5"),
-        Color.Parse("#6E6E78"),
+        Color.Parse(TextTokens.TertiaryDark),
         Color.Parse("#F5F5F7"),
         Color.Parse("#0B0B0D"));
 
@@ -130,7 +130,7 @@ public readonly record struct AppSurfaceColors(
         Color.Parse("#22111827"),
         Color.Parse("#151A21"),
         Color.Parse("#59626F"),
-        Color.Parse("#89919C"),
+        Color.Parse(TextTokens.TertiaryLight),
         Color.Parse("#1B2028"),
         Colors.White);
 
@@ -353,7 +353,7 @@ public static class IslandBrushes
     public static readonly IBrush Secondary = new SolidColorBrush(Color.Parse("#9B9BA5"));
 
     /// <summary>Tertiary text brush.</summary>
-    public static readonly IBrush Tertiary = new SolidColorBrush(Color.Parse("#6E6E78"));
+    public static readonly IBrush Tertiary = new SolidColorBrush(Color.Parse(TextTokens.TertiaryDark));
 
     /// <summary>Default accent brush (artwork fallback).</summary>
     public static readonly IBrush Accent = new SolidColorBrush(Accents.Fallback);
@@ -370,3 +370,4 @@ public static class IslandBrushes
     /// <summary>Warning brush.</summary>
     public static readonly IBrush Warning = new SolidColorBrush(Accents.Warning);
 }
+

@@ -1,3 +1,4 @@
+using FluidBar.Core.Layout;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -58,10 +59,10 @@ public sealed record IslandTheme
     public SKColor ForegroundSecondary { get; init; } = new(0x9B, 0x9B, 0xA5);
 
     /// <summary>
-    /// Tertiary text colour. Audited to meet WCAG AA 4.5:1 on both the shell (5.12:1) and raised cards
-    /// (4.70:1); the prototype's #6E6E78 was only 3.64:1 on raised surfaces.
+    /// Tertiary text colour from the shared <see cref="TextTokens.TertiaryDark"/> token (also used by the
+    /// settings window). On the island shell it is 5.55:1 and on raised cards 5.09:1 (WCAG AA).
     /// </summary>
-    public SKColor ForegroundTertiary { get; init; } = new(0x80, 0x80, 0x8A);
+    public SKColor ForegroundTertiary { get; init; } = ParseColor(TextTokens.TertiaryDark, default);
 
     /// <summary>User accent (default cyan).</summary>
     public SKColor Accent { get; init; } = new(0x4C, 0xC9, 0xF0);
@@ -138,7 +139,7 @@ public sealed record IslandTheme
         LineStrong = new SKColor(0x11, 0x18, 0x27, 0x22),
         Foreground = new SKColor(0x14, 0x16, 0x1A),
         ForegroundSecondary = new SKColor(0x5B, 0x62, 0x70),
-        ForegroundTertiary = new SKColor(0x89, 0x91, 0x9C),
+        ForegroundTertiary = ParseColor(TextTokens.TertiaryLight, default),
         Accent = new SKColor(0x0A, 0x84, 0xFF),
         TrackAccent = new SKColor(0xE0, 0x55, 0x9B),
         ArtEnd = new SKColor(0xDD, 0xE3, 0xEA),
