@@ -236,7 +236,11 @@ public sealed class SettingsWindow : Window, ILocalizable
             // unpainted wedge (grey band) can appear between the corner and the content.
             if (roundHandleIsUsable)
             {
-                DwmRoundingActive = WindowCornerRegion.TryEnableDwmRounding(roundHandle, out _);
+                _ = WindowDwmPolicy.TryApplyFramedStyle(roundHandle, out _);
+                DwmRoundingActive = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_DWM_SMALL"), "1",
+                    StringComparison.Ordinal)
+                    ? WindowDwmPolicy.TryEnableRoundingSmall(roundHandle, out _)
+                    : WindowCornerRegion.TryEnableDwmRounding(roundHandle, out _);
                 if (DwmRoundingActive)
                 {
                     // The shell stays square and fills the whole window rect: DWM cuts the rounded corner
@@ -297,10 +301,23 @@ public sealed class SettingsWindow : Window, ILocalizable
     private IntPtr OnNativeMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const uint WmEraseBackground = 0x0014;
+        const uint WmNcCalcSize = 0x0083;
         const uint WmSize = 0x0005;
         const uint WmWindowPosChanged = 0x0047;
         const uint WmShowWindow = 0x0018;
         const uint WmDpiChanged = 0x02E0;
+        if (msg == WmNcCalcSize)
+        {
+            // Keep the client area covering the whole window: the window carries WS_CAPTION|WS_THICKFRAME
+            // only so DWM treats it as a normal window and applies its rounded corner and shadow, but no
+            // title bar or border may be drawn.
+            if (wParam != IntPtr.Zero)
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+        }
+
         if (msg == WmEraseBackground)
         {
             // Never let the system fill the surface with the class brush: Avalonia paints the panel.
@@ -329,6 +346,12 @@ public sealed class SettingsWindow : Window, ILocalizable
                 if (!preparation.Succeeded)
                 {
                     System.Diagnostics.Debug.WriteLine($"settings first-frame: {preparation.Error}");
+                }
+
+                // keep the DWM rounding across DPI changes
+                if (DwmRoundingActive && hwnd != IntPtr.Zero)
+                {
+                    _ = WindowCornerRegion.TryEnableDwmRounding(hwnd, out _);
                 }
 
                 ApplyCornerRegion("first-frame");
