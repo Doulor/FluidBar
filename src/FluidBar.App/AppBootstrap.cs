@@ -529,7 +529,7 @@ internal sealed class AppBootstrap
                 }, 1, "audit");
                 _skiaHost?.PublishActivity(ActivityKind.Agent, new ActivityPayload
                 {
-                    Title = "运行中", Subtitle = "deepseek", Badge = "running", IsActive = true,
+                    Title = "运行中", Subtitle = "deepseek", Badge = "6", IsActive = true,
                 }, 2, "audit");
                 _skiaHost?.PublishActivity(ActivityKind.Timer, new ActivityPayload
                 {

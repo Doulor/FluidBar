@@ -2017,13 +2017,19 @@ public sealed class SkiaIslandController : IDisposable
                 label = _localizer.Get("Activity." + view.Kind);
             }
 
+            var badge = view.Badge is { Length: > 0 } candidate
+                && candidate.All(char.IsAsciiDigit)
+                ? candidate
+                : null;
             islets[i] = new IslandSplitIslet(
                 view.Kind,
                 MapSplitIcon(view.Icon),
                 string.IsNullOrWhiteSpace(label) ? view.Kind.ToString() : label,
                 view.Title,
                 view.Page,
-                ParseAccent(view.AccentColorHex));
+                ParseAccent(view.AccentColorHex),
+                badge,
+                view.Kind == ActivityKind.Agent && view.IsActive);
         }
 
         return islets;
@@ -2673,6 +2679,7 @@ public sealed class SkiaIslandController : IDisposable
             OverflowCount = expanded ? 0 : _schedulerState.BadgeCount,
             SplitIslets = expanded && _motion.SplitProgress <= 0.02 ? [] : BuildSplitIslets(),
             SplitProgress = _motion.SplitProgress,
+            SplitIsletHeight = _motion.Target.CompactSize.Height,
             StackSpin = _motion.StackSpin,
             FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),

@@ -17,7 +17,9 @@ public sealed record IslandSplitIslet(
     string Label,
     string? Title,
     IslandPage Page,
-    uint AccentArgb);
+    uint AccentArgb,
+    string? Badge = null,
+    bool ShowAction = false);
 
 /// <summary>
 /// One immutable island frame: the animating shell geometry, the active surface, the page strip
@@ -152,6 +154,9 @@ public readonly record struct IslandRenderState
 
     /// <summary>0 = islets merged into the pill, 1 = fully separated (spring driven).</summary>
     public double SplitProgress { get; init; }
+
+    /// <summary>Compact primary height the split capsules match (DIP), frozen while expanding.</summary>
+    public double SplitIsletHeight { get; init; }
 
     /// <summary>One-shot 0..1 ghost-exchange phase after a wheel rotation of the stacked order.</summary>
     public double StackSpin { get; init; }
