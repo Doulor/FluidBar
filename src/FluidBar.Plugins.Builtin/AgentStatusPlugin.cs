@@ -136,12 +136,17 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             _ => "event",
         };
 
+        // While an agent is running the platform keeps emitting the same session/status pair; those
+        // heartbeats must republish the activity so its TTL (5 s by default) never expires while the
+        // session is still alive - otherwise the compact capsule would fall back to media/idle and the
+        // user would think the agent stopped. Terminal rows keep the dedupe so they do not repeat.
+        var active = latest.Kind is AgentEventKind.Running or AgentEventKind.WaitingForInput;
         lock (_stateGate)
         {
             // The session id is stable across running → completed, so the dedupe key includes the
             // status token: a finished session must still replace the live "running" activity.
             var stateKey = latest.Id + "|" + kindToken;
-            if (string.Equals(stateKey, _lastEntryId, StringComparison.Ordinal))
+            if (!active && string.Equals(stateKey, _lastEntryId, StringComparison.Ordinal))
             {
                 return;
             }

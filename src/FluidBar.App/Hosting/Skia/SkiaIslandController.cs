@@ -45,6 +45,12 @@ public sealed class SkiaIslandController : IDisposable
     private readonly ActivityScheduler _scheduler = new();
     private readonly Func<SystemAppearanceSnapshot> _appearance;
     private readonly double[] _pageScroll = new double[PagerConstants.PageCount];
+
+    /// <summary>Wheel scroll chain: content first, then an overscroll threshold before paging.</summary>
+    private readonly PagerScrollChainPolicy _scrollChain = new();
+
+    /// <summary>When the last wheel page step happened (freezes the chain during the snap).</summary>
+    private DateTimeOffset _lastPageStepAt = DateTimeOffset.MinValue;
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
@@ -1136,26 +1142,59 @@ public sealed class SkiaIslandController : IDisposable
 
         var now = _time.GetLocalNow();
 
-        // Vertical scrolling first: a page whose content is taller than the 232 DIP body (large font
-        // scales) consumes the wheel until it reaches an edge; only then does the pager turn the page.
+        // Wheel arbitration: scrollable content owns the wheel until it reaches an edge; at the edge
+        // the gesture must accumulate overscroll (and dwell) before the pager turns one page, so a
+        // clipboard or notification list scrolls natively and only then flips. Short pages flip at once.
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
             var page = (int)State.Page;
             var max = MaxScrollForPage(page);
-            if (max > 0.5)
+            var current = _pageScroll[page];
+            var direction = deltaDip < 0 ? PagerScrollDirection.Up : PagerScrollDirection.Down;
+            var boundary = max <= 0.5
+                ? PagerScrollBoundary.None
+                : direction == PagerScrollDirection.Down
+                    ? (current >= max - 0.01 ? PagerScrollBoundary.Bottom : PagerScrollBoundary.None)
+                    : (current <= 0.01 ? PagerScrollBoundary.Top : PagerScrollBoundary.None);
+            var locked = now - _lastPageStepAt < TimeSpan.FromMilliseconds(PagerConstants.WheelCooldownMs);
+            var decision = _scrollChain.Handle(new PagerScrollChainRequest
             {
-                var current = _pageScroll[page];
-                var target = Math.Clamp(current + deltaDip, 0, max);
-                if (Math.Abs(target - current) > 0.01)
+                WheelDeltaDip = deltaDip,
+                ContentScrollable = max > 0.5,
+                ContentBoundary = boundary,
+                CurrentPage = page,
+                Now = now,
+                PageAnimationLocked = locked,
+            });
+
+            if (decision.Action == PagerScrollChainAction.ScrollContent)
+            {
+                _pageScroll[page] = Math.Clamp(current + deltaDip, 0, max);
+                _pages = ApplyPageScroll(_pages);
+                BuildRenderState();
+                InvalidateFull();
+                _archipelago.Reveal(now);
+                UpdateArchipelago(now);
+                return new SkiaWheelOutcome(true, false, page, true, false);
+            }
+
+            if (decision.Action is PagerScrollChainAction.PageNext or PagerScrollChainAction.PagePrevious)
+            {
+                _lastPageStepAt = now;
+                var paged = _pager.Wheel(deltaDip, horizontal: false, shift: false, now, contentScrollable: false);
+                if (paged.Paged || paged.Consumed)
                 {
-                    _pageScroll[page] = target;
-                    _pages = ApplyPageScroll(_pages);
-                    BuildRenderState();
-                    InvalidateFull();
                     _archipelago.Reveal(now);
                     UpdateArchipelago(now);
-                    return new SkiaWheelOutcome(true, false, page, true, false);
+                    InvalidateFull();
                 }
+
+                return paged;
+            }
+
+            if (decision.Consumed)
+            {
+                return new SkiaWheelOutcome(false, false, page, false, false);
             }
         }
 

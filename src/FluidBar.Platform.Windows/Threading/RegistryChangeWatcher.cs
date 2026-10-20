@@ -14,6 +14,12 @@ internal sealed class RegistryChangeWatcher : IDisposable
     private readonly Action _onChanged;
     private readonly IPlatformLogger _logger;
     private readonly PlatformCounters _counters;
+    /// <summary>
+    /// Rooted callback for <c>RegisterWaitForSingleObject</c>. The native wait stores only a function
+    /// pointer, so passing a method group here lets GC collect the delegate and the next notification
+    /// kills the process with a FailFast; the delegate must be held for the watcher's lifetime.
+    /// </summary>
+    private readonly NativeMethods.WaitOrTimerProc _waitProc;
     private SafeRegistryKey? _key;
     private SafeKernelHandle? _event;
     private IntPtr _waitHandle;
@@ -29,6 +35,7 @@ internal sealed class RegistryChangeWatcher : IDisposable
         _onChanged = onChanged ?? throw new ArgumentNullException(nameof(onChanged));
         _logger = logger ?? NullPlatformLogger.Instance;
         _counters = counters ?? new PlatformCounters();
+        _waitProc = OnWaitCompleted;
     }
 
     public bool WatchSubTree { get; }
@@ -42,7 +49,7 @@ internal sealed class RegistryChangeWatcher : IDisposable
         Arm();
 
         var registered = NativeMethods.Kernel32.RegisterWaitForSingleObject(out _waitHandle,
-            _event.DangerousGetHandle(), OnWaitCompleted, IntPtr.Zero, uint.MaxValue, 0);
+            _event.DangerousGetHandle(), _waitProc, IntPtr.Zero, uint.MaxValue, 0);
         if (!registered)
         {
             var error = Win32Error.LastError;

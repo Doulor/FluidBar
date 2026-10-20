@@ -152,3 +152,60 @@ observed. The provider read that copy end-to-end (copy + winsqlite3 query + stat
 - WorkBuddy reader: if `winsqlite3.dll` is missing or the copied DB cannot be opened, the provider degrades to
   an empty result per poll (no exception on the monitor thread); covered by a unit test.
 
+
+## End-to-end real-machine verification (Release, task-27 core path)
+
+Setup: no plugin, no hook, no script. Released build (`src/FluidBar.App/bin/Release/...`) launched with
+`FLUIDBAR_HOST=skia`, the real DSH desktop session kept running, and `%APPDATA%\FluidBar\agent-events`
+temporarily isolated (restored afterwards) so every row came from the read-only native providers only.
+The island was expanded and switched to page 05 with **UIA + PostMessage only (no SendInput / no user mouse
+movement)**; screenshots are PrintWindow captures.
+
+Observed:
+
+- Expanded page 05: three real DSH rows. Header line: `DeepSeek Harness  FluidBar`; main text (the session name,
+  not the brand): `你是 FluidBar 项目开发队友。仓` / `你是 FluidBar（D:\build\GitLocal\Flui`; right meta:
+  status `运行中` plus elapsed timer `75s` (prototype2's numeric duration format; the localized sentence
+  "已运行 X 分 Y 秒" is not rendered by the current rail-pixel numeric design).
+- Collapsed compact capsule: `你是 FluidBar 项目开发队...` + `运行中`, i.e. the session name, not the brand
+  and not the playing media track.
+- UIA name trees saved next to the screenshots:
+  - `fluidbar-71-e2e-expanded-uia.txt`: `ListItem name='DeepSeek Harness · FluidBar — 你是 FluidBar 项目开发队友。仓'`
+  - `fluidbar-72-e2e-compact-uia.txt`: `Group name='你是 FluidBar 项目开发队友。仓 · deepseek · 工具执行中 · running · deepseek · 运行中 · 你是 FluidBar 项目开发队友。仓'`
+
+Bug found and fixed on this core path: the built-in agent plugin deduped an unchanged running
+session/status pair, so after the activity's 5 s TTL the compact capsule fell back to the persistent media
+activity (KuGou) even while DSH was still working. `AgentStatusPlugin` now republishes running/waiting
+heartbeats (terminal rows still dedupe), and `AgentStatusPluginTests.RunningHeartbeatsRepublishSoTheCapsule-
+DoesNotExpire` pins the behaviour. After the fix the collapsed capsule shows the DSH session name and
+`运行中` continuously.
+
+Evidence:
+
+- `fluidbar-71-e2e-expanded.png` / `fluidbar-71-e2e-expanded-uia.txt`
+- `fluidbar-72-e2e-compact.png` / `fluidbar-72-e2e-compact-uia.txt`
+
+Verification totals after the fix: full solution build 0 errors, all 9 test projects green (2161 tests).
+
+
+### Duration format correction (prototype2 mm:ss)
+
+Agent row durations now use prototype2's clock form: "02:14" for a minute or more and "0:45" under a
+minute. The intermediate bare-second form ("75s") was wrong and is gone; a 75 s row reads "01:15".
+Screenshot `fluidbar-73-e2e-expanded-mmss.png` shows the real page with `0:05`, `0:10`, `0:19`, `0:10`.
+The mapper test keeps the prototype semantics and adds `Map_SubMinuteDurationUsesTheMssForm` ("0:45").
+
+### Agent capsule while media is playing (task-27 follow-up)
+
+Same Release run, KuGou actively playing (`fluidbar-74-e2e-media-playing.png`: track "Boy & Bear" by Pogo,
+progress 0:02, pause button) and a real DSH session running:
+
+- `fluidbar-75-e2e-compact-media-agent-1.png` - collapsed capsule shows the DSH session name
+  `接手灵动岛项目重构与预览` + `运行中`, not the media track, while media keeps playing.
+- `fluidbar-75-e2e-compact-media-agent-2.png` - 7 s later the same capsule still shows the agent row
+  (now `已完成` for the finished session); media never takes the capsule back.
+- UIA trees: `fluidbar-75-e2e-compact-media-agent-1-uia.txt` / `-2-uia.txt`.
+
+This is the TTL/heartbeat fix in action: before it, the media activity took over the compact capsule after
+5 s even though the agent was still running.
+
