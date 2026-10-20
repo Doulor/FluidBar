@@ -40,7 +40,7 @@ public sealed class OverflowBadgeTests
         Assert.Equal(IslandHitKind.Compact, renderer.HitTest(state, shell.Left + 12, shell.MidY).Kind);
 
         var plain = state with { OverflowCount = 0, ShellWidth = state.ShellWidth - LayoutTokens.OverflowBadgeReserve };
-        Assert.Equal(IslandHitKind.Compact, renderer.HitTest(plain, badge.MidX, badge.MidY).Kind);
+        Assert.Equal(IslandHitKind.Compact, renderer.HitTest(plain, shell.MidX, shell.MidY).Kind);
     }
 
     private static int Ink(SKBitmap bitmap, SKRect rectDip)

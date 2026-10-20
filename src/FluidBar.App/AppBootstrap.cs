@@ -498,8 +498,40 @@ internal sealed class AppBootstrap
                 }
             }
 
-            var expandedOnly = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_MODE"),
-                "expanded", StringComparison.OrdinalIgnoreCase);
+            var auditMode = Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_MODE");
+            var overflowAudit = string.Equals(auditMode, "overflow", StringComparison.OrdinalIgnoreCase);
+            if (overflowAudit)
+            {
+                // Multi-island evidence: one deterministic run covering 0 ghosts, 2 ghosts and the
+                // +N chip, then a real pointer click on the chip (press/release through the controller
+                // hit test) showing the expansion lands on the background activity's page.
+                await ShotAsync("stack-0-idle");
+                _skiaHost?.PublishActivity(ActivityKind.Media, new ActivityPayload
+                {
+                    Title = "Midnight Drive", Subtitle = "Lumen Fields", IsActive = true,
+                    ShowsAudioWave = true, ProgressPercent = 42,
+                }, 1, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.Timer, new ActivityPayload
+                {
+                    Title = "Pomodoro", Level = 8, IsActive = true,
+                }, 2, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.BatteryLow, new ActivityPayload
+                {
+                    Title = "Low battery", Level = 12,
+                }, 3, "audit");
+                await ShotAsync("stack-2ghost-no-badge");
+                _skiaHost?.PublishActivity(ActivityKind.Progress, new ActivityPayload
+                {
+                    Title = "Export", ProgressPercent = 40, ProgressIndeterminate = false,
+                }, 4, "audit");
+                await ShotAsync("stack-4-badge");
+                var clicked = _skiaHost?.SimulateOverflowBadgeClick() == true;
+                log.AppendLine("overflow-badge-clicked=" + clicked);
+                await ShotAsync("stack-badge-opened");
+                return;
+            }
+
+            var expandedOnly = string.Equals(auditMode, "expanded", StringComparison.OrdinalIgnoreCase);
             if (expandedOnly)
             {
                 // Expanded-page evidence runs against the normal plugin/data set so every page shows

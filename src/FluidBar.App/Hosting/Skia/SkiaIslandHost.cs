@@ -249,6 +249,22 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.HandlePointerReleased(shell.MidX, shell.MidY);
     }
 
+    /// <summary>Simulates a click on the compact "+N" overflow chip (smoke/tests).</summary>
+    /// <returns>Whether the rendered state had an overflow chip to click.</returns>
+    public bool SimulateOverflowBadgeClick()
+    {
+        var state = _controller.RenderState;
+        var badge = IslandMetrics.OverflowBadgeRect(state);
+        if (badge.Width <= 0 || badge.Height <= 0)
+        {
+            return false;
+        }
+
+        _controller.HandlePointerPressed(badge.MidX, badge.MidY);
+        _controller.HandlePointerReleased(badge.MidX, badge.MidY);
+        return true;
+    }
+
     /// <summary>Simulates Escape.</summary>
     public void SimulateEscape() => _controller.HandleEscape();
 

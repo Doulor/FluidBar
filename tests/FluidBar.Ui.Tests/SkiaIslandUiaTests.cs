@@ -1,4 +1,5 @@
 using FluidBar.App.Hosting.Skia;
+using FluidBar.Core.Activities;
 using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
@@ -582,6 +583,41 @@ public sealed class SkiaIslandUiaTests
         Assert.True(root.State.IsOffscreen);
         Assert.Empty(root.Children);
         Assert.Equal(UiaExpandCollapseState.Collapsed, root.State.ExpandCollapse);
+    }
+
+    [Fact]
+    public void CompactSnapshot_ExposesOverflowButton_AndInvokeOpensBackgroundPage()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.Settle();
+        var controller = fixture.Controller;
+        controller.PublishActivity(ActivityKind.Media,
+            new ActivityPayload { Title = "Midnight City", IsActive = true }, 1, "test");
+        controller.PublishActivity(ActivityKind.Timer,
+            new ActivityPayload { Title = "Pomodoro", Level = 8 }, 2, "test");
+        controller.PublishActivity(ActivityKind.BatteryLow,
+            new ActivityPayload { Title = "Low battery", Level = 12 }, 3, "test");
+        controller.PublishActivity(ActivityKind.Progress,
+            new ActivityPayload { Title = "Export", ProgressPercent = 40 }, 4, "test");
+        fixture.Settle();
+
+        var root = source.BuildSnapshot();
+        var overflow = root.Find(SkiaIslandUiaElementIds.Overflow);
+        Assert.NotNull(overflow);
+        Assert.Equal(UiaElementRole.Button, overflow!.Role);
+        Assert.NotEqual(UiaPatternKind.None, overflow.Patterns & UiaPatternKind.Invoke);
+        Assert.True(overflow.State.IsFocusable);
+        Assert.Equal(IslandMetrics.OverflowBadgeRect(controller.RenderState).Width,
+            (float)overflow.BoundsDip.Width, 0.001);
+
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, SkiaIslandUiaElementIds.Overflow));
+        fixture.Settle();
+
+        Assert.Equal(IslandStateKind.Expanded, controller.State.Kind);
+        Assert.Equal((int)IslandPage.Media, controller.Pager.SelectedIndex);
+        Assert.Equal(UiaExpandCollapseState.Expanded, source.BuildSnapshot().State.ExpandCollapse);
     }
 
     /// <summary>Converts a strip rectangle to the DIP rectangle the snapshot reports.</summary>
