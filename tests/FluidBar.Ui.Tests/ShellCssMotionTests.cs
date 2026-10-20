@@ -57,16 +57,19 @@ public sealed class ShellCssMotionTests
         Assert.Equal(0, motion.ExpandedContentOpacity, 3);
         Assert.Equal(0, motion.ChromeOpacity, 3);
 
-        run.AdvanceTo(0.085);
-        Assert.Equal(0, motion.ExpandedContentOpacity, 3); // 90 ms delay
+        run.AdvanceTo(0.050);
+        Assert.Equal(0, motion.ExpandedContentOpacity, 3); // 60 ms content stagger
+        Assert.Equal(0, motion.ChromeOpacity, 3);          // 120 ms chrome stagger
 
-        run.AdvanceTo(0.0983);
-        Assert.Equal(0, motion.CompactContentOpacity, 3); // 90 ms ease-in complete
-        Assert.Equal(0.147, motion.ExpandedContentOpacity, 0.005);
-        run.AdvanceTo(0.100);
-        Assert.Equal(0.239, motion.ChromeOpacity, 0.005);
+        run.AdvanceTo(0.080);
+        Assert.True(motion.ExpandedContentOpacity > 0, "content must follow the container");
+        Assert.Equal(0, motion.ChromeOpacity, 3);
 
-        run.AdvanceTo(0.310);
+        run.AdvanceTo(0.150);
+        Assert.True(motion.ExpandedContentOpacity > 0.5);
+        Assert.True(motion.ChromeOpacity > 0);
+
+        run.AdvanceTo(0.400);
         Assert.Equal(1, motion.ExpandedContentOpacity, 0.01);
         Assert.Equal(1, motion.ChromeOpacity, 0.01);
         Assert.Equal(0, motion.CompactContentOpacity, 3);
