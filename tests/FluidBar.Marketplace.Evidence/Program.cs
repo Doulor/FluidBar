@@ -567,6 +567,22 @@ internal static class Program
                 captures.Add(new { state = state.ToString(), cards = applied, zoom });
             }
 
+            var deltaRegion = CardCropRegion(900, 620);
+            var pressDelta = MeasureDelta(
+                Path.Combine(outputDir, "settings-idle.png"),
+                Path.Combine(outputDir, "settings-press.png"),
+                deltaRegion);
+            var hoverDelta = MeasureDelta(
+                Path.Combine(outputDir, "settings-idle.png"),
+                Path.Combine(outputDir, "settings-hover.png"),
+                deltaRegion);
+            var deltas = new
+            {
+                region = new { deltaRegion.Left, deltaRegion.Top, deltaRegion.Width, deltaRegion.Height },
+                pressVsIdle = new { mean = pressDelta.Mean, max = pressDelta.Max, changedPixels = pressDelta.ChangedPixels },
+                hoverVsIdle = new { mean = hoverDelta.Mean, max = hoverDelta.Max, changedPixels = hoverDelta.ChangedPixels },
+            };
+
             var comparison = Path.Combine(outputDir, "settings-material-states-compare.png");
             BuildComparison(
                 comparison,
@@ -574,7 +590,7 @@ internal static class Program
                 states.Select(state => Path.Combine(outputDir, state.File)).ToArray());
             captures.Add(new { comparison });
 
-            var report = new { section = section.ToString(), captures };
+            var report = new { section = section.ToString(), pixelDelta = deltas, captures };
             Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
             File.WriteAllText(
                 Path.Combine(outputDir, "settings-material-states.json"),
@@ -619,6 +635,38 @@ internal static class Program
         }
 
         target.Save(targetPng, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    /// <summary>Mean/max per-channel delta between two PNGs inside a region (press/hover evidence numbers).</summary>
+    private static (double Mean, double Max, int ChangedPixels) MeasureDelta(string leftPng, string rightPng, System.Drawing.Rectangle region)
+    {
+        using var left = System.Drawing.Image.FromFile(leftPng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException($"'{leftPng}' is not a bitmap.");
+        using var rightSource = System.Drawing.Image.FromFile(rightPng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException($"'{rightPng}' is not a bitmap.");
+        var sum = 0.0;
+        var max = 0.0;
+        var changed = 0;
+        var count = 0;
+        for (var y = region.Top; y < region.Top + region.Height; y++)
+        {
+            for (var x = region.Left; x < region.Left + region.Width; x++)
+            {
+                var a = left.GetPixel(x, y);
+                var b = rightSource.GetPixel(x, y);
+                var delta = (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B)) / 3.0;
+                sum += delta;
+                count++;
+                if (delta > 1.0)
+                {
+                    changed++;
+                }
+
+                max = Math.Max(max, delta);
+            }
+        }
+
+        return (Math.Round(sum / Math.Max(1, count), 2), Math.Round(max, 1), changed);
     }
 
     /// <summary>Stacks the same card crop for idle/pressed/hover into one labelled comparison sheet.</summary>
