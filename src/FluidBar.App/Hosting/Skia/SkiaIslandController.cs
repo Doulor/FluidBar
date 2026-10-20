@@ -333,7 +333,7 @@ public sealed class SkiaIslandController : IDisposable
         && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
-    public TimeSpan PreferredFrameInterval => IsWaveOnly
+    public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
         ? TimeSpan.FromMilliseconds(33)
         : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
 

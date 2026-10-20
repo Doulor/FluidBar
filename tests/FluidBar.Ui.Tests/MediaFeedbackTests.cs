@@ -212,4 +212,56 @@ public sealed class MediaFeedbackTests
         Assert.True(state.LastResolveRolledBack);
         Assert.False(state.IsPending);
     }
+
+    [Fact]
+    public void Pause_tap_holds_the_paused_icon_for_two_seconds_of_stale_reads()
+    {
+        // Five-frame evidence for the reported bug: after the pause tap the island must paint "paused" at
+        // 0 ms and 100 ms even while the accessibility source keeps reporting the pre-tap "playing" glyph,
+        // and it must not flash back to playing inside 2 s.
+        {
+            var optimistic = new OptimisticPlayState();
+            var now = new DateTimeOffset(2026, 10, 21, 1, 0, 0, TimeSpan.Zero);
+            var frames = new List<(int OffsetMs, bool IslandPlaying, bool Optimistic, bool RolledBack)>();
+
+            bool Sample(int offsetMs, bool sourceReading)
+            {
+                var at = now.AddMilliseconds(offsetMs);
+                var published = optimistic.Resolve(sourceReading, at);
+                frames.Add((offsetMs, published, optimistic.IsPending, optimistic.LastResolveRolledBack));
+                return published;
+            }
+
+            // The tap: pause, and the source still says "playing" for the next two reads (stale glyph).
+            optimistic.Set(playing: false, now);
+            Assert.False(Sample(0, sourceReading: true));
+
+            Assert.False(Sample(100, sourceReading: true));
+            Assert.False(Sample(300, sourceReading: true));       // first consistent disagreement: hold
+            Assert.False(Sample(1000, sourceReading: false));    // source caught up: still paused
+            Assert.False(Sample(2000, sourceReading: false));
+
+            // 0/100 ms must be paused, nothing inside 2 s flipped back to playing, no rollback happened.
+            Assert.False(frames[0].IslandPlaying);
+            Assert.False(frames[1].IslandPlaying);
+            Assert.All(frames, frame => Assert.False(frame.IslandPlaying));
+            Assert.All(frames, frame => Assert.False(frame.RolledBack));
+        }
+    }
+
+    [Fact]
+    public void Play_tap_holds_the_playing_icon_while_the_source_lags()
+    {
+        var optimistic = new OptimisticPlayState();
+        var now = new DateTimeOffset(2026, 10, 21, 1, 0, 0, TimeSpan.Zero);
+        optimistic.Set(playing: true, now);
+
+        // Same five sample points as the pause case: the resumed state must survive the lagging source.
+        Assert.True(optimistic.Resolve(actual: false, now));
+        Assert.True(optimistic.Resolve(actual: false, now.AddMilliseconds(100)));
+        Assert.True(optimistic.Resolve(actual: false, now.AddMilliseconds(300)));
+        Assert.True(optimistic.Resolve(actual: true, now.AddMilliseconds(1000)));
+        Assert.False(optimistic.IsPending);
+        Assert.False(optimistic.LastResolveRolledBack);
+    }
 }
