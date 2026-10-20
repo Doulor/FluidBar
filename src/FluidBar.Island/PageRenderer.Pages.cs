@@ -101,7 +101,8 @@ internal sealed partial class PageRenderer
         var lineBottom = row.Top + 21;
         var app = item.AppName;
         // 70 DIP cut "Windows PowerShell" to "Windows Powers…"; 84 still leaves the title ~240 DIP.
-        var appWidth = string.IsNullOrEmpty(app) ? 0 : Math.Min(84, _text.Measure(app, IslandType.RowApp));
+        // +2 DIP absorbs the shaper's fractional advance so a measured-to-fit label never ellipsizes.
+        var appWidth = string.IsNullOrEmpty(app) ? 0 : Math.Min(84, _text.Measure(app, IslandType.RowApp) + 2f);
         if (appWidth > 0)
         {
             _text.Draw(
@@ -114,23 +115,34 @@ internal sealed partial class PageRenderer
                 _opacity);
         }
 
+        // The time column is measured, not a fixed 46 DIP slot: at 1.6 "just now"/"20 min" ellipsized
+        // to "just n…"/"20 mi…". Reserve the real width (capped for long locales) and move the title
+        // boundary with it so neither line overlaps the dismiss button.
+        var timeWidth = string.IsNullOrEmpty(item.TimeText)
+            ? 0
+            : Math.Min(96, _text.Measure(item.TimeText, IslandType.RowMeta) + 2f);
+        var timeRight = row.Right - 36;
+        var timeLeft = timeRight - timeWidth;
         var titleLeft = row.Left + 44 + (appWidth > 0 ? appWidth + 6 : 0);
         _text.Draw(
             canvas,
             item.Title,
             IslandType.RowTitle,
-            new SKRect(titleLeft, lineTop, row.Right - 86, lineBottom),
+            new SKRect(titleLeft, lineTop, timeLeft - 6, lineBottom),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
-        _text.Draw(
-            canvas,
-            item.TimeText,
-            IslandType.RowMeta,
-            new SKRect(row.Right - 82, lineTop, row.Right - 36, lineBottom),
-            _theme.ForegroundTertiary,
-            TextAlign.Right,
-            _opacity);
+        if (timeWidth > 0)
+        {
+            _text.Draw(
+                canvas,
+                item.TimeText,
+                IslandType.RowMeta,
+                new SKRect(timeLeft, lineTop, timeRight, lineBottom),
+                _theme.ForegroundTertiary,
+                TextAlign.Right,
+                _opacity);
+        }
 
         var bodyRight = hasCode ? chip.Left - 6 : row.Right - 36;
         _text.Draw(
@@ -426,12 +438,13 @@ internal sealed partial class PageRenderer
 
         // prototype2 .agent-head: tool/brand 9px/600 fg-2, project 8px fg-3, 6 DIP gap, baseline-aligned;
         // the right column is 8px/600 status over 8px fg-3 duration, right-aligned 10 DIP in.
+        // +2 DIP per column: a measured-to-fit status ("Running" at 1.6) was ellipsized to "Runni…".
         var statusWidth = string.IsNullOrEmpty(item.StatusText)
             ? 0
-            : _text.Measure(item.StatusText, IslandType.RowMetaStrong);
+            : _text.Measure(item.StatusText, IslandType.RowMetaStrong) + 2f;
         var durationWidth = string.IsNullOrEmpty(item.DurationText)
             ? 0
-            : _text.Measure(item.DurationText, IslandType.RowMeta);
+            : _text.Measure(item.DurationText, IslandType.RowMeta) + 2f;
         var rightRight = row.Right - 10;
         var rightLeft = rightRight - Math.Max(statusWidth, durationWidth);
         var mainLeft = row.Left + 39;
@@ -441,7 +454,7 @@ internal sealed partial class PageRenderer
         var tool = item.Tool;
         var toolWidth = string.IsNullOrEmpty(tool)
             ? 0
-            : Math.Min((mainRight - mainLeft) * 0.6f, _text.Measure(tool, IslandType.AgentTool));
+            : Math.Min((mainRight - mainLeft) * 0.6f, _text.Measure(tool, IslandType.AgentTool) + 2f);
         if (toolWidth > 0)
         {
             _text.Draw(
@@ -684,7 +697,9 @@ internal sealed partial class PageRenderer
             canvas,
             model.WeatherCondition,
             IslandType.WidgetDesc,
-            new SKRect(card.Left + 36, conditionTop, card.Right - 64,
+            // The high/low pair sits on the line above, so the condition may use the full card width;
+            // the old 64 DIP right inset clipped "Partly cloudy" to "Partly cl…" at 1.6.
+            new SKRect(card.Left + 36, conditionTop, card.Right - 10,
                 conditionTop + 14 + m.LineGrow(IslandType.WidgetDesc)),
             _theme.ForegroundTertiary,
             TextAlign.Left,

@@ -136,7 +136,7 @@ internal sealed class FakeLocalizer : ILocalizer
         ["Page.Widgets.Title"] = "Widgets",
         ["Page.Widgets.Tasks"] = "Today",
         ["Page.Widgets.Today"] = "Today",
-        ["Page.Home.FocusTime"] = "Focus time",
+        ["Page.Home.FocusTime"] = "Focus",
         ["Page.Home.System"] = "System",
         ["Page.Widgets.Task.Review"] = "Review",
         ["Page.Widgets.Task.Ship"] = "Ship",

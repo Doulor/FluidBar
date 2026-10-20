@@ -57,8 +57,11 @@ public sealed record IslandTheme
     /// <summary>Secondary text colour.</summary>
     public SKColor ForegroundSecondary { get; init; } = new(0x9B, 0x9B, 0xA5);
 
-    /// <summary>Tertiary text colour.</summary>
-    public SKColor ForegroundTertiary { get; init; } = new(0x6E, 0x6E, 0x78);
+    /// <summary>
+    /// Tertiary text colour. Audited to meet WCAG AA 4.5:1 on both the shell (5.12:1) and raised cards
+    /// (4.70:1); the prototype's #6E6E78 was only 3.64:1 on raised surfaces.
+    /// </summary>
+    public SKColor ForegroundTertiary { get; init; } = new(0x80, 0x80, 0x8A);
 
     /// <summary>User accent (default cyan).</summary>
     public SKColor Accent { get; init; } = new(0x4C, 0xC9, 0xF0);

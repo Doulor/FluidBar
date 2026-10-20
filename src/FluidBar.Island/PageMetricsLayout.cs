@@ -257,14 +257,15 @@ public static class PageMetricsLayout
     public static SKRect MediaOutput(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left + 250, page.Top + 220 + dy, page.Left + 320, page.Top + 246 + dy);
+        // Widened/moved from 250..320 so the disabled "No output" label still fits at a 1.6 font scale.
+        return new SKRect(page.Left + 238, page.Top + 220 + dy, page.Left + 320, page.Top + 246 + dy);
     }
 
     /// <summary>Media queue button rectangle.</summary>
     public static SKRect MediaQueue(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left + 326, page.Top + 220 + dy, page.Left + 400, page.Top + 246 + dy);
+        return new SKRect(page.Left + 324, page.Top + 220 + dy, page.Left + 400, page.Top + 246 + dy);
     }
 
     /// <summary>Media content height below the title gutter.</summary>
