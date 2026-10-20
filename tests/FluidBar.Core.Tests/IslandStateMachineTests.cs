@@ -39,6 +39,26 @@ public class IslandStateMachineTests
     }
 
     [Fact]
+    public void SameKeyRefresh_DoesNotNudgeTheCompactShell()
+    {
+        var scheduler = new ActivityScheduler();
+        var first = scheduler.Update(ActivitySchedulerState.Empty, TestData.Media(), TestData.Now);
+        var replacement = IslandEvent.New(
+            new ActivityKey(ActivityKind.Media, "media:gsmtc"),
+            TestData.Payload("new track"),
+            2);
+        var refresh = scheduler.Update(first.State, replacement, TestData.Now.AddSeconds(1));
+        Assert.Equal(ActivityUpdateKind.ReplacedInPlace, refresh.Kind);
+
+        var compact = IslandState.Hidden with { Kind = IslandStateKind.Compact, ActivityCount = 1 };
+        var transition = Reduce(compact, FromUpdate(refresh));
+
+        // A running agent refreshes its payload every heart-beat, which surfaces as
+        // ReplacedInPlace. Nudging that made the island jump once a second.
+        Assert.DoesNotContain(transition.Effects, e => e.Kind == IslandEffectKind.PlayNudge);
+    }
+
+    [Fact]
     public void Hidden_SuppressedActivity_StaysHidden()
     {
         var suppressed = IslandState.Hidden with { IsSuppressed = true };

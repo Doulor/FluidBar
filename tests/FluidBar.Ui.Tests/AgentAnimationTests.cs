@@ -112,6 +112,54 @@ public sealed class AgentAnimationTests
             }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
+    [Fact]
+    public void Ten_seconds_of_agent_frames_keep_the_shell_size_position_and_nudge_zero()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(4);
+        fixture.Data.Update(content => content with { Agents = [Row(StatusTone.Info, "0:09")] });
+        fixture.Settle();
+        Drain(fixture);
+
+        var shell = fixture.Controller.RenderState;
+        var frames = new List<object>();
+        const double step = 1000.0 / 60.0;
+        for (var i = 0; i < 600; i++)
+        {
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(step));
+            Assert.True(fixture.Controller.TakeInvalidation(out var change), $"frame {i} produced no damage");
+            Assert.False(change.FullFrame, $"frame {i} repainted the whole surface");
+
+            var state = fixture.Controller.RenderState;
+            Assert.Equal(shell.ShellWidth, state.ShellWidth, 6);
+            Assert.Equal(shell.ShellHeight, state.ShellHeight, 6);
+            Assert.Equal(shell.ShellOrigin.X, state.ShellOrigin.X, 6);
+            Assert.Equal(shell.ShellOrigin.Y, state.ShellOrigin.Y, 6);
+            Assert.Equal(0, state.NudgeOffsetY, 6);
+            frames.Add(new
+            {
+                frame = i,
+                milliseconds = Math.Round(i * step, 3),
+                shellWidth = state.ShellWidth,
+                shellHeight = state.ShellHeight,
+                originX = state.ShellOrigin.X,
+                originY = state.ShellOrigin.Y,
+                nudgeY = state.NudgeOffsetY,
+                fullFrame = change.FullFrame,
+            });
+        }
+
+        var dir = Path.Combine(RepoRoot(), "build", "reports", "ui-audit", "agent-animation");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "frames-10s.json"),
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                note = "600 frames at 16.667 ms (10 s); shell size/origin and nudge must not change",
+                frames,
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
     private static void Drain(ControllerFixture fixture)
     {
         while (fixture.Controller.TakeInvalidation(out _))

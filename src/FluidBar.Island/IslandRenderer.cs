@@ -338,8 +338,12 @@ public sealed class IslandRenderer : IDisposable
             canvas.Translate(-shell.MidX, -shell.MidY);
         }
 
-        if (_options.EnableShadow)
+        if (_options.EnableShadow && state.Form is not ShellForm.Expanded)
         {
+            // The expanded host window is deliberately much larger than the 440x284 panel (the
+            // transparent margin is click-through padding). Painting the large shell shadow into
+            // that margin makes the layered window show a translucent grey block on the desktop,
+            // so the expanded panel is shadowless; compact/peek keep the prototype shadow.
             DrawShadow(canvas, state, shell, dpiScale, opacity);
         }
 

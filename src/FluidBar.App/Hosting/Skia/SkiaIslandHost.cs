@@ -1149,6 +1149,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _frameClock.Start(OnFrame);
         }    }
 
+    private SkiaIslandRenderChange _lastChange;
+    private bool _lastRenderHappened;
+
     private void OnFrame(TimeSpan delta)
     {
         if (_disposed || _rendering)
@@ -1165,6 +1168,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
             RenderAllLocked(forceFull: false);
+            if (SkiaFrameTrace.Enabled && _windows.Count > 0)
+            {
+                SkiaFrameTrace.Frame(
+                    _lastRenderHappened ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
+                    _controller.RenderState,
+                    _controller.Motion,
+                    _controller.IsAgentAnimating,
+                    _lastChange);
+            }
+
             if (_controller.IsAnimating || _controller.IsAgentAnimating)
             {
                 // The preview rail springs move the pills a few DIP during a page turn; keep the
@@ -1604,6 +1617,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private void RenderAllLocked(bool forceFull)
     {
+        _lastRenderHappened = false;
         if (_windows.Count == 0)
         {
             return;
@@ -1620,6 +1634,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             return;
         }
 
+        _lastChange = change;
+        _lastRenderHappened = true;
         var state = _controller.RenderState;
         double totalRenderMs = 0;
         foreach (var entry in _windows)

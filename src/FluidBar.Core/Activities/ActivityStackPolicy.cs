@@ -141,8 +141,7 @@ public sealed record ActivitySchedulerUpdate
     public bool HasChange => Kind != ActivityUpdateKind.None;
 
     /// <summary>Whether a one-shot nudge should be played for this update.</summary>
-    public bool ShouldNudge => Kind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted
-        or ActivityUpdateKind.ReplacedInPlace;
+    public bool ShouldNudge => Kind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted;
 
     /// <summary>Creates a no-op update for <paramref name="state"/>.</summary>
     public static ActivitySchedulerUpdate None(ActivitySchedulerState state) => new() { State = state };

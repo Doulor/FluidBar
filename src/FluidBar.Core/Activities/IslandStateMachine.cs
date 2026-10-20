@@ -117,8 +117,9 @@ public static class IslandStateMachine
                     AutoHideDeadline = options.AutoHideMs > 0 ? now.AddMilliseconds(options.AutoHideMs) : null,
                 };
                 var effects = new List<IslandEffect> { Effect(IslandEffectKind.UpdateContent), Effect(IslandEffectKind.UpdateTray) };
-                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted
-                    or ActivityUpdateKind.ReplacedInPlace)
+                // Only a genuinely new/preempting activity nudges. Same-key content refreshes use
+                // ReplacedInPlace; nudging those made a running agent bump the shell every heartbeat.
+                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted)
                 {
                     effects.Add(Effect(IslandEffectKind.PlayNudge));
                     effects.Add(Effect(IslandEffectKind.StartFrameLoop));
@@ -130,8 +131,7 @@ public static class IslandStateMachine
             case IslandStateKind.Peek:
             {
                 var effects = new List<IslandEffect> { Effect(IslandEffectKind.UpdateContent), Effect(IslandEffectKind.UpdateTray) };
-                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted
-                    or ActivityUpdateKind.ReplacedInPlace)
+                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted)
                 {
                     effects.Add(Effect(IslandEffectKind.PlayNudge));
                     effects.Add(Effect(IslandEffectKind.StartFrameLoop));
@@ -166,8 +166,7 @@ public static class IslandStateMachine
                 }
 
                 var effects = new List<IslandEffect> { Effect(IslandEffectKind.UpdateContent), Effect(IslandEffectKind.UpdateTray) };
-                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted
-                    or ActivityUpdateKind.ReplacedInPlace)
+                if (input.UpdateKind is ActivityUpdateKind.Added or ActivityUpdateKind.Preempted)
                 {
                     effects.Add(Effect(IslandEffectKind.PlayNudge));
                     effects.Add(Effect(IslandEffectKind.StartFrameLoop));
