@@ -319,6 +319,11 @@ public static class LayoutTokens
     /// <summary>Painted height of the +N chip.</summary>
     public const double OverflowBadgeHeight = 16;
 
+    /// <summary>Maximum compact-pill width while split previews are visible (DIP). The preview row
+    /// needs two capsules beside the pill; over-long lyric pills are ellipsised instead of pushing a
+    /// capsule off the fixed host surface.</summary>
+    public const double SplitPrimaryMaxWidth = 300;
+
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);

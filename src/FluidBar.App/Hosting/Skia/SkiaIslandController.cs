@@ -1945,6 +1945,15 @@ public sealed class SkiaIslandController : IDisposable
             ? Math.Min(viewModel.Ghosts.Length, LayoutTokens.MaxGhosts)
             : 0;
 
+        // The split previews need the two side lanes: cap an over-long lyric pill so both capsules
+        // stay fully inside the fixed host surface (the lyric falls back to its ellipsis).
+        if (splitCount > 0)
+        {
+            compactSize = new VisualSize(
+                Math.Min(compactSize.Width, LayoutTokens.SplitPrimaryMaxWidth),
+                compactSize.Height);
+        }
+
         // With more activities than the visible stack can hold, the compact pill reserves a column for
         // the "+N" chip. Keeping the reservation here (not only in the renderer) means the shell, its
         // hit region and the chip always agree on the same width.

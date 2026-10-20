@@ -194,21 +194,38 @@ public static class IslandMetrics
         return (digits * 7f) + 8f;
     }
 
-    /// <summary>Content-adaptive capsule width: left disc + optional badge + optional action (min 56).</summary>
+    /// <summary>Thumbnail diameter inside a capsule (height - 12 DIP).</summary>
+    public static float SplitIsletDiscHeight(in IslandRenderState state)
+        => SplitIsletHeight(state) - 12f;
+
+    /// <summary>Middle status/badge slot width; a numeric badge gets its own red pill in this slot.</summary>
+    public static float SplitIsletSlotWidth(IslandSplitIslet islet)
+        => Math.Max(14f, SplitIsletBadgeWidth(islet.Badge));
+
+    /// <summary>Badge rectangle inside the middle slot (empty when the capsule has no numeric badge).</summary>
+    public static SKRect SplitIsletBadgeRect(in IslandRenderState state, IslandSplitIslet islet, SKRect capsule)
+    {
+        var width = SplitIsletBadgeWidth(islet.Badge);
+        if (width <= 0)
+        {
+            return SKRect.Empty;
+        }
+
+        var disc = SplitIsletDiscHeight(state);
+        var slotLeft = capsule.Left + 4 + disc + 3;
+        var slotWidth = SplitIsletSlotWidth(islet);
+        return new SKRect(slotLeft, capsule.MidY - 7, slotLeft + slotWidth, capsule.MidY + 7);
+    }
+
+    /// <summary>Content-adaptive capsule width: thumbnail disc + middle slot + optional action (min 56).</summary>
     public static float SplitIsletWidth(in IslandRenderState state, IslandSplitIslet islet)
     {
         var height = SplitIsletHeight(state);
-        // Left icon disc + middle rounded-square status slot (both always inside the capsule).
-        var width = 4f + (height - 8f) + 4f + 16f + 4f;
-        var badge = SplitIsletBadgeWidth(islet.Badge);
-        if (badge > 0)
-        {
-            width += 4f + badge;
-        }
-
+        var disc = SplitIsletDiscHeight(state);
+        var width = 4f + disc + 3f + SplitIsletSlotWidth(islet) + 4f;
         if (islet.ShowAction)
         {
-            width += 4f + 20f;
+            width += 3f + 16f;
         }
 
         return Math.Max((float)SplitIsletMinWidth, width);
