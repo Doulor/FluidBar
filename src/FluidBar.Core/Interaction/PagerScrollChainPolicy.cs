@@ -54,7 +54,7 @@ public readonly record struct PagerScrollChainRequest
     /// <summary>Current page index (used to clamp page steps).</summary>
     public int CurrentPage { get; init; }
 
-    /// <summary>Number of pages (defaults to <see cref="FluidBar.Core.Activities.PageRef.BuiltinPages.Count"/>).</summary>
+    /// <summary>Number of pages; supplied by the live page registry/slots (must be &gt;= 1).</summary>
     public int PageCount { get; init; }
 
     /// <summary>Injected current time (no ambient clock).</summary>

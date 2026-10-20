@@ -223,15 +223,6 @@ public static class IslandMetrics
         return (dx * dx) + (dy * dy) <= radius * radius;
     }
 
-    /// <summary>True when the point is inside the circle (not merely its bounding square).</summary>
-    public static bool SplitIsletContains(SKRect circle, float x, float y)
-    {
-        var dx = x - circle.MidX;
-        var dy = y - circle.MidY;
-        var radius = circle.Width / 2;
-        return (dx * dx) + (dy * dy) <= radius * radius;
-    }
-
     /// <summary>Animated circle of islet <paramref name="index"/> (bud at the pill edge → round seat).</summary>
     public static SKRect SplitIsletAnimatedRect(in IslandRenderState state, SKRect[] finals, int index)
     {
