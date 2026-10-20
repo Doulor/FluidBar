@@ -74,7 +74,7 @@ internal static class SettingsMetrics
     public const double DescLineHeight = 1.55;
     public const double DescMarginBottom = 18;
     public const double DescMaxWidth = 560;
-    public const double CaptionSize = 8.5;
+    public const double CaptionSize = 9;
     public const double CaptionTracking = 0.12;
     public const double CaptionMarginTop = 20;
     public const double CaptionMarginBottom = 2;
@@ -132,7 +132,7 @@ internal static class SettingsMetrics
     public const double ApHeadMarginBottom = 6;
     public const double ApHeadSize = 8.5;
     public const double ApHeadTracking = 0.11;
-    public const double ApMetaSize = 8;
+    public const double ApMetaSize = 8.5;
     public const double ApCanvasHeight = 84;
     public const double ApCanvasRadius = 12;
     public const double ApShellWidth = 300;
@@ -167,12 +167,12 @@ internal static class SettingsMetrics
     public const double BadgeHeight = 16;
     public const double BadgeRadius = 4;
     public const double BadgePadX = 6;
-    public const double BadgeSize = 8;
+    public const double BadgeSize = 8.5;
     public const double BadgeTracking = 0.05;
     public const double PermHeight = 16;
     public const double PermPadX = 5;
     public const double PermRadius = 4;
-    public const double PermSize = 8;
+    public const double PermSize = 8.5;
     public const double PermGap = 3;
     public const double IconButton = 24;
     /// <summary><c>.icon-btn</c> corner radius.</summary>
@@ -188,7 +188,7 @@ internal static class SettingsMetrics
     public const double FeaturedPad = 18;
     public const double FeaturedGap = 16;
     public const double FeaturedRadius = 14;
-    public const double FeaturedKickerSize = 8;
+    public const double FeaturedKickerSize = 8.5;
     public const double FeaturedKickerTracking = 0.16;
     public const double FeaturedTitleSize = 20;
     public const double FeaturedDescSize = 10;
@@ -196,7 +196,7 @@ internal static class SettingsMetrics
     public const double FeaturedActionsMarginTop = 11;
     public const double FeaturedInstallHeight = 28;
     public const double FeaturedInstallPadX = 12;
-    public const double FeaturedMetaSize = 8.5;
+    public const double FeaturedMetaSize = 9;
     public const double FeaturedArt = 80;
     public const double FeaturedArtRadius = 19;
     public const double FeaturedArtGlyph = 36;
@@ -229,7 +229,7 @@ internal static class SettingsMetrics
     public const double MarketInstallRadius = 7;
     public const double MarketInstallSize = 9.5;
     public const double MarketFootnoteMarginTop = 14;
-    public const double MarketFootnoteSize = 8.5;
+    public const double MarketFootnoteSize = 9.5;
     public const double MarketFootnoteIcon = 10;
 
     // ---- unified control layer (task-22): one source of truth for every element -----------------
@@ -295,7 +295,7 @@ internal static class SettingsMetrics
     public const double ContribSize = 9.5;
     public const double FooterNoteMarginTop = 18;
     public const double FooterNotePadTop = 10;
-    public const double FooterNoteSize = 8.5;
+    public const double FooterNoteSize = 9.5;
 }
 
 /// <summary>
@@ -318,7 +318,7 @@ public sealed class SettingsPalette
             LineStrong = Color.FromArgb(33, 17, 24, 39);
             Foreground = Color.Parse("#151A21");
             Secondary = Color.Parse("#59626F");
-            Tertiary = Color.Parse("#89919C");
+            Tertiary = Color.Parse("#666D78");
             Active = Color.Parse("#1B2028");
             ActiveForeground = Colors.White;
         }
@@ -332,7 +332,7 @@ public sealed class SettingsPalette
             LineStrong = Color.FromArgb(28, 255, 255, 255);
             Foreground = Color.Parse("#F4F4F6");
             Secondary = Color.Parse("#9B9BA5");
-            Tertiary = Color.Parse("#6E6E78");
+            Tertiary = Color.Parse("#86868F");
             Active = Color.Parse("#F5F5F7");
             ActiveForeground = Color.Parse("#0B0B0D");
         }

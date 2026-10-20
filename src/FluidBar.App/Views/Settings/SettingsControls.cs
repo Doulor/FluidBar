@@ -425,6 +425,11 @@ internal static class SettingsControls
             };
         }
 
+        // Fluent paints the watermark with a ~40% foreground brush, which measured 3.4:1 on the dark
+        // field. Point the watermark at the palette's tertiary text colour (>= 4.5:1 in both themes).
+        box.WatermarkForeground = palette.ForegroundBrush;
+        box.Opacity = 1;
+
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         if (kind is SettingsFieldKind.Search or SettingsFieldKind.Path)
         {

@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime;
+using System.Runtime.InteropServices;
 using FluidBar.App.Diagnostics;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -78,6 +80,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private readonly IslandWindowInterop _interop;
     private readonly IFrameClock _frameClock;
     private readonly UiThreadTicker _deadlineTicker;
+    private readonly SkiaHostPerfProbe? _perfProbe;
+    private UiThreadTicker? _perfTicker;
+    private long _probeAdvanceAlloc;
+    private long _probeRenderAllocStart;
     private readonly List<WindowEntry> _windows = [];
 
     private const int FollowMousePollMs = 250;
@@ -95,6 +101,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private string? _primaryMonitorId;
     private string? _cursorMonitorId;
     private ITimer? _followMouseTimer;
+    private ITimer? _idleTrimTimer;
+    private GCLatencyMode? _savedLatencyMode;
+    private bool _timerResolutionRaised;
+    private int _idleTrimCount;
+    private long _idleTrimHeapBefore;
+    private long _idleTrimHeapAfter;
     private PendingDrop? _pendingDrop;
     private bool _started;
     private bool _disposed;
@@ -126,6 +138,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _renderer = new IslandRenderer(IslandTheme.Dark);
         _frameClock = options.FrameClockFactory?.Invoke() ?? new SkiaFrameClock(_time);
         _deadlineTicker = new UiThreadTicker(_time);
+        if (SkiaHostPerfProbe.IsEnabled)
+        {
+            _perfProbe = new SkiaHostPerfProbe(_logger, _renderer,
+                () => _windows.Count, SurfaceBytes, _time);
+        }
 
         _controller.SettingsRequested += () => SettingsRequested?.Invoke();
         _controller.MarketRequested += () => MarketRequested?.Invoke();
@@ -163,6 +180,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     /// <summary>Latest frame-timing sample for the advanced diagnostics setting (spec §9.3).</summary>
     public FrameStatsSnapshot FrameStats => _frameStats.Snapshot();
+
+    /// <summary>Number of completed idle trims (font cache purge + full GC while no frame is needed).</summary>
+    public int IdleTrimCount => Volatile.Read(ref _idleTrimCount);
+
+    /// <summary>Managed heap bytes before the first completed idle trim (0 until it runs).</summary>
+    public long IdleTrimHeapBefore => Interlocked.Read(ref _idleTrimHeapBefore);
+
+    /// <summary>Managed heap bytes after the most recent idle trim.</summary>
+    public long IdleTrimHeapAfter => Interlocked.Read(ref _idleTrimHeapAfter);
 
     /// <summary>Frame/commit counters.</summary>
     public SkiaIslandHostStats Stats => new(
@@ -260,6 +286,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _probeAdvanceAlloc = 0;
+        _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
         {
             RenderAllLocked(forceFull);
@@ -346,6 +374,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
 
             _frameStats.SetEnabled(settings.Advanced.FrameStats);
+            if (_perfProbe is not null)
+            {
+                _perfProbe.MarkHostStarted();
+                _perfProbe.Dump();
+                _perfTicker = new UiThreadTicker(_time);
+                _perfTicker.Start(TimeSpan.FromSeconds(1), _perfProbe.Dump);
+            }
+
             _logger.Information(LogCategories.Lifecycle, "island.skia.started", "Skia island host started.",
                 data: new Dictionary<string, object?>
                 {
@@ -374,7 +410,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _disposed = true;
         _logger.Information(LogCategories.Lifecycle, "island.skia.stop", "Stopping Skia island host.");
         _frameClock.Stop();
+        CancelIdleTrim();
+        RestoreLatencyMode();
+        LowerTimerResolution();
         _deadlineTicker.Dispose();
+        _perfTicker?.Dispose();
+        _perfTicker = null;
         _followMouseTimer?.Dispose();
         _followMouseTimer = null;
         _pendingDrop = null;
@@ -1079,8 +1120,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 _frameClock.Stop();
             }
 
+            RestoreLatencyMode();
+            LowerTimerResolution();
+            ScheduleIdleTrim();
             return;
         }
+
+        CancelIdleTrim();
+        EnterAnimationLatencyMode();
+        RaiseTimerResolution();
 
         if (_frameClock is SkiaFrameClock skiaClock)
         {
@@ -1100,10 +1148,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        var perfStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
         {
             _controller.PumpTimers();
             _controller.Advance(delta);
+            _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
+            _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
             RenderAllLocked(forceFull: false);
             if (_controller.IsAnimating || _controller.IsAgentAnimating)
             {
@@ -1120,6 +1171,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
                 RefreshAccessibility();
+                ScheduleIdleTrim();
             }
         }
         catch (Exception ex)
@@ -1140,6 +1192,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _probeAdvanceAlloc = 0;
+        _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
         {
             _controller.PumpTimers();
@@ -1180,6 +1234,175 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         else if (_deadlineTicker.IsRunning)
         {
             _deadlineTicker.Stop();
+        }
+    }
+
+    /// <summary>
+    /// While frames are being produced, ask the GC for <see cref="GCLatencyMode.SustainedLowLatency"/>:
+    /// full blocking collections are skipped in favour of gen0/gen1, which removes the 20–40 ms
+    /// animation stalls a background gen2 caused even though the render path itself allocates nothing.
+    /// The previous mode is restored the moment the island goes idle.
+    /// </summary>
+    private void EnterAnimationLatencyMode()
+    {
+        if (_savedLatencyMode is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            _savedLatencyMode = GCSettings.LatencyMode;
+            GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+        }
+        catch (Exception)
+        {
+            _savedLatencyMode = null;
+        }
+
+    }
+
+    private void RestoreLatencyMode()
+    {
+        if (_savedLatencyMode is not { } saved)
+        {
+            return;
+        }
+
+        _savedLatencyMode = null;
+        try
+        {
+            GCSettings.LatencyMode = saved;
+        }
+        catch (Exception)
+        {
+            // The runtime rejects invalid transitions; the default mode is restored on process exit.
+        }
+    }
+
+    /// <summary>
+    /// Windows' default timer granularity is 15.6 ms, so a requested 120 fps loop only gets every
+    /// second tick and scheduling jitter pushes p95/p99 to 24–31 ms. Raise the resolution to 1 ms for
+    /// the duration of the animation and lower it again as soon as the island is idle (the old
+    /// behaviour only ever asked the threadpool timer, it never changed global resolution).
+    /// </summary>
+    private void RaiseTimerResolution()
+    {
+        if (_timerResolutionRaised)
+        {
+            return;
+        }
+
+        try
+        {
+            _timerResolutionRaised = timeBeginPeriod(1) == 0;
+        }
+        catch (Exception)
+        {
+            _timerResolutionRaised = false;
+        }
+    }
+
+    private void LowerTimerResolution()
+    {
+        if (!_timerResolutionRaised)
+        {
+            return;
+        }
+
+        _timerResolutionRaised = false;
+        try
+        {
+            timeEndPeriod(1);
+        }
+        catch (Exception)
+        {
+            // Restored on process exit by the OS regardless.
+        }
+    }
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    private static extern uint timeBeginPeriod(uint period);
+
+    [DllImport("winmm.dll", SetLastError = true)]
+    private static extern uint timeEndPeriod(uint period);
+
+    /// <summary>Delay before trimming caches/GC after the last frame (5 s of true idleness).</summary>
+    private static readonly TimeSpan IdleTrimDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>Dev/measurement override for the idle-trim delay (`FLUIDBAR_PERF_IDLE_TRIM_MS`).</summary>
+    private static TimeSpan ResolveIdleTrimDelay()
+    {
+        var configured = Environment.GetEnvironmentVariable("FLUIDBAR_PERF_IDLE_TRIM_MS");
+        return int.TryParse(configured, out var milliseconds) && milliseconds >= 100
+            ? TimeSpan.FromMilliseconds(milliseconds)
+            : IdleTrimDelay;
+    }
+
+    /// <summary>
+    /// Schedules a one-shot memory trim once the frame loop has stopped. A tray island that sits idle
+    /// for minutes should not keep the Skia glyph cache and a grown GC heap resident; purging them
+    /// costs a single short pause and is invisible (nothing is animating, no frames are pending).
+    /// </summary>
+    private void ScheduleIdleTrim()
+    {
+        if (_disposed || _idleTrimTimer is not null)
+        {
+            return;
+        }
+
+        _idleTrimTimer = _time.CreateTimer(
+            static state => ((SkiaIslandHost)state!).OnIdleTrimElapsed(), this, ResolveIdleTrimDelay(),
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void CancelIdleTrim()
+    {
+        var timer = Interlocked.Exchange(ref _idleTrimTimer, null);
+        timer?.Dispose();
+    }
+
+    private void OnIdleTrimElapsed()
+    {
+        CancelIdleTrim();
+        _dispatcher.Post(TrimIdleMemory);
+    }
+
+    private void TrimIdleMemory()
+    {
+        if (_disposed || _rendering || _controller.IsAnimating || _controller.IsAgentAnimating)
+        {
+            return;
+        }
+
+        try
+        {
+            var heapBefore = GC.GetTotalMemory(forceFullCollection: false);
+            using var processBefore = Process.GetCurrentProcess();
+            var wsBefore = processBefore.WorkingSet64;
+
+            // The raster glyph/typeface cache is the largest Skia-owned idle allocation.
+            SKGraphics.PurgeFontCache();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: false, compacting: true);
+
+            var heapAfter = GC.GetTotalMemory(forceFullCollection: false);
+            using var processAfter = Process.GetCurrentProcess();
+            Interlocked.CompareExchange(ref _idleTrimHeapBefore, heapBefore, 0);
+            Interlocked.Exchange(ref _idleTrimHeapAfter, heapAfter);
+            Interlocked.Increment(ref _idleTrimCount);
+            _logger.Information(LogCategories.Render, "island.skia.idle-trim", "Idle memory trim completed.",
+                data: new Dictionary<string, object?>
+                {
+                    ["managedHeapBeforeBytes"] = heapBefore,
+                    ["managedHeapAfterBytes"] = heapAfter,
+                    ["workingSetBeforeBytes"] = wsBefore,
+                    ["workingSetAfterBytes"] = processAfter.WorkingSet64,
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Render, "island.skia.idle-trim-failed",
+                "Idle memory trim failed.", ex);
         }
     }
 
@@ -1389,13 +1612,21 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var state = _controller.RenderState;
+        double totalRenderMs = 0;
         foreach (var entry in _windows)
         {
-            RenderEntry(entry, state, change);
+            totalRenderMs += RenderEntry(entry, state, change);
+        }
+
+        if (_perfProbe is not null)
+        {
+            var renderAlloc = SkiaHostPerfProbe.CurrentAllocatedBytes() - _probeRenderAllocStart;
+            _perfProbe.RecordFrame(totalRenderMs, change.FullFrame, _probeAdvanceAlloc, renderAlloc);
+            _probeAdvanceAlloc = 0;
         }
     }
 
-    private void RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
+    private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
     {
         var started = Stopwatch.GetTimestamp();
         var frame = entry.Host.BeginFrame();
@@ -1420,7 +1651,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 if (damage.IsEmpty)
                 {
                     entry.Host.DiscardFrame();
-                    return;
+                    return 0;
                 }
 
                 _renderer.Render(
@@ -1451,6 +1682,20 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         Interlocked.Increment(ref _frames);
         _lastRenderMs = elapsedMs;
         _totalRenderMs += elapsedMs;
+        return elapsedMs;
+    }
+
+    /// <summary>Retained DIB bytes across every layered window (diagnostics for the perf probe).</summary>
+    private long SurfaceBytes()
+    {
+        long total = 0;
+        foreach (var entry in _windows)
+        {
+            var size = entry.Host.SurfaceSizePx;
+            total += (long)size.Width * size.Height * 4;
+        }
+
+        return total;
     }
 
     private void RecordCommit(WindowEntry entry, LayeredCommitResult result, bool dirty)

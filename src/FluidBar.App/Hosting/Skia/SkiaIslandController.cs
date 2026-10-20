@@ -1939,6 +1939,7 @@ public sealed class SkiaIslandController : IDisposable
             ShellWidth = _motion.Width,
             ShellHeight = _motion.Height,
             ShellRadii = _motion.ShellRadii,
+            ShellMorphing = !_motion.IsAtRest,
             ShellOrigin = _motion.ShellOrigin,
             Opacity = _motion.Opacity,
             ContentOpacity = expanded ? _motion.ExpandedContentOpacity : _motion.CompactContentOpacity,
@@ -2013,8 +2014,11 @@ public sealed class SkiaIslandController : IDisposable
 
     private bool IsWaveActive()
     {
-        if (!_hasRenderState || _motion.ReducedMotion || _renderState.Form == ShellForm.Expanded)
+        if (!_hasRenderState || _motion.ReducedMotion || _renderState.Form == ShellForm.Expanded
+            || _renderState.Form == ShellForm.Hidden)
         {
+            // A hidden island paints nothing: keep requesting 30 fps wave frames for an invisible
+            // surface was pure idle CPU burn (and contradicted the "idle means zero frames" contract).
             return false;
         }
 

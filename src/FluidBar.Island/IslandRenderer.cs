@@ -11,8 +11,12 @@ public sealed record IslandRendererOptions
     /// <summary>Bounded text layout cache capacity (entries; default 200).</summary>
     public int TextCacheCapacity { get; init; } = TextEngine.DefaultCacheCapacity;
 
-    /// <summary>Bounded shadow image cache capacity (entries; default 8).</summary>
-    public int ShadowCacheCapacity { get; init; } = 8;
+    /// <summary>
+    /// Bounded shadow image cache capacity (entries; default 4). One expanded shadow image is up to
+    /// ~2.7 MB at 150 % DPI, so the old capacity of 8 could retain ~21 MB; 4 still covers every
+    /// settled size plus the morph buckets that are actually revisited.
+    /// </summary>
+    public int ShadowCacheCapacity { get; init; } = 4;
 
     /// <summary>Bounded squircle path cache capacity (entries; default 32).</summary>
     public int PathCacheCapacity { get; init; } = 32;
@@ -112,6 +116,25 @@ public sealed class IslandRenderer : IDisposable
 
     /// <summary>Bounded shadow image cache (diagnostics).</summary>
     public int ShadowCacheCount => _shadows.Count;
+
+    /// <summary>
+    /// Retained-cache accounting for the working-set audit: image caches, text layouts and paths.
+    /// Cheap pointer reads except the text approximation (bounded by the cache capacity).
+    /// </summary>
+    public RenderResourceStats ResourceStats => new(
+        _paths.Count,
+        _paths.Builds,
+        _shadows.Count,
+        _shadows.PixelBytes,
+        _shadows.Builds,
+        _art.Count,
+        _artwork.Count,
+        _artwork.PixelBytes,
+        _artwork.Builds,
+        _text.CacheCount,
+        _text.CacheCapacity,
+        _text.ApproxCacheBytes,
+        _numbers.Count);
 
     /// <summary>Frame timing snapshot.</summary>
     public IslandRenderStats Stats => new(
@@ -464,7 +487,8 @@ public sealed class IslandRenderer : IDisposable
             dpiScale,
             _theme.ShadowColor,
             primary,
-            secondary);
+            secondary,
+            state.ShellMorphing ? ShadowCache.MorphBucketDip : 0);
         _shadows.Draw(canvas, image, shell, opacity);
     }
 

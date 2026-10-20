@@ -160,6 +160,15 @@ internal sealed class ShadowCache : IDisposable
         }
     }
 
+    /// <summary>
+    /// Bucket size in DIP used for shadow keys while the shell is morphing (0 = exact). During an
+    /// expand/collapse the shell size changes every frame; with the exact key that baked a fresh
+    /// blurred image on nearly every frame (~477 bakes / 16 s, 12 ms render p99). Morphing frames snap
+    /// to a coarse size grid so a handful of images are reused; the image is stretched by at most half
+    /// the bucket, which is invisible for a 22 DIP-sigma soft shadow.
+    /// </summary>
+    public const double MorphBucketDip = 24;
+
     public SKImage Get(
         double width,
         double height,
@@ -167,8 +176,25 @@ internal sealed class ShadowCache : IDisposable
         float scale,
         SKColor color,
         in ShadowLayer primary,
-        in ShadowLayer secondary = default)
+        in ShadowLayer secondary = default,
+        double bucketDip = 0)
     {
+        if (bucketDip > 0)
+        {
+            width = Math.Round(width / bucketDip) * bucketDip;
+            height = Math.Round(height / bucketDip) * bucketDip;
+
+            // The corner radii march from the pill's radius to the panel's radius every frame too;
+            // leaving them exact would still miss the cache on nearly every morph frame. Quantise
+            // them on a finer grid than the box (their contribution is hidden by the blur).
+            const double radiusBucket = 4;
+            radii = new CornerRadii(
+                Math.Round(radii.TopLeft / radiusBucket) * radiusBucket,
+                Math.Round(radii.TopRight / radiusBucket) * radiusBucket,
+                Math.Round(radii.BottomRight / radiusBucket) * radiusBucket,
+                Math.Round(radii.BottomLeft / radiusBucket) * radiusBucket);
+        }
+
         var key = Key.From(width, height, radii, scale, color, primary, secondary);
         if (_cache.TryGetValue(key, out var entry))
         {

@@ -37,6 +37,13 @@ public readonly record struct IslandRenderState
     /// <summary>Per-corner shell radii in DIP.</summary>
     public CornerRadii ShellRadii { get; init; }
 
+    /// <summary>
+    /// Whether the shell is mid-morph (spring running). The renderer uses coarser shadow buckets while
+    /// morphing so a 300 ms expand/collapse cannot bake a fresh blurred shadow image on every frame;
+    /// settled frames still use the exact size and stay pixel-stable for goldens.
+    /// </summary>
+    public bool ShellMorphing { get; init; }
+
     /// <summary>Shell top-left inside the host surface, in DIP.</summary>
     public VisualPoint ShellOrigin { get; init; } = new(LayoutTokens.WindowPadding, LayoutTokens.WindowPadding);
 

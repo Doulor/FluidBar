@@ -140,8 +140,9 @@ public sealed class TextEngine : IDisposable
     private readonly SKTypeface _cjkSemibold;
     private readonly SKTypeface _emoji;
 
-    private readonly Blob? _emojiBlob;
-    private readonly Face? _emojiFace;
+    private Blob? _emojiBlob;
+    private Face? _emojiFace;
+    private bool _emojiLoaded;
     private readonly Dictionary<float, HarfBuzzSharp.Font> _emojiFonts = [];
 
     private int _hits;
@@ -167,7 +168,21 @@ public sealed class TextEngine : IDisposable
         _cjkRegular = Resolve(["Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"], SKFontStyleWeight.Normal);
         _cjkSemibold = Resolve(["Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI"], SKFontStyleWeight.SemiBold);
         _emoji = Resolve(["Segoe UI Emoji", "Segoe UI Symbol"], SKFontStyleWeight.Normal);
+    }
 
+    /// <summary>
+    /// Loads the colour-emoji HarfBuzz face on first emoji text. Previously the 9 MB
+    /// `seguiemj.ttf` blob/face was created in the constructor even when no emoji was ever painted,
+    /// which cost working set (file mapping + face) for the whole session.
+    /// </summary>
+    private void EnsureEmojiFace()
+    {
+        if (_emojiLoaded)
+        {
+            return;
+        }
+
+        _emojiLoaded = true;
         try
         {
             var path = Path.Combine(
@@ -180,6 +195,7 @@ public sealed class TextEngine : IDisposable
         }
         catch
         {
+            _emojiBlob?.Dispose();
             _emojiBlob = null;
             _emojiFace = null;
         }
@@ -187,6 +203,9 @@ public sealed class TextEngine : IDisposable
 
     /// <summary>Entries currently held by the layout cache.</summary>
     public int CacheCount => _cache.Count;
+
+    /// <summary>Whether the colour-emoji HarfBuzz face has been loaded (lazy since the perf audit).</summary>
+    public bool EmojiFaceLoaded => _emojiFace is not null;
 
     /// <summary>Bounded layout cache capacity.</summary>
     public int CacheCapacity => _capacity;
@@ -596,6 +615,7 @@ public sealed class TextEngine : IDisposable
 
     private (SKTextBlob Blob, float Width, int GlyphCount) ShapeEmoji(string text, TextStyle style)
     {
+        EnsureEmojiFace();
         if (_emojiFace is null)
         {
             var font = GetRunFont(_emoji, style.Size);
