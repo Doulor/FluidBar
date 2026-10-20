@@ -404,6 +404,12 @@ internal static class SettingsControls
 
         /// <summary>Wires hover/pressed material states onto a card border.</summary>
         /// <param name="card">Card container to decorate.</param>
+        /// <summary>Pressed-state shadow (test/diagnostic access to the production values).</summary>
+        internal static BoxShadows PressedShadow => Pressed;
+
+        /// <summary>Hover-state shadow (test/diagnostic access to the production values).</summary>
+        internal static BoxShadows HoverShadow => Hover;
+
         public static void Attach(Border card)
         {
             card.PointerEntered += (_, _) => card.BoxShadow = Hover;
