@@ -221,7 +221,13 @@ public sealed class PluginHost : IAsyncDisposable
             }
 
             await StopSessionAsync(handle, cancellationToken).ConfigureAwait(false);
-            return handle.State == PluginLifecycleState.Stopped;
+            var stopped = handle.State == PluginLifecycleState.Stopped;
+            if (stopped)
+            {
+                _options.PluginStopped?.Invoke(pluginId);
+            }
+
+            return stopped;
         }
         finally
         {
@@ -271,7 +277,13 @@ public sealed class PluginHost : IAsyncDisposable
                 return new PluginUnloadResult(pluginId, false, false, 0, TimeSpan.Zero, false, $"Unknown plugin '{pluginId}'.");
             }
 
-            return await UnloadCoreAsync(handle, cancellationToken).ConfigureAwait(false);
+            var unloaded = await UnloadCoreAsync(handle, cancellationToken).ConfigureAwait(false);
+            if (unloaded.Success)
+            {
+                _options.PluginStopped?.Invoke(pluginId);
+            }
+
+            return unloaded;
         }
         finally
         {
@@ -623,7 +635,7 @@ public sealed class PluginHost : IAsyncDisposable
             handle.PackageDirectory,
             dataDirectory,
             _options.HostApiVersion,
-            new PluginIslandPublisher(manifest.Id, islandPublisher, _logger),
+            new PluginIslandPublisher(manifest.Id, islandPublisher, _logger, manifest),
             localizer,
             settings,
             storage,

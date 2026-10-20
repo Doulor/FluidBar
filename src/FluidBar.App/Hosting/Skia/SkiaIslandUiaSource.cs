@@ -331,7 +331,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private List<UiaElementSnapshot> BuildExpanded(in IslandRenderState state)
     {
         var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
-        var page = Math.Clamp(state.PageIndex, 0, PagerConstants.PageCount - 1);
+        var page = Math.Clamp(state.PageIndex, 0, state.Pages.PageCount - 1);
         var children = new List<UiaElementSnapshot>(5)
         {
             Node(
@@ -367,9 +367,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     {
         var strip = SkiaIslandHitTest.MeasureStrip(state);
         var stripVisible = state.Archipelago.Visible && state.Archipelago.Opacity > 0.01;
-        var tabs = new List<UiaElementSnapshot>(PagerConstants.PageCount);
+        var tabs = new List<UiaElementSnapshot>(state.Pages.PageCount);
 
-        for (var page = 0; page < PagerConstants.PageCount; page++)
+        for (var page = 0; page < state.Pages.PageCount; page++)
         {
             var bounds = TabBounds(strip, page, stripVisible);
             var offscreen = !stripVisible || bounds.IsEmpty;
@@ -403,16 +403,18 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private UiaElementSnapshot BuildPageControls(in IslandRenderState state, int pageIndex)
     {
         var page = IslandMetrics.PageRect(state, pageIndex);
-        var children = pageIndex switch
-        {
-            0 => BuildHomeControls(state, page),
-            1 => BuildMediaControls(state, page),
-            2 => BuildNotificationControls(state, page),
-            3 => BuildClipboardControls(state, page),
-            4 => BuildAgentControls(state, page),
-            5 => BuildWidgetControls(state, page),
-            _ => [],
-        };
+        var children = state.Pages.PluginPageAt(pageIndex) is { } pluginPage
+            ? BuildPluginControls(state, pluginPage, pageIndex, page)
+            : pageIndex switch
+            {
+                0 => BuildHomeControls(state, page),
+                1 => BuildMediaControls(state, page),
+                2 => BuildNotificationControls(state, page),
+                3 => BuildClipboardControls(state, page),
+                4 => BuildAgentControls(state, page),
+                5 => BuildWidgetControls(state, page),
+                _ => [],
+            };
 
         return Node(
             SkiaIslandUiaElementIds.PageBody(pageIndex),
@@ -894,10 +896,48 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         return children;
     }
 
+    private List<UiaElementSnapshot> BuildPluginControls(
+        in IslandRenderState state,
+        PluginPageModel pluginPage,
+        int pageIndex,
+        SKRect page)
+    {
+        var metrics = FontScaleMetrics.From(state.FontScale);
+        var children = new List<UiaElementSnapshot>(pluginPage.Rows.Count * 2);
+        for (var i = 0; i < pluginPage.Rows.Count; i++)
+        {
+            var row = pluginPage.Rows[i];
+            var rowRect = PageMetricsLayout.NotificationRow(page, i, 0, metrics);
+            var name = string.Join(": ", new[] { row.Title, row.Subtitle }
+                .Where(static value => !string.IsNullOrWhiteSpace(value)));
+            children.Add(Node(
+                $"island.page.{pageIndex}.row.{i}",
+                UiaElementRole.ListItem,
+                name,
+                ToRect(rowRect),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = row.RowCommandId is not null }));
+
+            if (!string.IsNullOrWhiteSpace(row.TrailingCommandId))
+            {
+                var button = new SKRect(rowRect.Right - 96, rowRect.MidY - 12, rowRect.Right - 8, rowRect.MidY + 12);
+                children.Add(Node(
+                    $"island.page.{pageIndex}.row.{i}.button",
+                    UiaElementRole.Button,
+                    row.TrailingLabel ?? row.Title,
+                    ToRect(button),
+                    UiaPatternKind.Invoke,
+                    new UiaElementState { IsFocusable = true }));
+            }
+        }
+
+        return children;
+    }
+
     private UiaElementSnapshot BuildStrip(in IslandRenderState state)
     {
         var strip = SkiaIslandHitTest.MeasureStrip(state);
-        var page = Math.Clamp(strip.Page, 0, PagerConstants.PageCount - 1);
+        var page = Math.Clamp(strip.Page, 0, Math.Max(1, state.Pages.PageCount) - 1);
         var children = new List<UiaElementSnapshot>(9);
 
         if (page > 0)
@@ -909,7 +949,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         children.Add(StripButton($"island.strip.current.{page}", state.Pages.Title(page),
             strip.Current, F("Island.Accessibility.CurrentPage", "Current page: {0}", state.Pages.Title(page))));
 
-        if (page < PagerConstants.PageCount - 1)
+        if (page < state.Pages.PageCount - 1)
         {
             children.Add(StripButton($"island.strip.next.{page + 1}", state.Pages.Title(page + 1),
                 strip.Next, F("Island.Accessibility.NextPage", "Next page: {0}", state.Pages.Title(page + 1))));
@@ -931,7 +971,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         for (var i = 0; i < strip.DotsRight.Length; i++)
         {
             var target = strip.RightDotPage(i);
-            if (target < PagerConstants.PageCount)
+            if (target < state.Pages.PageCount)
             {
                 children.Add(StripButton($"island.strip.dot.right.{target}.{i}", state.Pages.Title(target),
                     IslandStripLayout.DotHitRect(strip.DotsRight[i]),
@@ -1195,6 +1235,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
 
     private void ExecuteRow(int page, int index, string? action)
     {
+        if (_controller.HasRenderState && _controller.RenderState.Pages.PluginPageAt(page) is not null)
+        {
+            _controller.ActivateAccessibleControl(
+                action == "button" ? IslandPageControl.PluginRowButton : IslandPageControl.PluginRow,
+                page,
+                index);
+            return;
+        }
+
         var control = action switch
         {
             "dismiss" => IslandPageControl.Dismiss,
@@ -1207,7 +1256,10 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
 
     private void RequestPage(int page)
     {
-        if (page < 0 || page >= PagerConstants.PageCount)
+        var pageCount = _controller.HasRenderState
+            ? _controller.RenderState.Pages.PageCount
+            : PagerConstants.PageCount;
+        if (page < 0 || page >= pageCount)
         {
             return;
         }

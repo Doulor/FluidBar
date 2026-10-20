@@ -365,7 +365,7 @@ public sealed class InProcessPluginSession : IAsyncDisposable
             _packageDirectory,
             dataDirectory,
             _options.HostApiVersion,
-            new PluginIslandPublisher(manifest.Id, islandPublisher, _logger),
+            new PluginIslandPublisher(manifest.Id, islandPublisher, _logger, manifest),
             localizer,
             settings,
             storage,

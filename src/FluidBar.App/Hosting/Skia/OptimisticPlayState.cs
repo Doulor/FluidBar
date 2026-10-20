@@ -5,23 +5,41 @@ namespace FluidBar.App.Hosting.Skia;
 /// </summary>
 /// <remarks>
 /// <para>A fallback player (KuGou through MSAA) only reports its play/pause glyph on the accessibility
-/// poll, so waiting for the truth made the pill's icon lag visibly behind the tap. This holds the flipped
-/// state until the source agrees, it expires, or the transport command is refused (rollback) — the island
-/// then always ends up showing the real state instead of a stale lie.</para>
-/// <para>The window is deliberately short (600 ms ≈ two 250 ms polls): a flip that the source has not
-/// confirmed by then is dropped and the caller is told to re-read the source once, which is what stops the
-/// icon from disagreeing with the audio for a whole track.</para>
+/// poll, and that poll can still return the <em>old</em> text for a while after the tap. The previous rule
+/// (a fixed 600 ms window) rolled the flip back on a single stale read, which is exactly what made the
+/// island show "playing" after the user had already paused.</para>
+/// <para>The rule is now: the flip holds until the source reports the <em>same</em> disagreement twice in a
+/// row (one stale read is ignored, two consistent reads are the real state), for at most
+/// <see cref="HoldWindow"/> — during which the user's intent is what they see. When the flip is dropped the
+/// caller is told to re-read the source once instead of trusting its cached reading.</para>
 /// </remarks>
 public sealed class OptimisticPlayState
 {
-    /// <summary>How long a flip may disagree with the source before it is dropped.</summary>
-    public static readonly TimeSpan DefaultTtl = TimeSpan.FromMilliseconds(600);
+    /// <summary>Longest a flip may survive without two agreeing source reads (the "visible 2–3 s" window).</summary>
+    public static readonly TimeSpan HoldWindow = TimeSpan.FromMilliseconds(2500);
+
+    /// <summary>
+    /// Reads that arrive sooner than this after the tap are ignored: the accessibility poll almost always
+    /// still carries the pre-tap glyph, so counting it would roll the flip back immediately.
+    /// </summary>
+    public static readonly TimeSpan StaleReadGuard = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>Consecutive disagreeing reads required before the flip is dropped.</summary>
+    public const int RequiredDisagreements = 2;
 
     private bool? _pending;
+    private DateTimeOffset _startedAt;
     private DateTimeOffset _until;
+    private int _disagreements;
 
     /// <summary>Whether a flip is currently pending.</summary>
     public bool IsPending => _pending is not null;
+
+    /// <summary>State the flip assumes (null when settled).</summary>
+    public bool? PendingValue => _pending;
+
+    /// <summary>How many consecutive disagreeing reads have been seen.</summary>
+    public int Disagreements => _disagreements;
 
     /// <summary>
     /// True when the last <see cref="Resolve"/> dropped a flip because the source never agreed; the caller
@@ -32,11 +50,13 @@ public sealed class OptimisticPlayState
     /// <summary>Records a flip (the tap); <paramref name="now"/> is the current UTC clock.</summary>
     /// <param name="playing">State the caller optimistically assumes.</param>
     /// <param name="now">Current UTC time.</param>
-    /// <param name="ttl">How long the flip stays valid (default 600 ms).</param>
-    public void Set(bool playing, DateTimeOffset now, TimeSpan? ttl = null)
+    /// <param name="window">How long the flip stays valid (default <see cref="HoldWindow"/>).</param>
+    public void Set(bool playing, DateTimeOffset now, TimeSpan? window = null)
     {
         _pending = playing;
-        _until = now + (ttl ?? DefaultTtl);
+        _startedAt = now;
+        _until = now + (window ?? HoldWindow);
+        _disagreements = 0;
         LastResolveRolledBack = false;
     }
 
@@ -44,6 +64,7 @@ public sealed class OptimisticPlayState
     public void Clear()
     {
         _pending = null;
+        _disagreements = 0;
         LastResolveRolledBack = false;
     }
 
@@ -63,17 +84,26 @@ public sealed class OptimisticPlayState
         if (optimistic == actual)
         {
             _pending = null;
+            _disagreements = 0;
             return actual;
         }
 
-        // Still waiting, but only inside the short window.
-        if (now <= _until)
+        // Anything inside the stale-read guard is the pre-tap glyph: it must not roll the flip back.
+        if (now - _startedAt < StaleReadGuard)
         {
             return optimistic;
         }
 
-        // The source never agreed: drop the lie and tell the caller to re-read.
+        _disagreements++;
+
+        // One stale-looking read is tolerated; two consistent ones are the real state.
+        if (_disagreements < RequiredDisagreements && now <= _until)
+        {
+            return optimistic;
+        }
+
         _pending = null;
+        _disagreements = 0;
         LastResolveRolledBack = true;
         return actual;
     }

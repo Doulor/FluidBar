@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
@@ -46,6 +47,8 @@ public sealed class SkiaIslandController : IDisposable
     private readonly ActivityScheduler _scheduler = new();
     private readonly Func<SystemAppearanceSnapshot> _appearance;
     private readonly double[] _pageScroll = new double[PagerConstants.PageCount];
+    private readonly PageRegistry? _pageRegistry;
+    private IReadOnlyList<PluginPageModel> _pluginPages = [];
 
     /// <summary>Wheel scroll chain: content first, then an overscroll threshold before paging.</summary>
     private readonly PagerScrollChainPolicy _scrollChain = new();
@@ -201,6 +204,9 @@ public sealed class SkiaIslandController : IDisposable
         _dispatcher = dispatcher ?? new SkiaHostDispatcher();
         _platformActions = options.PlatformActions;
         _appearance = options.AppearanceSnapshot ?? SystemAppearanceSnapshot.FromWindows;
+        _pageRegistry = options.PageRegistry;
+        _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
+        _pages = _pages with { PluginPages = _pluginPages };
 
         _hub = new EventHub(logger: _logger, dispatcher: _dispatcher);
         _controller = CreateController(_settings.Current);
@@ -210,12 +216,16 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
-        _pager = new SkiaPager((int)State.Page);
+        _pager = new SkiaPager((int)State.Page, PagerConstants.PageCount + _pluginPages.Count);
         _pager.PageChanged += OnPagerPageChanged;
         _archipelago = new SkiaArchipelago(profile);
 
         _settings.Changed += OnSettingsChanged;
         _data.Changed += OnDataChanged;
+        if (_pageRegistry is not null)
+        {
+            _pageRegistry.Changed += OnPageRegistryChanged;
+        }
     }
 
     /// <summary>Raised when the settings window should open (quick action / hotkey).</summary>
@@ -226,6 +236,9 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Raised when the user asks to execute a media transport command.</summary>
     public event Action<MediaTransportCommand>? MediaCommandRequested;
+
+    /// <summary>Raised when a plugin page row/button is activated by pointer or UIA.</summary>
+    public event Action<PluginPageCommandRequest>? PluginPageCommandRequested;
 
     /// <summary>Raised after a state/content change so the host can refresh placement and the hit region.</summary>
     public event Action? StateChanged;
@@ -1000,6 +1013,11 @@ public sealed class SkiaIslandController : IDisposable
             return true;
         }
 
+        if (control is IslandPageControl.PluginRow or IslandPageControl.PluginRowButton)
+        {
+            return RaisePluginPageCommand(page, index, control == IslandPageControl.PluginRowButton);
+        }
+
         var hit = new IslandHitTarget(IslandHitKind.PageControl, page, control, index);
         var action = SkiaIslandControlRouter.Map(hit, _renderState, 0);
         if (action is null)
@@ -1499,8 +1517,8 @@ public sealed class SkiaIslandController : IDisposable
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
             var page = (int)State.Page;
-            var max = MaxScrollForPage(page);
-            var current = _pageScroll[page];
+            var max = page < PagerConstants.PageCount ? MaxScrollForPage(page) : 0;
+            var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
             var direction = deltaDip < 0 ? PagerScrollDirection.Up : PagerScrollDirection.Down;
             var boundary = max <= 0.5
                 ? PagerScrollBoundary.None
@@ -1520,7 +1538,11 @@ public sealed class SkiaIslandController : IDisposable
 
             if (decision.Action == PagerScrollChainAction.ScrollContent)
             {
-                _pageScroll[page] = Math.Clamp(current + deltaDip, 0, max);
+                if (page < _pageScroll.Length)
+                {
+                    _pageScroll[page] = Math.Clamp(current + deltaDip, 0, max);
+                }
+
                 _pages = ApplyPageScroll(_pages);
                 BuildRenderState();
                 InvalidateFull();
@@ -1629,6 +1651,11 @@ public sealed class SkiaIslandController : IDisposable
         _data.Changed -= OnDataChanged;
         _data.Stop();
         _pager.PageChanged -= OnPagerPageChanged;
+        if (_pageRegistry is not null)
+        {
+            _pageRegistry.Changed -= OnPageRegistryChanged;
+        }
+
         _controller.Transitioned -= OnTransition;
         _controller.Dispose();
         _hub.Dispose();
@@ -1812,9 +1839,13 @@ public sealed class SkiaIslandController : IDisposable
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked, showCompactLyrics);
         TrackCompactLyric();
+        _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
         _pages = ApplyPageScroll(ApplyCopyFeedback(
             SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
-            _time.GetLocalNow()));
+            _time.GetLocalNow())) with
+        {
+            PluginPages = _pluginPages,
+        };
         _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
         UpdateSplitPreviews(viewModel, settings);
         _motion.SetTarget(BuildTarget(viewModel));
@@ -2155,6 +2186,59 @@ public sealed class SkiaIslandController : IDisposable
         });
     }
 
+    private void OnPageRegistryChanged(object? sender, EventArgs e)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_dispatcher.IsOnDispatcherThread)
+        {
+            RefreshPluginPages();
+            return;
+        }
+
+        _dispatcher.Post(RefreshPluginPages);
+    }
+
+    private void RefreshPluginPages()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var pages = _pageRegistry?.BuildPluginPages() ?? [];
+        var previousCount = _pages.PageCount;
+        var pageCount = PagerConstants.PageCount + pages.Count;
+        var clamped = _pager.SetPageCount(pageCount);
+        _pluginPages = pages;
+        _pages = _pages with { PluginPages = pages };
+
+        if (clamped && previousCount > pageCount)
+        {
+            // The page the user was on was unregistered: return to Home instead of leaving an
+            // invalid index in the pager.
+            _syncingPage = true;
+            try
+            {
+                _pager.SelectPage(0);
+            }
+            finally
+            {
+                _syncingPage = false;
+            }
+
+            ApplyInput(IslandInput.PageRequested(CoreIslandPage.Home));
+        }
+
+        SyncContent(full: true);
+        StateChanged?.Invoke();
+        InvalidateFull();
+        FrameRequested?.Invoke();
+    }
+
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
         if (!string.Equals(previous.Language, current.Language, StringComparison.OrdinalIgnoreCase)
@@ -2228,6 +2312,12 @@ public sealed class SkiaIslandController : IDisposable
 
     private void HandlePageControl(in IslandHitTarget hit)
     {
+        if (hit.Control is IslandPageControl.PluginRow or IslandPageControl.PluginRowButton)
+        {
+            RaisePluginPageCommand(hit.PageIndex, hit.Index, hit.Control == IslandPageControl.PluginRowButton);
+            return;
+        }
+
         if (hit.Control == IslandPageControl.MediaCard)
         {
             HandlePageRequest(CoreIslandPage.Media);
@@ -2239,6 +2329,34 @@ public sealed class SkiaIslandController : IDisposable
         {
             DispatchControl(value, hit.PageIndex);
         }
+    }
+
+    private bool RaisePluginPageCommand(int page, int rowIndex, bool trailing)
+    {
+        if (!_hasRenderState || _renderState.Pages.PluginPageAt(page) is not { } pageModel)
+        {
+            return false;
+        }
+
+        if (rowIndex < 0 || rowIndex >= pageModel.Rows.Count)
+        {
+            return false;
+        }
+
+        var row = pageModel.Rows[rowIndex];
+        var commandId = trailing ? row.TrailingCommandId : row.RowCommandId ?? row.TrailingCommandId;
+        if (string.IsNullOrWhiteSpace(commandId))
+        {
+            return false;
+        }
+
+        PluginPageCommandRequested?.Invoke(new PluginPageCommandRequest(
+            page,
+            pageModel.OwnerPluginId,
+            pageModel.PageId,
+            row.RowId,
+            commandId));
+        return true;
     }
 
     /// <summary>
@@ -2691,12 +2809,13 @@ public sealed class SkiaIslandController : IDisposable
             SplitIsletHeight = _motion.Target.CompactSize.Height,
             StackSpin = _motion.StackSpin,
             FontScale = _settings.Current.FontScale,
-            Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),
+            Pager = PagerRenderState.FromPosition(
+                _pager.PagePosition, _pager.IsDragging, _pager.IsAnimating, _pages.PageCount),
             Compact = _compact,
             Pages = _pages,
             Theme = _theme,
             Archipelago = _options.EnableArchipelago
-                ? _archipelago.ToState(_pager.PagePosition) with
+                ? _archipelago.ToState(_pager.PagePosition, _pages.PageCount) with
                 {
                     Rail = _railMotion.Values,
                     RailHover = _railHover,
@@ -2943,7 +3062,7 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Page the preview rail currently represents (the drag position wins while dragging).</summary>
-    private int RailPage() => _pager.IsDragging ? MiniRailLayout.PageAt(_pager.PagePosition) : _pager.SelectedIndex;
+    private int RailPage() => _pager.IsDragging ? MiniRailLayout.PageAt(_pager.PagePosition, _pages.PageCount) : _pager.SelectedIndex;
 
     /// <summary>Rail slot that would navigate to a page from the current rail page.</summary>
     /// <param name="page">Page index of the hit rail slot.</param>

@@ -20,6 +20,9 @@ namespace FluidBar.Island;
 internal sealed class TransientStripRenderer : IDisposable
 {
     private const int MaxDots = IslandMetrics.MaxDotsPerSide;
+
+    // The dynamic-page work in flight removed the local const while callers still use it; keep the
+    // classic six-page contract until that refactor lands.
     private const int LastPage = PagerConstants.PageCount - 1;
 
     /// <summary>Glass fill of the mini islands (prototype contract in <see cref="MiniRailLayout"/>).</summary>
@@ -66,8 +69,9 @@ internal sealed class TransientStripRenderer : IDisposable
             Strip = _frame.Strip,
             Previous = _frame.Page > 0 ? _frame.Previous : SKRect.Empty,
             Current = _frame.Current,
-            Next = _frame.Page < LastPage ? _frame.Next : SKRect.Empty,
+            Next = _frame.Page < _frame.PageCount - 1 ? _frame.Next : SKRect.Empty,
             Page = _frame.Page,
+            PageCount = _frame.PageCount,
             CapsuleWidth = _frame.CapsuleWidth,
             DotsLeft = left,
             DotsRight = right,
@@ -79,7 +83,7 @@ internal sealed class TransientStripRenderer : IDisposable
     {
         _frame = MiniRailLayout.Measure(state, shell, _dotsLeft, _dotsRight);
         var label = state.Pages?.ShortTitle(_frame.Page)
-            ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(_frame.Page, 0, LastPage)];
+            ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(_frame.Page, 0, ExpandedPageContent.DefaultPageTitles.Length - 1)];
         if (_frame.Page != _trackedPage)
         {
             // The prototype cross-fades old → new label over 150 ms with a 3 DIP slide; the host's

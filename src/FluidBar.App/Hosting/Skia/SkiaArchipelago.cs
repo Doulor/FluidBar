@@ -169,8 +169,9 @@ public sealed class SkiaArchipelago : IDisposable
     /// <param name="pageCount">Number of pages.</param>
     public ArchipelagoState ToState(double pagePosition, int pageCount = PagerConstants.PageCount)
     {
+        var count = Math.Max(1, pageCount);
         var position = double.IsFinite(pagePosition)
-            ? Math.Clamp(pagePosition, 0, PagerConstants.PageCount - 1)
+            ? Math.Clamp(pagePosition, 0, count - 1)
             : 0;
         var page = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, PagerConstants.PagePitchDip, pageCount);
         var left = Math.Clamp(page - 1, 0, ArchipelagoState.MaxDotsPerSide);

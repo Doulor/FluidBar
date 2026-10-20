@@ -1,0 +1,126 @@
+using FluidBar.App.Hosting.Pages;
+using FluidBar.Sdk.Manifest;
+using FluidBar.Sdk.Pages;
+
+namespace FluidBar.Ui.Tests;
+
+/// <summary>M0 page registry contract: owner-scoped PageIds, host list data, removal and the 12-page cap.</summary>
+public sealed class PageRegistryTests
+{
+    private const string Owner = "sample-page";
+
+    [Fact]
+    public void RegisterPage_AppendsOnePageAfterBuiltins()
+    {
+        var registry = new PageRegistry();
+        var changed = 0;
+        registry.Changed += (_, _) => changed++;
+
+        var ok = registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out var error);
+
+        Assert.True(ok, error);
+        Assert.Equal(PageRegistry.BuiltinPageCount + 1, registry.Count);
+        var page = Assert.Single(registry.BuildPluginPages());
+        Assert.Equal("sample-page.metrics", page.PageId);
+        Assert.Equal(Owner, page.OwnerPluginId);
+        Assert.Equal("Sample page", page.Title);
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void RegisterPage_RejectsForeignPageId()
+    {
+        var registry = new PageRegistry();
+
+        Assert.False(registry.RegisterPage(Owner, Descriptor("other-plugin.metrics"), out var error));
+        Assert.Contains("prefixed", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PageRegistry.BuiltinPageCount, registry.Count);
+    }
+
+    [Fact]
+    public void RegisterPage_RejectsUnknownTemplateAndDuplicate()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out _));
+
+        Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out var duplicate));
+        Assert.Contains("already", duplicate, StringComparison.OrdinalIgnoreCase);
+        Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.other") with
+        {
+            TemplateId = "custom",
+        }, out var template));
+        Assert.Contains("template", template, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PublishPage_UpdatesTheHostModel()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out _));
+
+        Assert.True(registry.PublishPage(Owner, new PageData
+        {
+            PageId = "sample-page.metrics",
+            TemplateId = PageTemplates.List,
+            List = new PageListData
+            {
+                Rows =
+                [
+                    new PageListRow
+                    {
+                        RowId = "row",
+                        Title = "Count #1",
+                        Subtitle = "after click",
+                        RowCommandId = "sample-page.refresh",
+                        TrailingCommandId = "sample-page.refresh",
+                        TrailingLabel = "Refresh",
+                    },
+                ],
+            },
+        }, out var error), error);
+
+        var page = Assert.Single(registry.BuildPluginPages());
+        var row = Assert.Single(page.Rows);
+        Assert.Equal("Count #1", row.Title);
+        Assert.Equal("sample-page.refresh", row.TrailingCommandId);
+        Assert.Equal("Refresh", row.TrailingLabel);
+    }
+
+    [Fact]
+    public void UnregisterOwner_RemovesPagesAndRaisesChanged()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out _));
+        var changed = 0;
+        registry.Changed += (_, _) => changed++;
+
+        Assert.True(registry.UnregisterOwner(Owner));
+
+        Assert.Equal(PageRegistry.BuiltinPageCount, registry.Count);
+        Assert.Empty(registry.BuildPluginPages());
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void RegisterPage_StopsAtTwelvePages()
+    {
+        var registry = new PageRegistry();
+        for (var i = 0; i < PageRegistry.MaxPages - PageRegistry.BuiltinPageCount; i++)
+        {
+            Assert.True(registry.RegisterPage(Owner, Descriptor($"sample-page.page{i}"), out var error), error);
+        }
+
+        Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.overflow"), out var limit));
+        Assert.Contains("limit", limit, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static PageDescriptor Descriptor(string pageId) => new()
+    {
+        PageId = pageId,
+        Order = 55,
+        Title = new LocalizedString("Sample page"),
+        ShortTitle = new LocalizedString("Sample"),
+        IconToken = "list",
+        TemplateId = PageTemplates.List,
+    };
+}

@@ -28,6 +28,9 @@ public sealed record IslandStripLayout
     /// <summary>Committed page index.</summary>
     public required int Page { get; init; }
 
+    /// <summary>Total page count represented by the rail.</summary>
+    public int PageCount { get; init; } = FluidBar.Core.Interaction.PagerConstants.PageCount;
+
     /// <summary>Far-page dots on the left (nearest first).</summary>
     public required SKRect[] DotsLeft { get; init; }
 
@@ -45,7 +48,7 @@ public sealed record IslandStripLayout
     /// the last page (06 Widgets).
     /// </summary>
     public int RightDotPage(int index)
-        => index >= 0 && index < DotsRight.Length ? FluidBar.Core.Interaction.PagerConstants.PageCount - 1 : -1;
+        => index >= 0 && index < DotsRight.Length ? PageCount - 1 : -1;
 
     /// <summary>Hit-tests the rail layout (tests/host hit-region building).</summary>
     public IslandHitTarget HitTest(float x, float y)
@@ -60,7 +63,7 @@ public sealed record IslandStripLayout
             return new IslandHitTarget(IslandHitKind.RailSlot, Page);
         }
 
-        if (Page < FluidBar.Core.Interaction.PagerConstants.PageCount - 1 && Next.Contains(x, y))
+        if (Page < PageCount - 1 && Next.Contains(x, y))
         {
             return new IslandHitTarget(IslandHitKind.RailSlot, Page + 1);
         }

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://fluidbar.app/schemas/locale.schema.json",
+  "locale": "en-US",
+  "version": 1,
+  "messages": {
+    "island.title": "Sample pages"
+  }
+}

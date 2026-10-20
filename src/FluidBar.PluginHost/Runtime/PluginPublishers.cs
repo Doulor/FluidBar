@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
 using FluidBar.PluginHost.Logging;
 using FluidBar.Sdk;
+using FluidBar.Sdk.Manifest;
+using FluidBar.Sdk.Pages;
 
 namespace FluidBar.PluginHost.Runtime;
 
@@ -16,15 +18,21 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
     private readonly string _pluginId;
     private readonly IIslandPublisher _inner;
     private readonly IPluginHostLogger _logger;
+    private readonly PluginManifest? _manifest;
     private readonly HashSet<string> _loggedInvalidSources = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private long _droppedCount;
 
-    internal PluginIslandPublisher(string pluginId, IIslandPublisher inner, IPluginHostLogger logger)
+    internal PluginIslandPublisher(
+        string pluginId,
+        IIslandPublisher inner,
+        IPluginHostLogger logger,
+        PluginManifest? manifest = null)
     {
         _pluginId = pluginId;
         _inner = inner;
         _logger = logger;
+        _manifest = manifest;
     }
 
     internal long DroppedCount => Interlocked.Read(ref _droppedCount);
@@ -63,6 +71,58 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
 
         return _inner.TryRetract(source);
     }
+
+    /// <summary>
+    /// Page registration is capability-gated in the same wrapper for built-in and third-party plugins:
+    /// ui.pages, owner-prefixed PageId, and a declared template are required before forwarding.
+    /// </summary>
+    public bool RegisterPage(PageDescriptor descriptor)
+    {
+        if (descriptor is null)
+        {
+            Drop(_pluginId, "Page descriptor is null.");
+            return false;
+        }
+
+        var ui = _manifest?.Capabilities?.Ui;
+        if (ui is not { Pages: true })
+        {
+            Drop(_pluginId, "RegisterPage requires capabilities.ui.pages = true.");
+            return false;
+        }
+
+        if (ui.PageTemplates is { Count: > 0 } allowed
+            && !allowed.Contains(descriptor.TemplateId, StringComparer.Ordinal))
+        {
+            Drop(_pluginId, $"Template '{descriptor.TemplateId}' is not declared in capabilities.ui.pageTemplates.");
+            return false;
+        }
+
+        if (!descriptor.PageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase))
+        {
+            Drop(_pluginId, "PageId must be prefixed with the plugin id.");
+            return false;
+        }
+
+        return _inner.RegisterPage(descriptor);
+    }
+
+    public bool PublishPage(PageData data)
+    {
+        if (data is null
+            || !data.PageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase))
+        {
+            Drop(_pluginId, "PublishPage requires a page id owned by the plugin.");
+            return false;
+        }
+
+        return _inner.PublishPage(data);
+    }
+
+    public bool UnregisterPage(string pageId)
+        => !string.IsNullOrWhiteSpace(pageId)
+           && pageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase)
+           && _inner.UnregisterPage(pageId);
 
     private void Drop(string source, string reason)
     {

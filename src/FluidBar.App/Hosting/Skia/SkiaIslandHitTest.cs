@@ -22,14 +22,15 @@ public readonly record struct SkiaStripGeometry(
     int Page,
     float CapsuleWidth,
     SKRect[] DotsLeft,
-    SKRect[] DotsRight)
+    SKRect[] DotsRight,
+    int PageCount = PagerConstants.PageCount)
 {
     /// <summary>Target page for a left dot index (every dot in the cluster jumps to page 01).</summary>
     public int LeftDotPage(int index) => index >= 0 && index < DotsLeft.Length ? 0 : -1;
 
     /// <summary>Target page for a right dot index (every dot in the cluster jumps to the last page).</summary>
     public int RightDotPage(int index)
-        => index >= 0 && index < DotsRight.Length ? PagerConstants.PageCount - 1 : -1;
+        => index >= 0 && index < DotsRight.Length ? PageCount - 1 : -1;
 }
 
 /// <summary>
@@ -134,16 +135,16 @@ public static class SkiaIslandHitTest
         // Same measurement the renderer paints: the rail is centred on the shell, sits 8 DIP below
         // it, is 32 DIP tall and morphs the current capsule between the neighbouring label widths.
         var frame = MiniRailLayout.Measure(state, shell, dotsLeft, dotsRight);
-        var last = PagerConstants.PageCount - 1;
         return new SkiaStripGeometry(
             frame.Strip,
             frame.Page > 0 ? frame.Previous : SKRect.Empty,
             frame.Current,
-            frame.Page < last ? frame.Next : SKRect.Empty,
+            frame.Page < frame.PageCount - 1 ? frame.Next : SKRect.Empty,
             frame.Page,
             frame.CapsuleWidth,
             frame.LeftDots > 0 ? dotsLeft[..frame.LeftDots].ToArray() : [],
-            frame.RightDots > 0 ? dotsRight[..frame.RightDots].ToArray() : []);
+            frame.RightDots > 0 ? dotsRight[..frame.RightDots].ToArray() : [],
+            frame.PageCount);
     }
 
     /// <summary>
@@ -160,6 +161,31 @@ public static class SkiaIslandHitTest
     {
         var pages = state.Pages;
         var metrics = FontScaleMetrics.From(state.FontScale);
+        if (pages.PluginPageAt(page) is { } pluginPage)
+        {
+            var body = PageLayout.ListBody(pageRect);
+            for (var i = 0; i < pluginPage.Rows.Count; i++)
+            {
+                var row = PageMetricsLayout.NotificationRow(pageRect, i, 0, metrics);
+                if (!row.Contains(x, y) || !body.Contains(x, y))
+                {
+                    continue;
+                }
+
+                index = i;
+                var model = pluginPage.Rows[i];
+                var trailing = new SKRect(row.Right - 96, row.MidY - 12, row.Right - 8, row.MidY + 12);
+                return trailing.Contains(x, y) && !string.IsNullOrWhiteSpace(model.TrailingCommandId)
+                    ? IslandPageControl.PluginRowButton
+                    : !string.IsNullOrWhiteSpace(model.RowCommandId) || !string.IsNullOrWhiteSpace(model.TrailingCommandId)
+                        ? IslandPageControl.PluginRow
+                        : IslandPageControl.None;
+            }
+
+            index = -1;
+            return IslandPageControl.None;
+        }
+
         var count = page switch
         {
             0 => 4,

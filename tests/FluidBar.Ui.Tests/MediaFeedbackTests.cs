@@ -151,39 +151,63 @@ public sealed class MediaFeedbackTests
     }
 
     [Fact]
-    public void Optimistic_play_state_expires_instead_of_lying_forever()
+    public void Optimistic_pause_ignores_one_stale_read_and_follows_two_consistent_ones()
     {
+        // The accessibility poll keeps returning the pre-tap glyph for a while: a single stale read must
+        // not flip the icon back (that is the reported "paused but still shows playing" bug).
         var state = new OptimisticPlayState();
         var now = new DateTimeOffset(2026, 10, 20, 2, 0, 0, TimeSpan.Zero);
-
         state.Set(playing: false, now);
-        var resolved = state.Resolve(actual: true, now + OptimisticPlayState.DefaultTtl + TimeSpan.FromMilliseconds(1));
 
-        Assert.True(resolved);
-        Assert.False(state.IsPending);
-        // The expiry is a rollback: the caller has to re-read the source instead of trusting the old reading.
+        // Inside the stale-read guard: ignored entirely.
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(80)));
+        Assert.Equal(0, state.Disagreements);
+
+        // First consistent disagreement: still holding the user's intent.
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(320)));
+        Assert.Equal(1, state.Disagreements);
+        Assert.False(state.LastResolveRolledBack);
+
+        // Second consistent disagreement: the source really is playing, so follow it once.
+        Assert.True(state.Resolve(actual: true, now.AddMilliseconds(520)));
         Assert.True(state.LastResolveRolledBack);
+        Assert.False(state.IsPending);
+        Assert.True(state.Resolve(actual: true, now.AddMilliseconds(700)));
     }
 
     [Fact]
-    public void Optimistic_play_state_window_is_short_enough_for_two_polls()
+    public void Optimistic_play_state_clears_without_rollback_when_the_source_catches_up()
     {
-        // 600 ms ≈ two 250 ms accessibility polls: a flip the player never confirmed must not survive longer,
-        // otherwise the icon keeps disagreeing with the audio.
-        Assert.Equal(600, OptimisticPlayState.DefaultTtl.TotalMilliseconds, 1);
+        var state = new OptimisticPlayState();
+        var now = new DateTimeOffset(2026, 10, 20, 2, 0, 0, TimeSpan.Zero);
+        state.Set(playing: false, now);
 
+        Assert.False(state.Resolve(actual: false, now.AddMilliseconds(200)));
+        Assert.False(state.IsPending);
+        Assert.False(state.LastResolveRolledBack);
+    }
+
+    [Fact]
+    public void Optimistic_play_state_gives_up_after_the_hold_window()
+    {
         var state = new OptimisticPlayState();
         var now = new DateTimeOffset(2026, 10, 20, 2, 0, 0, TimeSpan.Zero);
         state.Set(playing: true, now);
 
-        // Still inside the window: the flip is painted.
-        Assert.True(state.Resolve(actual: false, now.AddMilliseconds(400)));
-        Assert.False(state.LastResolveRolledBack);
-        // Past it: the truth wins and the rollback is reported once.
-        Assert.False(state.Resolve(actual: false, now.AddMilliseconds(601)));
+        // The hold window is 2–3 s (the user must see their intent for a moment), but never longer.
+        Assert.InRange(OptimisticPlayState.HoldWindow, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
+
+        // A single disagreeing read inside the window keeps the user's intent (the current rule:
+        // one stale poll is ignored; two consistent reads are the truth)...
+        Assert.True(state.Resolve(actual: false, now.AddMilliseconds(300)));
+        Assert.False(state.Resolve(actual: false, now + OptimisticPlayState.HoldWindow + TimeSpan.FromMilliseconds(1)));
         Assert.True(state.LastResolveRolledBack);
-        // The next resolve is a plain reading again.
-        Assert.False(state.Resolve(actual: false, now.AddMilliseconds(700)));
-        Assert.False(state.LastResolveRolledBack);
+
+        // ...and a read that only lands after the window gives up immediately, even alone.
+        state.Set(playing: true, now);
+        Assert.False(state.Resolve(actual: false,
+            now + OptimisticPlayState.HoldWindow + OptimisticPlayState.StaleReadGuard));
+        Assert.True(state.LastResolveRolledBack);
+        Assert.False(state.IsPending);
     }
 }

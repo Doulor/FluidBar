@@ -9,6 +9,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using FluidBar.App.Controls;
 using FluidBar.App.Localization;
+using FluidBar.App.Plugins;
 using FluidBar.App.Settings;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
@@ -664,6 +665,69 @@ public static class SettingsSectionBuilder
 
     // ---- plugins ----------------------------------------------------------------------------
 
+    private static Control BuildLocalPlugins(SettingsWindowContext ctx, ILocalPluginUiService service)
+    {
+        var palette = ctx.Palette;
+        var stack = new StackPanel { Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        stack.Children.Add(SettingsWidgets.Caption("Local plugins", palette));
+        stack.Children.Add(SettingsControls.StatusLine(
+            service.LocalPluginRootDirectory,
+            palette,
+            SettingsTone.Neutral,
+            SettingsMetrics.RowDescSize));
+
+        var plugins = service.ListLocalPlugins();
+        if (plugins.Count == 0)
+        {
+            stack.Children.Add(SettingsControls.StatusLine(
+                "No local plugin packages found. Drop a folder with manifest.json into the local folder.",
+                palette,
+                SettingsTone.Neutral,
+                SettingsMetrics.RowDescSize));
+            return stack;
+        }
+
+        foreach (var plugin in plugins)
+        {
+            var row = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            row.Children.Add(SettingsControls.StatusLine(
+                $"{plugin.Id} {plugin.Version} · {(plugin.Active ? "active" : "stopped")}"
+                + (plugin.Error is null ? string.Empty : $" · {plugin.Error}"),
+                palette,
+                plugin.Active ? SettingsTone.Success : SettingsTone.Neutral,
+                SettingsMetrics.RowDescSize));
+
+            var reload = SettingsControls.Button(
+                "Reload",
+                palette,
+                SettingsButtonVariant.Raised,
+                SettingsButtonSize.Md,
+                SettingsIconKind.Settings,
+                () => _ = service.ReloadLocalPluginAsync(plugin.Id, CancellationToken.None));
+            reload.Margin = new Thickness(8, 0, 0, 0);
+            Grid.SetColumn(reload, 1);
+            row.Children.Add(reload);
+
+            var unload = SettingsControls.Button(
+                "Unload",
+                palette,
+                SettingsButtonVariant.Raised,
+                SettingsButtonSize.Md,
+                SettingsIconKind.Close,
+                () => _ = service.UnloadLocalPluginAsync(plugin.Id, CancellationToken.None));
+            unload.Margin = new Thickness(8, 0, 0, 0);
+            Grid.SetColumn(unload, 2);
+            row.Children.Add(unload);
+            stack.Children.Add(row);
+        }
+
+        return stack;
+    }
+
     private static Control BuildPlugins(SettingsWindowContext ctx)
     {
         var palette = ctx.Palette;
@@ -690,6 +754,11 @@ public static class SettingsSectionBuilder
 
         var toolbar = BuildPluginToolbar(ctx, palette);
         panel.Children.Add(toolbar);
+        if (ctx.Plugins is ILocalPluginUiService localPlugins)
+        {
+            panel.Children.Add(BuildLocalPlugins(ctx, localPlugins));
+        }
+
         var footer = SettingsControls.FooterNote(string.Empty, palette);
         panel.Children.Add(footer);
         reload = () => _ = LoadAsync();
@@ -775,6 +844,11 @@ public static class SettingsSectionBuilder
             panel.Children.Add(SettingsWidgets.Caption(
                 ctx.Localizer.Get(LocKeys.Settings.Support.Title), palette));
             panel.Children.Add(AgentSupportSectionView.Build(AgentSupportCatalog.CreateDefault(), ctx));
+            if (ctx.Plugins is ILocalPluginUiService localPlugins)
+            {
+                panel.Children.Add(BuildLocalPlugins(ctx, localPlugins));
+            }
+
             _ = LoadAsync();
         }
 

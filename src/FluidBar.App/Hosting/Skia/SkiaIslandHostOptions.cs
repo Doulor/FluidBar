@@ -1,3 +1,4 @@
+using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
@@ -27,6 +28,9 @@ public sealed record SkiaIslandHostOptions
     /// other control logs <c>island.skia.control-unsupported</c>.
     /// </summary>
     public IIslandPlatformActions? PlatformActions { get; init; }
+
+    /// <summary>Optional plugin page registry; when present its pages are appended after the built-ins.</summary>
+    public PageRegistry? PageRegistry { get; init; }
 
     /// <summary>Injected time source (deadlines, wheel cooldowns).</summary>
     public TimeProvider? TimeProvider { get; init; }

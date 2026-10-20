@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
 using FluidBar.Core.Activities;
+using FluidBar.App.Hosting.Pages;
 using FluidBar.Core.Events;
 using FluidBar.Plugins.Builtin;
 using FluidBar.Sdk;
+using FluidBar.Sdk.Pages;
 using CoreEvent = FluidBar.Core.Events.IslandEvent;
 using CoreEventKind = FluidBar.Core.Events.IslandEventKind;
 using SdkEvent = FluidBar.Sdk.IslandEvent;
@@ -181,14 +183,36 @@ public sealed class AppPluginIslandPublisher : IIslandPublisher
     private readonly string _pluginId;
     private readonly PluginIslandEventAdapter _adapter;
     private readonly Action<CoreEvent> _publish;
+    private readonly PageRegistry? _pages;
 
     /// <summary>Creates the publisher for one plugin.</summary>
-    public AppPluginIslandPublisher(string pluginId, PluginIslandEventAdapter adapter, Action<CoreEvent> publish)
+    public AppPluginIslandPublisher(
+        string pluginId,
+        PluginIslandEventAdapter adapter,
+        Action<CoreEvent> publish,
+        PageRegistry? pages = null)
     {
         _pluginId = pluginId ?? throw new ArgumentNullException(nameof(pluginId));
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         _publish = publish ?? throw new ArgumentNullException(nameof(publish));
+        _pages = pages;
     }
+
+    /// <inheritdoc />
+    public bool RegisterPage(PageDescriptor descriptor)
+        => descriptor is not null && _pages is not null
+           && _pages.RegisterPage(_pluginId, descriptor, out _);
+
+    /// <inheritdoc />
+    public bool PublishPage(PageData data)
+        => data is not null && _pages is not null && _pages.PublishPage(_pluginId, data, out _);
+
+    /// <inheritdoc />
+    public bool UnregisterPage(string pageId)
+        => !string.IsNullOrWhiteSpace(pageId) && _pages is not null && _pages.UnregisterPage(_pluginId, pageId);
+
+    /// <summary>Host-used cleanup when the plugin stops or unloads.</summary>
+    public bool UnregisterAllPages() => _pages?.UnregisterOwner(_pluginId) == true;
 
     /// <inheritdoc />
     public bool TryPublish(SdkEvent islandEvent)

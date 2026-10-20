@@ -398,6 +398,12 @@ public sealed record UiCapability
 
     public bool Widgets { get; init; }
 
+    /// <summary>Allows this plugin to register host-rendered island pages.</summary>
+    public bool Pages { get; init; }
+
+    /// <summary>Template ids the plugin may use for its pages.</summary>
+    public IReadOnlyList<string>? PageTemplates { get; init; }
+
     public bool Xaml { get; init; }
 }
 

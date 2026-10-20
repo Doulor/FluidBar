@@ -1,0 +1,68 @@
+{
+  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "schemaVersion": 2,
+  "id": "fluidbar-sample-local-pages",
+  "version": "1.0.0",
+  "apiVersion": "2.0.0",
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar-samples",
+    "displayName": "FluidBar Samples",
+    "url": "https://fluidbar.app"
+  },
+  "author": {
+    "name": "FluidBar contributors",
+    "url": "https://fluidbar.app"
+  },
+  "name": {
+    "en-US": "Local Pages Sample",
+    "zh-Hans": "本地页面示例"
+  },
+  "summary": {
+    "en-US": "M0 local-channel sample that registers a seventh host-rendered page.",
+    "zh-Hans": "M0 本地渠道示例，注册第七个宿主渲染页面。"
+  },
+  "description": {
+    "en-US": "Demonstrates RegisterPage/PublishPage and a manifest-declared row command from a local unsigned plugin.",
+    "zh-Hans": "演示本地无签名插件通过 RegisterPage/PublishPage 注册页面并使用清单声明的行命令。"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "homepage": "https://fluidbar.app",
+  "categories": ["developer"],
+  "tags": ["sample", "local", "pages"],
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Sample.LocalPages.dll",
+    "type": "FluidBar.Sample.LocalPages.SamplePagesPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": ["win-x64"],
+  "locales": {
+    "default": "en-US",
+    "available": ["en-US"],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "pages": true,
+      "pageTemplates": ["list"],
+      "commands": true,
+      "xaml": false
+    }
+  },
+  "activation": ["startup"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "fluidbar-sample-local-pages.refresh",
+        "title": {
+          "en-US": "Refresh sample page"
+        },
+        "contexts": ["island", "global"]
+      }
+    ]
+  }
+}

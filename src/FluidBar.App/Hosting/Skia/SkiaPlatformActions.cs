@@ -845,10 +845,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     }
 
     /// <summary>Asks the media service to re-read its source (rate-limited to once every two seconds).</summary>
-    private void RequestSourceReread()
+    /// <param name="force">Ignore the rate limit (a user tap must always be confirmed promptly).</param>
+    private void RequestSourceReread(bool force = false)
     {
         var nowMs = (long)(_time.GetTimestamp() * 1000.0 / _time.TimestampFrequency);
-        if (_lastRereadAtMs >= 0 && nowMs - _lastRereadAtMs < 2000)
+        if (!force && _lastRereadAtMs >= 0 && nowMs - _lastRereadAtMs < 2000)
         {
             return;
         }
@@ -1114,12 +1115,24 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _ = RunAsync(async () =>
         {
             var ok = await command().ConfigureAwait(false);
-            if (!ok && optimisticPlaying is not null)
+            if (ok || optimisticPlaying is null)
             {
-                ClearOptimisticPlaying();
-                _logger.Warning(LogCategories.Platform, eventId,
-                    "The media transport command was refused; the optimistic play state was rolled back.");
+                return;
             }
+
+            if (_media.CurrentTransportRoute.Route == TransportRoute.MediaKey)
+            {
+                // A system media key cannot report whether the player acted on it: rolling the flip back
+                // here is what made the icon snap back to "playing" after the user had paused. Trust the
+                // intent and let the two-consistent-reads rule (or the hold window) settle it.
+                _logger.Information(LogCategories.Platform, "media.play-state",
+                    "Media-key transport could not confirm the command; keeping the optimistic flip.");
+                return;
+            }
+
+            ClearOptimisticPlaying();
+            _logger.Warning(LogCategories.Platform, eventId,
+                "The media transport command was refused; the optimistic play state was rolled back.");
         }, eventId);
         return IslandActionResult.Handled;
     }
@@ -1128,6 +1141,23 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         _optimisticPlay.Set(playing, _time.GetUtcNow());
         Changed?.Invoke(this, EventArgs.Empty);
+
+        // Confirm early instead of waiting for the next poll: the first accessibility read after the tap
+        // is usually the pre-tap glyph, and re-reading now means the source can agree (or disagree) while
+        // the flip is still inside its stale-read guard.
+        _ = ConfirmSoonAsync();
+    }
+
+    private async Task ConfirmSoonAsync()
+    {
+        try
+        {
+            await Task.Delay(220).ConfigureAwait(false);
+            RequestSourceReread(force: true);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private void ClearOptimisticPlaying()

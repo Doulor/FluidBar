@@ -57,8 +57,9 @@ internal sealed partial class PageRenderer : IDisposable
 
         // Prototype2 `.pager-title`: page number 8.5 DIP @ 32 % white, title 10 DIP @ 72 % white, both
         // left aligned at the content inset (left 20 / top 11).
-        var page = Math.Clamp(state.PageIndex, 0, PageNumbers.Length - 1);
-        _text.Draw(canvas, PageNumbers[page], IslandType.PageNumber, PageLayout.PageNumberRect(content),
+        var page = Math.Max(0, state.PageIndex);
+        var number = page < PageNumbers.Length ? PageNumbers[page] : (page + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+        _text.Draw(canvas, number, IslandType.PageNumber, PageLayout.PageNumberRect(content),
             _theme.Foreground.WithAlpha(82), TextAlign.Left, _opacity);
         _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
             _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
@@ -91,6 +92,12 @@ internal sealed partial class PageRenderer : IDisposable
         _hasPointer = state.HasPointer;
         if (_opacity <= 0.01f)
         {
+            return;
+        }
+
+        if (state.Pages.PluginPageAt(page) is { } pluginPage)
+        {
+            DrawPluginPage(canvas, pluginPage, pageRect);
             return;
         }
 

@@ -304,11 +304,12 @@ public static class MiniRailTargetsFactory
     /// <param name="leftWide">Whether the last left dot is the 7 DIP overflow pill.</param>
     /// <param name="right">Right dot count (0..3).</param>
     /// <param name="rightWide">Whether the last right dot is the 7 DIP overflow pill.</param>
-    public static void DotCounts(int page, out int left, out bool leftWide, out int right, out bool rightWide)
+    public static void DotCounts(int page, out int left, out bool leftWide, out int right, out bool rightWide, int pageCount = PagerConstants.PageCount)
     {
-        var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
+        var count = Math.Max(1, pageCount);
+        var index = Math.Clamp(page, 0, count - 1);
         var leftTotal = Math.Max(0, index - 1);
-        var rightTotal = Math.Max(0, (PagerConstants.PageCount - 1) - (index + 1));
+        var rightTotal = Math.Max(0, (count - 1) - (index + 1));
         left = Math.Min(IslandMetrics.MaxDotsPerSide, leftTotal);
         right = Math.Min(IslandMetrics.MaxDotsPerSide, rightTotal);
         leftWide = leftTotal > left;
@@ -321,9 +322,10 @@ public static class MiniRailTargetsFactory
     /// <param name="fontScale">Island font scale.</param>
     public static MiniRailTargets Create(int page, ExpandedPageContent? pages, double fontScale)
     {
-        var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
+        var count = pages?.PageCount ?? PagerConstants.PageCount;
+        var index = Math.Clamp(page, 0, count - 1);
         var label = pages?.ShortTitle(index)
-            ?? ExpandedPageContent.DefaultPageTitles[index];
+            ?? ExpandedPageContent.DefaultPageTitles[Math.Min(index, ExpandedPageContent.DefaultPageTitles.Length - 1)];
         var width = MiniRailLayout.CapsuleWidth(label, fontScale);
         const float neighbour = (float)IslandMetrics.MiniNeighbourWidth;
         const float islandGap = (float)IslandMetrics.MiniGap;
@@ -332,7 +334,7 @@ public static class MiniRailTargetsFactory
 
         var prevX = -(width / 2f) - islandGap - half;
         var nextX = (width / 2f) + islandGap + half;
-        DotCounts(index, out var left, out var leftWide, out var right, out var rightWide);
+        DotCounts(index, out var left, out var leftWide, out var right, out var rightWide, count);
         var leftWidth = MiniRailLayout.ClusterWidth(left, leftWide);
         var rightWidth = MiniRailLayout.ClusterWidth(right, rightWide);
 
@@ -342,7 +344,7 @@ public static class MiniRailTargetsFactory
             prevX,
             nextX,
             index > 0 ? 1f : 0f,
-            index < PagerConstants.PageCount - 1 ? 1f : 0f,
+            index < count - 1 ? 1f : 0f,
             prevX - half - dotIslandGap - (leftWidth / 2f),
             nextX + half + dotIslandGap + (rightWidth / 2f),
             left > 0 ? 1f : 0f,

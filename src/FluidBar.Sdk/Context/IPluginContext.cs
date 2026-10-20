@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using FluidBar.Sdk.Capabilities;
+using FluidBar.Sdk.Pages;
 using FluidBar.Sdk.Versioning;
 
 namespace FluidBar.Sdk;
@@ -76,6 +77,18 @@ public interface IIslandPublisher
 
     /// <summary>Retracts the current event for a source (e.g. media playback stopped).</summary>
     bool TryRetract(string source);
+
+    /// <summary>
+    /// Registers one host-rendered page. Default implementation returns false so existing in-process
+    /// publisher implementations (and older plugins) do not have to be rewritten in lockstep.
+    /// </summary>
+    bool RegisterPage(PageDescriptor descriptor) => false;
+
+    /// <summary>Publishes new template data for a page previously registered by this plugin.</summary>
+    bool PublishPage(PageData data) => false;
+
+    /// <summary>Removes a page previously registered by this plugin (host also does this on stop).</summary>
+    bool UnregisterPage(string pageId) => false;
 }
 
 /// <summary>

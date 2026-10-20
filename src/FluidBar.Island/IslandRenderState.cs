@@ -295,11 +295,19 @@ public readonly record struct IslandRenderState
 /// <summary>Continuous pager state consumed by the page strip (all values come from Core policies).</summary>
 public readonly record struct PagerRenderState
 {
+    /// <summary>Creates the default pager state (the field initializers need an explicit ctor).</summary>
+    public PagerRenderState()
+    {
+    }
+
     /// <summary>Continuous page position (0..5); the strip is offset by <c>PagePosition × 400</c> DIP.</summary>
     public double PagePosition { get; init; }
 
     /// <summary>Committed page index (rounded position).</summary>
     public int PageIndex { get; init; }
+
+    /// <summary>Number of pages represented by the pager; defaults to the six built-in pages.</summary>
+    public int PageCount { get; init; } = PagerConstants.PageCount;
 
     /// <summary>Whether the pointer is dragging the pager.</summary>
     public bool IsDragging { get; init; }
@@ -311,20 +319,27 @@ public readonly record struct PagerRenderState
     public bool ControlOwnsGesture { get; init; }
 
     /// <summary>Creates a settled state for a page.</summary>
-    public static PagerRenderState At(int page) => new()
+    public static PagerRenderState At(int page, int pageCount = PagerConstants.PageCount) => new()
     {
-        PageIndex = PagePagerPolicy.ClampPage(page),
-        PagePosition = PagePagerPolicy.ClampPage(page),
+        PageIndex = PagePagerPolicy.ClampPage(page, pageCount),
+        PagePosition = PagePagerPolicy.ClampPage(page, pageCount),
+        PageCount = pageCount,
     };
 
     /// <summary>Creates a state from a fractional page position (committed page derived).</summary>
-    public static PagerRenderState FromPosition(double pagePosition, bool isDragging = false, bool isSnapping = false)
+    public static PagerRenderState FromPosition(
+        double pagePosition,
+        bool isDragging = false,
+        bool isSnapping = false,
+        int pageCount = PagerConstants.PageCount)
     {
-        var position = double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, PagerConstants.PageCount - 1) : 0;
+        var count = Math.Max(1, pageCount);
+        var position = double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, count - 1) : 0;
         return new PagerRenderState
         {
             PagePosition = position,
-            PageIndex = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip),
+            PageIndex = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, PagerConstants.PagePitchDip, count),
+            PageCount = count,
             IsDragging = isDragging,
             IsSnapping = isSnapping,
         };

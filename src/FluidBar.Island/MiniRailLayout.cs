@@ -69,7 +69,8 @@ public readonly record struct MiniRailFrame(
     float PulseNext,
     MiniRailSlot Hover,
     MiniRailSlot Pressed,
-    MiniRailSlot Focus);
+    MiniRailSlot Focus,
+    int PageCount = PagerConstants.PageCount);
 
 /// <summary>
 /// Pure geometry + text metrics for the prototype2 transient preview rail.
@@ -108,11 +109,11 @@ public static class MiniRailLayout
 
     /// <summary>Nearest page index for a continuous pager position (prototype `Math.round`).</summary>
     /// <param name="pagePosition">Continuous pager position (0..5).</param>
-    public static int PageAt(double pagePosition)
+    public static int PageAt(double pagePosition, int pageCount = PagerConstants.PageCount)
         => PagePagerPolicy.OffsetToPage(
-            Position(pagePosition) * PagerConstants.PagePitchDip,
+            Position(pagePosition, pageCount) * PagerConstants.PagePitchDip,
             PagerConstants.PagePitchDip,
-            PagerConstants.PageCount);
+            Math.Max(1, pageCount));
 
     /// <summary>
     /// Locale label width of a page in DIP, measured with the same 9 DIP semibold face the rail paints
@@ -158,8 +159,8 @@ public static class MiniRailLayout
     /// <param name="fontScale">Island font scale (0.8–1.6).</param>
     public static float CapsuleWidthAt(double pagePosition, ExpandedPageContent? pages, double fontScale)
     {
-        const int lastPage = PagerConstants.PageCount - 1;
-        var position = Position(pagePosition);
+        var lastPage = (pages?.PageCount ?? PagerConstants.PageCount) - 1;
+        var position = Position(pagePosition, lastPage + 1);
         var lower = (int)Math.Floor(position);
         var lowerWidth = CapsuleWidth(Label(pages, lower), fontScale);
         if (lower >= lastPage)
@@ -202,15 +203,16 @@ public static class MiniRailLayout
         var arch = state.Archipelago;
         var rail = arch.Rail;
         var position = Position(double.IsFinite(arch.PagePosition) ? arch.PagePosition : state.Pager.PagePosition);
-        var page = rail.Active ? rail.Page : PageAt(position);
+        var pageCount = state.Pages.PageCount;
+        var page = rail.Active ? rail.Page : PageAt(position, pageCount);
         var capsule = rail.Active ? rail.CapsuleWidth : CapsuleWidthAt(position, state.Pages, state.FontScale);
 
         // Dot counts follow the rail page (the page the pills represent), not the pager position: the
         // prototype rebuilds the clusters the moment the strip retargets.
-        MiniRailTargetsFactory.DotCounts(page, out var leftDots, out var leftWide, out var rightDots, out var rightWide);
+        MiniRailTargetsFactory.DotCounts(page, out var leftDots, out var leftWide, out var rightDots, out var rightWide, pageCount);
 
         var prevAlpha = rail.Active ? rail.PrevAlpha : (page > 0 ? 1f : 0f);
-        var nextAlpha = rail.Active ? rail.NextAlpha : (page < PagerConstants.PageCount - 1 ? 1f : 0f);
+        var nextAlpha = rail.Active ? rail.NextAlpha : (page < pageCount - 1 ? 1f : 0f);
         var leftAlpha = rail.Active ? rail.LeftAlpha : (leftDots > 0 ? 1f : 0f);
         var rightAlpha = rail.Active ? rail.RightAlpha : (rightDots > 0 ? 1f : 0f);
         var labelProgress = rail.Active ? rail.LabelProgress : 1f;
@@ -220,9 +222,9 @@ public static class MiniRailLayout
 
         // Interaction states are resolved per slot by the host (pointer, press, keyboard focus); the
         // layout only forwards them so drawing and hit-testing read one frame.
-        var hover = ResolveSlot(arch.RailHover, page);
-        var pressed = ResolveSlot(arch.RailPressed, page);
-        var focus = ResolveSlot(arch.RailFocus, page);
+        var hover = ResolveSlot(arch.RailHover, page, pageCount);
+        var pressed = ResolveSlot(arch.RailPressed, page, pageCount);
+        var focus = ResolveSlot(arch.RailFocus, page, pageCount);
 
         const float neighbour = (float)IslandMetrics.MiniNeighbourWidth;
         const float capsuleHeight = (float)IslandMetrics.MiniCurrentHeight;
@@ -311,7 +313,8 @@ public static class MiniRailLayout
             pulseNext,
             hover,
             pressed,
-            focus);
+            focus,
+            pageCount);
     }
 
     /// <summary>
@@ -321,10 +324,10 @@ public static class MiniRailLayout
     /// </summary>
     /// <param name="slot">Slot reported by the host.</param>
     /// <param name="page">Rail page the frame represents.</param>
-    internal static MiniRailSlot ResolveSlot(MiniRailSlot slot, int page) => slot switch
+    internal static MiniRailSlot ResolveSlot(MiniRailSlot slot, int page, int pageCount = PagerConstants.PageCount) => slot switch
     {
         MiniRailSlot.Previous when page <= 0 => MiniRailSlot.None,
-        MiniRailSlot.Next when page >= PagerConstants.PageCount - 1 => MiniRailSlot.None,
+        MiniRailSlot.Next when page >= pageCount - 1 => MiniRailSlot.None,
         _ => slot,
     };
 
@@ -363,9 +366,9 @@ public static class MiniRailLayout
         => pages?.ShortTitle(page)
            ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(page, 0, PagerConstants.PageCount - 1)];
 
-    private static double Position(double pagePosition)
+    private static double Position(double pagePosition, int pageCount = PagerConstants.PageCount)
         => double.IsFinite(pagePosition)
-            ? Math.Clamp(pagePosition, 0, PagerConstants.PageCount - 1)
+            ? Math.Clamp(pagePosition, 0, Math.Max(1, pageCount) - 1)
             : 0;
 }
 

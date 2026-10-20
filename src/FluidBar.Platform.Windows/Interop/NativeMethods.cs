@@ -1128,6 +1128,9 @@ internal static partial class NativeMethods
         /// </summary>
         [DllImport(Lib)]
         internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
+        [DllImport(Lib)]
+        internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
     }
 
     // ---------------------------------------------------------------------

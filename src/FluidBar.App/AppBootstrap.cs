@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using FluidBar.App.Diagnostics;
 using FluidBar.App.Hosting;
+using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Localization;
 using FluidBar.App.Plugins;
@@ -45,6 +46,7 @@ internal sealed class AppBootstrap
     private JsonUiSettingsStore? _settingsStore;
     private PluginRuntime? _pluginRuntime;
     private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
+    private readonly PageRegistry _pageRegistry = new();
     private StartupRegistrationSync? _startupRegistration;
     private AppUpdateCoordinator? _updates;
     private CrashGuard? _crashGuard;
@@ -386,12 +388,14 @@ internal sealed class AppBootstrap
                     Data = (IIslandDataSource?)_platformActions ?? _data!,
                     Logger = _logger,
                     PlatformActions = _platformActions,
+                    PageRegistry = _pageRegistry,
                     TargetFrameRate = 120,
                 });
                 host.SettingsRequested += OpenSettings;
                 host.MarketRequested += OpenMarket;
                 await host.StartAsync().ConfigureAwait(true);
                 _skiaHost = host;
+                host.PluginPageCommandRequested += request => _ = ExecutePluginPageCommandAsync(request);
                 _logger.Information(LogCategories.Lifecycle, "app.host-selected", "Island host: skia (layered Win32).");
                 return;
             }
@@ -843,6 +847,28 @@ internal sealed class AppBootstrap
                 "The edited hotkey bindings could not be applied; restart FluidBar to retry.", ex);
         }
     }
+    private async Task ExecutePluginPageCommandAsync(PluginPageCommandRequest request)
+    {
+        var runtime = _pluginRuntime;
+        if (runtime is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await runtime.ExecuteCommandAsync(
+                request.OwnerPluginId,
+                request.CommandId,
+                FluidBar.Sdk.CommandInvocationSource.Island).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.page.command-failed",
+                $"Plugin page command '{request.CommandId}' failed: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Composes the plugin platform after the island host exists (plugins publish into its event hub).
     /// Composition, discovery and loading run on the thread pool; a plugin failure never reaches the island.
@@ -860,6 +886,8 @@ internal sealed class AppBootstrap
             var options = new PluginRuntimeOptions
             {
                 PluginRootDirectory = PluginRuntimePaths.ResolveRoot(),
+                LocalPluginRootDirectory = PluginRuntimePaths.ResolveLocalRoot(),
+                PluginStopped = pluginId => _pageRegistry.UnregisterOwner(pluginId),
                 AppVersion = new SemanticVersion(2, 0, 0),
                 Localizer = _localizer,
                 Logger = new AppPluginHostLogger(_logger),
@@ -868,7 +896,8 @@ internal sealed class AppBootstrap
                 IslandPublisherFactory = manifest => new AppPluginIslandPublisher(
                     manifest.Id,
                     _pluginEventAdapter,
-                    PublishPluginEvent),
+                    PublishPluginEvent,
+                    _pageRegistry),
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
                 BuiltinServices = services,
                 // Safe mode disables every community plugin (spec §8.4); first-party ones still load.

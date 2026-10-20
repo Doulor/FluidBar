@@ -12,6 +12,79 @@ internal sealed partial class PageRenderer
 {
     private static readonly string[] ClipboardTypeLabels = ["Text", "Code", "Link", "Image"];
 
+    // ------------------------------------------------------------ plugin list (M0)
+
+    private void DrawPluginPage(SKCanvas canvas, PluginPageModel model, SKRect page)
+    {
+        if (model.Rows.Count == 0)
+        {
+            DrawEmpty(
+                canvas,
+                IconKind.Bell,
+                model.EmptyTitle ?? "Nothing here yet",
+                model.EmptyHint ?? "This page is provided by a plugin",
+                page);
+            return;
+        }
+
+        var m = _metrics;
+        var body = PageLayout.ListBody(page);
+        canvas.Save();
+        canvas.ClipRect(body);
+        for (var i = 0; i < model.Rows.Count; i++)
+        {
+            var row = PageMetricsLayout.NotificationRow(page, i, 0, m);
+            if (row.Top >= body.Bottom)
+            {
+                break;
+            }
+
+            DrawPluginRow(canvas, model.Rows[i], row, i);
+        }
+
+        canvas.Restore();
+    }
+
+    private void DrawPluginRow(SKCanvas canvas, PluginPageRowModel item, SKRect row, int index)
+    {
+        DrawListRowBackground(canvas, row, index == _hoverPage, false);
+        var hasTrailing = !string.IsNullOrWhiteSpace(item.TrailingLabel);
+        var trailingWidth = hasTrailing ? 76f : 0f;
+        var glyph = new SKRect(row.Left + 10, row.Top + 10, row.Left + 30, row.Top + 30);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
+        canvas.DrawRoundRect(glyph, 6, 6, _fill);
+        IconSet.Draw(canvas, IconKind.Check, glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
+
+        var titleRight = row.Right - 14 - trailingWidth - 8;
+        var lineTop = row.Top + 5;
+        var lineBottom = row.Top + 21;
+        _text.Draw(canvas, item.Title, IslandType.RowTitle,
+            new SKRect(row.Left + 38, lineTop, titleRight, lineBottom),
+            _theme.Foreground, TextAlign.Left, _opacity);
+        if (!string.IsNullOrWhiteSpace(item.Subtitle))
+        {
+            _text.Draw(canvas, item.Subtitle, IslandType.RowBody,
+                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
+                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
+        else if (!string.IsNullOrWhiteSpace(item.Value))
+        {
+            _text.Draw(canvas, item.Value, IslandType.RowMeta,
+                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
+                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
+
+        if (hasTrailing)
+        {
+            var button = new SKRect(row.Right - 96, row.MidY - 12, row.Right - 8, row.MidY + 12);
+            _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
+            canvas.DrawRoundRect(button, 7, 7, _fill);
+            _text.Draw(canvas, item.TrailingLabel!, IslandType.Chip, button,
+                _theme.Accent, TextAlign.Center, _opacity);
+        }
+    }
+
     // ------------------------------------------------------------ notifications
 
     private void DrawNotifications(SKCanvas canvas, NotificationsPageModel model, SKRect page)

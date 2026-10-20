@@ -64,6 +64,61 @@ public readonly record struct SkiaIslandHostStats(
 /// <c>WM_DPICHANGED</c> rebuilds the surface at <c>ceil(DIP × scale)</c> and re-places. Idle means
 /// zero frames: the clock stops as soon as the springs, pager, strip and dynamic content are at rest.
 /// </para>
+/// <summary>
+/// Per-frame probe for the compact karaoke sweep (diagnostics only): records the frame interval, the render
+/// cost, the allocation delta and the invalidation kind/area so a stutter can be attributed to layout
+/// rebuilds, full-frame repaints or allocation churn instead of guessed.
+/// </summary>
+internal static class IslandFrameProbe
+{
+    private static readonly string? DirectoryPath = Environment.GetEnvironmentVariable("FLUIDBAR_FRAME_PROBE");
+    private static readonly object Gate = new();
+    private static long _lastTicks;
+
+    /// <summary>Whether the probe is enabled.</summary>
+    public static bool Enabled => !string.IsNullOrEmpty(DirectoryPath);
+
+    /// <summary>Appends one frame record.</summary>
+    /// <param name="renderMs">Time spent rendering this frame.</param>
+    /// <param name="allocBytes">Managed bytes allocated while rendering this frame.</param>
+    /// <param name="fullFrame">Whether the frame repainted the whole surface.</param>
+    /// <param name="damageW">Damage width in DIP (0 for a full frame).</param>
+    /// <param name="damageH">Damage height in DIP (0 for a full frame).</param>
+    public static void Record(double renderMs, long allocBytes, bool fullFrame, double damageW, double damageH)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        var last = Interlocked.Read(ref _lastTicks);
+        Interlocked.Exchange(ref _lastTicks, now);
+        try
+        {
+            lock (Gate)
+            {
+                Directory.CreateDirectory(DirectoryPath!);
+                File.AppendAllText(Path.Combine(DirectoryPath!, "frames-probe.jsonl"),
+                    System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        at = DateTimeOffset.UtcNow,
+                        intervalMs = last == 0 ? 0 : Math.Round((now - last) * 1000.0 / Stopwatch.Frequency, 3),
+                        renderMs = Math.Round(renderMs, 3),
+                        allocBytes,
+                        fullFrame,
+                        damageW = Math.Round(damageW, 1),
+                        damageH = Math.Round(damageH, 1),
+                    }) + "\n");
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+}
+
+
 /// </summary>
 public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 {
@@ -151,6 +206,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.SettingsRequested += () => SettingsRequested?.Invoke();
         _controller.MarketRequested += () => MarketRequested?.Invoke();
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
+        _controller.PluginPageCommandRequested += request => PluginPageCommandRequested?.Invoke(request);
         _controller.StateChanged += OnStateChanged;
         _controller.PlacementRequested += OnPlacementRequested;
         _controller.PlacementPersistRequested += OnPlacementPersistRequested;
@@ -169,6 +225,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     /// <summary>Raised when the user asks to execute a media transport command.</summary>
     public event Action<MediaTransportCommand>? MediaCommandRequested;
+
+    /// <summary>Raised when a plugin page row/button is activated.</summary>
+    public event Action<PluginPageCommandRequest>? PluginPageCommandRequested;
 
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.State;
@@ -264,6 +323,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.HandlePointerReleased(balls[index].MidX, balls[index].MidY);
         return true;
     }
+
     /// <summary>Simulates a click on the compact "+N" overflow chip (smoke/tests).</summary>
     /// <returns>Whether the rendered state had an overflow chip to click.</returns>
     public bool SimulateOverflowBadgeClick()
@@ -1701,6 +1761,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
     {
+        var probeAllocStart = IslandFrameProbe.Enabled ? GC.GetAllocatedBytesForCurrentThread() : 0L;
+        if (IslandVerifyDump.Enabled)
+        {
+            // Verification runs dump the *same* render state the layered surface gets, so the PNG is
+            // exactly what a visible window would show (a locked desktop cannot be captured otherwise).
+            IslandVerifyDump.Capture(_renderer, state, (float)entry.Host.SurfaceSizeDip.WidthDip is var w && w > 0
+                ? Math.Max(1f, Math.Min(3f, w / 488f))
+                : 1.5f);
+        }
+
         var started = Stopwatch.GetTimestamp();
         var frame = entry.Host.BeginFrame();
         var surface = EnsureSurface(entry, frame);
@@ -1749,6 +1819,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var elapsedMs = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
+        if (IslandFrameProbe.Enabled)
+        {
+            IslandFrameProbe.Record(elapsedMs,
+                GC.GetAllocatedBytesForCurrentThread() - probeAllocStart,
+                change.FullFrame,
+                change.FullFrame ? 0 : change.DamageDip.Width,
+                change.FullFrame ? 0 : change.DamageDip.Height);
+        }
+
         _frameStats.Record(elapsedMs);
         entry.Frames++;
         entry.LastRenderMs = elapsedMs;
@@ -1874,6 +1953,20 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     placement.X + (shell.Right + slackDip) * scale,
                     placement.Y + (shell.Bottom + slackDip) * scale));
 
+                foreach (var ball in IslandMetrics.SplitIsletRects(state))
+                {
+                    if (ball.Width <= 0 || ball.Height <= 0)
+                    {
+                        continue;
+                    }
+
+                    _hookRects.Add(new IslandMouseHook.Rect(
+                        placement.X + (ball.Left - slackDip) * scale,
+                        placement.Y + (ball.Top - slackDip) * scale,
+                        placement.X + (ball.Right + slackDip) * scale,
+                        placement.Y + (ball.Bottom + slackDip) * scale));
+                }
+
                 // The preview rail sits below the shell, so without its own region the hook treats the
                 // clicks as desktop and the pills/dots never receive input.
                 if (!stripVisible)
@@ -1941,16 +2034,22 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var shell = IslandMetrics.ShellRect(state);
         region.SetShell(new VisualRect(shell.Left, shell.Top, shell.Width, shell.Height), state.ShellRadii);
 
+        Span<VisualRect> rects = stackalloc VisualRect[LayeredHitRegion.MaxInteractiveRects];
+        var count = 0;
+        // Split previews live outside the shell, so each ball gets its own interactive rect (clicks
+        // between the balls stay transparent/click-through).
+        foreach (var ball in IslandMetrics.SplitIsletRects(state))
+        {
+            AddRect(rects, ref count, ball);
+        }
+
         if (!state.Archipelago.Visible || state.Archipelago.Opacity <= 0.01)
         {
-            region.SetInteractiveRects(default);
+            region.SetInteractiveRects(rects[..count]);
             return;
         }
 
         var strip = SkiaIslandHitTest.MeasureStrip(state);
-        Span<VisualRect> rects = stackalloc VisualRect[LayeredHitRegion.MaxInteractiveRects];
-        var count = 0;
-        AddRect(rects, ref count, strip.Previous);
         AddRect(rects, ref count, strip.Current);
         AddRect(rects, ref count, strip.Next);
         var dotHit = (float)IslandMetrics.DotHitSize / 2;

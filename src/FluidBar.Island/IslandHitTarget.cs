@@ -105,6 +105,12 @@ public enum IslandPageControl
 
     /// <summary>Scrollable list body (wheel/touch scroll region).</summary>
     Scroll,
+
+    /// <summary>Plugin list row; <see cref="IslandHitTarget.Index"/> is the row.</summary>
+    PluginRow,
+
+    /// <summary>Plugin list row's trailing button; <see cref="IslandHitTarget.Index"/> is the row.</summary>
+    PluginRowButton,
 }
 
 /// <summary>One hit-test result: region kind, page, control and row/toggle index.</summary>

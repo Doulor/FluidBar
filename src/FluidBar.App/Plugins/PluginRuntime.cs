@@ -31,6 +31,12 @@ public sealed record PluginRuntimeOptions
     /// <summary>Plugins root (<c>%APPDATA%\FluidBar\plugins</c> in production).</summary>
     public required string PluginRootDirectory { get; init; }
 
+    /// <summary>Unsigned/local plugin root (<c>%APPDATA%\FluidBar\plugins\local</c>); null disables local loading.</summary>
+    public string? LocalPluginRootDirectory { get; init; }
+
+    /// <summary>Host cleanup hook for page/command registrations when a plugin stops.</summary>
+    public Action<string>? PluginStopped { get; init; }
+
     /// <summary>Running FluidBar version used by the min/max app-version gates.</summary>
     public required SemanticVersion AppVersion { get; init; }
 
@@ -123,7 +129,7 @@ public sealed record PluginRuntimeReport(
 /// marketplace/plugin UI services over both. Nothing here touches the UI thread; callers create it from a
 /// background task during startup.
 /// </summary>
-public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiService
+public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiService, ILocalPluginUiService
 {
     private readonly PluginRuntimeOptions _options;
     private readonly PluginHostOptions _hostOptions;
@@ -133,11 +139,13 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     private readonly bool _ownsHttp;
     private readonly MarketplaceCatalogClient? _catalog;
     private readonly bool _ownsCatalog;
+    private readonly PluginHostType? _localHost;
     private readonly List<BuiltinPluginSessionEntry> _builtins = [];
     private readonly List<PluginLoadResult> _communityResults = [];
     private readonly List<string> _builtinErrors = [];
     private readonly IPluginSettingsValues _values;
     private IReadOnlyList<PluginDiscoveryInfo> _discoveries = [];
+    private IReadOnlyList<PluginDiscoveryInfo> _localDiscoveries = [];
     private bool _disposed;
 
     private PluginRuntime(
@@ -149,7 +157,8 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         HttpClient http,
         bool ownsHttp,
         MarketplaceCatalogClient? catalog,
-        bool ownsCatalog)
+        bool ownsCatalog,
+        PluginHostType? localHost = null)
     {
         _options = options;
         _hostOptions = hostOptions;
@@ -162,6 +171,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         _ownsHttp = ownsHttp;
         _catalog = catalog;
         _ownsCatalog = ownsCatalog;
+        _localHost = localHost;
         _values = new RuntimePluginSettingsValues(this);
         Host.StateChanged += OnHostStateChanged;
     }
@@ -171,6 +181,9 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
 
     /// <summary>Community plugin host.</summary>
     public PluginHostType Host { get; }
+
+    /// <summary>Local (unsigned, user-owned) plugin host; null when local loading is disabled.</summary>
+    public PluginHostType? LocalHost => _localHost;
 
     /// <summary>Marketplace install/update/rollback/uninstall state machine.</summary>
     public PluginInstallService Installs { get; }
@@ -215,11 +228,23 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             Dispatcher = options.Dispatcher,
             IslandPublisherFactory = options.IslandPublisherFactory,
             NotificationSinkFactory = options.NotificationSinkFactory,
+            PluginStopped = options.PluginStopped,
             TimeProvider = options.TimeProvider,
             HostUiLocales = options.HostUiLocales,
         };
 
         var host = new PluginHostType(hostOptions);
+        PluginHostType? localHost = null;
+        if (!string.IsNullOrWhiteSpace(options.LocalPluginRootDirectory)
+            && !string.Equals(Path.GetFullPath(options.LocalPluginRootDirectory),
+                Path.GetFullPath(options.PluginRootDirectory), StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(options.LocalPluginRootDirectory);
+            localHost = new PluginHostType(hostOptions with
+            {
+                PluginRootDirectory = Path.GetFullPath(options.LocalPluginRootDirectory),
+            });
+        }
         var installLogger = options.InstallLogger ?? NullPluginInstallLogger.Instance;
         var installs = new PluginInstallService(new PluginInstallOptions
         {
@@ -271,7 +296,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             new DesignMarketplaceUiService(),
             options.Localizer);
 
-        var runtime = new PluginRuntime(options, hostOptions, host, installs, marketplace, http, ownsHttp, catalog, ownsCatalog);
+        var runtime = new PluginRuntime(options, hostOptions, host, installs, marketplace, http, ownsHttp, catalog, ownsCatalog, localHost);
         try
         {
             if (options.LoadBuiltins)
@@ -375,6 +400,26 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
 
         _communityResults.Clear();
         _communityResults.AddRange(results);
+
+        if (_localHost is not null)
+        {
+            try
+            {
+                var localDiscoveries = await _localHost.DiscoverAsync(cancellationToken).ConfigureAwait(false);
+                _localDiscoveries = localDiscoveries;
+                _discoveries = [.. discoveries, .. localDiscoveries];
+                var localResults = await _localHost.LoadAllAsync(cancellationToken).ConfigureAwait(false);
+                _communityResults.AddRange(localResults);
+                // M0 local channel is opt-out: a package dropped into the local root runs on startup.
+                // Explicit unloads stop the current session (settings handles that); persistence of a
+                // local disable flag is part of the M1 settings work.
+            }
+            catch (Exception exception)
+            {
+                _logger.Error("<local-host>", $"Local plugin loading failed: {exception.GetType().FullName}: {exception.Message}");
+            }
+        }
+
         foreach (var result in results)
         {
             if (result.Success && !_enablement.IsEnabled(result.PluginId))
@@ -384,7 +429,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         }
 
         RaiseChanged();
-        return results;
+        return _communityResults;
     }
 
     /// <summary>Installs an offline <c>.fbp</c> (unsigned allowed only when explicitly requested).</summary>
@@ -416,6 +461,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         if (builtin is not null)
         {
             return await builtin.ExecuteCommandAsync(commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_localHost?.Find(pluginId) is not null)
+        {
+            return await _localHost.ExecuteCommandAsync(pluginId, commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         return await Host.ExecuteCommandAsync(pluginId, commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -531,6 +581,18 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         catch (Exception exception)
         {
             _logger.Error("<host>", $"Plugin host shutdown failed: {exception.GetType().FullName}: {exception.Message}");
+        }
+
+        if (_localHost is not null)
+        {
+            try
+            {
+                await _localHost.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _logger.Error("<local-host>", $"Local plugin host shutdown failed: {exception.GetType().FullName}: {exception.Message}");
+            }
         }
 
         Installs.Dispose();
@@ -675,6 +737,60 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         }
 
         RaiseChanged();
+    }
+
+    string ILocalPluginUiService.LocalPluginRootDirectory => _options.LocalPluginRootDirectory ?? string.Empty;
+
+    IReadOnlyList<LocalPluginListItem> ILocalPluginUiService.ListLocalPlugins()
+    {
+        if (_localHost is null)
+        {
+            return [];
+        }
+
+        return _localDiscoveries
+            .Select(discovery =>
+            {
+                var handle = _localHost.Find(discovery.PluginId);
+                return new LocalPluginListItem(
+                    discovery.PluginId,
+                    discovery.Manifest?.Version ?? "?",
+                    handle?.State == PluginLifecycleState.Active,
+                    handle?.LastError ?? (discovery.IsValid ? null : string.Join("; ", discovery.Errors)));
+            })
+            .ToArray();
+    }
+
+    async Task<LocalPluginListItem> ILocalPluginUiService.ReloadLocalPluginAsync(
+        string pluginId,
+        CancellationToken cancellationToken)
+    {
+        if (_localHost is null)
+        {
+            return new LocalPluginListItem(pluginId, "?", false, "local channel is disabled");
+        }
+
+        var result = await _localHost.ReloadAsync(pluginId, cancellationToken).ConfigureAwait(false);
+        RaiseChanged();
+        return new LocalPluginListItem(
+            pluginId,
+            result.Handle?.Manifest.Version ?? "?",
+            result.Success,
+            result.Success ? null : result.Message);
+    }
+
+    async Task<bool> ILocalPluginUiService.UnloadLocalPluginAsync(
+        string pluginId,
+        CancellationToken cancellationToken)
+    {
+        if (_localHost is null)
+        {
+            return false;
+        }
+
+        var result = await _localHost.UnloadAsync(pluginId, cancellationToken).ConfigureAwait(false);
+        RaiseChanged();
+        return result.Success;
     }
 
     LocalizedString? IPluginContributionUiService.DisplayName(string pluginId)

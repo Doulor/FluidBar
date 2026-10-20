@@ -9,9 +9,24 @@ public static class PluginRuntimePaths
     /// <summary>Environment variable that overrides the plugins root (tests, portable installs).</summary>
     public const string RootOverrideVariable = "FLUIDBAR_PLUGINS_DIR";
 
+    /// <summary>Environment variable that overrides the unsigned local plugin root.</summary>
+    public const string LocalRootOverrideVariable = "FLUIDBAR_LOCAL_PLUGINS_DIR";
+
     /// <summary>Default plugins root: <c>%APPDATA%\FluidBar\plugins</c>.</summary>
     public static string DefaultRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar", "plugins");
+
+    /// <summary>Default unsigned/local root: <c>%APPDATA%\FluidBar\plugins\local</c>.</summary>
+    public static string DefaultLocalRoot => Path.Combine(DefaultRoot, "local");
+
+    /// <summary>Resolves the unsigned/local root, honoring the local override when absolute.</summary>
+    public static string ResolveLocalRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable(LocalRootOverrideVariable);
+        return !string.IsNullOrWhiteSpace(configured) && Path.IsPathFullyQualified(configured)
+            ? Path.GetFullPath(configured)
+            : DefaultLocalRoot;
+    }
 
     /// <summary>Resolves the plugins root, honoring <see cref="RootOverrideVariable"/> when it is an absolute path.</summary>
     public static string ResolveRoot()

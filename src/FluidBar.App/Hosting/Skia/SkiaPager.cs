@@ -24,7 +24,7 @@ public sealed class SkiaPager
     private const double ClickCancelThresholdDip = 6;
 
     private readonly PagerSnapMotion _snap;
-    private readonly PagerWheelPolicy _wheel;
+    private PagerWheelPolicy _wheel;
     private readonly PagerScrollChainPolicy _chain = new();
 
     private bool _dragging;
@@ -49,7 +49,29 @@ public sealed class SkiaPager
     }
 
     /// <summary>Number of pages.</summary>
-    public int PageCount { get; }
+    public int PageCount { get; private set; }
+
+    /// <summary>Updates the page count; clamps the committed page and returns whether it changed.</summary>
+    public bool SetPageCount(int pageCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
+        if (pageCount == PageCount)
+        {
+            return false;
+        }
+
+        PageCount = pageCount;
+        _wheel = new PagerWheelPolicy(pageCount);
+        var clamped = PagePagerPolicy.ClampPage(SelectedIndex, pageCount);
+        if (clamped == SelectedIndex)
+        {
+            return false;
+        }
+
+        SelectedIndex = clamped;
+        _snap.JumpTo(PagePagerPolicy.PageToOffset(clamped, PagerConstants.PagePitchDip, pageCount));
+        return true;
+    }
 
     /// <summary>Committed page index.</summary>
     public int SelectedIndex { get; private set; }

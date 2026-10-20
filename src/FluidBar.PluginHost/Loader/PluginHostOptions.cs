@@ -62,6 +62,9 @@ public sealed record PluginHostOptions
     /// <summary>Creates the island publisher for a plugin. The App wires this to the core event hub.</summary>
     public Func<PluginManifest, IIslandPublisher>? IslandPublisherFactory { get; init; }
 
+    /// <summary>Host-owned cleanup hook fired when a plugin stops or unloads (pages/commands).</summary>
+    public Action<string>? PluginStopped { get; init; }
+
     /// <summary>Creates the notification sink for a plugin. The App wires this to the notification service.</summary>
     public Func<PluginManifest, INotificationSink>? NotificationSinkFactory { get; init; }
 
