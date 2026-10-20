@@ -531,6 +531,9 @@ internal static class Program
                 ?? throw new InvalidOperationException("The settings window has no content.");
 
             var captures = new List<object>();
+            var rowBounds = new Dictionary<string, object>(StringComparer.Ordinal);
+            Point? rowCardOrigin = null;
+            Size rowCardSize = default;
             var states = new (SettingsWindow.SettingsMaterialVisualState State, string File)[]
             {
                 (SettingsWindow.SettingsMaterialVisualState.Idle, "settings-idle.png"),
@@ -548,8 +551,10 @@ internal static class Program
                 // dropped the shadow between the first call and the capture.
                 applied = Math.Max(applied, window.ForceMaterialState(state));
                 Dispatcher.UIThread.RunJobs();
-                var matched = window.GetVisualDescendants().OfType<Border>()
+                var matchedBorders = window.GetVisualDescendants().OfType<Border>()
                     .Where(static border => border.Child is Grid && border.BorderThickness.Left == 1 && border.CornerRadius.TopLeft > 0)
+                    .ToArray();
+                var matched = matchedBorders
                     .Select(static border => new
                     {
                         x = Math.Round(border.Bounds.X, 1),
@@ -559,8 +564,33 @@ internal static class Program
                         child = border.Child?.GetType().Name,
                     })
                     .ToArray();
+
+                // First row card (h > 40): its Bounds must stay identical for every state (scale is draw-only).
+                var rowCard = matchedBorders.FirstOrDefault(static border => border.Bounds.Height > 40);
+                var rowOrigin = rowCard?.TranslatePoint(new Point(0, 0), content);
+                if (rowCard is not null)
+                {
+                    rowCardOrigin ??= rowOrigin;
+                    rowCardSize = rowCard.Bounds.Size;
+                }
+
+                var rowSnapshot = rowCard is null
+                    ? null
+                    : new
+                    {
+                        // Layout bounds (must not change) plus the draw-time position (includes RenderTransform).
+                        layoutWidth = Math.Round(rowCard.Bounds.Width, 2),
+                        layoutHeight = Math.Round(rowCard.Bounds.Height, 2),
+                        visualX = rowOrigin is { } point ? Math.Round(point.X, 2) : (double?)null,
+                        visualY = rowOrigin is { } pointY ? Math.Round(pointY.Y, 2) : (double?)null,
+                    };
+                if (rowSnapshot is not null)
+                {
+                    rowBounds[state.ToString()] = rowSnapshot;
+                }
+
                 var full = Path.Combine(outputDir, file);
-                captures.Add(new { state = state.ToString(), cardsMatched = matched });
+                captures.Add(new { state = state.ToString(), cardsMatched = matched, rowCard = rowSnapshot });
                 captures.Add(Capture(content, full));
                 var zoom = Path.Combine(outputDir, file.Replace(".png", "-card2x.png", StringComparison.Ordinal));
                 CropAndZoom(full, zoom, CardCropRegion(content.Bounds.Width, content.Bounds.Height));
@@ -583,6 +613,28 @@ internal static class Program
                 hoverVsIdle = new { mean = hoverDelta.Mean, max = hoverDelta.Max, changedPixels = hoverDelta.ChangedPixels },
             };
 
+            object? edgeComparison = null;
+            if (rowCardOrigin is { } cardOrigin)
+            {
+                var edge = Path.Combine(outputDir, "settings-press-edge4x.png");
+                BuildEdgeComparison(
+                    edge,
+                    Path.Combine(outputDir, "settings-idle.png"),
+                    Path.Combine(outputDir, "settings-press.png"),
+                    cardOrigin,
+                    rowCardSize);
+                edgeComparison = new
+                {
+                    path = edge,
+                    x = Math.Round(cardOrigin.X, 2),
+                    y = Math.Round(cardOrigin.Y, 2),
+                    profile = MeasureEdgeProfile(
+                        Path.Combine(outputDir, "settings-idle.png"),
+                        Path.Combine(outputDir, "settings-press.png"),
+                        cardOrigin),
+                };
+            }
+
             var comparison = Path.Combine(outputDir, "settings-material-states-compare.png");
             BuildComparison(
                 comparison,
@@ -590,7 +642,16 @@ internal static class Program
                 states.Select(state => Path.Combine(outputDir, state.File)).ToArray());
             captures.Add(new { comparison });
 
-            var report = new { section = section.ToString(), pixelDelta = deltas, captures };
+            var report = new
+            {
+                section = section.ToString(),
+                pixelDelta = deltas,
+                boundsBefore = rowBounds.GetValueOrDefault("Idle"),
+                boundsAfter = rowBounds.GetValueOrDefault("Pressed"),
+                rowCardBounds = rowBounds,
+                edgeComparison,
+                captures,
+            };
             Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
             File.WriteAllText(
                 Path.Combine(outputDir, "settings-material-states.json"),
@@ -696,6 +757,111 @@ internal static class Program
                 new System.Drawing.Rectangle(region.Left, region.Top, region.Width, region.Height),
                 System.Drawing.GraphicsUnit.Pixel);
             graphics.DrawString(labels[index], font, brush, 10, blockTop + 6);
+        }
+
+        target.Save(targetPng, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    /// <summary>
+    /// 4x crop of the first row card's top edge: idle vs pressed. Proves the draw-only 0.99 scale neither
+    /// clips the top edge (no missing pixel row) nor overlaps the neighbouring row.
+    /// </summary>
+    /// <summary>Per-row mean luminance around the first row card's top edge (idle vs pressed), proving the
+    /// draw-only scale does not move the edge into the gap above the card.</summary>
+    private static object MeasureEdgeProfile(string idlePng, string pressPng, Point origin)
+    {
+        using var idle = System.Drawing.Image.FromFile(idlePng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException("idle capture is not a bitmap.");
+        using var press = System.Drawing.Image.FromFile(pressPng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException("press capture is not a bitmap.");
+
+        var left = (int)Math.Round(origin.X) + 40;
+        var right = Math.Min(left + 160, idle.Width - 1);
+        var top = (int)Math.Round(origin.Y);
+        static double Luminance(System.Drawing.Color color) => (0.2126 * color.R) + (0.7152 * color.G) + (0.0722 * color.B);
+        double RowMean(System.Drawing.Bitmap bitmap, int y)
+        {
+            var sum = 0.0;
+            for (var x = left; x < right; x++)
+            {
+                sum += Luminance(bitmap.GetPixel(x, y));
+            }
+
+            return Math.Round(sum / Math.Max(1, right - left), 3);
+        }
+
+        var rows = new List<object>();
+        for (var y = top - 4; y <= top + 8; y++)
+        {
+            if (y < 0 || y >= idle.Height)
+            {
+                continue;
+            }
+
+            rows.Add(new { y, idle = RowMean(idle, y), press = RowMean(press, y) });
+        }
+
+        return new { cardTopY = top, rows };
+    }
+
+    private static void BuildEdgeComparison(string targetPng, string idlePng, string pressPng, Point origin, Size cardSize)
+    {
+        // Whole first card, 2x: the top-edge treatment (1.5 DIP highlight + 8 DIP L4 band + 0.99 scale)
+        // is visible without guessing a sub-pixel crop window.
+        var x = Math.Max(0, (int)Math.Round(origin.X));
+        var y = Math.Max(0, (int)Math.Round(origin.Y));
+        var width = Math.Max(48, Math.Min(640, (int)Math.Round(cardSize.Width)));
+        var height = Math.Max(24, Math.Min(96, (int)Math.Round(cardSize.Height)));
+        const int scale = 2;
+        const int labelHeight = 30;
+        var labels = new[]
+        {
+            "Idle — first row card 2x (baseline)",
+            "Pressed — 0.99 draw scale + L4 8 DIP band + 1.5 DIP top highlight",
+            "Delta x6 — white = where pressed differs (top band / edges only)",
+        };
+
+        using var idle = System.Drawing.Image.FromFile(idlePng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException("idle capture is not a bitmap.");
+        using var press = System.Drawing.Image.FromFile(pressPng) as System.Drawing.Bitmap
+            ?? throw new InvalidOperationException("press capture is not a bitmap.");
+
+        using var delta = new System.Drawing.Bitmap(width, height);
+        for (var dy = 0; dy < height; dy++)
+        {
+            for (var dx = 0; dx < width; dx++)
+            {
+                var a = idle.GetPixel(x + dx, y + dy);
+                var b = press.GetPixel(x + dx, y + dy);
+                var difference = (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B)) / 3.0;
+                var value = (int)Math.Clamp(Math.Round(difference * 8), 0, 255);
+                delta.SetPixel(dx, dy, System.Drawing.Color.FromArgb(value, value, value));
+            }
+        }
+
+        using var target = new System.Drawing.Bitmap(width * scale, (labelHeight + (height * scale)) * labels.Length);
+        using var graphics = System.Drawing.Graphics.FromImage(target);
+        graphics.Clear(System.Drawing.Color.FromArgb(5, 5, 7));
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+        graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+        using var font = new System.Drawing.Font("Segoe UI", 12, System.Drawing.FontStyle.Bold);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(237, 237, 238));
+
+        for (var index = 0; index < labels.Length; index++)
+        {
+            var blockTop = index * (labelHeight + (height * scale));
+            var source = index switch
+            {
+                0 => (System.Drawing.Image)idle,
+                1 => press,
+                _ => delta,
+            };
+            graphics.DrawImage(
+                source,
+                new System.Drawing.Rectangle(0, blockTop + labelHeight, width * scale, height * scale),
+                new System.Drawing.Rectangle(index == 2 ? 0 : x, index == 2 ? 0 : y, width, height),
+                System.Drawing.GraphicsUnit.Pixel);
+            graphics.DrawString(labels[index], font, brush, 8, blockTop + 8);
         }
 
         target.Save(targetPng, System.Drawing.Imaging.ImageFormat.Png);
