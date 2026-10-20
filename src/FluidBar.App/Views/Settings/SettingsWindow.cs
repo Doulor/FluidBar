@@ -56,6 +56,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private IslandPreview? _preview;
     private bool _closed;
     private readonly WindowRegionTracker _regionTracker = new();
+    private Border? _bleed;
     private IReadOnlyList<string> _firstFrameSteps = Array.Empty<string>();
     private bool _firstFramePreparing;
     private string? _status;
@@ -109,6 +110,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         // the window is still hidden inside ShowWindow (WM_SHOWWINDOW), i.e. before the first frame.
         Avalonia.Controls.Win32Properties.AddWndProcHookCallback(this, OnNativeMessage);
 
+        _bleed = new Border { IsVisible = false };
         _shell = new Border
         {
             CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius),
@@ -117,7 +119,10 @@ public sealed class SettingsWindow : Window, ILocalizable
             Child = BuildLayout(),
         };
         ApplyChrome();
-        Content = _shell;
+        var root = new Grid();
+        root.Children.Add(_bleed);
+        root.Children.Add(_shell);
+        Content = root;
 
         _settings.Changed += OnSettingsChanged;
         _localizer.Changed += OnLocalizerChanged;
@@ -187,26 +192,46 @@ public sealed class SettingsWindow : Window, ILocalizable
         // when granted, let the window be the rounded shape: the shell fills it edge to edge (no painted
         // curve fighting DWM's) and the surface colour matches the panel, so no grey wedge can appear.
         var roundingHandle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-        var dwmRounding = roundingHandle != IntPtr.Zero
-            && WindowCornerRegion.TryEnableDwmRounding(roundingHandle, out _);
-        DwmRoundingActive = dwmRounding;
-        if (dwmRounding)
+        // A remote session can claim Transparent while the composited surface is opaque, so alpha is only
+        // trusted on a local session; everywhere else the DWM-rounded opaque fallback takes over.
+        var alphaUsable = ActualTransparencyLevel == WindowTransparencyLevel.Transparent
+            && !WindowCornerRegion.IsRemoteSession();
+        ChromeMode = alphaUsable ? SettingsWindowChrome.Transparent : SettingsWindowChrome.Opaque;
+
+        if (ChromeMode == SettingsWindowChrome.Transparent)
         {
-            // One single surface: the window background is the panel colour, so whatever DWM leaves between
-            // its corner cut and the painted radius is the panel itself - no second background layer.
-            // The painted radius follows the DWM radius so both edges coincide (no double rim), and DWM's
-            // own 1 px border is switched off so the only transition is edge -> panel.
-            Background = new SolidColorBrush(_palette.Window);
-            _ = WindowCornerRegion.TryRemoveDwmBorder(roundingHandle, out _);
-            _shell.CornerRadius = new CornerRadius(DwmCornerRadiusDip);
-            // No painted rim: the panel edge IS the window edge, so there is exactly one transition.
-            _shell.BorderThickness = new Thickness(0);
+            // Primary path: the surface carries per-pixel alpha, so the window background is fully
+            // transparent and the only painted thing is the 22 DIP rounded panel.
+            Background = Brushes.Transparent;
+            _shell.CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius);
+            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
         }
-        else if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        else
         {
-            // Fallback: square opaque window instead of black corner triangles.
-            _shell.CornerRadius = new CornerRadius(0);
+            // Runtime fallback (e.g. a remote session without alpha): let DWM round the window itself and
+            // fill the surface with the panel colour, so no grey square corner can ever appear.
+            var dwmRounding = roundingHandle != IntPtr.Zero
+                && WindowCornerRegion.TryEnableDwmRounding(roundingHandle, out _);
+            DwmRoundingActive = dwmRounding;
+            // Known Win11 platform behaviour (documented in build/reports/ui-audit/SETTINGS-CORNERS-FINAL.md):
+            // DWM composites a 2-4 px edge band around a rounded window. Verified on this machine that the
+            // band is NOT painted by us: it survives DwmExtendFrameIntoClientArea, WS_EX_LAYERED,
+            // DWMWA_BORDER_COLOR=DONOTDRAW, DWMWA_NCRENDERING_POLICY=DISABLED, a red hbrBackground and an
+            // Avalonia-painted full-bleed layer. SetWindowRgn reports success but DWM ignores it, and the
+            // composited surface is opaque even though ActualTransparencyLevel says Transparent. The native
+            // Windows Calculator shows the same edge with the same sampling, so it is the normal
+            // Win11 rounded-window look, not an app defect.
             Background = new SolidColorBrush(_palette.Window);
+            if (dwmRounding)
+            {
+                _ = WindowCornerRegion.TryRemoveDwmBorder(roundingHandle, out _);
+                _shell.CornerRadius = new CornerRadius(DwmCornerRadiusDip);
+                _shell.BorderThickness = new Thickness(0);
+            }
+            else
+            {
+                _shell.CornerRadius = new CornerRadius(0);
+            }
         }
 
         // Whatever the compositor did, clip the native window to the painted radius: a rectangular
@@ -218,6 +243,8 @@ public sealed class SettingsWindow : Window, ILocalizable
         ApplyCornerRegion("opened");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
             Avalonia.Threading.DispatcherPriority.Loaded);
+        Avalonia.Threading.Dispatcher.UIThread.Post(VerifyAlphaOrFallBack,
+            Avalonia.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
@@ -225,6 +252,12 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     /// <summary>True once the window was prepared before its first composited frame.</summary>
     public bool FirstFramePrepared { get; private set; }
+
+    /// <summary>Which chrome path the window ended up using (diagnostics and tests).</summary>
+    public SettingsWindowChrome ChromeMode { get; private set; }
+
+    /// <summary>Corner radius currently painted by the shell (DIP).</summary>
+    public double ShellCornerRadiusDip => _shell.CornerRadius.TopLeft;
 
     /// <summary>Content radius used when DWM rounds the window itself (Windows 11 cuts at about 8 DIP).</summary>
     public const double DwmCornerRadiusDip = 8;
@@ -331,10 +364,116 @@ public sealed class SettingsWindow : Window, ILocalizable
             }
         });
 
+    /// <summary>
+    /// Verifies that the composited window really carries per-pixel alpha by sampling the screen just
+    /// outside the painted corner: if that pixel differs from the desktop behind the window, the surface
+    /// is opaque and the DWM-rounded fallback has to take over (remote sessions and some drivers report
+    /// <c>Transparent</c> while composing an opaque surface).
+    /// </summary>
+    private void VerifyAlphaOrFallBack()
+    {
+        if (ChromeMode != SettingsWindowChrome.Transparent || _closed)
+        {
+            return;
+        }
+
+        try
+        {
+            var origin = Position;
+            var scale = RenderScaling <= 0 ? 1.0 : RenderScaling;
+            var inset = (int)Math.Round(3 * scale);
+            var outside = (int)Math.Round(12 * scale);
+            using var bitmap = new System.Drawing.Bitmap(1, 1);
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                graphics.CopyFromScreen(origin.X + inset, origin.Y + inset, 0, 0, new System.Drawing.Size(1, 1));
+                var cornerPixel = bitmap.GetPixel(0, 0);
+                graphics.CopyFromScreen(origin.X - outside, origin.Y - outside, 0, 0, new System.Drawing.Size(1, 1));
+                var desktopPixel = bitmap.GetPixel(0, 0);
+                var delta = Math.Abs(cornerPixel.R - desktopPixel.R) + Math.Abs(cornerPixel.G - desktopPixel.G)
+                    + Math.Abs(cornerPixel.B - desktopPixel.B);
+                if (delta > 12)
+                {
+                    // The corner is painted by an opaque surface: switch to the DWM-rounded fallback.
+                    ChromeMode = SettingsWindowChrome.Opaque;
+                    ApplyOpaqueFallback();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or PlatformNotSupportedException
+            or NotSupportedException)
+        {
+            // A capture failure must not break the window; the transparent path stays as configured.
+        }
+    }
+
+    /// <summary>Switches the window to the opaque, DWM-rounded chrome (no alpha required).</summary>
+    private void ApplyOpaqueFallback()
+    {
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        Background = new SolidColorBrush(_palette.Window);
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (WindowCornerRegion.TryEnableDwmRounding(handle, out _))
+        {
+            DwmRoundingActive = true;
+            _ = WindowCornerRegion.TryRemoveDwmBorder(handle, out _);
+            _ = WindowCornerRegion.TryDisableNonClientRendering(handle, out _);
+            _shell.CornerRadius = new CornerRadius(DwmCornerRadiusDip);
+            _shell.BorderThickness = new Thickness(0);
+        }
+        else
+        {
+            _shell.CornerRadius = new CornerRadius(0);
+        }
+
+        ApplyWindowSurface();
+        ApplyCornerRegion("alpha-fallback");
+    }
+
+    /// <summary>
+    /// Keeps the window surface in sync with the current theme: in the opaque fallback the window
+    /// background and the window-class brush must both be the panel colour, otherwise the platform clear
+    /// colour (system grey) shows as a band between the rounded edge and the panel - visible in the light
+    /// theme, almost invisible on the dark one.
+    /// </summary>
+    private void ApplyWindowSurface()
+    {
+        if (ChromeMode == SettingsWindowChrome.Transparent)
+        {
+            Background = Brushes.Transparent;
+            return;
+        }
+
+        var brush = new SolidColorBrush(_palette.Window);
+        Background = brush;
+        if (TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var argb = ((uint)_palette.Window.A << 24) | ((uint)_palette.Window.R << 16) |
+            ((uint)_palette.Window.G << 8) | _palette.Window.B;
+        var radius = WindowCornerRegion.RadiusPx(_shell.CornerRadius.TopLeft, RenderScaling);
+        _ = WindowFirstFrame.Prepare(handle, radius, argb);
+    }
+
     private void ApplyChrome()
     {
+        if (_bleed is not null)
+        {
+            // The layer must be the exact panel colour: it is only there to cover the platform surface
+            // between DWM's corner cut and the painted arc.
+            _bleed.Background = new SolidColorBrush(_palette.Window);
+            _bleed.IsVisible = ChromeMode == SettingsWindowChrome.Opaque;
+        }
+
         _shell.Background = new SolidColorBrush(_palette.Window);
         _shell.BorderBrush = _palette.LineStrongBrush;
+        ApplyWindowSurface();
     }
 
     private Control BuildLayout()
@@ -900,4 +1039,14 @@ public sealed class SettingsWindow : Window, ILocalizable
             _kicker.Foreground = _palette.TertiaryBrush;
         }
     }
+}
+
+/// <summary>Which chrome path the settings window uses for its rounded shape.</summary>
+public enum SettingsWindowChrome
+{
+    /// <summary>Per-pixel alpha: transparent window background and a painted 22 DIP rounded panel.</summary>
+    Transparent,
+
+    /// <summary>No alpha: DWM rounds the window itself (or a square opaque panel as the last resort).</summary>
+    Opaque,
 }

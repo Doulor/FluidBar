@@ -7,22 +7,22 @@ using FluidBar.App.Views.Settings;
 namespace FluidBar.Ui.Tests;
 
 /// <summary>
-/// Guards for the skia-mode Avalonia rendering policy (task-37): the settings/market window is the
-/// only Avalonia surface in skia-host mode, so it renders on the CPU and never loads the GPU stack;
-/// the legacy Avalonia island host keeps the platform default.
+/// Guards the Avalonia rendering policy. GPU is the default everywhere (task-48): only a per-pixel-alpha
+/// surface gives the settings window its true rounded shape, so the CPU/software path is now opt-in
+/// through the explicit override for memory-constrained runs.
 /// </summary>
 public sealed class AvaloniaRenderingPolicyTests
 {
     [Theory]
-    [InlineData("skia", null, true)]
-    [InlineData("SKIA", null, true)]
-    [InlineData(null, null, true)]
+    [InlineData("skia", null, false)]
+    [InlineData("SKIA", null, false)]
+    [InlineData(null, null, false)]
     [InlineData("avalonia", null, false)]
     [InlineData("skia", "gpu", false)]
     [InlineData("avalonia", "software", true)]
     [InlineData(null, "1", true)]
     [InlineData(null, "0", false)]
-    public void Policy_resolves_software_for_skia_and_platform_default_for_avalonia(
+    public void Policy_uses_gpu_by_default_and_software_only_on_override(
         string? host, string? overrideMode, bool expected)
         => Assert.Equal(expected, AvaloniaRenderingPolicy.ShouldUseSoftwareRendering(host, overrideMode));
 

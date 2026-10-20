@@ -19,6 +19,7 @@ public static class WindowCornerRegion
     private const int DwmWindowCornerPreference = 33;
     private const int DwmTransitionsForceDisabled = 3;
     private const int DwmBorderColor = 34;
+    private const int DwmNcRenderingPolicy = 2;
     private const int DwmCornerDoNotRound = 1;
 
     /// <summary>Converts a DIP corner radius to the pixel radius used by <c>CreateRoundRectRgn</c>.</summary>
@@ -117,6 +118,54 @@ public static class WindowCornerRegion
         if (hr < 0)
         {
             error = $"DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE) failed: 0x{hr:X8}";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// True when the process runs in a remote (RDP) session. Remote sessions can report
+    /// <c>ActualTransparencyLevel = Transparent</c> while the composited window surface is still opaque,
+    /// so per-pixel alpha cannot be trusted there and the DWM-rounded fallback must be used instead.
+    /// </summary>
+    /// <returns>True for a remote session.</returns>
+    public static bool IsRemoteSession()
+    {
+        const int SmRemoteSession = 0x1000;
+        try
+        {
+            return NativeMethods.User32.GetSystemMetrics(SmRemoteSession) != 0;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Disables DWM non-client rendering for this window (<c>DWMWA_NCRENDERING_POLICY =
+    /// DWMNCRP_DISABLED</c>). That removes the 1-2 px mid-grey frame/shadow DWM composites around a
+    /// rounded window, which is the last band between the desktop and the panel in the opaque fallback.
+    /// </summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false.</param>
+    /// <returns>True when DWM accepted the attribute.</returns>
+    public static bool TryDisableNonClientRendering(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var disabled = 1; // DWMNCRP_DISABLED
+        var hr = NativeMethods.DwmApi.DwmSetWindowAttribute(hwnd, DwmNcRenderingPolicy, ref disabled,
+            Marshal.SizeOf<int>());
+        if (hr < 0)
+        {
+            error = $"DwmSetWindowAttribute(DWMWA_NCRENDERING_POLICY) failed: 0x{hr:X8}";
             return false;
         }
 

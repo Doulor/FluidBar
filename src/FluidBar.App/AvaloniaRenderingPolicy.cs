@@ -38,7 +38,11 @@ public static class AvaloniaRenderingPolicy
             return false;
         }
 
-        return !string.Equals(hostSelection, "avalonia", StringComparison.OrdinalIgnoreCase);
+        // GPU is the default: only a per-pixel-alpha surface (which the software/composition path does
+        // not deliver) lets the settings window paint a true rounded shape. Software stays available
+        // through the explicit override for memory-constrained runs.
+        _ = hostSelection;
+        return false;
     }
 
     /// <summary>Resolves the override from the environment (`FLUIDBAR_AVALONIA_RENDERING`, then the legacy flag).</summary>
