@@ -363,6 +363,29 @@ internal static class SettingsControls
             IsHitTestVisible = false,
         });
 
+        // Material L4 is painted as a gradient overlay: Avalonia 12 does not render BoxShadow.IsInset,
+        // so the pressed shade has to be a real layer inside the card (black 18 % top band, 8 DIP).
+        stack.Children.Add(new Border
+        {
+            Name = "MaterialPressedInset",
+            Height = SettingsPalette.PressedInsetTopDip,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            CornerRadius = new CornerRadius(radius, radius, 0, 0),
+            IsHitTestVisible = false,
+            Opacity = 0,
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+                EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new Avalonia.Media.GradientStop(Color.FromArgb(46, 0, 0, 0), 0),
+                    new Avalonia.Media.GradientStop(Color.FromArgb(0, 0, 0, 0), 1),
+                },
+            },
+        });
+
         var card = new Border
         {
             CornerRadius = new CornerRadius(radius),
@@ -410,6 +433,21 @@ internal static class SettingsControls
         /// <summary>Hover-state shadow (test/diagnostic access to the production values).</summary>
         internal static BoxShadows HoverShadow => Hover;
 
+        /// <summary>Shows or hides the L4 pressed overlay inside a card.</summary>
+        /// <param name="card">Card container.</param>
+        /// <param name="pressed">True to show the shade.</param>
+        public static void SetPressedOverlay(Border card, bool pressed)
+        {
+            if (card.Child is Grid stack)
+            {
+                foreach (var overlay in stack.Children.OfType<Border>()
+                    .Where(border => border.Name == "MaterialPressedInset"))
+                {
+                    overlay.Opacity = pressed ? 1 : 0;
+                }
+            }
+        }
+
         public static void Attach(Border card)
         {
             card.PointerEntered += (_, _) => card.BoxShadow = Hover;
@@ -420,11 +458,12 @@ internal static class SettingsControls
             };
             card.PointerPressed += (_, _) =>
             {
-                card.BoxShadow = Pressed;
+                SetPressedOverlay(card, true);
                 card.Classes.Add("pressed");
             };
             card.PointerReleased += (_, _) =>
             {
+                SetPressedOverlay(card, false);
                 card.BoxShadow = Hover;
                 card.Classes.Remove("pressed");
             };

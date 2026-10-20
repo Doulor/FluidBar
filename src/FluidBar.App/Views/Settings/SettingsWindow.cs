@@ -184,14 +184,9 @@ public sealed class SettingsWindow : Window, ILocalizable
     {
         var shadows = state switch
         {
-            SettingsMaterialVisualState.Pressed => new BoxShadows(new BoxShadow
-            {
-                Blur = 4,
-                Spread = -8,
-                OffsetY = 8,
-                IsInset = true,
-                Color = Color.FromArgb(46, 0, 0, 0),
-            }),
+            // Avalonia 12 does not paint BoxShadow.IsInset; the pressed shade is the card's overlay band
+            // (see SettingsWidgets.Card -> "MaterialPressedInset"), so no shadow is used here.
+            SettingsMaterialVisualState.Pressed => default,
             SettingsMaterialVisualState.Hover => new BoxShadows(new BoxShadow
             {
                 Blur = 10,
@@ -206,6 +201,15 @@ public sealed class SettingsWindow : Window, ILocalizable
             if (card.Child is Grid && card.BorderThickness.Left == 1 && card.CornerRadius.TopLeft > 0)
             {
                 card.BoxShadow = shadows;
+                if (card.Child is Grid stack)
+                {
+                    foreach (var overlay in stack.Children.OfType<Border>()
+                        .Where(border => border.Name == "MaterialPressedInset"))
+                    {
+                        overlay.Opacity = state == SettingsMaterialVisualState.Pressed ? 1 : 0;
+                    }
+                }
+
                 count++;
             }
         }
