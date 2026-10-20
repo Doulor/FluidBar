@@ -48,6 +48,15 @@ internal static class Program
             });
         }
 
+        // Skia host mode rarely shows Avalonia UI (only the settings/market window). Rendering that
+        // window on the CPU keeps the GPU stack (ANGLE/D3D/NVIDIA user-mode driver) out of the
+        // process for the whole session; measured with SkiaHostPerfProbe in task-37. Applied last so
+        // it wins over the composition-mode presets above (a later Win32PlatformOptions wins).
+        if (AvaloniaRenderingPolicy.ShouldUseSoftwareRendering())
+        {
+            builder = builder.With(AvaloniaRenderingPolicy.CreatePlatformOptions());
+        }
+
         return builder.LogToTrace();
     }
 }

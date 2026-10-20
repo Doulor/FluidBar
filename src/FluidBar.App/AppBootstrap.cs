@@ -90,6 +90,14 @@ internal sealed class AppBootstrap
                 _ = SmokeAsync();
             }
 
+            _logger.Information(LogCategories.Lifecycle, "app.avalonia-rendering",
+                "Avalonia rendering backend resolved.",
+                data: new Dictionary<string, object?>
+                {
+                    ["backend"] = AvaloniaRenderingPolicy.ShouldUseSoftwareRendering() ? "software" : "platform-default",
+                    ["host"] = Environment.GetEnvironmentVariable("FLUIDBAR_HOST") ?? "(default skia-first)",
+                    ["override"] = Environment.GetEnvironmentVariable(AvaloniaRenderingPolicy.OverrideVariable),
+                });
             _logger.Information(LogCategories.Lifecycle, "app.started", "FluidBar shell started.");
         }
         catch (Exception ex)

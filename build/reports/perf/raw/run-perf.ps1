@@ -5,7 +5,8 @@ param(
   [int]$Cycles = 10,
   [bool]$Probe = $true,
   [string]$LogLevel = 'info',
-  [int]$IdleTrimMs = 0
+  [int]$IdleTrimMs = 0,
+  [int]$AvaloniaSoftware = 0
 )
 $ErrorActionPreference = 'Stop'
 $ev = Join-Path $env:TEMP 'fluidbar-perf'
@@ -59,6 +60,16 @@ public static class RunPerfNative {
   $settings | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $appdata 'settings.ui.json') -Encoding UTF8
 
   $env:FLUIDBAR_HOST = 'skia'
+  if ($AvaloniaSoftware -eq 1) {
+    $env:FLUIDBAR_AVALONIA_SOFTWARE = '1'
+    Remove-Item Env:\FLUIDBAR_AVALONIA_RENDERING -ErrorAction SilentlyContinue
+  } elseif ($AvaloniaSoftware -eq 0) {
+    Remove-Item Env:\FLUIDBAR_AVALONIA_SOFTWARE -ErrorAction SilentlyContinue
+    $env:FLUIDBAR_AVALONIA_RENDERING = 'gpu'
+  } else {
+    Remove-Item Env:\FLUIDBAR_AVALONIA_SOFTWARE -ErrorAction SilentlyContinue
+    Remove-Item Env:\FLUIDBAR_AVALONIA_RENDERING -ErrorAction SilentlyContinue
+  }
   if ($IdleTrimMs -gt 0) { $env:FLUIDBAR_PERF_IDLE_TRIM_MS = [string]$IdleTrimMs } else { Remove-Item Env:\FLUIDBAR_PERF_IDLE_TRIM_MS -ErrorAction SilentlyContinue }
   if ($Probe) { $env:FLUIDBAR_PERF_PROBE = '1' } else { Remove-Item Env:\FLUIDBAR_PERF_PROBE -ErrorAction SilentlyContinue }
   $startTime = Get-Date
