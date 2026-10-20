@@ -270,6 +270,67 @@ public sealed class ClaudeTranscriptProviderTests : IDisposable
     }
 
     [Fact]
+    public void Poll_ToolUseThatGoesQuietWithoutEndTurnBecomesWaiting()
+    {
+        var provider = new ClaudeTranscriptProvider(_root);
+        Append("claude-wait", new
+        {
+            type = "assistant",
+            timestamp = Now.AddSeconds(-5).ToString("o"),
+            cwd = "D:\\build\\FluidBar",
+            message = new
+            {
+                stop_reason = "tool_use",
+                content = new object[] { new { type = "tool_use", name = "Bash" } },
+            },
+        });
+        Assert.Equal("running", Assert.Single(provider.Poll(Now)).Event);
+
+        // No new lines for longer than the active threshold and still no end_turn: waiting for the user.
+        var waiting = Assert.Single(provider.Poll(Now.AddMinutes(3)));
+        Assert.Equal("waiting", waiting.Event);
+        Assert.Equal("等待输入", waiting.Message);
+    }
+
+    [Fact]
+    public void Poll_EndTurnAfterWaitingCompletesTheRow()
+    {
+        var provider = new ClaudeTranscriptProvider(_root);
+        Append("claude-wait2", new
+        {
+            type = "assistant",
+            timestamp = Now.AddSeconds(-5).ToString("o"),
+            cwd = "D:\\build\\FluidBar",
+            message = new { stop_reason = "tool_use", content = Array.Empty<object>() },
+        });
+        _ = provider.Poll(Now);
+        _ = provider.Poll(Now.AddMinutes(3));
+
+        Append("claude-wait2", new
+        {
+            type = "assistant",
+            timestamp = Now.AddMinutes(4).ToString("o"),
+            cwd = "D:\\build\\FluidBar",
+            message = new { stop_reason = "end_turn", content = Array.Empty<object>() },
+        });
+        var completed = Assert.Single(provider.Poll(Now.AddMinutes(4)));
+        Assert.Equal("completed", completed.Event);
+    }
+
+    [Fact]
+    public void Poll_StaleTranscriptWithoutEndTurnAtStartupIsAdopted()
+    {
+        Append("claude-old", new
+        {
+            type = "assistant",
+            timestamp = Now.AddHours(-3).ToString("o"),
+            cwd = "D:\\build\\FluidBar",
+            message = new { stop_reason = "tool_use", content = Array.Empty<object>() },
+        });
+        Assert.Empty(new ClaudeTranscriptProvider(_root).Poll(Now));
+    }
+
+    [Fact]
     public void Poll_MissingDirectoryReportsUnavailable()
     {
         var provider = new ClaudeTranscriptProvider(Path.Combine(_root, "missing"));
@@ -501,6 +562,97 @@ public sealed class AgentProviderRegistryTests
     }
 }
 
+/// <summary>WorkBuddy provider: SQLite session rows mapped to running/completed/failed states.</summary>
+public sealed class WorkBuddySessionProviderTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    private sealed class Reader
+    {
+        public List<WorkBuddySessionRow> Rows { get; } = [];
+
+        public IReadOnlyList<WorkBuddySessionRow> Read(string directory) => Rows;
+    }
+
+    private static string CreateDirectory()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "FluidBarTests", "workbuddy",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllBytes(Path.Combine(directory, "workbuddy.db"), []);
+        return directory;
+    }
+
+    private static WorkBuddySessionProvider CreateProvider(Reader reader)
+        => new(CreateDirectory(), reader.Read, TimeSpan.FromSeconds(120));
+
+    [Fact]
+    public void Poll_RunningRowIsRunningAndCompletedRowFinishesIt()
+    {
+        var reader = new Reader();
+        var provider = CreateProvider(reader);
+        reader.Rows.Add(new WorkBuddySessionRow("s1", "Fix the login bug", "running",
+            "D:\\build\\GitLocal\\FluidBar", Now.ToUnixTimeMilliseconds(), Now.ToUnixTimeMilliseconds()));
+
+        var running = Assert.Single(provider.Poll(Now));
+        Assert.Equal("running", running.Event);
+        Assert.Contains("FluidBar", running.Title, StringComparison.Ordinal);
+        Assert.Contains("Fix the login bug", running.Message, StringComparison.Ordinal);
+
+        reader.Rows[0] = reader.Rows[0] with { Status = "completed" };
+        var completed = Assert.Single(provider.Poll(Now.AddSeconds(1)));
+        Assert.Equal("completed", completed.Event);
+    }
+
+    [Fact]
+    public void Poll_ErrorRowBecomesFailedWithDetail()
+    {
+        var reader = new Reader();
+        var provider = CreateProvider(reader);
+        reader.Rows.Add(new WorkBuddySessionRow("s2", "Crash while saving", "error",
+            "D:\\build\\GitLocal\\FluidBar", Now.ToUnixTimeMilliseconds(), Now.ToUnixTimeMilliseconds()));
+
+        var failed = Assert.Single(provider.Poll(Now));
+        Assert.Equal("failed", failed.Event);
+        Assert.Contains("Crash while saving", failed.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Poll_AdoptsSessionsThatAlreadyFinishedBeforeStartup()
+    {
+        var reader = new Reader();
+        reader.Rows.Add(new WorkBuddySessionRow("s3", "Old task", "completed", "C:\\old",
+            Now.AddHours(-2).ToUnixTimeMilliseconds(), Now.AddHours(-2).ToUnixTimeMilliseconds()));
+
+        Assert.Empty(CreateProvider(reader).Poll(Now));
+    }
+
+    [Fact]
+    public void Poll_ReaderWithoutSqliteDegradesToEmpty()
+    {
+        var directory = CreateDirectory();
+        var provider = new WorkBuddySessionProvider(directory,
+            _ => throw new DllNotFoundException("winsqlite3.dll"), TimeSpan.FromSeconds(120));
+
+        Assert.True(provider.IsAvailable);
+        Assert.Empty(provider.Poll(Now));
+    }
+
+    [Fact]
+    public void Poll_RealWorkBuddyDatabaseDoesNotThrow()
+    {
+        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".workbuddy");
+        if (!File.Exists(Path.Combine(directory, "workbuddy.db")))
+        {
+            return;
+        }
+
+        var provider = new WorkBuddySessionProvider(directory);
+        Assert.True(provider.IsAvailable);
+        _ = provider.Poll(Now); // real reader: copies the SQLite DB and queries the copy
+    }
+}
+
 /// <summary>Support catalog: native providers are reported, unreadable agents explain why.</summary>
 public sealed class AgentSupportCatalogTests
 {
@@ -527,13 +679,16 @@ public sealed class AgentSupportCatalogTests
             new StubProvider(),
             new StubProvider { ProviderId = "claude-code", DisplayName = "Claude Code", IsAvailable = false },
             new StubProvider { ProviderId = "aider", DisplayName = "Aider" },
+            new StubProvider { ProviderId = "workbuddy", DisplayName = "WorkBuddy" },
         ]);
 
         Assert.Equal(AgentSupportKind.Native, statuses.Single(status => status.Id == "dsh").Kind);
         Assert.Equal(AgentSupportKind.NotDetected, statuses.Single(status => status.Id == "claude-code").Kind);
         Assert.Equal(AgentSupportKind.Partial, statuses.Single(status => status.Id == "aider").Kind);
-        Assert.Equal(AgentSupportKind.Infeasible,
-            statuses.Single(status => status.Id == "workbuddy").Kind);
+        Assert.Equal(AgentSupportKind.Partial, statuses.Single(status => status.Id == "workbuddy").Kind);
+        Assert.Equal(AgentSupportKind.Infeasible, statuses.Single(status => status.Id == "cursor").Kind);
+        Assert.Equal(AgentSupportKind.NotDetected, statuses.Single(status => status.Id == "qoder").Kind);
+        Assert.Equal("not-installed", statuses.Single(status => status.Id == "qoder").NoteCode);
         Assert.All(statuses.Where(status => status.Kind is AgentSupportKind.Infeasible
             or AgentSupportKind.NotDetected), status => Assert.NotNull(status.NoteCode));
     }

@@ -50,12 +50,16 @@ public static class AgentContentMapper
                 _ => "Running",
             };
 
+            var statusText = localizer?.Get(statusKey) ?? statusFallback;
             builder.Add(new AgentItemData
             {
-                Name = string.IsNullOrWhiteSpace(entry.Title)
-                    ? AgentDisplayName(entry.Agent)
-                    : entry.Title,
-                StatusText = localizer?.Get(statusKey) ?? statusFallback,
+                // Brand = the expanded row's tool line; the compact capsule never shows it.
+                Name = AgentDisplayName(entry.Agent),
+                Project = ProjectOf(entry),
+                // Priority (user requirement + prototype): current action (tool + target) → session/task
+                // name → status description. Brand names are deliberately not part of this chain.
+                PrimaryText = FirstNonEmpty(entry.Action, entry.SessionTitle, statusText),
+                StatusText = statusText,
                 Tone = entry.Kind switch
                 {
                     AgentEventKind.Completed => StatusTone.Success,
@@ -90,9 +94,40 @@ public static class AgentContentMapper
         _ => "Agent",
     };
 
+    /// <summary>Project leaf shown in the expanded row head, falling back to the legacy "Brand · project" title.</summary>
+    private static string? ProjectOf(AgentEventEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Project))
+        {
+            return entry.Project!.Trim();
+        }
+
+        var title = entry.Title;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        var separator = title.LastIndexOf(" · ", StringComparison.Ordinal);
+        return separator >= 0 && separator + 3 < title.Length ? title[(separator + 3)..].Trim() : null;
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value!.Trim();
+            }
+        }
+
+        return string.Empty;
+    }
+
     /// <summary>
-    /// Elapsed-duration label ("已运行 3 分 12 秒", "耗时 2 分 5 秒"); null when the emitter supplied no
-    /// start time (legacy v1 payloads), so the row falls back to its HH:mm timestamp.
+    /// Elapsed-duration label in prototype2's compact numeric form ("02:14", "48s"); null when the emitter
+    /// supplied no start time (legacy v1 payloads), so the row falls back to its HH:mm timestamp.
     /// </summary>
     public static string? FormatDuration(AgentEventEntry entry, DateTimeOffset now, bool running,
         ILocalizer? localizer = null)
@@ -110,12 +145,10 @@ public static class AgentContentMapper
             elapsed = TimeSpan.Zero;
         }
 
-        var minutes = (int)elapsed.TotalMinutes;
-        var seconds = elapsed.Seconds;
-        return running
-            ? localizer?.Format(LocKeys.Agent.DurationRunning, ("minutes", minutes), ("seconds", seconds))
-                ?? $"Running {minutes}m {seconds}s"
-            : localizer?.Format(LocKeys.Agent.DurationDone, ("minutes", minutes), ("seconds", seconds))
-                ?? $"Took {minutes}m {seconds}s";
+        var totalSeconds = (int)elapsed.TotalSeconds;
+        // prototype2 durations: "48s" under a minute, zero-padded "02:14" above.
+        return totalSeconds >= 60
+            ? $"{totalSeconds / 60:00}:{totalSeconds % 60:00}"
+            : $"{totalSeconds}s";
     }
 }

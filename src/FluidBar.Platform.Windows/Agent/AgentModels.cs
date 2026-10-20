@@ -67,7 +67,10 @@ public sealed record AgentEventEntry(
     DateTimeOffset Timestamp,
     string SourceFile,
     string? SessionId = null,
-    DateTimeOffset? StartedAt = null);
+    DateTimeOffset? StartedAt = null,
+    string? SessionTitle = null,
+    string? Action = null,
+    string? Project = null);
 
 /// <summary>Immutable bounded snapshot of recent agent events (newest first).</summary>
 public sealed record AgentEventSnapshot(ImmutableArray<AgentEventEntry> Recent)

@@ -107,7 +107,12 @@ public static class IslandPresenter
             },
             ActivityKind.Agent => model with
             {
-                Title = string.IsNullOrEmpty(primary.Title) ? primary.SourceName ?? localizer.Get(LocKeys.Agent.Title) : primary.Title,
+                // The publishing plugin already resolved the priority chain (action → session name →
+                // status description), so Title is that text. An empty title means "status only": show the
+                // localized status in the main slot instead of falling back to the brand/source name.
+                Title = string.IsNullOrEmpty(primary.Title)
+                    ? localizer.Get(primary.IsActive ? LocKeys.Agent.Running : LocKeys.Agent.Completed)
+                    : primary.Title,
                 StatusText = localizer.Get(primary.IsActive ? LocKeys.Agent.Running : LocKeys.Agent.Completed),
                 Tone = primary.IsActive ? StatusTone.Info : StatusTone.Success,
             },

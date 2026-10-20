@@ -116,9 +116,10 @@ public sealed class SettingsEffectsTests
     [Fact]
     public void ThemeMapper_SystemThemeAndReducedMotionFollowTheProbe()
     {
+        // A light Windows theme must not repaint the island (Obsidian in every desktop theme).
         var light = SkiaIslandThemeMapper.Map(AppSettings.Default with { Theme = AppTheme.System },
             new SystemAppearanceSnapshot(true, false, null));
-        Assert.Equal(IslandThemeMode.Light, light.Mode);
+        Assert.Equal(IslandThemeMode.Dark, light.Mode);
 
         var dark = SkiaIslandThemeMapper.Map(AppSettings.Default with { Theme = AppTheme.System },
             new SystemAppearanceSnapshot(false, false, null));

@@ -58,8 +58,10 @@ internal static class AgentSupportSectionView
         stack.Children.Add(source);
         if (status.Kind == AgentSupportKind.NotDetected)
         {
+            var text = NoteText(localizer, status.NoteCode);
             var note = SettingsControls.StatusLine(
-                localizer.Get(LocKeys.Settings.Support.Note.NotDetected), palette, SettingsTone.Warning);
+                string.IsNullOrEmpty(text) ? localizer.Get(LocKeys.Settings.Support.Note.NotDetected) : text,
+                palette, SettingsTone.Warning);
             note.Margin = new Avalonia.Thickness(0, 0, 0, 8);
             stack.Children.Add(note);
         }
@@ -82,7 +84,7 @@ internal static class AgentSupportSectionView
         return stack;
     }
 
-    private static string Describe(AgentSupportStatus status, ILocalizer localizer)
+    private static string? Describe(AgentSupportStatus status, ILocalizer localizer)
     {
         var fields = status.Id switch
         {
@@ -91,9 +93,10 @@ internal static class AgentSupportSectionView
             "codex" => LocKeys.Settings.Support.Fields.Codex,
             "copilot" => LocKeys.Settings.Support.Fields.Copilot,
             "aider" => LocKeys.Settings.Support.Fields.Aider,
+            "workbuddy" => LocKeys.Settings.Support.Fields.WorkBuddy,
             _ => null,
         };
-        return fields is null ? NoteText(localizer, status.NoteCode) : localizer.Get(fields);
+        return fields is null ? null : localizer.Get(fields);
     }
 
     private static string NoteText(ILocalizer localizer, string? noteCode) => noteCode switch
@@ -103,6 +106,7 @@ internal static class AgentSupportSectionView
         "electron-only" => localizer.Get(LocKeys.Settings.Support.Note.ElectronOnly),
         "no-public-state" => localizer.Get(LocKeys.Settings.Support.Note.NoPublicState),
         "not-detected" => localizer.Get(LocKeys.Settings.Support.Note.NotDetected),
+        "not-installed" => localizer.Get(LocKeys.Settings.Support.Note.NotInstalled),
         "no-activity" => localizer.Get(LocKeys.Settings.Support.Note.NoActivity),
         _ => string.Empty,
     };

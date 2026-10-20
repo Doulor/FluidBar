@@ -253,6 +253,8 @@
     "Settings.Support.Fields.Codex": "Rollout JSONL: task start/complete events, tool calls and timestamps.",
     "Settings.Support.Fields.Copilot": "Session events JSONL: session start/end, tool events and timestamps.",
     "Settings.Support.Fields.Aider": "Chat history file mtime only: coarse running/completed activity, no tool details.",
+    "Settings.Support.Fields.WorkBuddy": "Local SQLite session database: session title, status (running/completed/error) and activity time; queried from a read-only copy.",
+    "Settings.Support.Note.NotInstalled": "Not installed on this machine (checked the documented install and log paths).",
     "Settings.Agents.Title": "Agent integrations",
     "Settings.Agents.Subtitle": "The island shows live agent status. DeepSeek Harness is built in; other agents are wired with one click or launched through a wrapper command.",
     "Settings.Agents.Status.BuiltIn": "Built in",

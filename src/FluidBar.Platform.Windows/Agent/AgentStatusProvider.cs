@@ -44,7 +44,17 @@ public sealed record AgentProviderEvent(
     string Message,
     DateTimeOffset Timestamp,
     DateTimeOffset? StartedAt = null,
-    string? Error = null);
+    string? Error = null)
+{
+    /// <summary>Session/任务 name from the provider (DSH session title, Claude's first user prompt).</summary>
+    public string? SessionTitle { get; init; }
+
+    /// <summary>Concrete current action (tool + target) when the provider can observe one.</summary>
+    public string? Action { get; init; }
+
+    /// <summary>Project/workspace leaf name (the secondary identifier in the agent page).</summary>
+    public string? Project { get; init; }
+}
 
 /// <summary>Options for the provider registry poller.</summary>
 public sealed class AgentProviderRegistryOptions
@@ -199,7 +209,13 @@ public sealed class AgentProviderRegistry : PlatformMonitor<AgentEventSnapshot>,
             StartedAt: observed.StartedAt,
             Error: observed.Error);
         var entry = AgentEventParser.ToEntry(file,
-            Path.Combine(provider.DataPath, observed.SessionId + ".json"), observed.Timestamp);
+            Path.Combine(provider.DataPath, observed.SessionId + ".json"), observed.Timestamp)
+            with
+            {
+                SessionTitle = observed.SessionTitle,
+                Action = observed.Action,
+                Project = observed.Project,
+            };
         _history.Add(entry);
         return true;
     }

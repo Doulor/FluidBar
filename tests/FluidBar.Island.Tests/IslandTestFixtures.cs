@@ -20,6 +20,9 @@ internal static class IslandTestFixtures
         "05-compact-clipboard",
         "06-compact-agent",
         "07-compact-timer",
+        "70-compact-agent-action",
+        "71-compact-agent-session",
+        "72-compact-agent-status",
         "08-compact-battery",
         "10-expanded-home",
         "11-expanded-media",
@@ -104,6 +107,38 @@ internal static class IslandTestFixtures
             Title = "Refactor island renderer",
             StatusText = "Running",
             DurationText = "2m",
+            Status = CompactStatus.Info,
+        }));
+
+    /// <summary>Compact agent, priority 1: the current tool + target.</summary>
+    public static IslandRenderState AgentAction() => Compact(new CompactActivity(
+        ActivityKind.Agent,
+        new CompactModel
+        {
+            Title = "读取 src/App.tsx",
+            StatusText = "运行中",
+            DurationText = "12s",
+            Status = CompactStatus.Info,
+        }));
+
+    /// <summary>Compact agent, priority 2: the session/task name (no tool observable).</summary>
+    public static IslandRenderState AgentSession() => Compact(new CompactActivity(
+        ActivityKind.Agent,
+        new CompactModel
+        {
+            Title = "接手灵动岛项目重构与预览",
+            StatusText = "运行中",
+            DurationText = "02:07",
+            Status = CompactStatus.Info,
+        }));
+
+    /// <summary>Compact agent, priority 3: no action or session name — the status description only.</summary>
+    public static IslandRenderState AgentStatusOnly() => Compact(new CompactActivity(
+        ActivityKind.Agent,
+        new CompactModel
+        {
+            Title = "运行中",
+            StatusText = "运行中",
             Status = CompactStatus.Info,
         }));
 
@@ -346,6 +381,9 @@ internal static class IslandTestFixtures
         "05-compact-clipboard" => Clipboard(),
         "06-compact-agent" => Agent(),
         "07-compact-timer" => Timer(),
+        "70-compact-agent-action" => AgentAction(),
+        "71-compact-agent-session" => AgentSession(),
+        "72-compact-agent-status" => AgentStatusOnly(),
         "08-compact-battery" => Battery(),
         "10-expanded-home" => Expanded(0),
         "11-expanded-media" => Expanded(1),

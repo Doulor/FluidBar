@@ -222,7 +222,7 @@ public sealed class TokenAndGeometryTests
         Assert.Equal(new VisualSize(208, 40), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Brightness));
         Assert.Equal(new VisualSize(248, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Notification));
         Assert.Equal(new VisualSize(264, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Clipboard));
-        Assert.Equal(new VisualSize(288, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Agent));
+        Assert.Equal(new VisualSize(236, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Agent));
         Assert.Equal(new VisualSize(190, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Timer));
         Assert.Equal(new VisualSize(208, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.BatteryLow));
         Assert.Equal(new VisualSize(236, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Progress));

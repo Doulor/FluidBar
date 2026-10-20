@@ -314,18 +314,27 @@ internal sealed class CompactRenderer : IDisposable
     private void DrawAgent(SKCanvas canvas, CompactModel model, float width, float height)
     {
         var tone = Tone(model.Status);
-        var ring = new SKRect(12, (height - 16) / 2, 28, (height + 16) / 2);
+        // prototype2 .pill-agent: padding 0 12 0 10, gap 8, .agent-ring 20×20 with a 1.5px border at
+        // rgba(accent, .18) plus a spinning top/right arc (running); done/error replace the arc with a
+        // 10 DIP glyph. The task line is 11.5px/500, the meta 9.5px fg-3, and nothing is drawn after the
+        // meta (the old trailing status dot is gone).
+        var ring = new SKRect(10, (height - 20) / 2, 30, (height + 20) / 2);
         _stroke.Style = SKPaintStyle.Stroke;
-        _stroke.StrokeWidth = 1.8f;
-        _stroke.Color = Alpha(tone, _opacity);
-        canvas.DrawCircle(ring.MidX, ring.MidY, 7, _stroke);
+        _stroke.StrokeWidth = 1.5f;
+        _stroke.Color = Alpha(tone, 0.18f * _opacity);
+        canvas.DrawCircle(ring.MidX, ring.MidY, 10, _stroke);
         if (model.Status == CompactStatus.Success)
         {
-            DrawIcon(canvas, IconKind.Check, ring.Deflate(4), tone);
+            DrawIcon(canvas, IconKind.Check, ring.Deflate(5), tone);
         }
         else if (model.Status == CompactStatus.Danger)
         {
-            DrawIcon(canvas, IconKind.Alert, ring.Deflate(4), tone);
+            DrawIcon(canvas, IconKind.Alert, ring.Deflate(5), tone);
+        }
+        else if (model.Status is CompactStatus.Info or CompactStatus.Warning)
+        {
+            _stroke.Color = Alpha(tone, _opacity);
+            canvas.DrawArc(ring, -90, 130, false, _stroke);
         }
         else
         {
@@ -334,29 +343,31 @@ internal sealed class CompactRenderer : IDisposable
             canvas.DrawCircle(ring.MidX, ring.MidY, 2.4f, _fill);
         }
 
-        var metaWidth = 78f;
-        _text.Draw(canvas, model.Title ?? model.Body, IslandType.CardTitle,
-            new SKRect(36, 0, width - 36 - metaWidth - 6, height), _theme.Foreground, TextAlign.Left, _opacity);
-
         var status = model.StatusText;
         var duration = model.DurationText;
-        var metaRight = width - 12 - 8;
-        if (!string.IsNullOrEmpty(duration))
+        var meta = string.IsNullOrEmpty(status)
+            ? duration
+            : string.IsNullOrEmpty(duration) ? status : status + " · " + duration;
+        // Status-only fallback: the main slot already carries the localized status, so repeating it in
+        // the meta column would read "运行中 运行中".
+        if (!string.IsNullOrEmpty(model.Title) && string.Equals(model.Title, status, StringComparison.Ordinal))
         {
-            var durationWidth = Math.Min(40f, _text.Measure(duration, IslandType.CompactTiny));
-            _text.Draw(canvas, duration, IslandType.CompactTiny,
-                new SKRect(metaRight - durationWidth, 0, metaRight, height), _theme.ForegroundTertiary,
-                TextAlign.Right, _opacity);
-            metaRight -= durationWidth + 4;
+            meta = duration;
         }
 
-        _text.Draw(canvas, status, IslandType.CompactTiny,
-            new SKRect(metaRight - metaWidth, 0, metaRight, height), _theme.ForegroundSecondary,
-            TextAlign.Right, _opacity);
+        var metaRight = width - 12;
+        var textRight = metaRight;
+        if (!string.IsNullOrEmpty(meta))
+        {
+            var metaWidth = _text.Measure(meta, IslandType.CompactTiny);
+            _text.Draw(canvas, meta, IslandType.CompactTiny,
+                new SKRect(metaRight - metaWidth, 0, metaRight, height), _theme.ForegroundTertiary,
+                TextAlign.Right, _opacity);
+            textRight = metaRight - metaWidth - 8;
+        }
 
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(tone, _opacity);
-        canvas.DrawCircle(width - 12 - 3, height / 2, 3, _fill);
+        _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactAgentTask,
+            new SKRect(38, 0, Math.Max(38, textRight), height), _theme.Foreground, TextAlign.Left, _opacity);
     }
 
     // ------------------------------------------------------------------ timer

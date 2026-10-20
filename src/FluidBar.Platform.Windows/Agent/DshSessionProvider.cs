@@ -117,6 +117,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
 
         var sessionId = Path.GetFileNameWithoutExtension(file.Name);
         var project = LeafName(ReadString(rows, "workingDirectory"));
+        var sessionTitle = ReadSessionTitle(rows);
         var openStep = ReadOpenStep(rows);
         var stepKind = ReadLastStepKind(rows);
         var lastTurn = ReadLastTurn(rows);
@@ -134,6 +135,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         }
 
         state.Project = project;
+        state.SessionTitle = sessionTitle ?? state.SessionTitle;
         state.LastSeen = now;
         _knownSessions!.Add(sessionId);
 
@@ -153,14 +155,23 @@ public sealed class DshSessionProvider : IAgentStatusProvider
                         : ("running", "工具执行中");
 
             events.Add(new AgentProviderEvent(sessionId, eventName, TitleFor(project), message, now,
-                state.StartedAt ?? openStep?.StartedAt));
+                state.StartedAt ?? openStep?.StartedAt)
+            {
+                SessionTitle = state.SessionTitle,
+                Project = project,
+                Action = openStep?.PendingTool is { Length: > 0 } tool ? DescribeTool(tool) : null,
+            });
         }
         else if (state.WasRunning && lastTurn > state.AdoptedTurn)
         {
             state.WasRunning = false;
             state.AdoptedTurn = lastTurn;
             events.Add(new AgentProviderEvent(sessionId, "completed", TitleFor(state.Project), "已完成", now,
-                state.StartedAt));
+                state.StartedAt)
+            {
+                SessionTitle = state.SessionTitle,
+                Project = state.Project,
+            });
         }
         else if (state.CreatedDuringSession && !state.CompletionEmitted && lastTurn > state.AdoptedTurn)
         {
@@ -170,7 +181,11 @@ public sealed class DshSessionProvider : IAgentStatusProvider
             state.CompletionEmitted = true;
             var startedAt = state.StartedAt ?? file.CreationTimeUtc;
             events.Add(new AgentProviderEvent(sessionId, "completed", TitleFor(state.Project), "已完成", now,
-                startedAt));
+                startedAt)
+            {
+                SessionTitle = state.SessionTitle,
+                Project = state.Project,
+            });
         }
         else if (!state.WasRunning)
         {
@@ -197,6 +212,42 @@ public sealed class DshSessionProvider : IAgentStatusProvider
 
     private static string TitleFor(string project)
         => string.IsNullOrWhiteSpace(project) ? DefaultTitle : DefaultTitle + " · " + Trim(project, 32);
+
+    /// <summary>
+    /// Session name for the compact capsule: DSH's projection "title" row, else the first user request
+    /// ("titleInput.first.text"). Trimmed so an overlong prompt never dominates the pill.
+    /// </summary>
+    private static string? ReadSessionTitle(JsonElement rows)
+    {
+        var title = ReadString(rows, "title");
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            return Trim(title.Trim().ReplaceLineEndings(" "), 60);
+        }
+
+        if (ReadVal(rows, "titleInput") is { ValueKind: JsonValueKind.Object } input
+            && input.TryGetProperty("first", out var first)
+            && first.ValueKind == JsonValueKind.Object
+            && first.TryGetProperty("text", out var text)
+            && text.ValueKind == JsonValueKind.String
+            && text.GetString() is { Length: > 0 } prompt)
+        {
+            return Trim(prompt.Trim().ReplaceLineEndings(" "), 60);
+        }
+
+        return null;
+    }
+
+    /// <summary>Localized verb for the pending tool id; unknown tools pass through unchanged.</summary>
+    private static string DescribeTool(string tool) => tool.ToLowerInvariant() switch
+    {
+        "read" or "read_file" or "readfile" => "读取文件",
+        "write" or "write_file" or "edit" or "edit_file" or "multiedit" or "apply_patch" => "编辑文件",
+        "bash" or "shell" or "run" or "run_command" or "run_code" or "powershell" => "运行命令",
+        "grep" or "search" or "rg" => "搜索代码",
+        "glob" or "find" or "list" or "ls" => "查找文件",
+        _ => tool,
+    };
 
     private static string Trim(string value, int max) => value.Length <= max ? value : value[..max] + "…";
 
@@ -364,6 +415,8 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         public bool CompletionEmitted { get; set; }
 
         public string Project { get; set; } = string.Empty;
+
+        public string? SessionTitle { get; set; }
 
         public DateTimeOffset LastSeen { get; set; } = DateTimeOffset.UtcNow;
     }

@@ -92,7 +92,7 @@ public sealed class FontScaleTests
         Assert.True(PageMetricsLayout.MediaContentExtent(pageRect, large) > PageMetricsLayout.MediaContentExtent(pageRect, one));
         Assert.Equal(PageMetricsLayout.NotificationRowHeight(one), 40, 3);
         Assert.Equal(PageMetricsLayout.ClipboardRowHeight(one), 48, 3);
-        Assert.Equal(PageMetricsLayout.AgentRowHeight(one), 48, 3);
+        Assert.Equal(PageMetricsLayout.AgentRowHeight(one), 44.6, 3);
         Assert.Equal(PageMetricsLayout.HomeContentExtent(pageRect, one), 212, 3);
         Assert.Equal(PageMetricsLayout.MediaContentExtent(pageRect, one), 232, 3);
     }
@@ -180,7 +180,8 @@ public sealed class FontScaleTests
         Assert.Equal(1.6, FontScaleMetrics.From(9.0).Value, 6);
         Assert.Equal(1.0, FontScaleMetrics.From(double.NaN).Value, 6);
         Assert.Equal(LayoutTokens.CompactSize(null).Width * 0.8, LayoutTokens.CompactSizeFor(null, IslandMode.Float, 0.1).Width, 3);
-        Assert.Equal(440, LayoutTokens.CompactSizeFor(FluidBar.Core.Activities.ActivityKind.Agent, IslandMode.Float, 9).Width, 6);
+        // The agent token is 236 wide now (prototype2), so 236 × 1.6 still fits under the 440 ceiling.
+        Assert.Equal(377.6, LayoutTokens.CompactSizeFor(FluidBar.Core.Activities.ActivityKind.Agent, IslandMode.Float, 9).Width, 6);
     }
 
     public static TheoryData<string, string, double> RailLabels => new()
@@ -253,7 +254,7 @@ public sealed class FontScaleTests
             compared++;
         }
 
-        Assert.Equal(25, compared);
+        Assert.Equal(28, compared);
     }
 
     [Theory]

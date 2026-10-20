@@ -342,7 +342,9 @@ internal sealed partial class PageRenderer
 
         var m = _metrics;
         var rowHeight = PageMetricsLayout.AgentRowHeight(m);
-        var body = PageLayout.ListBody(page);
+        // prototype2 .agent-list: the rows span the full 400 DIP page width (no 16 DIP list inset).
+        var body = new SKRect(page.Left, page.Top + PageMetricsLayout.BodyTop,
+            page.Right, page.Top + PageMetricsLayout.BodyTop + PageMetricsLayout.BodyHeight);
         var maxScroll = Math.Max(0, (count * (rowHeight + 6)) - 6 - PageMetricsLayout.BodyHeight);
         var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
         var first = rowHeight + 6 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 6));
@@ -371,13 +373,11 @@ internal sealed partial class PageRenderer
         var hovered = index == model.HoverIndex;
         DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
 
-        var dy = (row.Height - 48f) / 2;
-        canvas.Save();
-        canvas.Translate(0, dy);
         var tone = Tone(item.Tone);
-        var stateCenter = new SKPoint(row.Left + 20, row.Top + 24);
+        // prototype2 .agent-state: 20×20 circle whose centre sits 10 DIP in from the row edge.
+        var stateCenter = new SKPoint(row.Left + 20, row.MidY);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(tone, 0.12f * _opacity);
+        _fill.Color = Alpha(tone, 0.10f * _opacity);
         canvas.DrawCircle(stateCenter.X, stateCenter.Y, 10, _fill);
 
         if (item.Tone == CompactStatus.Info)
@@ -418,65 +418,92 @@ internal sealed partial class PageRenderer
             canvas.DrawCircle(stateCenter.X, stateCenter.Y, 2.5f, _fill);
         }
 
-        var mainLeft = row.Left + 38;
-        var mainRight = row.Right - 80;
+        // prototype2 .agent-head: tool/brand 9px/600 fg-2, project 8px fg-3, 6 DIP gap, baseline-aligned;
+        // the right column is 8px/600 status over 8px fg-3 duration, right-aligned 10 DIP in.
+        var statusWidth = string.IsNullOrEmpty(item.StatusText)
+            ? 0
+            : _text.Measure(item.StatusText, IslandType.RowMetaStrong);
+        var durationWidth = string.IsNullOrEmpty(item.DurationText)
+            ? 0
+            : _text.Measure(item.DurationText, IslandType.RowMeta);
+        var rightRight = row.Right - 10;
+        var rightLeft = rightRight - Math.Max(statusWidth, durationWidth);
+        var mainLeft = row.Left + 39;
+        var mainRight = Math.Max(mainLeft, rightLeft - 9);
+        var headTop = row.Top + 9;
+
         var tool = item.Tool;
-        var toolWidth = string.IsNullOrEmpty(tool) ? 0 : Math.Min(80, _text.Measure(tool, IslandType.RowApp));
+        var toolWidth = string.IsNullOrEmpty(tool)
+            ? 0
+            : Math.Min((mainRight - mainLeft) * 0.6f, _text.Measure(tool, IslandType.AgentTool));
         if (toolWidth > 0)
         {
             _text.Draw(
                 canvas,
                 tool,
-                IslandType.RowApp,
-                new SKRect(mainLeft, row.Top + 7, mainLeft + toolWidth, row.Top + 20),
+                IslandType.AgentTool,
+                new SKRect(mainLeft, headTop, mainLeft + toolWidth, headTop + 12),
                 _theme.ForegroundSecondary,
                 TextAlign.Left,
                 _opacity);
         }
 
         var projectLeft = mainLeft + (toolWidth > 0 ? toolWidth + 6 : 0);
-        _text.Draw(
-            canvas,
-            item.Project,
-            IslandType.RowMeta,
-            new SKRect(projectLeft, row.Top + 8, mainRight, row.Top + 20),
-            _theme.ForegroundTertiary,
-            TextAlign.Left,
-            _opacity);
+        if (projectLeft < mainRight)
+        {
+            _text.Draw(
+                canvas,
+                item.Project ?? string.Empty,
+                IslandType.RowMeta,
+                new SKRect(projectLeft, headTop, mainRight, headTop + 12),
+                _theme.ForegroundTertiary,
+                TextAlign.Left,
+                _opacity);
+        }
+
         _text.Draw(
             canvas,
             item.Task,
-            IslandType.RowTitle,
-            new SKRect(mainLeft, row.Top + 21, mainRight, row.Top + 39),
+            IslandType.AgentTask,
+            new SKRect(mainLeft, row.Top + 23, mainRight, row.Top + 23 + 14),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
-        _text.Draw(
-            canvas,
-            item.StatusText,
-            IslandType.RowMetaStrong,
-            new SKRect(row.Right - 78, row.Top + 8, row.Right - 10, row.Top + 20),
-            tone,
-            TextAlign.Right,
-            _opacity);
-        _text.Draw(
-            canvas,
-            item.DurationText,
-            IslandType.RowMeta,
-            new SKRect(row.Right - 78, row.Top + 22, row.Right - 10, row.Top + 34),
-            _theme.ForegroundTertiary,
-            TextAlign.Right,
-            _opacity);
+
+        if (statusWidth > 0)
+        {
+            _text.Draw(
+                canvas,
+                item.StatusText,
+                IslandType.RowMetaStrong,
+                new SKRect(rightLeft, headTop, rightRight, headTop + 12),
+                tone,
+                TextAlign.Right,
+                _opacity);
+        }
+
+        if (durationWidth > 0)
+        {
+            _text.Draw(
+                canvas,
+                item.DurationText,
+                IslandType.RowMeta,
+                new SKRect(rightLeft, row.Top + 23, rightRight, row.Top + 23 + 12),
+                _theme.ForegroundTertiary,
+                TextAlign.Right,
+                _opacity);
+        }
 
         if (item.Tone == CompactStatus.Info && item.ProgressPercent >= 0)
         {
-            var track = new SKRect(row.Left + 10, row.Bottom - 3.5f, row.Right - 10, row.Bottom - 2);
+            // prototype2 .agent-progress: 1.5 DIP track across the full row with an accent fill.
+            var track = new SKRect(row.Left, row.Bottom - 1.5f, row.Right, row.Bottom);
             _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
             canvas.DrawRoundRect(track, 0.75f, 0.75f, _fill);
             var fraction = (float)Math.Clamp(item.ProgressPercent / 100.0, 0, 1);
             if (fraction > 0)
             {
-                _fill.Color = Alpha(_theme.Accent, 0.75f * _opacity);
+                _fill.Color = Alpha(_theme.Accent, _opacity);
                 canvas.DrawRoundRect(
                     new SKRect(track.Left, track.Top, track.Left + (track.Width * fraction), track.Bottom),
                     0.75f,
@@ -484,8 +511,6 @@ internal sealed partial class PageRenderer
                     _fill);
             }
         }
-
-        canvas.Restore();
     }
 
     // ------------------------------------------------------------------ widgets

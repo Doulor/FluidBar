@@ -24,9 +24,12 @@ public sealed class AgentContentMapperTests
         string message = "",
         DateTimeOffset? startedAt = null,
         DateTimeOffset? timestamp = null,
-        string? sessionId = "session-x")
+        string? sessionId = "session-x",
+        string? sessionTitle = null,
+        string? action = null,
+        string? project = null)
         => new($"session:{sessionId}", agent, kind, title, message,
-            timestamp ?? Now, "inbox.json", sessionId, startedAt);
+            timestamp ?? Now, "inbox.json", sessionId, startedAt, sessionTitle, action, project);
 
     [Fact]
     public async Task Map_Running_UsesTheLocalizedStatusAndElapsedDuration()
@@ -40,7 +43,8 @@ public sealed class AgentContentMapperTests
 
         Assert.Single(rows);
         Assert.Equal("运行中", rows[0].StatusText);
-        Assert.Equal("已运行 3 分 12 秒", rows[0].TimeText);
+        // prototype2 durations are numeric ("02:14", "48s"), not localized sentences.
+        Assert.Equal("03:12", rows[0].TimeText);
         Assert.Equal(StatusTone.Info, rows[0].Tone);
         Assert.Equal(AgentKind.DeepSeek, rows[0].Kind);
         Assert.Equal("session-x", rows[0].SessionId);
@@ -59,7 +63,7 @@ public sealed class AgentContentMapperTests
         });
 
         Assert.Equal("已完成", rows[0].StatusText);
-        Assert.Equal("耗时 2 分 5 秒", rows[0].TimeText);
+        Assert.Equal("02:05", rows[0].TimeText);
         Assert.Equal(StatusTone.Success, rows[0].Tone);
         await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
@@ -99,6 +103,57 @@ public sealed class AgentContentMapperTests
         });
 
         Assert.Equal(Now.ToLocalTime().ToString("HH:mm"), rows[0].TimeText);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_CompactText_PrefersTheActionOverTheSessionAndTheStatus()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(title: "DeepSeek Harness · FluidBar",
+                    sessionTitle: "接手灵动岛项目重构与预览",
+                    action: "读取 src/App.tsx", project: "FluidBar")),
+                Now, localizer);
+        });
+
+        Assert.Equal("读取 src/App.tsx", rows[0].PrimaryText);
+        Assert.Equal("DeepSeek Harness", rows[0].Name); // brand stays out of the capsule, on the row tool line
+        Assert.Equal("FluidBar", rows[0].Project);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_CompactText_FallsBackToTheSessionNameWithoutATool()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(title: "Claude Code · fluidbar",
+                    sessionTitle: "Rebuild the settings motion layer", project: "fluidbar")),
+                Now, localizer);
+        });
+
+        Assert.Equal("Rebuild the settings motion layer", rows[0].PrimaryText);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_CompactText_FallsBackToTheStatusInsteadOfTheBrand()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(title: "DeepSeek Harness · FluidBar", kind: AgentEventKind.Completed,
+                    timestamp: Now)), Now, localizer);
+        });
+
+        Assert.Equal("已完成", rows[0].PrimaryText);
+        Assert.DoesNotContain("DeepSeek", rows[0].PrimaryText, StringComparison.Ordinal);
         await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
 

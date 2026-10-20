@@ -320,6 +320,15 @@ public static class IslandType
     /// <summary>Row meta line, semibold (status label).</summary>
     public static readonly TextStyle RowMetaStrong = new(FontRole.UiSemiBold, 8f);
 
+    /// <summary>Agent row head tool/brand label (prototype2 .agent-tool: 9px/600).</summary>
+    public static readonly TextStyle AgentTool = new(FontRole.UiSemiBold, 9f);
+
+    /// <summary>Agent row primary task/action line (prototype2 .agent-task: 10.5px/500).</summary>
+    public static readonly TextStyle AgentTask = new(FontRole.UiMedium, 10.5f);
+
+    /// <summary>Agent compact pill task/action line (prototype2 .agent-task: 11.5px/500).</summary>
+    public static readonly TextStyle CompactAgentTask = new(FontRole.UiMedium, 11.5f);
+
     /// <summary>Small accent chip (verification code).</summary>
     public static readonly TextStyle Chip = new(FontRole.UiSemiBold, 8f);
 
@@ -498,8 +507,8 @@ public static class PageLayout
     /// <summary>Clipboard row gap (6 DIP).</summary>
     public const float ClipboardRowGap = 6;
 
-    /// <summary>Agent row height (48 DIP).</summary>
-    public const float AgentRowHeight = 48;
+    /// <summary>Agent row height (44.6 DIP — prototype2 .agent-row: 2×9 padding + 12 + 2 + 12.6).</summary>
+    public const float AgentRowHeight = 44.6f;
 
     /// <summary>Agent row gap (6 DIP).</summary>
     public const float AgentRowGap = 6;
@@ -559,7 +568,7 @@ public static class PageLayout
     public static SKRect AgentRow(SKRect page, int index, float scrollOffset = 0)
     {
         var top = page.Top + 28 + (index * (AgentRowHeight + AgentRowGap)) - scrollOffset;
-        return new SKRect(page.Left + 16, top, page.Right - 16, top + AgentRowHeight);
+        return new SKRect(page.Left, top, page.Right, top + AgentRowHeight);
     }
 
     /// <summary>Maximum scroll offset for a list (0 when every row fits).</summary>

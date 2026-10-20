@@ -148,10 +148,18 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
 
             _lastEntryId = stateKey;
         }
+        // The compact capsule shows what the agent is doing, not its brand: action (tool + target) →
+        // session/task name → status description (the presenter localizes the empty case). The brand stays
+        // in the expanded row (AgentContentMapper.Name / the page's tool line).
+        var capsuleText = !string.IsNullOrWhiteSpace(latest.Action)
+            ? latest.Action!
+            : !string.IsNullOrWhiteSpace(latest.SessionTitle)
+                ? latest.SessionTitle!
+                : IsBrandTitle(latest.Title) ? string.Empty : latest.Title ?? string.Empty;
         var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["icon"] = "agent",
-            ["title"] = latest.Title,
+            ["title"] = capsuleText,
             ["agent"] = agentToken,
             ["body"] = latest.Message,
             ["badge"] = kindToken,
@@ -161,7 +169,7 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
         Publish(new IslandEvent
         {
             Source = PluginId,
-            Title = string.IsNullOrWhiteSpace(latest.Title) ? kindToken : latest.Title,
+            Title = capsuleText,
             Content = latest.Message,
             IconKind = "agent",
             Kind = IslandEventKind.Agent,
@@ -176,6 +184,34 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
                 Fields = fields,
             },
         });
+    }
+
+    /// <summary>
+    /// True when a legacy inbox row's Title is just the agent's brand (or "Brand · project"): the compact
+    /// capsule must show the status instead of that brand. Emitters that send a task name keep it.
+    /// </summary>
+    private static bool IsBrandTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        string[] brands =
+        [
+            "DeepSeek Harness", "Claude Code", "Codex", "Cursor", "Windsurf", "Aider",
+            "GitHub Copilot", "zcode", "Qoder", "WorkBuddy", "Agent",
+        ];
+        foreach (var brand in brands)
+        {
+            if (title.Equals(brand, StringComparison.OrdinalIgnoreCase)
+                || title.StartsWith(brand + " · ", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected override void OnStopped()

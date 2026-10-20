@@ -314,8 +314,8 @@ public static class LayoutTokens
     private static readonly VisualSize HudSize = new(208, 40);
     private static readonly VisualSize NotificationSize = new(248, 36);
     private static readonly VisualSize ClipboardSize = new(264, 36);
-    // Widened from 236 so "DeepSeek Harness" plus the status chip is not ellipsised in the pill.
-    private static readonly VisualSize AgentSize = new(288, 36);
+    // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
+    private static readonly VisualSize AgentSize = new(236, 36);
     private static readonly VisualSize TimerSize = new(190, 36);
     private static readonly VisualSize BatterySize = new(208, 36);
     private static readonly VisualSize LookupSize = new(480, 44);

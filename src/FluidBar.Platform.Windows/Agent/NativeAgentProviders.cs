@@ -38,6 +38,119 @@ internal static class TranscriptReader
 
     public static string Trim(string value, int max) => value.Length <= max ? value : value[..max] + "…";
 
+    /// <summary>
+    /// The first real user request in a transcript (Claude Code writes it as the first user turn). Used as
+    /// the session/task name when the provider has no dedicated session-title field.
+    /// </summary>
+    public static string? FirstUserPrompt(FileInfo file, int maxChars = 60)
+    {
+        try
+        {
+            using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            for (var index = 0; index < 400 && reader.ReadLine() is { } line; index++)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                JsonDocument document;
+                try
+                {
+                    document = JsonDocument.Parse(line);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                using (document)
+                {
+                    var root = document.RootElement;
+                    if (String(root, "type") != "user" || Object(root, "message") is not { } message)
+                    {
+                        continue;
+                    }
+
+                    if (message.TryGetProperty("content", out var content))
+                    {
+                        if (content.ValueKind == JsonValueKind.String
+                            && content.GetString() is { Length: > 0 } text)
+                        {
+                            return CleanPrompt(text, maxChars);
+                        }
+
+                        if (content.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var block in content.EnumerateArray())
+                            {
+                                if (String(block, "type") == "text" && String(block, "text") is { Length: > 0 } part)
+                                {
+                                    return CleanPrompt(part, maxChars);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable transcript; no name this poll.
+        }
+
+        return null;
+    }
+
+    private static string? CleanPrompt(string text, int maxChars)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0 || trimmed.StartsWith('<') || trimmed.StartsWith("[Request interrupted", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return Trim(trimmed.ReplaceLineEndings(" "), maxChars);
+    }
+
+    /// <summary>Human action label for an observed tool_use block ("读取 src/App.tsx").</summary>
+    public static string DescribeToolUse(JsonElement block)
+    {
+        var name = String(block, "name") ?? "tool";
+        var target = Object(block, "input") is { } input
+            ? Trim((String(input, "file_path") ?? String(input, "path") ?? String(input, "pattern")
+                ?? String(input, "query") ?? String(input, "url") ?? CommandHead(String(input, "command"))
+                ?? string.Empty).Trim(), 44)
+            : string.Empty;
+        var verb = name.ToLowerInvariant() switch
+        {
+            "read" or "read_file" => "读取",
+            "edit" or "write" or "multiedit" or "notebookedit" or "apply_patch" => "编辑",
+            "bash" or "shell" or "run_command" => "运行",
+            "grep" or "search" => "搜索",
+            "glob" or "list" => "查找",
+            "webfetch" or "websearch" => "查询",
+            "task" => "委派",
+            _ => name,
+        };
+        return string.IsNullOrEmpty(target) ? verb : verb + " " + target;
+    }
+
+    private static string? CommandHead(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return null;
+        }
+
+        var tokens = command.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return tokens.Length >= 2 && (tokens[0] is "dotnet" or "npm" or "pnpm" or "git" or "node" or "python")
+            ? tokens[0] + " " + tokens[1]
+            : tokens[0];
+    }
+
     public static string? String(JsonElement element, params string[] names)
     {
         foreach (var name in names)
@@ -174,10 +287,12 @@ public sealed class ClaudeTranscriptProvider : IAgentStatusProvider
     {
         var sessionId = Path.GetFileNameWithoutExtension(file.Name);
         var lines = TranscriptReader.Tail(file, 256);
+        var sessionTitle = TranscriptReader.FirstUserPrompt(file);
         var project = string.Empty;
         var started = (DateTimeOffset?)null;
         var lastTimestamp = new DateTimeOffset(file.LastWriteTime);
         var lastTool = (string?)null;
+        var lastToolAction = (string?)null;
         var lastStopReason = (string?)null;
         var sawAssistant = false;
         foreach (var line in lines)
@@ -230,6 +345,7 @@ public sealed class ClaudeTranscriptProvider : IAgentStatusProvider
                             if (TranscriptReader.String(block, "type") == "tool_use")
                             {
                                 lastTool = TranscriptReader.String(block, "name");
+                                lastToolAction = TranscriptReader.DescribeToolUse(block);
                                 break;
                             }
                         }
@@ -252,40 +368,71 @@ public sealed class ClaudeTranscriptProvider : IAgentStatusProvider
         state.StartedAt ??= started;
 
         // "tool_use" means Claude Code paused for a tool and will continue, so the row stays running.
-        var active = sawAssistant
-                     && (lastStopReason is null || string.Equals(lastStopReason, "tool_use", StringComparison.Ordinal))
-                     && now - lastTimestamp <= _activeThreshold;
+        var recent = now - lastTimestamp <= _activeThreshold;
+        // Completed only when the last assistant message says the turn ended (end_turn). A transcript that
+        // simply stops without end_turn (permission prompt, tool wait, app closed) is waiting, not running.
+        var ended = sawAssistant && string.Equals(lastStopReason, "end_turn", StringComparison.Ordinal);
         var title = "Claude Code" + (string.IsNullOrEmpty(state.Project) ? string.Empty : " · " + TranscriptReader.Trim(state.Project, 32));
-        if (active)
+        if (ended)
+        {
+            var shouldEmit = state.WasRunning || state.WaitingEmitted || state.CreatedDuringSession;
+            state.WasRunning = false;
+            state.WaitingEmitted = false;
+            state.CompletionEmitted = true;
+            if (shouldEmit)
+            {
+                events.Add(new AgentProviderEvent(sessionId, "completed", title, "已完成", now,
+                    StartedAtForDisplay(state, now))
+                {
+                    SessionTitle = sessionTitle,
+                    Project = state.Project,
+                });
+            }
+        }
+        else if (recent && sawAssistant)
         {
             state.WasRunning = true;
+            state.WaitingEmitted = false;
             state.CompletionEmitted = false;
-            var detail = lastTool is { Length: > 0 } ? "正在使用 " + lastTool : "会话进行中";
-            events.Add(new AgentProviderEvent(sessionId, "running", title, detail, now, state.StartedAt));
+            var detail = lastTool is { Length: > 0 }
+                ? "正在使用 " + lastTool
+                : lastToolAction ?? "会话进行中";
+            events.Add(new AgentProviderEvent(sessionId, "running", title, detail, now, state.StartedAt)
+            {
+                SessionTitle = sessionTitle,
+                Project = state.Project,
+                Action = lastToolAction,
+            });
         }
-        else if (state.WasRunning)
+        else if (!recent && !state.CompletionEmitted
+                 && (state.WasRunning || state.WaitingEmitted || state.CreatedDuringSession))
         {
+            // Long silence without end_turn: the session is waiting for the user/permission, not running.
             state.WasRunning = false;
-            state.CompletionEmitted = true;
-            events.Add(new AgentProviderEvent(sessionId, "completed", title, "已完成", now, state.StartedAt));
-        }
-        else if (state.CreatedDuringSession && !state.CompletionEmitted && sawAssistant)
-        {
-            state.CompletionEmitted = true;
-            // A transcript that was already old when the row appeared is still a real session record; the
-            // elapsed label uses the observation time instead of a week-old start.
-            var startedAt = state.StartedAt is { } recorded && now - recorded <= TimeSpan.FromHours(6)
-                ? recorded
-                : file.CreationTimeUtc;
-            events.Add(new AgentProviderEvent(sessionId, "completed", title, "已完成", now, startedAt));
+            state.WaitingEmitted = true;
+            events.Add(new AgentProviderEvent(sessionId, "waiting", title, "等待输入", now,
+                StartedAtForDisplay(state, now))
+            {
+                SessionTitle = sessionTitle,
+                Project = state.Project,
+            });
         }
     }
+
+    /// <summary>
+    /// Elapsed base for a row: a live session's recorded start, or the observation time when the
+    /// transcript was already old (recorded sessions imported/copied into the watched folder).
+    /// </summary>
+    private static DateTimeOffset StartedAtForDisplay(SessionState state, DateTimeOffset now)
+        => state.StartedAt is { } recorded && now - recorded <= TimeSpan.FromHours(6) ? recorded : now;
 
     private sealed class SessionState
     {
         public DateTimeOffset? StartedAt { get; set; }
 
         public bool WasRunning { get; set; }
+
+        public bool WaitingEmitted { get; set; }
 
         public bool CompletionEmitted { get; set; }
 
@@ -834,6 +981,8 @@ public static class NativeAgentProviders
                 ?? Path.Combine(profile, ".copilot", "session-state")),
             new AiderSessionProvider(Environment.GetEnvironmentVariable("FLUIDBAR_AIDER_HISTORY")
                 ?? Path.Combine(profile, ".aider.chat.history.md")),
+            new WorkBuddySessionProvider(Environment.GetEnvironmentVariable("FLUIDBAR_WORKBUDDY_HOME")
+                ?? Path.Combine(profile, ".workbuddy")),
         ];
     }
 }

@@ -45,7 +45,9 @@ public sealed class AgentSupportSectionTests
                 Assert.DoesNotContain(buttons, button => Equals(button.Content, "Remove"));
                 Assert.Contains("Read-only native detection", texts);
                 Assert.Contains("No readable local state", texts);
+                Assert.Contains("Partial", texts);
                 Assert.Contains(texts, text => text.Contains("SQLite", StringComparison.Ordinal));
+                Assert.Contains(texts, text => text.Contains("Local SQLite session database", StringComparison.Ordinal));
             }
             finally
             {
@@ -69,7 +71,10 @@ public sealed class AgentSupportSectionTests
                 Assert.Contains("未检测到", texts);
                 Assert.Contains("不可行", texts);
                 Assert.Contains("数据来源", texts);
+                Assert.Contains("部分支持", texts);
                 Assert.Contains(texts, text => text.Contains("SQLite", StringComparison.Ordinal));
+                Assert.Contains(texts, text => text.Contains("本地 SQLite 会话库", StringComparison.Ordinal));
+                Assert.Contains(texts, text => text.Contains("本机未安装", StringComparison.Ordinal));
             }
             finally
             {
@@ -88,8 +93,9 @@ public sealed class AgentSupportSectionTests
             {
                 var texts = window.GetVisualDescendants().OfType<TextBlock>()
                     .Select(text => text.Text ?? string.Empty).ToArray();
-                Assert.Contains(texts, text => text.Contains("Electron desktop client", StringComparison.Ordinal));
+                Assert.Contains(texts, text => text.Contains("SQLite database", StringComparison.Ordinal));
                 Assert.Contains(texts, text => text.Contains("Pure IDE agent", StringComparison.Ordinal));
+                Assert.Contains(texts, text => text.Contains("Not installed on this machine", StringComparison.Ordinal));
             }
             finally
             {

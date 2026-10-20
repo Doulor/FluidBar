@@ -535,6 +535,8 @@ public static partial class LocKeys
                 public const string ElectronOnly = "Settings.Support.Note.ElectronOnly";
                 /// <summary><c>Settings.Support.Note.NoPublicState</c></summary>
                 public const string NoPublicState = "Settings.Support.Note.NoPublicState";
+                /// <summary><c>Settings.Support.Note.NotInstalled</c></summary>
+                public const string NotInstalled = "Settings.Support.Note.NotInstalled";
             }
             /// <summary>Keys in the 'Fields' area.</summary>
             public static class Fields
@@ -549,6 +551,8 @@ public static partial class LocKeys
                 public const string Copilot = "Settings.Support.Fields.Copilot";
                 /// <summary><c>Settings.Support.Fields.Aider</c></summary>
                 public const string Aider = "Settings.Support.Fields.Aider";
+                /// <summary><c>Settings.Support.Fields.WorkBuddy</c></summary>
+                public const string WorkBuddy = "Settings.Support.Fields.WorkBuddy";
             }
         }
         /// <summary>Keys in the 'Agents' area (legacy one-click hook page; kept for fallback copy).</summary>

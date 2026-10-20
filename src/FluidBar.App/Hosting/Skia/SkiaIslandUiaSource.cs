@@ -699,7 +699,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             rows.Add(Node(
                 $"island.page.4.row.{i}",
                 UiaElementRole.ListItem,
-                JoinNotEmpty(" — ", item.Tool, item.Task),
+                JoinNotEmpty(" — ", JoinNotEmpty(" · ", item.Tool, item.Project), item.Task),
                 ToRect(row),
                 UiaPatternKind.Invoke,
                 new UiaElementState

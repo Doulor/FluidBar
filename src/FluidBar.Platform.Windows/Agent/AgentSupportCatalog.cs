@@ -44,7 +44,7 @@ public static class AgentSupportCatalog
         {
             var kind = provider.ProviderId switch
             {
-                "aider" when provider.IsAvailable => AgentSupportKind.Partial,
+                "aider" or "workbuddy" when provider.IsAvailable => AgentSupportKind.Partial,
                 _ when provider.IsAvailable => AgentSupportKind.Native,
                 _ => AgentSupportKind.NotDetected,
             };
@@ -52,14 +52,25 @@ public static class AgentSupportCatalog
                 provider.DataPath, kind == AgentSupportKind.NotDetected ? "not-detected" : null));
         }
 
-        statuses.AddRange(
-        [
-            new AgentSupportStatus("cursor", "Cursor", AgentSupportKind.Infeasible, null, "sqlite-state"),
-            new AgentSupportStatus("windsurf", "Windsurf", AgentSupportKind.Infeasible, null, "ide-only"),
-            new AgentSupportStatus("qoder", "Qoder", AgentSupportKind.Infeasible, null, "ide-only"),
-            new AgentSupportStatus("zcode", "zcode", AgentSupportKind.Infeasible, null, "no-public-state"),
-            new AgentSupportStatus("workbuddy", "WorkBuddy", AgentSupportKind.Infeasible, null, "electron-only"),
-        ]);
+        // Rows without a provider: either documented-infeasible, or not installed on this machine (the
+        // paths below are the documented locations that were checked).
+        var known = statuses.Select(static status => status.Id).ToHashSet(StringComparer.Ordinal);
+        void Add(string id, string name, AgentSupportKind kind, string? path, string? note)
+        {
+            if (known.Add(id))
+            {
+                statuses.Add(new AgentSupportStatus(id, name, kind, path, note));
+            }
+        }
+
+        Add("cursor", "Cursor", AgentSupportKind.Infeasible, null, "sqlite-state");
+        Add("windsurf", "Windsurf", AgentSupportKind.Infeasible, null, "ide-only");
+        Add("qoder", "Qoder", AgentSupportKind.NotDetected,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Qoder"),
+            "not-installed");
+        Add("zcode", "zcode", AgentSupportKind.NotDetected,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "zcode"),
+            "not-installed");
         return statuses;
     }
 

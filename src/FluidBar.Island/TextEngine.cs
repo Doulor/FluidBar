@@ -9,6 +9,9 @@ public enum FontRole
     /// <summary>Segoe UI Variable Text / Microsoft YaHei UI / Segoe UI, regular.</summary>
     Ui,
 
+    /// <summary>UI medium (500) — prototype2's agent task/action text weight.</summary>
+    UiMedium,
+
     /// <summary>UI semibold (600).</summary>
     UiSemiBold,
 
@@ -127,6 +130,7 @@ public sealed class TextEngine : IDisposable
     private readonly SKPaint _paint = new() { IsAntialias = true };
 
     private readonly SKTypeface _ui;
+    private readonly SKTypeface _uiMedium;
     private readonly SKTypeface _uiSemibold;
     private readonly SKTypeface _displaySemibold;
     private readonly SKTypeface _displayBold;
@@ -154,6 +158,7 @@ public sealed class TextEngine : IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(cacheCapacity, 1);
         _capacity = cacheCapacity;
         _ui = Resolve(["Segoe UI Variable Text", "Microsoft YaHei UI", "Segoe UI"], SKFontStyleWeight.Normal);
+        _uiMedium = Resolve(["Segoe UI Variable Text", "Microsoft YaHei UI", "Segoe UI"], SKFontStyleWeight.Medium);
         _uiSemibold = Resolve(["Segoe UI Variable Text", "Microsoft YaHei UI", "Segoe UI Semibold", "Segoe UI"], SKFontStyleWeight.SemiBold);
         _displaySemibold = Resolve(["Segoe UI Variable Display", "Microsoft YaHei UI", "Segoe UI Semibold", "Segoe UI"], SKFontStyleWeight.SemiBold);
         _displayBold = Resolve(["Segoe UI Variable Display", "Microsoft YaHei UI", "Segoe UI Bold", "Segoe UI"], SKFontStyleWeight.Bold);
@@ -546,6 +551,7 @@ public sealed class TextEngine : IDisposable
     private SKTypeface GetPrimaryTypeface(TextStyle style) => style.Role switch
     {
         FontRole.Ui => _ui,
+        FontRole.UiMedium => _uiMedium,
         FontRole.UiSemiBold => _uiSemibold,
         FontRole.DisplaySemiBold => _displaySemibold,
         FontRole.DisplayBold => _displayBold,

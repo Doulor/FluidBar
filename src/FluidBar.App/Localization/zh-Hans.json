@@ -253,6 +253,8 @@
     "Settings.Support.Fields.Codex": "Rollout JSONL：任务开始/完成事件、工具调用与时间戳。",
     "Settings.Support.Fields.Copilot": "会话事件 JSONL：会话开始/结束、工具事件与时间戳。",
     "Settings.Support.Fields.Aider": "仅对话记录文件的修改时间：粗略的运行/完成状态，无工具细节。",
+    "Settings.Support.Fields.WorkBuddy": "本地 SQLite 会话库：会话标题、状态（running/completed/error）与活动时间；只查询只读副本。",
+    "Settings.Support.Note.NotInstalled": "本机未安装（已检查文档中的安装目录与日志路径）。",
     "Settings.Agents.Title": "代理集成",
     "Settings.Agents.Subtitle": "灵动岛会显示代理的实时状态。DeepSeek Harness 已内置；其他代理可一键接入，或通过包装命令启动。",
     "Settings.Agents.Status.BuiltIn": "已内置",

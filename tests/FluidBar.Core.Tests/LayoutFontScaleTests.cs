@@ -60,7 +60,8 @@ public sealed class LayoutFontScaleTests
     public void Compact_size_never_exceeds_the_expanded_shell()
     {
         var size = LayoutTokens.CompactSizeFor(ActivityKind.Agent, IslandMode.Float, 1.6);
-        Assert.Equal(LayoutTokens.ExpandedWidth, size.Width, 3);
+        // prototype2 agent token 236 × 1.6 = 377.6, still below the 440 expanded shell.
+        Assert.Equal(377.6, size.Width, 3);
         Assert.True(size.Height <= LayoutTokens.ExpandedHeight);
         var narrow = LayoutTokens.CompactSizeFor(null, IslandMode.Float, 0.8);
         Assert.Equal(Math.Round(LayoutTokens.CompactSize(null).Width * 0.8, 2), narrow.Width, 3);
@@ -73,7 +74,9 @@ public sealed class LayoutFontScaleTests
         var highAgent = LayoutTokens.CompactSizeFor(ActivityKind.Agent, IslandMode.Float, 99);
         var nan = LayoutTokens.CompactSizeFor(null, IslandMode.Float, double.NaN);
         Assert.Equal(Math.Round(LayoutTokens.CompactSize(null).Width * LayoutTokens.MinFontScale, 2), low.Width, 3);
-        Assert.Equal(LayoutTokens.ExpandedWidth, highAgent.Width, 3);
+        // 236 × 1.6 at the ceiling (no clamping needed with the narrower prototype2 agent pill).
+        Assert.Equal(377.6, highAgent.Width, 3);
+        Assert.True(highAgent.Width <= LayoutTokens.ExpandedWidth);
         Assert.Equal(LayoutTokens.CompactSize(null, IslandMode.Float), nan);
         Assert.Equal(0.8, LayoutTokens.MinFontScale);
         Assert.Equal(1.6, LayoutTokens.MaxFontScale);

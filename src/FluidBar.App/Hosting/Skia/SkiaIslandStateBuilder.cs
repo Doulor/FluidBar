@@ -304,7 +304,8 @@ public static class SkiaIslandStateBuilder
             models[i] = new AgentItemModel
             {
                 Tool = item.Name,
-                Task = item.Detail,
+                Project = item.Project,
+                Task = string.IsNullOrWhiteSpace(item.PrimaryText) ? item.Detail : item.PrimaryText,
                 StatusText = item.StatusText,
                 DurationText = item.TimeText,
                 Tone = MapTone(item.Tone),
@@ -468,6 +469,7 @@ public static class SkiaIslandStateBuilder
             var item = items[i];
             builder.Append(item.Name).Append('|').Append(item.StatusText).Append('|')
                 .Append(item.TimeText).Append('|').Append(item.Detail).Append('|')
+                .Append(item.PrimaryText).Append('|').Append(item.Project).Append('|')
                 .Append((int)item.Tone).Append('|');
         }
     }

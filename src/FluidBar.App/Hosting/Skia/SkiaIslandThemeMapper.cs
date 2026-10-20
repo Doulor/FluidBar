@@ -39,14 +39,12 @@ public static class SkiaIslandThemeMapper
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var resolvedTheme = SystemSettingResolution.ResolveTheme(settings.Theme, appearance.LightTheme);
-        var theme = resolvedTheme == AppTheme.Light ? IslandTheme.Light : IslandTheme.Dark;
-
-        // Palettes are dark-surface tokens; the porcelain island keeps its own tokens.
-        if (theme.Mode == IslandThemeMode.Dark)
-        {
-            theme = ApplyPalette(theme, settings.Palette);
-        }
+        // The island itself is always Obsidian. The "desktop theme" setting explicitly only affects the
+        // desktop, the demo console and the settings window; mapping it onto the island made the panel
+        // light and — with acrylic — turn into a translucent grey veil over the desktop (the reported
+        // left-side grey layer). Island palettes remain dark-surface tokens.
+        var theme = IslandTheme.Dark;
+        theme = ApplyPalette(theme, settings.Palette);
 
         // Safe mode forces the Tier 0 opaque material (spec §8.4).
         if (settings.Material == AppMaterial.Acrylic && !settings.Advanced.SafeMode)

@@ -217,9 +217,9 @@ public static class PageMetricsLayout
     public static float ClipboardRowHeight(in FontScaleMetrics metrics)
         => 48 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowMeta);
 
-    /// <summary>Agent row height (48 at 1.0).</summary>
+    /// <summary>Agent row height (44.6 at 1.0 — prototype2 row: 2×9 padding + head 12 + 2 + task 12.6).</summary>
     public static float AgentRowHeight(in FontScaleMetrics metrics)
-        => 48 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowMeta);
+        => 44.6f + metrics.LineGrow(IslandType.AgentTask) + metrics.LineGrow(IslandType.RowMeta);
 
     /// <summary>Notification row rectangle for an index at a scroll offset.</summary>
     public static SKRect NotificationRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
@@ -263,11 +263,11 @@ public static class PageMetricsLayout
         return new SKRect(row.Right - 34, row.MidY - 11, row.Right - 12, row.MidY + 11);
     }
 
-    /// <summary>Agent row rectangle for an index at a scroll offset.</summary>
+    /// <summary>Agent row rectangle for an index at a scroll offset (full page width, prototype2 .agent-row).</summary>
     public static SKRect AgentRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
         var top = page.Top + BodyTop + (index * (AgentRowHeight(metrics) + 6)) - scrollOffset;
-        return new SKRect(page.Left + 16, top, page.Right - 16, top + AgentRowHeight(metrics));
+        return new SKRect(page.Left, top, page.Right, top + AgentRowHeight(metrics));
     }
 
     // ---------------------------------------------------------------- widgets

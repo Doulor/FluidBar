@@ -47,9 +47,10 @@ internal static class PluginTestHarness
     public static NotificationEntry Notification(string? code = "123456", uint id = 7)
         => new(id, "App", "Title", "Body", DateTimeOffset.UnixEpoch, code);
 
-    public static AgentEventEntry AgentEvent(string id = "agent-1")
-        => new(id, AgentKind.Claude, AgentEventKind.Completed, "Done", "message", DateTimeOffset.UnixEpoch,
-            "a.json");
+    public static AgentEventEntry AgentEvent(string id = "agent-1", string title = "Done",
+        string? sessionTitle = null, string? action = null)
+        => new(id, AgentKind.Claude, AgentEventKind.Completed, title, "message", DateTimeOffset.UnixEpoch,
+            "a.json", SessionTitle: sessionTitle, Action: action);
 
     public static DeviceEventEntry Device(string id = "usb-1", DeviceKind kind = DeviceKind.Usb)
         => new(id, kind, DeviceChangeKind.Connected, "USB 1234:5678", DateTimeOffset.UnixEpoch);
@@ -265,6 +266,28 @@ public sealed class AgentStatusPluginTests
         Assert.Equal("Done", published.Title);
         Assert.Equal("claude", published.Payload!.Subtitle);
         Assert.Contains("claude:completed", published.Payload.DetailLines!);
+    }
+
+    [Fact]
+    public async Task CapsulePrefersTheActionThenTheSessionAndNeverTheBrand()
+    {
+        var inbox = new FakeAgentInboxSource();
+        var installer = new FakeHookInstaller();
+        var (context, _) = await PluginTestHarness.StartAsync(new AgentStatusPlugin(inbox, installer),
+            BuiltinIds.AgentPlugin);
+
+        // 1) concrete tool action wins, 2) session/task name next.
+        inbox.Emit(PluginTestHarness.AgentEvent("agent-action", title: "DeepSeek Harness · FluidBar",
+            sessionTitle: "接手灵动岛项目重构与预览", action: "读取 src/App.tsx"));
+        Assert.Equal("读取 src/App.tsx", context.Publisher.LastPublished.Title);
+
+        inbox.Emit(PluginTestHarness.AgentEvent("agent-session", title: "DeepSeek Harness · FluidBar",
+            sessionTitle: "接手灵动岛项目重构与预览"));
+        Assert.Equal("接手灵动岛项目重构与预览", context.Publisher.LastPublished.Title);
+
+        // 3) a brand-only title is dropped; the presenter shows the localized status instead.
+        inbox.Emit(PluginTestHarness.AgentEvent("agent-brand", title: "DeepSeek Harness · FluidBar"));
+        Assert.Equal(string.Empty, context.Publisher.LastPublished.Title);
     }
 
     [Fact]

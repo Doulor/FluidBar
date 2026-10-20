@@ -125,6 +125,15 @@ public sealed record AgentItemData
 
     /// <summary>Agent session id when the emitter supplied one (merged row identity).</summary>
     public string? SessionId { get; init; }
+
+    /// <summary>Project/workspace leaf name shown next to the brand in the expanded row.</summary>
+    public string? Project { get; init; }
+
+    /// <summary>
+    /// Primary row/capsule text: the concrete current action, else the session/task name, else the
+    /// localized status. Never the brand name — that is <see cref="Name"/>.
+    /// </summary>
+    public string PrimaryText { get; init; } = string.Empty;
 }
 
 /// <summary>One widget task row.</summary>
