@@ -89,6 +89,43 @@ public interface IIslandPublisher
 
     /// <summary>Removes a page previously registered by this plugin (host also does this on stop).</summary>
     bool UnregisterPage(string pageId) => false;
+
+    /// <summary>
+    /// Publishes a generic Status/Progress compact activity through the shared host template. Default
+    /// implementation forwards to <see cref="TryPublish"/> so existing publishers keep working.
+    /// </summary>
+    bool PublishActivity(IslandActivity activity)
+    {
+        if (activity is null || string.IsNullOrWhiteSpace(activity.Source) || string.IsNullOrWhiteSpace(activity.Title))
+        {
+            return false;
+        }
+
+        return TryPublish(new IslandEvent
+        {
+            Source = activity.Source,
+            Title = activity.Title,
+            Content = activity.Body,
+            IconKind = activity.IconToken,
+            Kind = activity.Kind == IslandActivityKind.Progress ? IslandEventKind.Progress : IslandEventKind.Status,
+            Payload = new IslandEventPayload
+            {
+                Subtitle = activity.Subtitle,
+                Badge = activity.Badge,
+                Progress = activity.Progress,
+                IsActive = activity.IsActive,
+                DetailLines = activity.DetailLines,
+                Fields = new Dictionary<string, string?>(StringComparer.Ordinal)
+                {
+                    ["status"] = activity.StatusText,
+                    ["title"] = activity.Title,
+                    ["subtitle"] = activity.Subtitle,
+                    ["icon"] = activity.IconToken,
+                    ["badge"] = activity.Badge,
+                },
+            },
+        });
+    }
 }
 
 /// <summary>

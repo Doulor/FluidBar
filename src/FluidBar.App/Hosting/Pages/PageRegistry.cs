@@ -5,7 +5,7 @@ using FluidBar.Sdk.Pages;
 namespace FluidBar.App.Hosting.Pages;
 
 /// <summary>
-/// M0 host page registry. The six built-in pages keep their existing renderers for now; plugin pages are
+/// M0 host page registry. The five built-in pages keep their existing renderers for now; plugin pages are
 /// appended after them and use the host-owned list template. M1 replaces the built-in seed with the same
 /// descriptor path.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class PageRegistry
     /// <summary>Raised after a page is registered, updated or removed (safe from any thread).</summary>
     public event EventHandler? Changed;
 
-    /// <summary>Total page count including the six built-in pages.</summary>
+    /// <summary>Total page count including the five built-in pages.</summary>
     public int Count
     {
         get
@@ -35,10 +35,18 @@ public sealed class PageRegistry
 
     /// <summary>Registers a page owned by <paramref name="ownerId"/>.</summary>
     public bool RegisterPage(string ownerId, PageDescriptor descriptor, out string? error)
+        => RegisterPage(ownerId, descriptor, null, out error);
+
+    /// <summary>Registers a page with an explicit page-id namespace (trusted built-ins use <c>builtin</c>).</summary>
+    public bool RegisterPage(string ownerId, PageDescriptor descriptor, string? pageNamespace, out string? error)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
         ArgumentNullException.ThrowIfNull(descriptor);
-        if (!PageIdRules.TryValidateOwned(ownerId, descriptor.PageId, out error))
+        var pageNamespaceId = pageNamespace ?? ownerId;
+        var allowBuiltinNamespace = string.Equals(ownerId, "builtin", StringComparison.Ordinal)
+            || (string.Equals(pageNamespace, "builtin", StringComparison.Ordinal)
+                && ownerId.StartsWith("fluidbar-", StringComparison.Ordinal));
+        if (!PageIdRules.TryValidateOwned(pageNamespaceId, descriptor.PageId, allowBuiltinNamespace, out error))
         {
             return false;
         }
@@ -168,7 +176,6 @@ public sealed class PageRegistry
         new() { PageId = "builtin.media", Order = 10, Title = new LocalizedString("Now playing"), ShortTitle = new LocalizedString("Media"), IconToken = "media", TemplateId = "builtin.media" },
         new() { PageId = "builtin.notifications", Order = 20, Title = new LocalizedString("Notifications"), ShortTitle = new LocalizedString("Notifications"), IconToken = "bell", TemplateId = PageTemplates.List },
         new() { PageId = "builtin.clipboard", Order = 30, Title = new LocalizedString("Clipboard"), ShortTitle = new LocalizedString("Clipboard"), IconToken = "clipboard", TemplateId = PageTemplates.List },
-        new() { PageId = "builtin.agent", Order = 40, Title = new LocalizedString("Agent activity"), ShortTitle = new LocalizedString("Agent"), IconToken = "agent", TemplateId = PageTemplates.List },
         new() { PageId = "builtin.widgets", Order = 50, Title = new LocalizedString("Widgets"), ShortTitle = new LocalizedString("Widgets"), IconToken = "calendar", TemplateId = PageTemplates.Calendar },
     ];
 
@@ -256,6 +263,10 @@ public static class PageIdRules
         System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     public static bool TryValidateOwned(string ownerId, string pageId, out string? error)
+        => TryValidateOwned(ownerId, pageId, allowBuiltinNamespace: false, out error);
+
+    /// <summary>Validates a page id, optionally allowing the trusted built-in namespace.</summary>
+    public static bool TryValidateOwned(string ownerId, string pageId, bool allowBuiltinNamespace, out string? error)
     {
         if (string.IsNullOrWhiteSpace(pageId) || pageId.Length > 64 || !PageIdRegex.IsMatch(pageId))
         {
@@ -263,7 +274,10 @@ public static class PageIdRules
             return false;
         }
 
-        if (pageId.StartsWith(PageRegistry.BuiltinPrefix, StringComparison.Ordinal))
+        // The synthetic manifest PageOwnerId "builtin" is the one trusted namespace allowed to
+        // publish the host's reserved page ids (the agent page moved into a built-in plugin in M2).
+        if (pageId.StartsWith(PageRegistry.BuiltinPrefix, StringComparison.Ordinal)
+            && !allowBuiltinNamespace)
         {
             error = "page id prefix 'builtin.' is reserved for host pages";
             return false;
@@ -279,3 +293,4 @@ public static class PageIdRules
         return true;
     }
 }
+

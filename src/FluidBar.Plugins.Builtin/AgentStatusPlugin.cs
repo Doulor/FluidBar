@@ -2,6 +2,8 @@ using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Threading;
 using FluidBar.Sdk;
 using FluidBar.Sdk.Contributions;
+using FluidBar.Sdk.Manifest;
+using FluidBar.Sdk.Pages;
 
 namespace FluidBar.Plugins.Builtin;
 
@@ -31,6 +33,12 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
 
     public static PluginContributions Contributions => BuiltinContributions.ForAgent();
 
+    public const string AgentPageId = "builtin.agent";
+
+    private const string PageTitleKey = "agent.page.title";
+
+    private bool _pageRegistered;
+
     protected override void OnStarted()
     {
         TrackSubscription(() => _inbox.SnapshotChanged += OnSnapshotChanged,
@@ -42,6 +50,20 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             RunHookOperationAsync("repair", context, cancellationToken));
         RegisterCommand(BuiltinIds.AgentUninstallHooks, (context, cancellationToken) =>
             RunHookOperationAsync("uninstall", context, cancellationToken));
+
+        _pageRegistered = Context.Islands.RegisterPage(new PageDescriptor
+        {
+            PageId = AgentPageId,
+            Order = 40,
+            Title = new LocalizedString("Agent"),
+            ShortTitle = new LocalizedString("Agent"),
+            IconToken = "agent",
+            TemplateId = PageTemplates.List,
+        });
+        if (!_pageRegistered)
+        {
+            Context.Log.Warning($"{PluginId}: failed to register the agent page.");
+        }
 
         PublishSnapshot(_inbox.Current);
     }
@@ -101,51 +123,34 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
         {
             lock (_stateGate)
             {
-                if (_lastEntryId.Length == 0)
-                {
-                    return;
-                }
-
                 _lastEntryId = string.Empty;
             }
 
-            Retract();
+            Context.Islands.TryRetract(PluginId);
+            PublishPageRows([]);
             return;
         }
 
-        var agentToken = latest.Agent switch
+        var active = latest.Kind is AgentEventKind.Running or AgentEventKind.WaitingForInput;
+        var statusText = latest.Kind switch
         {
-            AgentKind.Claude => "claude",
-            AgentKind.Codex => "codex",
-            AgentKind.DeepSeek => "deepseek",
-            AgentKind.Cursor => "cursor",
-            AgentKind.Windsurf => "windsurf",
-            AgentKind.Aider => "aider",
-            AgentKind.Copilot => "copilot",
-            AgentKind.Zcode => "zcode",
-            AgentKind.Qoder => "qoder",
-            AgentKind.WorkBuddy => "workbuddy",
-            _ => "generic",
+            AgentEventKind.Completed => Context.Localization.TryGet("agent.status.completed", out var completed) ? completed : "Completed",
+            AgentEventKind.Failed => Context.Localization.TryGet("agent.status.failed", out var failed) ? failed : "Failed",
+            AgentEventKind.WaitingForInput => Context.Localization.TryGet("agent.status.waiting", out var waiting) ? waiting : "Waiting",
+            _ => Context.Localization.TryGet("agent.status.running", out var running) ? running : "Running",
         };
         var kindToken = latest.Kind switch
         {
             AgentEventKind.Completed => "completed",
             AgentEventKind.Failed => "failed",
             AgentEventKind.WaitingForInput => "waiting",
-            AgentEventKind.Running => "running",
-            _ => "event",
+            _ => "running",
         };
 
-        // While an agent is running the platform keeps emitting the same session/status pair; those
-        // heartbeats must republish the activity so its TTL (5 s by default) never expires while the
-        // session is still alive - otherwise the compact capsule would fall back to media/idle and the
-        // user would think the agent stopped. Terminal rows keep the dedupe so they do not repeat.
-        var active = latest.Kind is AgentEventKind.Running or AgentEventKind.WaitingForInput;
+        // Running heartbeats must keep the compact activity alive; only terminal duplicates are deduped.
+        var stateKey = latest.Id + "|" + kindToken;
         lock (_stateGate)
         {
-            // The session id is stable across running → completed, so the dedupe key includes the
-            // status token: a finished session must still replace the live "running" activity.
-            var stateKey = latest.Id + "|" + kindToken;
             if (!active && string.Equals(stateKey, _lastEntryId, StringComparison.Ordinal))
             {
                 return;
@@ -153,40 +158,46 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
 
             _lastEntryId = stateKey;
         }
-        // The compact capsule shows what the agent is doing, not its brand: action (tool + target) →
-        // session/task name → status description (the presenter localizes the empty case). The brand stays
-        // in the expanded row (AgentContentMapper.Name / the page's tool line).
+
         var capsuleText = !string.IsNullOrWhiteSpace(latest.Action)
             ? latest.Action!
             : !string.IsNullOrWhiteSpace(latest.SessionTitle)
                 ? latest.SessionTitle!
-                : IsBrandTitle(latest.Title) ? string.Empty : latest.Title ?? string.Empty;
-        var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["icon"] = "agent",
-            ["title"] = capsuleText,
-            ["agent"] = agentToken,
-            ["body"] = latest.Message,
-            ["badge"] = kindToken,
-            ["actions"] = null,
-        };
+                : IsBrandTitle(latest.Title) ? statusText : latest.Title ?? statusText;
 
-        Publish(new IslandEvent
+        PublishPageRows(AgentPageMapper.Map(snapshot, Context.Time.GetLocalNow(), Context.Localization));
+
+        Context.Islands.PublishActivity(new IslandActivity
         {
             Source = PluginId,
-            Title = capsuleText,
-            Content = latest.Message,
-            IconKind = "agent",
-            Kind = IslandEventKind.Agent,
-            LayoutId = BuiltinIds.AgentCompactLayout,
-            Payload = new IslandEventPayload
+            Title = string.IsNullOrWhiteSpace(capsuleText) ? statusText : capsuleText,
+            Kind = IslandActivityKind.Status,
+            Subtitle = statusText,
+            Body = latest.Message,
+            IconToken = "agent",
+            Badge = kindToken,
+            StatusText = statusText,
+            IsActive = active,
+        });
+    }
+
+    private void PublishPageRows(IReadOnlyList<PageListRow> rows)
+    {
+        if (!_pageRegistered)
+        {
+            return;
+        }
+
+        Context.Islands.PublishPage(new PageData
+        {
+            PageId = AgentPageId,
+            Revision = 1,
+            TemplateId = PageTemplates.List,
+            List = new PageListData
             {
-                Subtitle = agentToken,
-                Badge = kindToken,
-                SourceName = agentToken,
-                IsActive = latest.Kind is AgentEventKind.WaitingForInput or AgentEventKind.Running,
-                DetailLines = [$"{agentToken}:{kindToken}"],
-                Fields = fields,
+                EmptyTitle = "No agent sessions",
+                EmptyHint = "Running agents will show up here",
+                Rows = rows,
             },
         });
     }
@@ -224,6 +235,13 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
         lock (_stateGate)
         {
             _lastEntryId = string.Empty;
+        }
+
+        Context.Islands.TryRetract(PluginId);
+        if (_pageRegistered)
+        {
+            Context.Islands.UnregisterPage(AgentPageId);
+            _pageRegistered = false;
         }
     }
 }

@@ -91,9 +91,6 @@ public sealed class IslandGeometryTests
             ("clipboard", Rects(
                 ClipboardPage.RowRect(0), ClipboardPage.RowRect(1), ClipboardPage.RowRect(2), ClipboardPage.RowRect(3),
                 ClipboardPage.PinRect(0), ClipboardPage.PinRect(3))),
-            ("agent", Rects(
-                AgentPage.RowRect(0), AgentPage.RowRect(1), AgentPage.RowRect(2), AgentPage.RowRect(3),
-                AgentPage.StatusChipRect(AgentPage.RowRect(0)), AgentPage.StatusChipRect(AgentPage.RowRect(3)))),
             ("widgets", Rects(
                 WidgetsPage.CalendarRect, WidgetsPage.TasksRect,
                 WidgetsPage.CalendarNavRect(previous: true), WidgetsPage.CalendarNavRect(previous: false),
@@ -123,7 +120,6 @@ public sealed class IslandGeometryTests
         Assert.True(NotificationsPage.ClearRect.Bottom <= IslandPageView.BodyTop);
         Assert.Equal(244, HomePage.QuickActionRect(0).Bottom, Eps);
         Assert.Equal(244, ClipboardPage.RowRect(3).Bottom, Eps);
-        Assert.Equal(244, AgentPage.RowRect(3).Bottom, Eps);
         Assert.Equal(244, WidgetsPage.CalendarRect.Bottom, Eps);
         Assert.Equal(244, WidgetsPage.TasksRect.Bottom, Eps);
     }

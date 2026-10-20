@@ -197,7 +197,6 @@ public static class SkiaIslandHitTest
             PageSlotKind.Media => 1,
             PageSlotKind.Notifications => pages.Notifications.Items?.Count ?? 0,
             PageSlotKind.Clipboard => pages.Clipboard.Items?.Count ?? 0,
-            PageSlotKind.Agent => pages.Agent.Items?.Count ?? 0,
             PageSlotKind.Widgets => pages.Widgets.Tasks?.Count ?? 0,
             _ => 0,
         };
@@ -207,7 +206,6 @@ public static class SkiaIslandHitTest
             PageSlotKind.Media => (float)pages.Media.ScrollOffset,
             PageSlotKind.Notifications => (float)pages.Notifications.ScrollOffset,
             PageSlotKind.Clipboard => (float)pages.Clipboard.ScrollOffset,
-            PageSlotKind.Agent => (float)pages.Agent.ScrollOffset,
             PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
@@ -307,7 +305,6 @@ public static class SkiaIslandHitTest
         PageSlotKind.Media => 1,
         PageSlotKind.Notifications => 2,
         PageSlotKind.Clipboard => 3,
-        PageSlotKind.Agent => 4,
         PageSlotKind.Widgets => 5,
         _ => -1,
     };

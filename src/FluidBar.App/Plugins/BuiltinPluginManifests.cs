@@ -19,7 +19,18 @@ public static class BuiltinPluginManifests
         {
             SchemaVersion = 2,
             Id = descriptor.Id,
+            PageOwnerId = descriptor.PageOwnerId,
             Version = "2.0.0",
+            Capabilities = descriptor.PageTemplates is { Count: > 0 } templates
+                ? new PluginCapabilities
+                {
+                    Ui = new UiCapability
+                    {
+                        Pages = true,
+                        PageTemplates = templates,
+                    },
+                }
+                : null,
             ApiVersion = PluginApiVersion.Current.ToString(),
             MinAppVersion = "2.0.0",
             Publisher = new PublisherInfo

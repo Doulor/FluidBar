@@ -22,7 +22,6 @@ internal sealed partial class PageRenderer : IDisposable
 
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
-    private double _agentAnimationSeconds;
     private bool _reduced;
     private FontScaleMetrics _metrics = FontScaleMetrics.One;
     private IslandPageControl _pressedControl;
@@ -83,7 +82,6 @@ internal sealed partial class PageRenderer : IDisposable
         _opacity = opacity;
         _text.SetScale(state.FontScale);
         _metrics = _text.Metrics;
-        _agentAnimationSeconds = state.AgentAnimationSeconds;
         _reduced = state.ReducedMotion;
         _pressedControl = state.PressedControl;
         _pressedPage = state.PressedPage;
@@ -123,9 +121,6 @@ internal sealed partial class PageRenderer : IDisposable
                         return;
                     case PageSlotKind.Clipboard:
                         DrawClipboard(canvas, state.Pages.Clipboard, pageRect);
-                        return;
-                    case PageSlotKind.Agent:
-                        DrawAgent(canvas, state.Pages.Agent, pageRect);
                         return;
                     default:
                         DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);

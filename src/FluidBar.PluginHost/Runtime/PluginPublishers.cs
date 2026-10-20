@@ -19,6 +19,7 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
     private readonly IIslandPublisher _inner;
     private readonly IPluginHostLogger _logger;
     private readonly PluginManifest? _manifest;
+    private readonly string _pageOwnerPrefix;
     private readonly HashSet<string> _loggedInvalidSources = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private long _droppedCount;
@@ -33,6 +34,7 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
         _inner = inner;
         _logger = logger;
         _manifest = manifest;
+        _pageOwnerPrefix = string.IsNullOrWhiteSpace(manifest?.PageOwnerId) ? pluginId : manifest.PageOwnerId;
     }
 
     internal long DroppedCount => Interlocked.Read(ref _droppedCount);
@@ -98,9 +100,9 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
             return false;
         }
 
-        if (!descriptor.PageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase))
+        if (!descriptor.PageId.StartsWith(_pageOwnerPrefix + ".", StringComparison.OrdinalIgnoreCase))
         {
-            Drop(_pluginId, "PageId must be prefixed with the plugin id.");
+            Drop(_pluginId, "PageId must be prefixed with the plugin page namespace.");
             return false;
         }
 
@@ -110,7 +112,7 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
     public bool PublishPage(PageData data)
     {
         if (data is null
-            || !data.PageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase))
+            || !data.PageId.StartsWith(_pageOwnerPrefix + ".", StringComparison.OrdinalIgnoreCase))
         {
             Drop(_pluginId, "PublishPage requires a page id owned by the plugin.");
             return false;
@@ -121,7 +123,7 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
 
     public bool UnregisterPage(string pageId)
         => !string.IsNullOrWhiteSpace(pageId)
-           && pageId.StartsWith(_pluginId + ".", StringComparison.OrdinalIgnoreCase)
+           && pageId.StartsWith(_pageOwnerPrefix + ".", StringComparison.OrdinalIgnoreCase)
            && _inner.UnregisterPage(pageId);
 
     private void Drop(string source, string reason)

@@ -93,7 +93,6 @@ public sealed class ShellAndCompactSurfaceTests
                     CompactStyle.Hud => ActivityKind.Volume,
                     CompactStyle.Notification => ActivityKind.Notification,
                     CompactStyle.Clipboard => ActivityKind.Clipboard,
-                    CompactStyle.Agent => ActivityKind.Agent,
                     CompactStyle.Timer => ActivityKind.Timer,
                     CompactStyle.Battery => ActivityKind.BatteryLow,
                     CompactStyle.LockKeys => ActivityKind.LockKeys,

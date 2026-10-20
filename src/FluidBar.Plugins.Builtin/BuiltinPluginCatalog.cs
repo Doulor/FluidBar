@@ -12,7 +12,9 @@ public sealed record BuiltinPluginDescriptor(
     PluginCategory Category,
     IReadOnlyList<PluginCapability> Capabilities,
     PluginContributions Contributions,
-    Func<BuiltinPlatformServices, IFluidBarPlugin?> Factory);
+    Func<BuiltinPlatformServices, IFluidBarPlugin?> Factory,
+    string? PageOwnerId = null,
+    IReadOnlyList<string>? PageTemplates = null);
 
 /// <summary>A descriptor paired with a constructed plugin instance.</summary>
 public sealed record BuiltinPluginInstance(BuiltinPluginDescriptor Descriptor, IFluidBarPlugin Plugin);
@@ -59,11 +61,13 @@ public static class BuiltinPluginCatalog
             BuiltinIds.AgentPlugin,
             LocalizedString.From("plugin.agent.name"),
             PluginCategory.Developer,
-            [PluginCapability.Files, PluginCapability.Background],
+            [PluginCapability.Files, PluginCapability.Background, PluginCapability.Ui],
             BuiltinContributions.ForAgent(),
             static services => services.AgentInbox is null || services.AgentHookInstaller is null
                 ? null
-                : new AgentStatusPlugin(services.AgentInbox, services.AgentHookInstaller)),
+                : new AgentStatusPlugin(services.AgentInbox, services.AgentHookInstaller),
+            PageOwnerId: "builtin",
+            PageTemplates: ["list"]),
         new BuiltinPluginDescriptor(
             BuiltinIds.DevicesPlugin,
             LocalizedString.From("plugin.devices.name"),

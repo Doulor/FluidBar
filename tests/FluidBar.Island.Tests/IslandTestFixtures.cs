@@ -18,11 +18,7 @@ internal static class IslandTestFixtures
         "03-compact-hud",
         "04-compact-notification",
         "05-compact-clipboard",
-        "06-compact-agent",
         "07-compact-timer",
-        "70-compact-agent-action",
-        "71-compact-agent-session",
-        "72-compact-agent-status",
         "08-compact-battery",
         "10-expanded-home",
         "11-expanded-media",
@@ -33,13 +29,11 @@ internal static class IslandTestFixtures
         "16-expanded-flush-home",
         "17-expanded-notifications",
         "18-expanded-clipboard",
-        "19-expanded-agent",
         "20-expanded-widgets",
         "21-rail-page0-home",
         "22-rail-page1-media",
         "23-rail-page2-notifications",
         "24-rail-page3-clipboard",
-        "25-rail-page4-agent",
         "26-rail-page5-widgets",
         "27-rail-hover-next",
         "28-rail-pressed-next",
@@ -309,54 +303,6 @@ internal static class IslandTestFixtures
             HoverIndex = 0,
             CopiedIndex = 2,
         },
-        Agent = new AgentPageModel
-        {
-            Items =
-            [
-                new AgentItemModel
-                {
-                    Tool = "Claude Code",
-                    Project = "fluidbar",
-                    Task = "Rebuild the settings motion layer",
-                    StatusText = "Running",
-                    DurationText = "02:14",
-                    Tone = CompactStatus.Info,
-                    ProgressPercent = 62,
-                },
-                new AgentItemModel
-                {
-                    Tool = "Codex",
-                    Project = "prototype2",
-                    Task = "Fix compact metrics and ellipsis rules",
-                    StatusText = "Done",
-                    DurationText = "48s",
-                    Tone = CompactStatus.Success,
-                    ProgressPercent = 100,
-                },
-                new AgentItemModel
-                {
-                    Tool = "Claude Code",
-                    Project = "docs",
-                    Task = "Generate the design walkthrough shots",
-                    StatusText = "Running",
-                    DurationText = "01:03",
-                    Tone = CompactStatus.Info,
-                    ProgressPercent = 34,
-                },
-                new AgentItemModel
-                {
-                    Tool = "Codex",
-                    Project = "pager",
-                    Task = "Scroll-chaining boundary test",
-                    StatusText = "Failed",
-                    DurationText = "12s",
-                    Tone = CompactStatus.Danger,
-                    ProgressPercent = 0,
-                },
-            ],
-            SelectedIndex = 2,
-            HoverIndex = 0,
-        },
         Widgets = new WidgetsPageModel
         {
             CalendarMonthTitle = "October 2026",
@@ -457,7 +403,6 @@ internal static class IslandTestFixtures
             1 => pages with { Media = pages.Media with { ScrollOffset = offset } },
             2 => pages with { Notifications = pages.Notifications with { ScrollOffset = offset } },
             3 => pages with { Clipboard = pages.Clipboard with { ScrollOffset = offset } },
-            4 => pages with { Agent = pages.Agent with { ScrollOffset = offset } },
             5 => pages with { Widgets = pages.Widgets with { ScrollOffset = offset } },
             _ => pages,
         };
@@ -683,3 +628,6 @@ internal static class IslandTestFixtures
         return AppContext.BaseDirectory;
     }
 }
+
+
+

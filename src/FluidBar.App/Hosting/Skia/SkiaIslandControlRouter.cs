@@ -105,10 +105,6 @@ public static class SkiaIslandControlRouter
             case PageSlotKind.Clipboard:
                 // A clipboard row click copies the row (Windows clipboard-history behaviour).
                 return TryClipboardCopy(state, hit.Index);
-            case PageSlotKind.Agent:
-                return HasRow(state.Pages.Agent.Items, hit.Index)
-                    ? new IslandPlatformAction(IslandPlatformActionKind.AgentActivate, hit.Index)
-                    : null;
             default:
                 return null;
         }

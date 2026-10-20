@@ -130,7 +130,6 @@ public sealed class SkiaIslandController : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
     private string _dynamicSignature = string.Empty;
-    private string _agentTimingSignature = string.Empty;
     private string _visibleStackSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
@@ -141,8 +140,6 @@ public sealed class SkiaIslandController : IDisposable
     private VisualRect _pendingDamage;
 
     private double _motionPhase;
-    private double _agentAnimationSeconds;
-    private bool _agentLoopRequested;
     private double _waveAccumulator;
     private double _pointerX;
     private double _pointerY;
@@ -302,54 +299,6 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
     public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
-
-    /// <summary>
-    /// Whether the agent spinner / indeterminate progress needs continuous 60 fps frames. True only
-    /// while a running/waiting agent is actually painted (compact agent capsule or expanded page 5),
-    /// and false under reduced motion, so the idle island requests no frames at all.
-    /// </summary>
-    public bool IsAgentAnimating
-    {
-        get
-        {
-            if (!_started || _disposed || _motion.ReducedMotion)
-            {
-                return false;
-            }
-
-            if (_hasRenderState && _renderState.Form == ShellForm.Expanded)
-            {
-                return CurrentPageIs(PageSlotKind.Agent) && HasActiveAgentRow(_renderState.Pages.Agent);
-            }
-
-            // An agent preview ball also spins (the split strategy can keep the agent off the pill).
-            if (_splitPreviews.Any(preview => preview.Kind == ActivityKind.Agent && preview.IsActive))
-            {
-                return true;
-            }
-
-            return _compact.Kind == ActivityKind.Agent
-                && _compact.Model.Status is CompactStatus.Info or CompactStatus.Warning;
-        }
-    }
-
-    private static bool HasActiveAgentRow(AgentPageModel page)
-    {
-        if (page.Items is null)
-        {
-            return false;
-        }
-
-        foreach (var item in page.Items)
-        {
-            if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     /// <summary>
     /// Whether the karaoke sweep still needs frames: a per-word line is on screen and playing, so the
@@ -698,14 +647,6 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
-        // Agent spinner / progress pulse use their own clock; it only advances while an agent is
-        // actually running, so the host's frame loop stops (and CPU drops) as soon as it finishes.
-        var agentWasAnimating = IsAgentAnimating;
-        if (agentWasAnimating)
-        {
-            _agentAnimationSeconds += dt;
-        }
-
         var now = _time.GetLocalNow();
         var trackTransitionWasRunning = IsTrackTransitionAnimating;
         StepTrackTransition();
@@ -745,15 +686,6 @@ public sealed class SkiaIslandController : IDisposable
         {
             // Scale/opacity affects the whole layered surface; a full frame is cheap for < 0.5 s.
             InvalidateFull();
-        }
-
-        if (agentWasAnimating)
-        {
-            // The spinner/pulse phase changes every frame, but no content change arrives until the
-            // next elapsed-time tick. Damage only the animated glyphs (or the agent page for the
-            // full-row progress bar) so the host actually paints a new frame instead of freezing
-            // between one-second content updates.
-            InvalidateDirty(AgentFrameDamage());
         }
 
         if (motionWasRunning)
@@ -1822,34 +1754,15 @@ public sealed class SkiaIslandController : IDisposable
 
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
-        var timingSignature = SkiaIslandStateBuilder.AgentTimingSignature(content, viewModel);
         var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
         var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
-        var timingChanged = !string.Equals(timingSignature, _agentTimingSignature, StringComparison.Ordinal);
         _structuralSignature = structural;
         _dynamicSignature = dynamicSignature;
-        _agentTimingSignature = timingSignature;
 
-        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && !timingChanged && !stackChanged)
+        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && !stackChanged)
         {
             // A producer heartbeat with identical content: no relayout, no transition retarget, no frame.
             return false;
-        }
-
-        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && timingChanged && !stackChanged)
-        {
-            // Elapsed-time-only update: patch the duration strings and repaint the time strip. The
-            // page models, shell target and text layout stay untouched, so the one-second tick can
-            // never resize the island or reflow the row.
-            ApplyAgentTiming(content);
-            BuildRenderState();
-            InvalidateDirty(AgentTimingDamage());
-            if (IsAgentAnimating)
-            {
-                FrameRequested?.Invoke();
-            }
-
-            return true;
         }
 
         SyncKaraoke(content);
@@ -1880,89 +1793,8 @@ public sealed class SkiaIslandController : IDisposable
         {
             InvalidateDynamic();
         }
-        else if (timingChanged)
-        {
-            InvalidateDirty(AgentTimingDamage());
-        }
-
-        // A content change may have started an agent run: ask the host for a frame loop now so the
-        // spinner starts immediately (the loop keeps itself alive while IsAgentAnimating is true).
-        if (IsAgentAnimating)
-        {
-            InvalidateDirty(ContentDamage());
-            FrameRequested?.Invoke();
-        }
 
         return true;
-    }
-
-    /// <summary>Updates only the elapsed-time strings on the already-built agent page model.</summary>
-    /// <param name="content">Fresh non-activity snapshot (agent rows).</param>
-    private void ApplyAgentTiming(IslandContent content)
-    {
-        var source = content.Agents;
-        var items = _pages.Agent.Items;
-        if (items.Count == source.Length)
-        {
-            var updated = new AgentItemModel[items.Count];
-            for (var i = 0; i < updated.Length; i++)
-            {
-                updated[i] = items[i] with { DurationText = source[i].TimeText };
-            }
-
-            _pages = _pages with { Agent = _pages.Agent with { Items = updated } };
-        }
-    }
-
-    /// <summary>Damage of the elapsed-time glyphs only (right time column / compact meta right edge).</summary>
-    private VisualRect AgentTimingDamage()
-    {
-        if (!_hasRenderState)
-        {
-            return ContentDamage();
-        }
-
-        if (CurrentPageIs(PageSlotKind.Agent))
-        {
-            // Agent rows stack status over duration in a fixed right column; repaint that strip for
-            // every visible row without touching the task text or the shell.
-            var page = IslandMetrics.PageRect(_renderState, 4);
-            return new VisualRect(page.Right - 150, page.Top, 150, page.Height).Inflate(2);
-        }
-
-        if (_compact.Kind == ActivityKind.Agent && _renderState.Form != ShellForm.Expanded)
-        {
-            var shell = IslandMetrics.ShellRect(_renderState);
-            return new VisualRect(shell.Right - 160, shell.Top, 158, shell.Height).Inflate(2);
-        }
-
-        return ContentDamage();
-    }
-
-    /// <summary>Damage of the per-frame spinner/progress glyphs.</summary>
-    private VisualRect AgentFrameDamage()
-    {
-        if (!_hasRenderState)
-        {
-            return ContentDamage();
-        }
-
-        if (CurrentPageIs(PageSlotKind.Agent))
-        {
-            // The indeterminate progress bar spans each row, so repaint the agent page content only
-            // (never the whole layered surface).
-            return ContentDamage();
-        }
-
-        if (_compact.Kind == ActivityKind.Agent)
-        {
-            // prototype2 .agent-ring is a 20 DIP circle at x=10..30, vertically centred.
-            var shell = IslandMetrics.ShellRect(_renderState);
-            var ringTop = shell.Top + ((shell.Height - 20) / 2);
-            return new VisualRect(shell.Left + 10, ringTop, 20, 20).Inflate(2);
-        }
-
-        return ContentDamage();
     }
 
     private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
@@ -2086,7 +1918,7 @@ public sealed class SkiaIslandController : IDisposable
                 view.Page,
                 ParseAccent(view.AccentColorHex),
                 null,
-                view.Kind == ActivityKind.Agent && view.IsActive,
+                false,
                 SplitArtwork(view),
                 view.AlbumArtPath);
         }
@@ -2294,7 +2126,6 @@ public sealed class SkiaIslandController : IDisposable
         "builtin.media" => PageSlotKind.Media,
         "builtin.notifications" => PageSlotKind.Notifications,
         "builtin.clipboard" => PageSlotKind.Clipboard,
-        "builtin.agent" => PageSlotKind.Agent,
         "builtin.widgets" => PageSlotKind.Widgets,
         _ => PageSlotKind.Plugin,
     };
@@ -2307,7 +2138,6 @@ public sealed class SkiaIslandController : IDisposable
             "builtin.media" => "Page.Media.Title",
             "builtin.notifications" => "Page.Notifications.Title",
             "builtin.clipboard" => "Page.Clipboard.Title",
-            "builtin.agent" => "Page.Agent.Title",
             "builtin.widgets" => "Page.Widgets.Title",
             _ => null,
         };
@@ -2345,16 +2175,19 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var pages = _pageRegistry?.BuildPluginPages() ?? [];
+        var currentPageId = _pages.PageSlotAt(_pager.SelectedIndex)?.PageId;
         _pluginPages = pages;
         _pages = _pages with { PluginPages = pages, PageSlots = BuildPageSlots() };
-        var previousCount = _pages.PageCount;
         var pageCount = _pages.PageCount;
+        var currentPageAfterUpdate = currentPageId is null
+            ? -1
+            : _pages.IndexOfPage(new PageRef(currentPageId));
         var clamped = _pager.SetPageCount(pageCount);
 
-        if (clamped && previousCount > pageCount)
+        if (currentPageId is not null && currentPageAfterUpdate < 0)
         {
             // The page the user was on was unregistered: return to Home instead of leaving an
-            // invalid index in the pager.
+            // invalid index (or silently showing whichever page slid into that slot).
             _syncingPage = true;
             try
             {
@@ -2366,6 +2199,19 @@ public sealed class SkiaIslandController : IDisposable
             }
 
             ApplyInput(IslandInput.PageRequested(CoreIslandPage.Home));
+        }
+        else if (currentPageAfterUpdate >= 0 && currentPageAfterUpdate != _pager.SelectedIndex)
+        {
+            // A page was inserted/removed before the current one: keep the user on the same page id.
+            _syncingPage = true;
+            try
+            {
+                _pager.SelectPage(currentPageAfterUpdate);
+            }
+            finally
+            {
+                _syncingPage = false;
+            }
         }
 
         SyncContent(full: true);
@@ -2628,7 +2474,6 @@ public sealed class SkiaIslandController : IDisposable
             Media = pages.Media with { ScrollOffset = ScrollForKind(PageSlotKind.Media) },
             Notifications = pages.Notifications with { ScrollOffset = ScrollForKind(PageSlotKind.Notifications) },
             Clipboard = pages.Clipboard with { ScrollOffset = ScrollForKind(PageSlotKind.Clipboard) },
-            Agent = pages.Agent with { ScrollOffset = ScrollForKind(PageSlotKind.Agent) },
             Widgets = pages.Widgets with { ScrollOffset = ScrollForKind(PageSlotKind.Widgets) },
         };
     }
@@ -2667,7 +2512,6 @@ public sealed class SkiaIslandController : IDisposable
             PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Media, metrics),
             PageSlotKind.Notifications => ListMaxScroll(source.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
             PageSlotKind.Clipboard => ListMaxScroll(source.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
-            PageSlotKind.Agent => ListMaxScroll(source.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
             PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Widgets, metrics, source.Widgets.Tasks?.Count ?? 0),
             _ => 0,
         };
@@ -2965,27 +2809,12 @@ public sealed class SkiaIslandController : IDisposable
                 : ArchipelagoState.HiddenState,
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
-            AgentAnimationSeconds = _agentAnimationSeconds,
             // A focused rail glass paints its own prototype accent outline in the strip renderer, so
             // the generic page-control ring stays off for those slots.
             FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,
         };
         _hasRenderState = true;
 
-        // The agent page can become visible without a content change (page switch / expand): start
-        // the 60 fps frame loop here too, and remember that we asked so the idle path stays quiet.
-        if (IsAgentAnimating)
-        {
-            if (!_agentLoopRequested)
-            {
-                _agentLoopRequested = true;
-                FrameRequested?.Invoke();
-            }
-        }
-        else
-        {
-            _agentLoopRequested = false;
-        }
     }
 
     private ShellForm ResolveVisualForm()

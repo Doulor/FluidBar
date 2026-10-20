@@ -21,9 +21,6 @@ public enum CompactStyle
     /// <summary>Clipboard preview.</summary>
     Clipboard,
 
-    /// <summary>Agent session status.</summary>
-    Agent,
-
     /// <summary>Countdown timer.</summary>
     Timer,
 

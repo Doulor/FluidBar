@@ -347,7 +347,6 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
                 _notifications.Current, PageNotificationLimit, now, _localizer),
-            Agents = MapAgents(_agentSources.Current),
             Tasks = tasks.Tasks,
             TasksEmptyHint = tasks.EmptyHint,
             TasksMoreText = tasks.MoreText,
@@ -1090,8 +1089,6 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
-            IslandPlatformActionKind.AgentActivate => Defer(
-                action, "agent session activation is App-owned (no platform session-activate service)"),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
             _ => Unsupported($"unknown island action {action.Kind}"),
@@ -1331,10 +1328,6 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _ = RunAsync(() => _focus.SetActiveAsync(target), "island.actions.focus-toggle");
         return IslandActionResult.Handled;
     }
-
-    /// <summary>Maps the bounded agent inbox snapshot into island page rows (newest first).</summary>
-    private ImmutableArray<AgentItemData> MapAgents(AgentEventSnapshot? snapshot)
-        => AgentContentMapper.Map(snapshot, _time.GetLocalNow(), _localizer);
 
     private string Localized(string key, string fallback) => _localizer?.Get(key) ?? fallback;
 

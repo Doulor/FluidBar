@@ -49,7 +49,6 @@ public sealed class FontScaleTests
             IslandTestFixtures.WithFontScale(IslandTestFixtures.MediaCompact(), scale),
             IslandTestFixtures.WithFontScale(IslandTestFixtures.Notification(), scale),
             IslandTestFixtures.WithFontScale(IslandTestFixtures.Clipboard(), scale),
-            IslandTestFixtures.WithFontScale(IslandTestFixtures.Agent(), scale),
             IslandTestFixtures.WithFontScale(IslandTestFixtures.Hud(), scale),
         };
 
@@ -254,7 +253,7 @@ public sealed class FontScaleTests
             compared++;
         }
 
-        Assert.Equal(32, compared);
+        Assert.Equal(IslandTestFixtures.GoldenNames.Count(name => !name.Contains("-fs", StringComparison.Ordinal)), compared);
     }
 
     [Theory]

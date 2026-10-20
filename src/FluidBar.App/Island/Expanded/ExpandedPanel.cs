@@ -56,7 +56,14 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     /// <summary>Incoming-page scale delta.</summary>
     public const double ParallaxScale = 0.015;
 
-    private static readonly CoreIslandPage[] PageOrder = [.. CoreIslandPage.BuiltinPages];
+    private static readonly CoreIslandPage[] PageOrder =
+    [
+        CoreIslandPage.Home,
+        CoreIslandPage.Media,
+        CoreIslandPage.Notifications,
+        CoreIslandPage.Clipboard,
+        CoreIslandPage.Widgets,
+    ];
 
     private readonly Dictionary<CoreIslandPage, IslandPageView> _pages = new();
     private readonly Panel _strip = new() { ClipToBounds = false };
@@ -89,7 +96,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
 
         foreach (var page in new IslandPageView[]
                  {
-                     new HomePage(), new MediaPage(), new NotificationsPage(), new ClipboardPage(), new AgentPage(), new WidgetsPage(),
+                     new HomePage(), new MediaPage(), new NotificationsPage(), new ClipboardPage(), new WidgetsPage(),
                  })
         {
             AddPage(page);

@@ -48,6 +48,13 @@ public interface IPluginUiService
     event EventHandler? Changed;
 }
 
+/// <summary>Optional host service for unloading a compiled-in plugin without restarting the app.</summary>
+public interface IBuiltinPluginUnloadService
+{
+    /// <summary>Stops and removes one built-in plugin; its pages are unregistered through PluginStopped.</summary>
+    Task<bool> UnloadBuiltinPluginAsync(string pluginId, CancellationToken cancellationToken);
+}
+
 /// <summary>Deterministic plugin list service for previews/headless tests.</summary>
 public sealed class DesignPluginUiService : IPluginUiService
 {

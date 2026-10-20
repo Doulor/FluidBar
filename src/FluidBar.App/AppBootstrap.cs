@@ -961,7 +961,8 @@ internal sealed class AppBootstrap
                     manifest.Id,
                     _pluginEventAdapter,
                     PublishPluginEvent,
-                    _pageRegistry),
+                    _pageRegistry,
+                    pageOwnerId: manifest.PageOwnerId),
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
                 BuiltinServices = services,
                 // Safe mode disables every community plugin (spec §8.4); first-party ones still load.

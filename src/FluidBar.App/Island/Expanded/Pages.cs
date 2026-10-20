@@ -457,93 +457,6 @@ public sealed class ClipboardPage : IslandPageView
     }
 }
 
-/// <summary>Agent sessions page.</summary>
-public sealed class AgentPage : IslandPageView
-{
-    private const double RowHeight = 50;
-    private const double RowGap = 6;
-
-    /// <summary>Creates the agent page.</summary>
-    public AgentPage()
-        : base(CoreIslandPage.Agent)
-    {
-    }
-
-    /// <inheritdoc />
-    public override string AutomationName => Localizer.Get(LocKeys.Rail.Agent);
-
-    /// <inheritdoc />
-    public override IslandPageActionRequest HitTest(Point point)
-    {
-        if (Context is null)
-        {
-            return default;
-        }
-
-        var count = Math.Min(Context.Content.Agents.Length, 4);
-        for (var i = 0; i < count; i++)
-        {
-            if (RowRect(i).Contains(point))
-            {
-                return new IslandPageActionRequest(IslandPageAction.OpenAgent, i);
-            }
-        }
-
-        return default;
-    }
-
-    /// <inheritdoc />
-    public override void Render(DrawingContext context)
-    {
-        if (Context is null)
-        {
-            return;
-        }
-
-        var palette = Context.Settings.Colors;
-        var fg = new SolidColorBrush(palette.Foreground);
-        var secondary = new SolidColorBrush(palette.ForegroundSecondary);
-        var items = Context.Content.Agents;
-
-        if (items.IsDefaultOrEmpty)
-        {
-            DrawEmpty(context, IconKind.Agent, Localizer.Get(LocKeys.Agent.Empty),
-                Localizer.Get(LocKeys.Agent.EmptyHint));
-            return;
-        }
-
-        var count = Math.Min(items.Length, 4);
-        for (var i = 0; i < count; i++)
-        {
-            var item = items[i];
-            var rect = RowRect(i);
-            IslandDraw.Card(context, rect, palette);
-            var tone = item.Tone switch
-            {
-                StatusTone.Info => Accents.Info,
-                StatusTone.Success => Accents.Success,
-                StatusTone.Warning => Accents.Warning,
-                StatusTone.Danger => Accents.Danger,
-                _ => Accents.Fallback,
-            };
-            context.DrawEllipse(new SolidColorBrush(tone), null, new Point(rect.X + 16, rect.Center.Y), 4, 4);
-            IslandDraw.Text(context, item.Name, new Rect(rect.X + 28, rect.Y + 8, 180, 18),
-                Fonts.SemiBold, Typography.TitleSize, fg);
-            IslandDraw.Text(context, item.Detail, new Rect(rect.X + 28, rect.Y + 29, 190, 14),
-                Fonts.Regular, Typography.CaptionSize, secondary);
-            IslandDraw.Text(context, item.TimeText, new Rect(rect.Right - 56, rect.Y + 8, 46, 14),
-                Fonts.Regular, 10, new SolidColorBrush(palette.ForegroundTertiary), TextAlignment.Right);
-            IslandDraw.Chip(context, item.StatusText, StatusChipRect(rect), tone, fg, 10);
-        }
-    }
-
-    /// <summary>Agent row rectangle for <paramref name="index"/> (four rows fill the body band).</summary>
-    public static Rect RowRect(int index) => new(Inset, BodyTop + (index * (RowHeight + RowGap)), UsableWidth, RowHeight);
-
-    /// <summary>Status chip rectangle inside an agent row.</summary>
-    public static Rect StatusChipRect(Rect row) => new(row.Right - 92, row.Y + 29, 82, 16);
-}
-
 /// <summary>Widgets page: mini calendar and task list.</summary>
 public sealed class WidgetsPage : IslandPageView
 {
@@ -701,4 +614,5 @@ public sealed class WidgetsPage : IslandPageView
     public static Rect TaskRect(int index)
         => new(TaskX, BodyTop + 34 + (index * 44), TaskWidth, 40);
 }
+
 

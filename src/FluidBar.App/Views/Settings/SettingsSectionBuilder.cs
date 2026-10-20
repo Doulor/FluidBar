@@ -1132,6 +1132,19 @@ public static class SettingsSectionBuilder
             actions.Children.Add(SettingsControls.IconButton(SettingsIconKind.Settings, palette, () => showDetail(plugin.Id)));
         }
 
+        // The agent page is a built-in plugin page in M2. Expose an explicit unload action so the
+        // page/compact-activity teardown is testable on the real host, not only in unit harnesses.
+        if (plugin.Builtin && plugin.Id == "fluidbar-agent"
+            && ctx.Plugins is IBuiltinPluginUnloadService unloadService)
+        {
+            var unload = SettingsControls.IconButton(
+                SettingsIconKind.Close,
+                palette,
+                () => _ = unloadService.UnloadBuiltinPluginAsync(plugin.Id, CancellationToken.None));
+            ToolTip.SetTip(unload, "Unload");
+            actions.Children.Add(unload);
+        }
+
         var toggle = new SettingsSwitch
         {
             IsOn = enabled,

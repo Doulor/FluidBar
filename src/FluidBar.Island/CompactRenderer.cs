@@ -23,7 +23,6 @@ internal sealed class CompactRenderer : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
     private double _phase;
-    private double _agentPhase;
     private bool _reduced;
     private bool _pressed;
 
@@ -49,7 +48,6 @@ internal sealed class CompactRenderer : IDisposable
         _opacity = Math.Clamp(opacity, 0, 1);
         _text.SetScale(state.FontScale);
         _phase = state.MotionPhase;
-        _agentPhase = state.AgentAnimationSeconds;
         _reduced = state.ReducedMotion;
         // Compact pill = one big button: the shell spring scales it on press, and the renderer adds a
         // light wash so the pressed frame is readable in a still capture too.
@@ -81,9 +79,6 @@ internal sealed class CompactRenderer : IDisposable
                 break;
             case ActivityKind.Clipboard:
                 DrawClipboard(canvas, model, width, height);
-                break;
-            case ActivityKind.Agent:
-                DrawAgent(canvas, model, width, height);
                 break;
             case ActivityKind.Timer:
                 DrawTimer(canvas, model, width, height);
@@ -318,99 +313,6 @@ internal sealed class CompactRenderer : IDisposable
 
         _text.Draw(canvas, model.Body ?? model.Title, IslandType.CompactSmall,
             new SKRect(85, 0, width - 12, height), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
-    }
-
-    // ------------------------------------------------------------------ agent
-
-    private void DrawAgent(SKCanvas canvas, CompactModel model, float width, float height)
-    {
-        var tone = Tone(model.Status);
-        // prototype2 .pill-agent: padding 0 12 0 10, gap 8, .agent-ring 20×20 with a 1.5px border at
-        // rgba(accent, .18) plus a spinning top/right arc (running); done/error replace the arc with a
-        // 10 DIP glyph. The task line is 11.5px/500, the meta 9.5px fg-3, and nothing is drawn after the
-        // meta (the old trailing status dot is gone).
-        // CSS border-box: a 1.5px border sits inside the 20×20 box, so the stroke radius is
-        // (20 - 1.5) / 2 = 9.25 DIP. The base ring keeps the prototype2 fixed accent tint even when
-        // the state turns done/error (::before is rgba(76,201,240,.18)).
-        var ring = new SKRect(10, (height - 20) / 2, 30, (height + 20) / 2);
-        var ringRadius = (20f - AgentMotion.RingStrokeWidth) / 2f;
-        _stroke.Style = SKPaintStyle.Stroke;
-        _stroke.StrokeCap = SKStrokeCap.Butt;
-        _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
-        _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * _opacity);
-        canvas.DrawCircle(ring.MidX, ring.MidY, ringRadius, _stroke);
-        if (model.Status == CompactStatus.Success)
-        {
-            DrawIcon(canvas, IconKind.Check, ring.Deflate(5), tone);
-        }
-        else if (model.Status == CompactStatus.Danger)
-        {
-            DrawIcon(canvas, IconKind.Alert, ring.Deflate(5), tone);
-        }
-        else if (model.Status is CompactStatus.Info or CompactStatus.Warning)
-        {
-            // prototype2 .agent-ring::after: spin 900ms linear infinite, border-top+right color =
-            // currentColor (= accent for running), i.e. a half-circle rotating clockwise.
-            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentPhase);
-            _stroke.Color = Alpha(model.Status == CompactStatus.Info ? _theme.Accent : tone, _opacity);
-            canvas.DrawArc(
-                new SKRect(ring.MidX - ringRadius, ring.MidY - ringRadius,
-                    ring.MidX + ringRadius, ring.MidY + ringRadius),
-                AgentMotion.ArcStartDegrees + (float)rotation,
-                AgentMotion.ArcSweepDegrees,
-                false,
-                _stroke);
-        }
-        else
-        {
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(tone, _opacity);
-            canvas.DrawCircle(ring.MidX, ring.MidY, 2.4f, _fill);
-        }
-
-        var status = model.StatusText;
-        var duration = model.DurationText;
-        // Status-only fallback: the main slot already carries the localized status, so repeating it in
-        // the meta column would read "运行中 运行中".
-        var metaStatus = status;
-        if (!string.IsNullOrEmpty(model.Title) && string.Equals(model.Title, status, StringComparison.Ordinal))
-        {
-            metaStatus = null;
-        }
-
-        var metaRight = width - 12;
-        var textRight = metaRight;
-        var hasStatus = !string.IsNullOrEmpty(metaStatus);
-        var hasDuration = !string.IsNullOrEmpty(duration);
-        if (hasStatus || hasDuration)
-        {
-            // Reserve the widest tabular duration ("00:00") for the whole run: a per-second text change
-            // (0:09 -> 0:10, 0:59 -> 1:00) may not resize the meta column or push the task line.
-            var durationColumn = hasDuration ? _text.Measure("00:00", IslandType.CompactTinyMono) : 0;
-            var statusWidth = hasStatus ? _text.Measure(metaStatus!, IslandType.CompactTiny) : 0;
-            var separator = hasStatus && hasDuration ? _text.Measure(" · ", IslandType.CompactTiny) : 0;
-            var metaWidth = statusWidth + separator + durationColumn;
-            var durationLeft = metaRight - durationColumn;
-            if (hasDuration)
-            {
-                _text.Draw(canvas, duration, IslandType.CompactTinyMono,
-                    new SKRect(durationLeft, 0, metaRight, height), _theme.ForegroundTertiary,
-                    TextAlign.Right, _opacity);
-            }
-
-            if (hasStatus)
-            {
-                var statusRight = durationLeft - separator;
-                _text.Draw(canvas, metaStatus, IslandType.CompactTiny,
-                    new SKRect(statusRight - statusWidth, 0, statusRight, height),
-                    _theme.ForegroundTertiary, TextAlign.Right, _opacity);
-            }
-
-            textRight = metaRight - metaWidth - 8;
-        }
-
-        _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactAgentTask,
-            new SKRect(38, 0, Math.Max(38, textRight), height), _theme.Foreground, TextAlign.Left, _opacity);
     }
 
     // ------------------------------------------------------------------ timer

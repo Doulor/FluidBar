@@ -115,39 +115,6 @@ public sealed record ClipboardItemData
     public bool IsImage { get; init; }
 }
 
-/// <summary>One agent session row.</summary>
-public sealed record AgentItemData
-{
-    /// <summary>Session/agent title.</summary>
-    public string Name { get; init; } = string.Empty;
-
-    /// <summary>Localized status text.</summary>
-    public string StatusText { get; init; } = string.Empty;
-
-    /// <summary>Status tone.</summary>
-    public StatusTone Tone { get; init; }
-
-    /// <summary>Localized elapsed/relative time.</summary>
-    public string TimeText { get; init; } = string.Empty;
-
-    /// <summary>Detail line (task/result summary; failures carry the error text).</summary>
-    public string Detail { get; init; } = string.Empty;
-
-    /// <summary>Agent kind (display-name and icon semantics).</summary>
-    public Platform.Windows.Agent.AgentKind Kind { get; init; }
-
-    /// <summary>Agent session id when the emitter supplied one (merged row identity).</summary>
-    public string? SessionId { get; init; }
-
-    /// <summary>Project/workspace leaf name shown next to the brand in the expanded row.</summary>
-    public string? Project { get; init; }
-
-    /// <summary>
-    /// Primary row/capsule text: the concrete current action, else the session/task name, else the
-    /// localized status. Never the brand name — that is <see cref="Name"/>.
-    /// </summary>
-    public string PrimaryText { get; init; } = string.Empty;
-}
 
 /// <summary>One widget task row.</summary>
 public sealed record WidgetTaskData
@@ -247,9 +214,6 @@ public sealed record IslandContent
 
     /// <summary>Clipboard rows, newest first.</summary>
     public ImmutableArray<ClipboardItemData> Clipboard { get; init; } = [];
-
-    /// <summary>Agent session rows.</summary>
-    public ImmutableArray<AgentItemData> Agents { get; init; } = [];
 
     /// <summary>Widget task rows.</summary>
     public ImmutableArray<WidgetTaskData> Tasks { get; init; } = [];
@@ -470,24 +434,6 @@ public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
             new ClipboardItemData { Preview = "The island stays obsidian in every theme.", Meta = "12 min" },
             new ClipboardItemData { Preview = _localizer.Get(LocKeys.Clipboard.Image), Meta = "1 h", IsImage = true });
 
-        var agents = ImmutableArray.Create(
-            new AgentItemData
-            {
-                Name = "Claude Code",
-                StatusText = _localizer.Get(LocKeys.Agent.Running),
-                Tone = StatusTone.Info,
-                TimeText = "3 min",
-                Detail = "Refactor spring integrator",
-            },
-            new AgentItemData
-            {
-                Name = "Codex",
-                StatusText = _localizer.Get(LocKeys.Agent.Completed),
-                Tone = StatusTone.Success,
-                TimeText = "18 min",
-                Detail = "Avalonia spike report",
-            });
-
         var tasks = ImmutableArray.Create(
             new WidgetTaskData { Title = _localizer.Get(LocKeys.Page.Widgets.Task.Review), Done = true },
             new WidgetTaskData { Title = _localizer.Get(LocKeys.Page.Widgets.Task.Ship) },
@@ -510,7 +456,6 @@ public sealed class DesignIslandDataSource : IIslandDataSource, IDisposable
             Media = media,
             Notifications = notifications,
             Clipboard = clipboardItems,
-            Agents = agents,
             Tasks = tasks,
             UnreadCount = 3,
             CalendarMonthTitle = now.ToString("MMMM yyyy", culture),

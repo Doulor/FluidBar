@@ -290,15 +290,6 @@ public sealed class ArchipelagoStrip : Control
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 8, area.Width * 0.8, 2), 1));
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 14, area.Width * 0.6, 2), 1));
                 break;
-            case "builtin.agent":
-            {
-                var pulse = 0.55 + (0.45 * Math.Sin(_previewPhase * 3.2));
-                var center = new Point(area.Center.X, area.Center.Y);
-                context.DrawEllipse(new SolidColorBrush(Accents.Info, 0.25 + (0.2 * pulse)), null, center, 6, 6);
-                context.DrawEllipse(new SolidColorBrush(Accents.Info, 0.6 + (0.4 * pulse)), null, center, 2.6, 2.6);
-                break;
-            }
-
             case "builtin.widgets":
             {
                 const double cell = 5;

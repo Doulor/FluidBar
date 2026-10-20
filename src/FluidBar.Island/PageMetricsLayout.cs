@@ -427,7 +427,6 @@ public static class PageMetricsLayout
                 return MediaContentExtent(page, metrics);
             case PageSlotKind.Notifications:
             case PageSlotKind.Clipboard:
-            case PageSlotKind.Agent:
                 return BodyHeight; // list pages clamp their own model scroll offset
             case PageSlotKind.Widgets:
                 return WidgetsContentExtent(page, metrics, itemCount);
@@ -605,28 +604,6 @@ public static class PageMetricsLayout
                     for (var i = 0; i < count; i++)
                     {
                         if (ClipboardRow(pageRect, i, scroll, metrics).Contains(x, y))
-                        {
-                            index = i;
-                            return IslandPageControl.Row;
-                        }
-                    }
-
-                    return IslandPageControl.Scroll;
-                }
-
-            case PageSlotKind.Agent:
-                {
-                    var body = Body(pageRect);
-                    if (!body.Contains(x, y))
-                    {
-                        return IslandPageControl.None;
-                    }
-
-                    var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampListScroll(count, AgentRowHeight(metrics), 6, scrollOffset);
-                    for (var i = 0; i < count; i++)
-                    {
-                        if (AgentRow(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;
                             return IslandPageControl.Row;

@@ -242,8 +242,11 @@ public static class IslandMetrics
     public static SKRect SplitIsletThumbnailRect(SKRect circle)
     {
         var side = Math.Max(0f, circle.Width - 8f);
-        return new SKRect(circle.MidX - (side / 2), circle.MidY - (side / 2),
-            circle.MidX + (side / 2), circle.MidY + (side / 2));
+        return new SKRect(
+            circle.MidX - (side / 2),
+            circle.MidY - (side / 2),
+            circle.MidX + (side / 2),
+            circle.MidY + (side / 2));
     }
 
     /// <summary>Corner radius of the inner thumbnail: 22.5% of its side.</summary>
@@ -261,8 +264,11 @@ public static class IslandMetrics
         var scale = Math.Min(square.Width / imageWidth, square.Height / imageHeight);
         var width = imageWidth * scale;
         var height = imageHeight * scale;
-        return new SKRect(square.MidX - (width / 2), square.MidY - (height / 2),
-            square.MidX + (width / 2), square.MidY + (height / 2));
+        return new SKRect(
+            square.MidX - (width / 2),
+            square.MidY - (height / 2),
+            square.MidX + (width / 2),
+            square.MidY + (height / 2));
     }
 
     /// <summary>Staggered 0..1 progress for one islet (later previews separate slightly later).</summary>
@@ -916,28 +922,6 @@ public static class PageLayout
                     for (var i = 0; i < count; i++)
                     {
                         if (ClipboardRow(pageRect, i, scroll).Contains(x, y))
-                        {
-                            index = i;
-                            return IslandPageControl.Row;
-                        }
-                    }
-
-                    return IslandPageControl.Scroll;
-                }
-
-            case PageSlotKind.Agent:
-                {
-                    var body = ListBody(pageRect);
-                    if (!body.Contains(x, y))
-                    {
-                        return IslandPageControl.None;
-                    }
-
-                    var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampScroll(scrollOffset, count, AgentRowHeight, AgentRowGap);
-                    for (var i = 0; i < count; i++)
-                    {
-                        if (AgentRow(pageRect, i, scroll).Contains(x, y))
                         {
                             index = i;
                             return IslandPageControl.Row;

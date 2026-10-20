@@ -122,23 +122,6 @@ public sealed class ExpandedPageHitTestTests
     }
 
     [Fact]
-    public void Agent_rows_and_scroll_region_are_targets()
-    {
-        var state = IslandTestFixtures.Expanded(4);
-        var page = IslandMetrics.PageRect(state, 4);
-
-        var row = PageLayout.AgentRow(page, 2);
-        var hit = Hit(state, row.MidX, row.MidY);
-        Assert.Equal(IslandPageControl.Row, hit.Control);
-        Assert.Equal(2, hit.Index);
-        Assert.Equal(4, hit.PageIndex);
-
-        var body = PageLayout.ListBody(page);
-        var scroll = Hit(state, body.MidX, body.Bottom - 2);
-        Assert.Equal(IslandPageControl.Scroll, scroll.Control);
-    }
-
-    [Fact]
     public void Widgets_calendar_nav_and_task_rows_are_targets()
     {
         var state = IslandTestFixtures.Expanded(5);
@@ -197,3 +180,4 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(-1, hit.Index);
     }
 }
+

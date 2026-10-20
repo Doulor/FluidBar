@@ -129,7 +129,7 @@ public sealed record PluginRuntimeReport(
 /// marketplace/plugin UI services over both. Nothing here touches the UI thread; callers create it from a
 /// background task during startup.
 /// </summary>
-public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiService, ILocalPluginUiService
+public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiService, ILocalPluginUiService, IBuiltinPluginUnloadService
 {
     private readonly PluginRuntimeOptions _options;
     private readonly PluginHostOptions _hostOptions;
@@ -532,6 +532,31 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     public InProcessPluginSession? FindBuiltinSession(string pluginId)
         => _builtins.FirstOrDefault(entry => string.Equals(entry.Descriptor.Id, pluginId, StringComparison.Ordinal))?.Session;
 
+    async Task<bool> IBuiltinPluginUnloadService.UnloadBuiltinPluginAsync(
+        string pluginId,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        var entry = _builtins.FirstOrDefault(candidate =>
+            string.Equals(candidate.Descriptor.Id, pluginId, StringComparison.Ordinal));
+        if (entry?.Session is null || !entry.Session.IsActive)
+        {
+            return false;
+        }
+
+        // StopAsync runs BuiltInPluginBase.OnStopped, which calls UnregisterPage/retract; the
+        // PageRegistry.Changed path then removes the slot and clamps the pager on the UI thread.
+        var stopped = await entry.Session.StopAsync(cancellationToken).ConfigureAwait(false);
+        if (!stopped)
+        {
+            return false;
+        }
+
+        _builtins.Remove(entry);
+        RaiseChanged();
+        return true;
+    }
+
     /// <summary>Disposes the runtime without blocking the caller (App shutdown path).</summary>
     public void DisposeInBackground()
     {
@@ -783,6 +808,14 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         string pluginId,
         CancellationToken cancellationToken)
     {
+        // The built-in agent is a compiled-in plugin in M2; accept the legacy local service entry
+        // so callers/tests can unload it through the same host-owned operation.
+        if (_builtins.Any(entry => string.Equals(entry.Descriptor.Id, pluginId, StringComparison.Ordinal)))
+        {
+            return await ((IBuiltinPluginUnloadService)this).UnloadBuiltinPluginAsync(pluginId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (_localHost is null)
         {
             return false;

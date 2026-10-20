@@ -192,12 +192,6 @@ public readonly record struct IslandRenderState
     public double MotionPhase { get; init; }
 
     /// <summary>
-    /// Host-driven agent animation clock in seconds (ring spin / indeterminate progress). It only
-    /// advances while an agent is running, so an idle island requests no frames.
-    /// </summary>
-    public double AgentAnimationSeconds { get; init; }
-
-    /// <summary>
     /// Logical keyboard/UIA focus ring in host-local DIP (null when nothing is focused). The renderer
     /// paints a 2 DIP informational outline; the host never activates for pointer clicks.
     /// </summary>
@@ -588,9 +582,6 @@ public sealed record ExpandedPageContent
     /// <summary>Clipboard history page model (page 3).</summary>
     public ClipboardPageModel Clipboard { get; init; } = new();
 
-    /// <summary>Agent activity page model (page 4).</summary>
-    public AgentPageModel Agent { get; init; } = new();
-
     /// <summary>Widgets page model (page 5).</summary>
     public WidgetsPageModel Widgets { get; init; } = new();
 
@@ -648,7 +639,9 @@ public sealed record ExpandedPageContent
         new PageSlot { PageId = "builtin.media", Kind = PageSlotKind.Media, TemplateId = "builtin.media", Title = "Now playing", ShortTitle = "Media", IconToken = "media" },
         new PageSlot { PageId = "builtin.notifications", Kind = PageSlotKind.Notifications, TemplateId = "list", Title = "Notifications", ShortTitle = "Notifications", IconToken = "bell" },
         new PageSlot { PageId = "builtin.clipboard", Kind = PageSlotKind.Clipboard, TemplateId = "list", Title = "Clipboard", ShortTitle = "Clipboard", IconToken = "clipboard" },
-        new PageSlot { PageId = "builtin.agent", Kind = PageSlotKind.Agent, TemplateId = "list", Title = "Agent activity", ShortTitle = "Agent", IconToken = "agent" },
+        // Test-fixture compatibility slot only: production slots come from PageRegistry. No host
+        // renderer/UIA/hit-test branch knows this page id; an unloaded agent plugin leaves no page.
+        new PageSlot { PageId = "builtin.agent", Kind = PageSlotKind.Plugin, TemplateId = "list", Title = "Agent", ShortTitle = "Agent", IconToken = "agent" },
         new PageSlot { PageId = "builtin.widgets", Kind = PageSlotKind.Widgets, TemplateId = "calendar", Title = "Widgets", ShortTitle = "Widgets", IconToken = "calendar" },
     ];
 
@@ -1030,56 +1023,6 @@ public sealed record ClipboardItemModel
 
     /// <summary>Whether the preview is monospace (code/command).</summary>
     public bool IsMonospace { get; init; }
-}
-
-/// <summary>
-/// Expanded agent page (page 4): a scrollable list of 48 DIP agent session rows with status tone,
-/// duration and a running progress bar.
-/// </summary>
-public sealed record AgentPageModel
-{
-    /// <summary>Agent sessions.</summary>
-    public IReadOnlyList<AgentItemModel> Items { get; init; } = [];
-
-    /// <summary>Vertical scroll offset in DIP (clamped by the renderer to the list range).</summary>
-    public double ScrollOffset { get; init; }
-
-    /// <summary>Row index under the pointer (-1 = none).</summary>
-    public int HoverIndex { get; init; } = -1;
-
-    /// <summary>Selected row index (-1 = none).</summary>
-    public int SelectedIndex { get; init; } = -1;
-
-    /// <summary>Empty-state title override.</summary>
-    public string? EmptyTitle { get; init; }
-
-    /// <summary>Empty-state hint override.</summary>
-    public string? EmptyHint { get; init; }
-}
-
-/// <summary>One agent session row.</summary>
-public sealed record AgentItemModel
-{
-    /// <summary>Tool name ("Claude Code").</summary>
-    public string? Tool { get; init; }
-
-    /// <summary>Project name ("fluidbar").</summary>
-    public string? Project { get; init; }
-
-    /// <summary>Task description.</summary>
-    public string? Task { get; init; }
-
-    /// <summary>Localized status label ("Running").</summary>
-    public string? StatusText { get; init; }
-
-    /// <summary>Elapsed/duration label ("02:14").</summary>
-    public string? DurationText { get; init; }
-
-    /// <summary>Status tone (Info paints the running spinner and progress bar).</summary>
-    public CompactStatus Tone { get; init; }
-
-    /// <summary>Progress percentage 0..100; negative hides the progress bar.</summary>
-    public double ProgressPercent { get; init; } = -1;
 }
 
 /// <summary>Expanded widgets page (page 5): month calendar, weather, system stats and a task list.</summary>

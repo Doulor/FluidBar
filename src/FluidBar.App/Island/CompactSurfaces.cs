@@ -17,7 +17,6 @@ public static class CompactSurfaceFactory
         CompactStyle.Hud => new HudCompactSurface(),
         CompactStyle.Notification => new NotificationCompactSurface(),
         CompactStyle.Clipboard => new ClipboardCompactSurface(),
-        CompactStyle.Agent => new AgentCompactSurface(),
         CompactStyle.Timer => new TimerCompactSurface(),
         CompactStyle.Battery => new BatteryCompactSurface(),
         CompactStyle.LockKeys => new BasicCompactSurface(CompactStyle.LockKeys, IconKind.Lock),
@@ -294,34 +293,6 @@ public sealed class ClipboardCompactSurface : CompactSurface
     }
 }
 
-/// <summary>Agent pill: sparkle + session title + status (236×36).</summary>
-public sealed class AgentCompactSurface : CompactSurface
-{
-    /// <inheritdoc />
-    public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;
-
-    /// <inheritdoc />
-    public override void Render(DrawingContext context)
-    {
-        const double width = 236;
-        const double height = 36;
-        const double inset = 12;
-        var iconArea = new Rect(inset, (height - 16) / 2, 16, 16);
-        Icons.Draw(context, IconKind.Agent, iconArea, IslandBrushes.Info);
-
-        var statusWidth = 78.0;
-        var textArea = new Rect(iconArea.Right + 8, 0, width - (iconArea.Right + 8) - inset - statusWidth - 6, height);
-        DrawLine(context, Model.Title, textArea, Fonts.SemiBold, Typography.TitleSize, IslandBrushes.Foreground);
-
-        var status = Model.StatusText ?? Model.Subtitle;
-        var statusArea = new Rect(width - inset - statusWidth, 0, statusWidth - 10, height);
-        DrawLine(context, status, statusArea, Fonts.Regular, Typography.CaptionSize, ToneBrush(Model.Tone),
-            TextAlignment.Right);
-        context.DrawEllipse(ToneBrush(Model.Tone), null,
-            new Point(width - inset - 3, height / 2), 3, 3);
-    }
-}
-
 /// <summary>Timer pill: clock icon + countdown + label/progress (190×36).</summary>
 public sealed class TimerCompactSurface : CompactSurface
 {
@@ -447,3 +418,4 @@ public sealed class BasicCompactSurface : CompactSurface
         }
     }
 }
+

@@ -7,9 +7,8 @@ public enum PageSlotKind
     Media = 1,
     Notifications = 2,
     Clipboard = 3,
-    Agent = 4,
-    Widgets = 5,
-    Plugin = 6,
+    Widgets = 4,
+    Plugin = 5,
 }
 
 /// <summary>One ordered page slot: built-ins use native templates, plugins carry host list data.</summary>

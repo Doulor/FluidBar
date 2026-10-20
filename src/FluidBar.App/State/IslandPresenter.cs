@@ -79,7 +79,7 @@ public static class IslandPresenter
             Body = primary.Body,
             Badge = primary.Badge,
             SourceName = primary.SourceName,
-            Icon = MapIcon(primary.Icon),
+            Icon = IconForToken(primary.IconToken) ?? MapIcon(primary.Icon),
             ProgressPercent = primary.ProgressPercent,
             ProgressIndeterminate = primary.ProgressIndeterminate,
             IsActive = primary.IsActive,
@@ -115,6 +115,12 @@ public static class IslandPresenter
                     : primary.Title,
                 StatusText = localizer.Get(primary.IsActive ? LocKeys.Agent.Running : LocKeys.Agent.Completed),
                 Tone = primary.IsActive ? StatusTone.Info : StatusTone.Success,
+            },
+            ActivityKind.Status => model with
+            {
+                Title = string.IsNullOrEmpty(primary.Title) ? primary.Body ?? string.Empty : primary.Title,
+                StatusText = primary.Subtitle ?? primary.Body,
+                Tone = StatusTone.Info,
             },
             ActivityKind.BatteryLow => model with
             {
@@ -167,7 +173,8 @@ public static class IslandPresenter
         ActivityKind.Volume or ActivityKind.Brightness => CompactStyle.Hud,
         ActivityKind.Notification => CompactStyle.Notification,
         ActivityKind.Clipboard => CompactStyle.Clipboard,
-        ActivityKind.Agent => CompactStyle.Agent,
+        ActivityKind.Agent => CompactStyle.Progress,
+        ActivityKind.Status => CompactStyle.Progress,
         ActivityKind.Timer => CompactStyle.Timer,
         ActivityKind.BatteryLow => CompactStyle.Battery,
         ActivityKind.LockKeys => CompactStyle.LockKeys,
@@ -238,6 +245,17 @@ public static class IslandPresenter
     /// <summary>Immutable page list snapshot for the expanded panel.</summary>
     public static ImmutableArray<NotificationItemData> Notifications(IslandContent content) => content.Notifications;
     /// <summary>Maps Core activity icon identities to the App vector icon set.</summary>
+    /// <summary>Maps a plugin-declared icon token to a host glyph; unknown tokens fall back to the kind icon.</summary>
+    public static IconKind? IconForToken(string? token) => token?.Trim().ToLowerInvariant() switch
+    {
+        "agent" => IconKind.Agent,
+        "check" or "success" => IconKind.Check,
+        "alert" or "danger" => IconKind.Warning,
+        "pause" or "warning" => IconKind.Pause,
+        "bell" or "notification" => IconKind.Bell,
+        _ => null,
+    };
+
     public static IconKind MapIcon(ActivityIconKind icon) => icon switch
     {
         ActivityIconKind.Clock => IconKind.Clock,

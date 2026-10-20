@@ -138,7 +138,7 @@ public class PlatformToSdkSeamTests
     }
 
     [Fact]
-    public async Task Agent_snapshot_becomes_agent_sdk_event_with_agent_token()
+    public async Task Agent_snapshot_becomes_generic_status_event()
     {
         var graph = new FakePlatformGraph();
         await using var host = await graph.StartAsync();
@@ -146,9 +146,9 @@ public class PlatformToSdkSeamTests
         graph.AgentInbox.Emit(FakeSnapshots.AgentCompleted("claude"));
 
         var latest = host.EventsOf(BuiltinIds.AgentPlugin)[^1];
-        Assert.Equal(IslandEventKind.Agent, latest.Kind);
+        Assert.Equal(IslandEventKind.Status, latest.Kind);
         Assert.Equal("Agent finished", latest.Title);
-        Assert.Equal("claude", latest.Payload?.Subtitle);
+        Assert.Equal("Completed", latest.Payload?.Subtitle);
         Assert.Equal("completed", latest.Payload?.Badge);
     }
 

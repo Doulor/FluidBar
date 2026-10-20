@@ -21,6 +21,9 @@ public sealed record PluginManifest
 
     public string Id { get; init; } = string.Empty;
 
+    /// <summary>Optional page ownership namespace for trusted built-ins (e.g. <c>builtin</c>).</summary>
+    public string? PageOwnerId { get; init; }
+
     public string Version { get; init; } = string.Empty;
 
     public string ApiVersion { get; init; } = string.Empty;

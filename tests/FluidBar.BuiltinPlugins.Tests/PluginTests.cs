@@ -8,6 +8,7 @@ using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Plugins.Builtin;
 using FluidBar.Sdk;
 using FluidBar.Sdk.Contributions;
+using FluidBar.Sdk.Pages;
 
 namespace FluidBar.BuiltinPlugins.Tests;
 
@@ -262,10 +263,10 @@ public sealed class AgentStatusPluginTests
 
         inbox.Emit(PluginTestHarness.AgentEvent());
         var published = context.Publisher.LastPublished;
-        Assert.Equal(IslandEventKind.Agent, published.Kind);
+        Assert.Equal(IslandEventKind.Status, published.Kind);
         Assert.Equal("Done", published.Title);
-        Assert.Equal("claude", published.Payload!.Subtitle);
-        Assert.Contains("claude:completed", published.Payload.DetailLines!);
+        Assert.Equal("Completed", published.Payload!.Subtitle);
+        Assert.Equal("completed", published.Payload.Badge);
     }
 
     [Fact]
@@ -318,9 +319,9 @@ public sealed class AgentStatusPluginTests
             sessionTitle: "接手灵动岛项目重构与预览"));
         Assert.Equal("接手灵动岛项目重构与预览", context.Publisher.LastPublished.Title);
 
-        // 3) a brand-only title is dropped; the presenter shows the localized status instead.
+        // 3) a brand-only title falls back to the status text; the brand never becomes the capsule.
         inbox.Emit(PluginTestHarness.AgentEvent("agent-brand", title: "DeepSeek Harness · FluidBar"));
-        Assert.Equal(string.Empty, context.Publisher.LastPublished.Title);
+        Assert.Equal("Completed", context.Publisher.LastPublished.Title);
     }
 
     [Fact]
@@ -367,14 +368,20 @@ public sealed class AgentStatusPluginTests
     }
 
     [Fact]
-    public async Task StopReleasesInboxSubscription()
+    public async Task StopReleasesInboxSubscriptionAndPage()
     {
         var inbox = new FakeAgentInboxSource();
         var plugin = new AgentStatusPlugin(inbox, new FakeHookInstaller());
-        await PluginTestHarness.StartAsync(plugin, BuiltinIds.AgentPlugin);
+        var (context, _) = await PluginTestHarness.StartAsync(plugin, BuiltinIds.AgentPlugin);
         Assert.Equal(1, inbox.CountSubscribers());
+        Assert.Contains(context.Publisher.Pages, page => page.PageId == AgentStatusPlugin.AgentPageId
+            && page.TemplateId == PageTemplates.List
+            && page.Order == 40);
+
         await plugin.StopAsync(CancellationToken.None);
         Assert.Equal(0, inbox.CountSubscribers());
+        Assert.DoesNotContain(context.Publisher.Pages, page => page.PageId == AgentStatusPlugin.AgentPageId);
+        Assert.Contains(BuiltinIds.AgentPlugin, context.Publisher.Retracted);
     }
 }
 

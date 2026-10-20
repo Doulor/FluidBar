@@ -8,6 +8,7 @@ using FluidBar.Platform.Windows.Threading;
 using FluidBar.Sdk;
 using FluidBar.Sdk.Capabilities;
 using FluidBar.Sdk.Contributions;
+using FluidBar.Sdk.Pages;
 using FluidBar.Sdk.Versioning;
 
 namespace FluidBar.BuiltinPlugins.Tests;
@@ -31,7 +32,32 @@ public sealed class FakeIslandPublisher : IIslandPublisher
 
     public List<string> Retracted { get; } = new();
 
+    /// <summary>Pages registered by the plugin (descriptor order).</summary>
+    public List<PageDescriptor> Pages { get; } = new();
+
+    /// <summary>Last list data per page id.</summary>
+    public Dictionary<string, PageData> PageData { get; } = new(StringComparer.Ordinal);
+
     public bool AutoAccept { get; set; } = true;
+
+    public bool RegisterPage(PageDescriptor descriptor)
+    {
+        Pages.Add(descriptor);
+        return AutoAccept;
+    }
+
+    public bool PublishPage(PageData data)
+    {
+        PageData[data.PageId] = data;
+        return AutoAccept;
+    }
+
+    public bool UnregisterPage(string pageId)
+    {
+        Pages.RemoveAll(page => string.Equals(page.PageId, pageId, StringComparison.Ordinal));
+        PageData.Remove(pageId);
+        return true;
+    }
 
     public bool TryPublish(IslandEvent islandEvent)
     {

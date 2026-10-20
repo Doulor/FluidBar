@@ -412,7 +412,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 PageSlotKind.Media => BuildMediaControls(state, page),
                 PageSlotKind.Notifications => BuildNotificationControls(state, page),
                 PageSlotKind.Clipboard => BuildClipboardControls(state, page),
-                PageSlotKind.Agent => BuildAgentControls(state, page),
                 PageSlotKind.Widgets => BuildWidgetControls(state, page),
                 _ => [],
             };
@@ -760,44 +759,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 "island.page.3.list",
                 UiaElementRole.List,
                 state.Pages.Title(3),
-                ToRect(body),
-                state: new UiaElementState { IsOffscreen = false },
-                children: rows),
-        ];
-    }
-
-    private List<UiaElementSnapshot> BuildAgentControls(in IslandRenderState state, SKRect page)
-    {
-        var model = state.Pages.Agent;
-        var rows = new List<UiaElementSnapshot>();
-        var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(model.ScrollOffset, model.Items.Count,
-            PageLayout.AgentRowHeight, PageLayout.AgentRowGap);
-
-        for (var i = 0; i < Math.Min(model.Items.Count, MaxListRows); i++)
-        {
-            var item = model.Items[i];
-            var row = PageLayout.AgentRow(page, i, scroll);
-            rows.Add(Node(
-                $"island.page.4.row.{i}",
-                UiaElementRole.ListItem,
-                JoinNotEmpty(" — ", JoinNotEmpty(" · ", item.Tool, item.Project), item.Task),
-                ToRect(row),
-                UiaPatternKind.Invoke,
-                new UiaElementState
-                {
-                    IsFocusable = true,
-                    IsOffscreen = !Intersects(row, body),
-                    ItemStatus = JoinNotEmpty(", ", item.StatusText, item.DurationText),
-                }));
-        }
-
-        return
-        [
-            Node(
-                "island.page.4.list",
-                UiaElementRole.List,
-                state.Pages.Title(4),
                 ToRect(body),
                 state: new UiaElementState { IsOffscreen = false },
                 children: rows),

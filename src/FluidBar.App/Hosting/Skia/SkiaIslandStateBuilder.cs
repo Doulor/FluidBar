@@ -216,13 +216,6 @@ public static class SkiaIslandStateBuilder
             EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };
 
-        var agentPage = new AgentPageModel
-        {
-            Items = BuildAgents(content.Agents),
-            EmptyTitle = localizer.Get(LocKeys.Agent.Empty),
-            EmptyHint = localizer.Get(LocKeys.Agent.EmptyHint),
-        };
-
         var widgetsPage = BuildWidgets(content, localizer);
 
         string[] titles =
@@ -253,7 +246,6 @@ public static class SkiaIslandStateBuilder
             Media = mediaPage,
             Notifications = notificationsPage,
             Clipboard = clipboardPage,
-            Agent = agentPage,
             Widgets = widgetsPage,
             PageTitles = titles,
             ShortTitles = shortTitles,
@@ -297,26 +289,6 @@ public static class SkiaIslandStateBuilder
                 TypeLabel = localizer.Get(kind == ClipboardContentKind.Image
                     ? LocKeys.Clipboard.Image
                     : LocKeys.Clipboard.Text),
-            };
-        }
-
-        return models;
-    }
-
-    private static AgentItemModel[] BuildAgents(IReadOnlyList<AgentItemData> items)
-    {
-        var models = new AgentItemModel[items.Count];
-        for (var i = 0; i < models.Length; i++)
-        {
-            var item = items[i];
-            models[i] = new AgentItemModel
-            {
-                Tool = item.Name,
-                Project = item.Project,
-                Task = string.IsNullOrWhiteSpace(item.PrimaryText) ? item.Detail : item.PrimaryText,
-                StatusText = item.StatusText,
-                DurationText = item.TimeText,
-                Tone = MapTone(item.Tone),
             };
         }
 
@@ -449,7 +421,6 @@ public static class SkiaIslandStateBuilder
 
         AppendNotifications(builder, content.Notifications);
         AppendClipboard(builder, content.Clipboard);
-        AppendAgents(builder, content.Agents);
         AppendStats(builder, content.Stats);
         AppendTasks(builder, content.Tasks);
         return builder.ToString();
@@ -476,41 +447,6 @@ public static class SkiaIslandStateBuilder
             builder.Append(item.Preview).Append('|').Append(item.Meta).Append('|')
                 .Append(item.Pinned ? '1' : '0').Append(item.IsImage ? '1' : '0').Append('|');
         }
-    }
-
-    private static void AppendAgents(StringBuilder builder, IReadOnlyList<AgentItemData> items)
-    {
-        builder.Append(items.Count).Append('|');
-        for (var i = 0; i < items.Count; i++)
-        {
-            var item = items[i];
-            builder.Append(item.Name).Append('|').Append(item.StatusText).Append('|')
-                .Append(item.Detail).Append('|')
-                .Append(item.PrimaryText).Append('|').Append(item.Project).Append('|')
-                .Append((int)item.Tone).Append('|');
-        }
-    }
-
-    /// <summary>
-    /// Elapsed-time-only signature. Agent durations tick once per second but the page skeleton,
-    /// labels and shell size do not change; keeping them out of <see cref="StructuralSignature"/>
-    /// lets the controller repaint just the time strip instead of rebuilding the whole layout.
-    /// </summary>
-    /// <param name="content">Non-activity content snapshot.</param>
-    /// <param name="island">Activity view model (compact agent duration lives on the primary activity).</param>
-    public static string AgentTimingSignature(IslandContent content, IslandViewModel island)
-    {
-        ArgumentNullException.ThrowIfNull(content);
-        ArgumentNullException.ThrowIfNull(island);
-        var builder = new StringBuilder(96);
-        var items = content.Agents;
-        builder.Append(items.Length).Append('|');
-        for (var i = 0; i < items.Length; i++)
-        {
-            builder.Append(items[i].TimeText).Append('|');
-        }
-
-        return builder.ToString();
     }
 
     private static void AppendStats(StringBuilder builder, IReadOnlyList<WidgetStatData> items)

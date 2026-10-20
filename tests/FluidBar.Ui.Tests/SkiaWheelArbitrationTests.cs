@@ -198,7 +198,6 @@ public sealed class SkiaWheelArbitrationTests
                     Meta = "1 min",
                 }),
             ],
-            Agents = [],
         });
         fixture.ExpandAndSettle();
         fixture.GoToPage(ClipboardPage);

@@ -54,9 +54,10 @@ internal sealed partial class PageRenderer
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
         canvas.DrawRoundRect(glyph, 6, 6, _fill);
-        IconSet.Draw(canvas, IconKind.Check, glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
+        IconSet.Draw(canvas, IconForPluginToken(item.IconToken), glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
 
-        var titleRight = row.Right - 14 - trailingWidth - 8;
+        var valueWidth = string.IsNullOrWhiteSpace(item.Value) ? 0f : 70f;
+        var titleRight = row.Right - 14 - trailingWidth - valueWidth - 8;
         var lineTop = row.Top + 5;
         var lineBottom = row.Top + 21;
         _text.Draw(canvas, item.Title, IslandType.RowTitle,
@@ -75,6 +76,13 @@ internal sealed partial class PageRenderer
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
 
+        if (!string.IsNullOrWhiteSpace(item.Value))
+        {
+            _text.Draw(canvas, item.Value!, IslandType.RowMetaMono,
+                new SKRect(row.Right - 14 - trailingWidth - valueWidth, lineTop, row.Right - 14 - trailingWidth, lineBottom),
+                _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+        }
+
         if (hasTrailing)
         {
             var button = new SKRect(row.Right - 96, row.MidY - 12, row.Right - 8, row.MidY + 12);
@@ -84,6 +92,16 @@ internal sealed partial class PageRenderer
                 _theme.Accent, TextAlign.Center, _opacity);
         }
     }
+
+    private static IconKind IconForPluginToken(string? token) => token?.ToLowerInvariant() switch
+    {
+        "agent" => IconKind.Agent,
+        "check" or "success" => IconKind.Check,
+        "alert" or "danger" => IconKind.Alert,
+        "pause" or "warning" => IconKind.Pause,
+        "bell" or "notification" => IconKind.Bell,
+        _ => IconKind.Check,
+    };
 
     // ------------------------------------------------------------ notifications
 
@@ -408,213 +426,7 @@ internal sealed partial class PageRenderer
         _ => IconKind.Document,
     };
 
-    // -------------------------------------------------------------------- agent
-
-    private void DrawAgent(SKCanvas canvas, AgentPageModel model, SKRect page)
-    {
-        var items = model.Items;
-        var count = items is null ? 0 : items.Count;
-        if (count == 0)
-        {
-            DrawEmpty(
-                canvas,
-                IconKind.Agent,
-                model.EmptyTitle ?? "No agent sessions",
-                model.EmptyHint ?? "Running agents will show up here",
-                page);
-            return;
-        }
-
-        var m = _metrics;
-        var rowHeight = PageMetricsLayout.AgentRowHeight(m);
-        // prototype2 .agent-list: the rows span the full 400 DIP page width (no 16 DIP list inset).
-        var body = new SKRect(page.Left, page.Top + PageMetricsLayout.BodyTop,
-            page.Right, page.Top + PageMetricsLayout.BodyTop + PageMetricsLayout.BodyHeight);
-        var maxScroll = Math.Max(0, (count * (rowHeight + 6)) - 6 - PageMetricsLayout.BodyHeight);
-        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
-        var first = rowHeight + 6 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 6));
-
-        canvas.Save();
-        canvas.ClipRect(body);
-        for (var i = first; i < count; i++)
-        {
-            var row = PageMetricsLayout.AgentRow(page, i, scroll, m);
-            if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
-            {
-                break;
-            }
-
-            if (row.Bottom > body.Top)
-            {
-                DrawAgentRow(canvas, items![i], row, i, model);
-            }
-        }
-
-        canvas.Restore();
-    }
-
-    private void DrawAgentRow(SKCanvas canvas, AgentItemModel item, SKRect row, int index, AgentPageModel model)
-    {
-        var hovered = index == model.HoverIndex;
-        DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
-
-        var tone = Tone(item.Tone);
-        // prototype2 .agent-state: 20×20 circle whose centre sits 10 DIP in from the row edge.
-        var stateCenter = new SKPoint(row.Left + 20, row.MidY);
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(tone, 0.10f * _opacity);
-        canvas.DrawCircle(stateCenter.X, stateCenter.Y, 10, _fill);
-
-        if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
-        {
-            // prototype2 .agent-state .spinner-ring: an 11×11 border ring (1.5px) whose top+right
-            // seams spin 900ms linear, exactly like the compact capsule ring.
-            const float spinnerRadius = (11f - AgentMotion.RingStrokeWidth) / 2f;
-            _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeCap = SKStrokeCap.Butt;
-            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
-            _stroke.Color = Alpha(_theme.Accent, AgentMotion.SpinnerBaseAlpha * _opacity);
-            canvas.DrawCircle(stateCenter.X, stateCenter.Y, spinnerRadius, _stroke);
-            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentAnimationSeconds);
-            _stroke.Color = Alpha(tone, _opacity);
-            canvas.DrawArc(
-                new SKRect(stateCenter.X - spinnerRadius, stateCenter.Y - spinnerRadius,
-                    stateCenter.X + spinnerRadius, stateCenter.Y + spinnerRadius),
-                AgentMotion.ArcStartDegrees + (float)rotation,
-                AgentMotion.ArcSweepDegrees,
-                false,
-                _stroke);
-        }
-        else if (item.Tone == CompactStatus.Success)
-        {
-            IconSet.Draw(
-                canvas,
-                IconKind.Check,
-                new SKRect(stateCenter.X - 5.5f, stateCenter.Y - 5.5f, stateCenter.X + 5.5f, stateCenter.Y + 5.5f),
-                Alpha(tone, _opacity),
-                _icon);
-        }
-        else if (item.Tone == CompactStatus.Danger)
-        {
-            IconSet.Draw(
-                canvas,
-                IconKind.Alert,
-                new SKRect(stateCenter.X - 5.5f, stateCenter.Y - 5.5f, stateCenter.X + 5.5f, stateCenter.Y + 5.5f),
-                Alpha(tone, _opacity),
-                _icon);
-        }
-        else
-        {
-            _fill.Color = Alpha(tone, _opacity);
-            canvas.DrawCircle(stateCenter.X, stateCenter.Y, 2.5f, _fill);
-        }
-
-        // prototype2 .agent-head: tool/brand 9px/600 fg-2, project 8px fg-3, 6 DIP gap, baseline-aligned;
-        // the right column is 8px/600 status over 8px fg-3 duration, right-aligned 10 DIP in.
-        // The duration column is reserved for the widest "00:00" with tabular (mono) digits: the
-        // per-second text change must not move the left column. Status width still follows its text
-        // (a real status change is a content change), but the duration always sits in this fixed slot.
-        var statusWidth = string.IsNullOrEmpty(item.StatusText)
-            ? 0
-            : _text.Measure(item.StatusText, IslandType.RowMetaStrong) + 2f;
-        var durationColumnWidth = _text.Measure("00:00", IslandType.RowMetaMono) + 2f;
-        var durationWidth = string.IsNullOrEmpty(item.DurationText) ? 0 : durationColumnWidth;
-        var rightRight = row.Right - 10;
-        var rightLeft = rightRight - Math.Max(statusWidth, durationWidth);
-        var mainLeft = row.Left + 39;
-        var mainRight = Math.Max(mainLeft, rightLeft - 9);
-        var headTop = row.Top + 9;
-
-        var tool = item.Tool;
-        var toolWidth = string.IsNullOrEmpty(tool)
-            ? 0
-            : Math.Min((mainRight - mainLeft) * 0.6f, _text.Measure(tool, IslandType.AgentTool) + 2f);
-        if (toolWidth > 0)
-        {
-            _text.Draw(
-                canvas,
-                tool,
-                IslandType.AgentTool,
-                new SKRect(mainLeft, headTop, mainLeft + toolWidth, headTop + 12),
-                _theme.ForegroundSecondary,
-                TextAlign.Left,
-                _opacity);
-        }
-
-        var projectLeft = mainLeft + (toolWidth > 0 ? toolWidth + 6 : 0);
-        if (projectLeft < mainRight)
-        {
-            _text.Draw(
-                canvas,
-                item.Project ?? string.Empty,
-                IslandType.RowMeta,
-                new SKRect(projectLeft, headTop, mainRight, headTop + 12),
-                _theme.ForegroundTertiary,
-                TextAlign.Left,
-                _opacity);
-        }
-
-        _text.Draw(
-            canvas,
-            item.Task,
-            IslandType.AgentTask,
-            new SKRect(mainLeft, row.Top + 23, mainRight, row.Top + 23 + 14),
-            _theme.Foreground,
-            TextAlign.Left,
-            _opacity);
-
-        if (statusWidth > 0)
-        {
-            _text.Draw(
-                canvas,
-                item.StatusText,
-                IslandType.RowMetaStrong,
-                new SKRect(rightLeft, headTop, rightRight, headTop + 12),
-                tone,
-                TextAlign.Right,
-                _opacity);
-        }
-
-        if (durationWidth > 0)
-        {
-            _text.Draw(
-                canvas,
-                item.DurationText,
-                IslandType.RowMetaMono,
-                new SKRect(rightRight - durationColumnWidth, row.Top + 23, rightRight, row.Top + 23 + 12),
-                _theme.ForegroundTertiary,
-                TextAlign.Right,
-                _opacity);
-        }
-
-        if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
-        {
-            // prototype2 .agent-progress: a 1.5 DIP full-row track; the span pulses its width
-            // 48% → 72% over 2.4s ease-in-out alternate while the agent is active. A real provider
-            // progress (ProgressPercent >= 0) pins the width instead of pulsing.
-            var track = new SKRect(row.Left, row.Bottom - AgentMotion.ProgressHeight, row.Right, row.Bottom);
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
-            canvas.DrawRect(track, _fill);
-            var fraction = item.ProgressPercent >= 0
-                ? (float)Math.Clamp(item.ProgressPercent / 100.0, 0, 1)
-                : _reduced
-                    ? (float)AgentMotion.ProgressMinFraction
-                    : (float)(AgentMotion.IndeterminateProgressPercent(_agentAnimationSeconds) / 100.0);
-            if (fraction > 0)
-            {
-                var fillColor = item.Tone == CompactStatus.Info ? _theme.Accent : tone;
-                _fill.Color = Alpha(fillColor, AgentMotion.ProgressOpacity * _opacity);
-                canvas.DrawRoundRect(
-                    new SKRect(track.Left, track.Top, track.Left + (track.Width * fraction), track.Bottom),
-                    AgentMotion.ProgressRadius,
-                    AgentMotion.ProgressRadius,
-                    _fill);
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------ widgets
+    // -------------------------------------------------------------- widgets
 
     private void DrawWidgets(SKCanvas canvas, WidgetsPageModel model, SKRect page)
     {
@@ -1016,3 +828,4 @@ internal sealed partial class PageRenderer
             (byte)(from.Alpha + ((to.Alpha - from.Alpha) * t)));
     }
 }
+

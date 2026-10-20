@@ -199,7 +199,7 @@ public sealed class IslandHostTests
 public sealed class ExpandedAndSettingsUiTests
 {
     [Fact]
-    public async Task ExpandedPanel_IsUniform440x284_WithSixCachedPagesInOneStrip()
+    public async Task ExpandedPanel_IsUniform440x284_WithFiveCachedPagesInOneStrip()
     {
         await AvaloniaTest.Run(() =>
         {
@@ -223,7 +223,7 @@ public sealed class ExpandedAndSettingsUiTests
             Assert.Equal(284, panel.DesiredSize.Height);
             Assert.Equal(400, ExpandedPanel.ViewportWidth);
             Assert.Equal(252, ExpandedPanel.ViewportHeight);
-            foreach (var page in CoreIslandPage.BuiltinPages)
+            foreach (var page in CoreIslandPage.BuiltinPages.Where(page => page != CoreIslandPage.Agent))
             {
                 var pageView = panel.PageFor(page);
                 Assert.Equal(IslandPageView.PageWidth, pageView.DesiredSize.Width);

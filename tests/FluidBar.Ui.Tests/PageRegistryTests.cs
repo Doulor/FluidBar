@@ -38,6 +38,19 @@ public sealed class PageRegistryTests
     }
 
     [Fact]
+    public void RegisterPage_AllowsBuiltinNamespaceOnlyForTrustedBuiltinOwner()
+    {
+        var registry = new PageRegistry();
+
+        Assert.True(registry.RegisterPage("builtin", Descriptor("builtin.agent"), "builtin", out var builtinError),
+            builtinError);
+        Assert.Contains(registry.BuildPluginPages(), page => page.PageId == "builtin.agent");
+
+        Assert.False(registry.RegisterPage(Owner, Descriptor("builtin.evil"), "builtin", out var foreignError));
+        Assert.Contains("reserved", foreignError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RegisterPage_RejectsUnknownTemplateAndDuplicate()
     {
         var registry = new PageRegistry();
@@ -132,9 +145,10 @@ public sealed class PageRegistryTests
     public void BuiltinsUseTemplatesAndUserOrderIsApplied()
     {
         var registry = new PageRegistry();
-        Assert.Equal(6, PageRegistry.BuiltinDescriptors.Count);
+        Assert.Equal(5, PageRegistry.BuiltinDescriptors.Count);
         Assert.Equal("builtin.home", PageRegistry.BuiltinDescriptors[0].TemplateId);
-        Assert.Equal("calendar", PageRegistry.BuiltinDescriptors[5].TemplateId);
+        Assert.Equal("calendar", PageRegistry.BuiltinDescriptors[4].TemplateId);
+        Assert.DoesNotContain(PageRegistry.BuiltinDescriptors, descriptor => descriptor.PageId == "builtin.agent");
 
         Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out _));
         registry.SetOrder(["sample-page.metrics", "builtin.media", "builtin.home"]);

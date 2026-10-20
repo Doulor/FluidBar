@@ -36,6 +36,9 @@ public enum ActivityKind
     /// <summary>Agent (Claude/Codex) completion or failure feedback. Rank 10 (lead brief extension).</summary>
     Agent,
 
+    /// <summary>Generic plugin status feedback rendered by the shared status template (rank 10).</summary>
+    Status,
+
     /// <summary>Low battery warning. Rank 11, persistent.</summary>
     BatteryLow,
 
@@ -101,6 +104,7 @@ public static class ActivityKindExtensions
         ActivityKind.Brightness => "brightness",
         ActivityKind.Notification => "notification",
         ActivityKind.Agent => "agent",
+        ActivityKind.Status => "status",
         ActivityKind.BatteryLow => "battery.low",
         ActivityKind.Progress => "progress",
         ActivityKind.Timer => "timer",
@@ -124,6 +128,7 @@ public static class ActivityKindExtensions
             "brightness" => ActivityKind.Brightness,
             "notification" => ActivityKind.Notification,
             "agent" => ActivityKind.Agent,
+            "status" => ActivityKind.Status,
             "battery.low" or "battery" => ActivityKind.BatteryLow,
             "progress" => ActivityKind.Progress,
             "timer" => ActivityKind.Timer,
@@ -133,8 +138,8 @@ public static class ActivityKindExtensions
         };
 
         return token is not null && token is "lookup" or "clipboard" or "lockkeys" or "device" or "bluetooth"
-            or "focus" or "volume" or "brightness" or "notification" or "agent" or "battery.low" or "battery"
-            or "progress" or "timer" or "media" or "idle";
+            or "focus" or "volume" or "brightness" or "notification" or "agent" or "status"
+            or "battery.low" or "battery" or "progress" or "timer" or "media" or "idle";
     }
 
     /// <summary>The expanded page this activity opens when the user clicks the compact pill.</summary>
@@ -144,6 +149,7 @@ public static class ActivityKindExtensions
         ActivityKind.Notification => PageRef.Notifications,
         ActivityKind.Clipboard => PageRef.Clipboard,
         ActivityKind.Agent => PageRef.Agent,
+        ActivityKind.Status => PageRef.Agent,
         _ => PageRef.Home,
     };
 

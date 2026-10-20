@@ -1241,7 +1241,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             return;
         }
 
-        if (!_controller.IsAnimating && !_controller.IsAgentAnimating)
+        if (!_controller.IsAnimating)
         {
             if (_frameClock.IsRunning)
             {
@@ -1293,11 +1293,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     _lastRenderHappened ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
                     _controller.RenderState,
                     _controller.Motion,
-                    _controller.IsAgentAnimating,
+                    false,
                     _lastChange);
             }
 
-            if (_controller.IsAnimating || _controller.IsAgentAnimating)
+            if (_controller.IsAnimating)
             {
                 // The preview rail springs move the pills a few DIP during a page turn; keep the
                 // hook envelope on the painted geometry instead of the start-of-animation one.
@@ -1511,7 +1511,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private void TrimIdleMemory()
     {
-        if (_disposed || _rendering || _controller.IsAnimating || _controller.IsAgentAnimating)
+        if (_disposed || _rendering || _controller.IsAnimating)
         {
             return;
         }

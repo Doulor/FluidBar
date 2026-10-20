@@ -120,6 +120,9 @@ public sealed record ActivityViewModel
     /// <summary>Icon identity.</summary>
     public required ActivityIconKind Icon { get; init; }
 
+    /// <summary>Optional plugin icon token; the UI maps it before falling back to <see cref="Icon"/>.</summary>
+    public string? IconToken { get; init; }
+
     /// <summary>Accent rule.</summary>
     public required AccentRule Accent { get; init; }
 
@@ -260,6 +263,7 @@ public static class ActivityPresenter
         ActivityKind.Progress => ActivityIconKind.Progress,
         ActivityKind.Lookup => ActivityIconKind.Search,
         ActivityKind.Agent => ActivityIconKind.Agent,
+        ActivityKind.Status => ActivityIconKind.Progress,
         _ => ActivityIconKind.Clock,
     };
 
@@ -276,6 +280,7 @@ public static class ActivityPresenter
             ActivityKind.Media => AccentRule.Artwork,
             ActivityKind.BatteryLow => AccentRule.Danger,
             ActivityKind.Agent => payload?.IsActive == false ? AccentRule.Danger : AccentRule.Info,
+            ActivityKind.Status => AccentRule.Info,
             ActivityKind.Notification or ActivityKind.Clipboard => AccentRule.Info,
             ActivityKind.Progress => AccentRule.SystemAccent,
             ActivityKind.Focus => AccentRule.ThemeAccent,
@@ -330,6 +335,7 @@ public static class ActivityPresenter
             Key = record.Key,
             Kind = record.Kind,
             Icon = IconFor(record.Kind),
+            IconToken = payload.IconToken,
             Accent = AccentFor(record.Kind, payload),
             KindLabelKey = KindLabelKeyFor(record.Kind),
             Title = payload.Title,

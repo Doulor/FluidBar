@@ -184,21 +184,6 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void AgentRows_MapToAgentActivate()
-    {
-        var actions = new RecordingIslandPlatformActions();
-        using var fixture = ControllerFixture.Create(actions: actions);
-        fixture.ExpandAndSettle();
-        fixture.GoToPage(4);
-
-        Click(fixture, PageLayout.AgentRow(Page(4, fixture), 1));
-
-        var call = Assert.Single(actions.Calls);
-        Assert.Equal(IslandPlatformActionKind.AgentActivate, call.Kind);
-        Assert.Equal(1, call.Index);
-    }
-
-    [Fact]
     public void WidgetsCalendarAndTasks_MapToCalendarAndTaskActions()
     {
         var actions = new RecordingIslandPlatformActions();
@@ -229,7 +214,6 @@ public sealed class SkiaIslandControlTests
         var pages = fixture.Controller.RenderState.Pages;
         Assert.Equal(3, pages.Notifications.Items.Count);
         Assert.Equal(3, pages.Clipboard.Items.Count);
-        Assert.Equal(2, pages.Agent.Items.Count);
         Assert.Equal(3, pages.Widgets.Tasks.Count);
         Assert.Equal(42, pages.Widgets.CalendarDays.Count);
     }
@@ -346,6 +330,7 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerReleased(rect.MidX, rect.MidY);
     }
 }
+
 
 
 

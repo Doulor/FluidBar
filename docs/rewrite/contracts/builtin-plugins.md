@@ -93,7 +93,7 @@ Stable field keys used by the layouts:
 | Media | `icon`, `title`, `subtitle`, `badge` (`playing`/`paused`), `progress` (0..1 invariant string), `wave` (`on`/`off`), `artwork` (path), `body` (current lyric), `actions` | `Payload` also carries `Subtitle/SourceName/Progress/IsActive/AlbumArtPath/LyricLines/PlaybackTicks`. Artwork path points into the bounded `ArtworkTempStore` (SHA-256-named, byte/retention capped). |
 | Clipboard | `icon` (kind token), `title` (preview), `preview`, `badge` (history count), `kind`, `actions` | file drops expose `DetailLines` |
 | Notifications | `icon`, `title`, `body`, `code`, `actions` | `Payload.VerificationCode`/`Badge` carry the 6-digit code; permission-denied state publishes a `Status` event with `Title=notification-access`, `Subtitle=<state>` |
-| Agent | `icon`, `title`, `agent` (`claude`/`codex`/`generic`), `body`, `badge` (`completed`/`failed`/`waiting`/`event`), `actions` | `DetailLines` = `agent:<kind>` |
+| Agent | `Status` event: `icon=agent`, `title`, `subtitle` (localized status), `badge` (`running`/`completed`/`failed`/`waiting`), `body`; page is a plugin-owned `builtin.agent` list page | `PageListRow` carries icon/title/project/status/duration; no host agent model |
 | Devices | `icon`, `title`, `source` (`system:usb`/`system:bluetooth`), `badge` (kind), `device` | `Content` = `<sourceToken>:<connected|disconnected>`; cold start primes history without replaying it |
 
 Transport buttons: media `actions` field holds the command id list the host renders as buttons

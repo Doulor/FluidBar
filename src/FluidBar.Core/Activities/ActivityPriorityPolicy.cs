@@ -37,6 +37,9 @@ public static class ActivityPriorityPolicy
     /// <summary>Rank of <see cref="ActivityKind.Agent"/> (lead-brief extension).</summary>
     public const int AgentRank = 10;
 
+    /// <summary>Rank of generic plugin status feedback.</summary>
+    public const int StatusRank = 10;
+
     /// <summary>Rank of <see cref="ActivityKind.BatteryLow"/>.</summary>
     public const int BatteryLowRank = 11;
 
@@ -68,6 +71,7 @@ public static class ActivityPriorityPolicy
         ActivityKind.Brightness => BrightnessRank,
         ActivityKind.Notification => NotificationRank,
         ActivityKind.Agent => AgentRank,
+        ActivityKind.Status => StatusRank,
         ActivityKind.BatteryLow => BatteryLowRank,
         ActivityKind.Progress => ProgressRank,
         ActivityKind.Timer => TimerRank,
@@ -106,6 +110,7 @@ public static class ActivityPriorityPolicy
         ActivityKind.Brightness => TimeSpan.FromSeconds(1.6),
         ActivityKind.Notification => TimeSpan.FromSeconds(5),
         ActivityKind.Agent => TimeSpan.FromSeconds(5),
+        ActivityKind.Status => TimeSpan.FromSeconds(5),
         ActivityKind.BatteryLow => null,
         ActivityKind.Progress => null,
         ActivityKind.Timer => null,
@@ -119,7 +124,7 @@ public static class ActivityPriorityPolicy
 
     /// <summary>Whether the kind is an ambient/system status (priority band 3, below media-user feedback).</summary>
     public static bool IsAmbient(ActivityKind kind) => kind is ActivityKind.Focus or ActivityKind.BatteryLow
-        or ActivityKind.Progress or ActivityKind.Timer;
+        or ActivityKind.Progress or ActivityKind.Timer or ActivityKind.Status;
 
     /// <summary>Whether the kind may reveal a <c>Hidden</c> island on arrival (T1 guard).</summary>
     public static bool CanRevealWhenHidden(ActivityKind kind) => kind != ActivityKind.Idle;

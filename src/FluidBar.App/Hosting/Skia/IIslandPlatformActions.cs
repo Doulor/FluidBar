@@ -49,9 +49,6 @@ public enum IslandPlatformActionKind
     /// <summary>Pin/unpin a clipboard row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     ClipboardPin,
 
-    /// <summary>Activate an agent session row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
-    AgentActivate,
-
     /// <summary>Toggle a widget task; <see cref="IslandPlatformAction.Index"/> is the task row.</summary>
     TaskToggle,
 

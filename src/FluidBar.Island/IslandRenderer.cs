@@ -526,8 +526,9 @@ public sealed class IslandRenderer : IDisposable
 
     /// <summary>
     /// Paints the split previews as pure circles on the primary pill's baseline. Every circle has
-    /// exactly one element: an agent gets only its blue spinning 180° arc, media gets only its
-    /// circular album cover (or a neutral music-note fallback), and everything else gets one icon.
+    /// exactly one element: an agent gets only its blue spinning 180° arc, media gets only a
+    /// rounded-square contain-fit album thumbnail inside the black circle (or a neutral note),
+    /// and everything else gets one icon.
     /// No labels, badges, status dots, action buttons or decorative rings.
     /// </summary>
     private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
@@ -561,27 +562,6 @@ public sealed class IslandRenderer : IDisposable
             canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
             _fill.BlendMode = SKBlendMode.SrcOver;
 
-            if (islet.Kind == ActivityKind.Agent)
-            {
-                // The ring is the agent's entire content: 2 DIP, 180° arc, 900 ms linear clockwise.
-                var phase = (float)((state.AgentAnimationSeconds / 0.9) % 1.0);
-                if (phase < 0) { phase += 1f; }
-                var ringInset = Math.Max(1f, radius * 0.12f);
-                var ringRect = new SKRect(
-                    rect.Left + ringInset,
-                    rect.Top + ringInset,
-                    rect.Right - ringInset,
-                    rect.Bottom - ringInset);
-                _stroke.Style = SKPaintStyle.Stroke;
-                _stroke.StrokeWidth = 2f;
-                _stroke.StrokeCap = SKStrokeCap.Round;
-                _stroke.Shader = null;
-                _stroke.Color = Alpha(_theme.Info, alpha);
-                canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
-                _stroke.StrokeCap = SKStrokeCap.Butt;
-                continue;
-            }
-
             if (islet.Kind == ActivityKind.Media)
             {
                 var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
@@ -597,7 +577,7 @@ public sealed class IslandRenderer : IDisposable
                     squircle.AddRoundRect(new SKRoundRect(thumbnail, thumbRadius, thumbRadius));
                     canvas.ClipPath(squircle, SKClipOperation.Intersect, antialias: true);
                     _icon.Color = Alpha(SKColors.White, alpha);
-                    // Contain: the whole cover is visible; spare space stays the black ball fill.
+                    // Contain: the whole image is visible; any spare space stays the black ball fill.
                     var imageRect = IslandMetrics.SplitIsletContainRect(
                         thumbnail, cover.Width, cover.Height);
                     canvas.DrawImage(cover, imageRect, _icon);
@@ -844,7 +824,6 @@ public sealed class IslandRenderer : IDisposable
             PageSlotKind.Media => PageMetricsLayout.ClampScroll(pageRect, PageSlotKind.Media, pages.Media.ScrollOffset, metrics),
             PageSlotKind.Notifications => (float)pages.Notifications.ScrollOffset,
             PageSlotKind.Clipboard => (float)pages.Clipboard.ScrollOffset,
-            PageSlotKind.Agent => (float)pages.Agent.ScrollOffset,
             // The widgets card grows with the task rows, so the clamp needs the row count.
             PageSlotKind.Widgets => PageMetricsLayout.ClampScroll(pageRect, PageSlotKind.Widgets, pages.Widgets.ScrollOffset, metrics,
                 pages.Widgets.Tasks?.Count ?? 0),
@@ -861,7 +840,6 @@ public sealed class IslandRenderer : IDisposable
             PageSlotKind.Media => 1,
             PageSlotKind.Notifications => pages.Notifications.Items?.Count ?? 0,
             PageSlotKind.Clipboard => pages.Clipboard.Items?.Count ?? 0,
-            PageSlotKind.Agent => pages.Agent.Items?.Count ?? 0,
             PageSlotKind.Widgets => pages.Widgets.Tasks?.Count ?? 0,
             _ => int.MaxValue,
         };

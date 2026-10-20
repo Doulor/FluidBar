@@ -99,7 +99,7 @@ public sealed class PluginIslandEventAdapter
 
         if (string.Equals(source, BuiltinIds.AgentPlugin, StringComparison.Ordinal))
         {
-            return (ActivityKind.Agent, "agent:claude");
+            return (ActivityKind.Status, "agent:claude");
         }
 
         if (string.Equals(source, BuiltinIds.DevicesPlugin, StringComparison.Ordinal))
@@ -121,7 +121,9 @@ public sealed class PluginIslandEventAdapter
             case SdkEventKind.Notification:
                 return ActivityKind.Notification;
             case SdkEventKind.Agent:
-                return ActivityKind.Agent;
+                return ActivityKind.Status;
+            case SdkEventKind.Status:
+                return ActivityKind.Status;
             case SdkEventKind.Progress:
                 return ActivityKind.Progress;
         }
@@ -162,6 +164,8 @@ public sealed class PluginIslandEventAdapter
             Badge = payload?.Badge,
             SourceName = payload?.SourceName,
             ProgressPercent = progressPercent,
+            ProgressIndeterminate = payload?.Progress is null && kind == ActivityKind.Status,
+            IconToken = islandEvent.IconKind,
             IsActive = payload?.IsActive,
             ShowsAudioWave = payload is not null
                 ? payload.AudioWave is { Count: > 0 } || (kind == ActivityKind.Media && payload.IsActive)
@@ -181,6 +185,7 @@ public sealed class PluginIslandEventAdapter
 public sealed class AppPluginIslandPublisher : IIslandPublisher
 {
     private readonly string _pluginId;
+    private readonly string _pageOwnerId;
     private readonly PluginIslandEventAdapter _adapter;
     private readonly Action<CoreEvent> _publish;
     private readonly PageRegistry? _pages;
@@ -190,9 +195,11 @@ public sealed class AppPluginIslandPublisher : IIslandPublisher
         string pluginId,
         PluginIslandEventAdapter adapter,
         Action<CoreEvent> publish,
-        PageRegistry? pages = null)
+        PageRegistry? pages = null,
+        string? pageOwnerId = null)
     {
         _pluginId = pluginId ?? throw new ArgumentNullException(nameof(pluginId));
+        _pageOwnerId = string.IsNullOrWhiteSpace(pageOwnerId) ? _pluginId : pageOwnerId;
         _adapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         _publish = publish ?? throw new ArgumentNullException(nameof(publish));
         _pages = pages;
@@ -201,7 +208,7 @@ public sealed class AppPluginIslandPublisher : IIslandPublisher
     /// <inheritdoc />
     public bool RegisterPage(PageDescriptor descriptor)
         => descriptor is not null && _pages is not null
-           && _pages.RegisterPage(_pluginId, descriptor, out _);
+           && _pages.RegisterPage(_pluginId, descriptor, _pageOwnerId, out _);
 
     /// <inheritdoc />
     public bool PublishPage(PageData data)

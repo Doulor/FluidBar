@@ -188,8 +188,8 @@ public sealed class ArchipelagoTests
             panel.ClickMiniIsland(4);
 
             Assert.Equal(4, panel.CurrentIndex);
-            Assert.Equal(CoreIslandPage.Agent, panel.CurrentPage);
-            Assert.Contains(CoreIslandPage.Agent, requested);
+            Assert.Equal(CoreIslandPage.Widgets, panel.CurrentPage);
+            Assert.Contains(CoreIslandPage.Widgets, requested);
             Assert.True(panel.Motion.IsAnimating, "click-jump should animate the snap spring");
         });
     }

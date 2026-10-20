@@ -10,7 +10,6 @@ public sealed class ExpandedPageTests
     [Theory]
     [InlineData(2)]
     [InlineData(3)]
-    [InlineData(4)]
     [InlineData(5)]
     public void Expanded_pages_2_to_5_render_inside_the_shell_without_bands(int pageIndex)
     {
@@ -132,7 +131,6 @@ public sealed class ExpandedPageTests
     [Theory]
     [InlineData(2, 3)]
     [InlineData(3, 4)]
-    [InlineData(4, 5)]
     public void Adjacent_expanded_pages_2_to_5_paint_different_content(int leftPage, int rightPage)
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
@@ -147,7 +145,6 @@ public sealed class ExpandedPageTests
     [Theory]
     [InlineData(2)]
     [InlineData(3)]
-    [InlineData(4)]
     [InlineData(5)]
     public void Page_strip_positions_2_to_5_render_settled_and_mid_transition(int pageIndex)
     {
@@ -223,7 +220,6 @@ public sealed class ExpandedPageTests
     [Theory]
     [InlineData(2)]
     [InlineData(3)]
-    [InlineData(4)]
     public void Empty_list_pages_render_a_centered_empty_state(int pageIndex)
     {
         var content = IslandTestFixtures.Content();
@@ -237,10 +233,7 @@ public sealed class ExpandedPageTests
             {
                 Pages = content with { Clipboard = new ClipboardPageModel() },
             },
-            _ => IslandTestFixtures.Expanded(4) with
-            {
-                Pages = content with { Agent = new AgentPageModel() },
-            },
+            _ => throw new ArgumentOutOfRangeException(nameof(pageIndex)),
         };
 
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
@@ -409,3 +402,4 @@ public sealed class ExpandedPageTests
         return data.ToArray();
     }
 }
+
