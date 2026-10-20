@@ -628,7 +628,7 @@ public sealed class IslandRenderer : IDisposable
         var finals = IslandMetrics.SplitIsletRects(state);
         for (var i = 0; i < finals.Length && i < state.SplitIslets.Length; i++)
         {
-            if (finals[i].Contains(x, y))
+            if (IslandMetrics.SplitIsletContains(finals[i], x, y))
             {
                 return new IslandHitTarget(IslandHitKind.SplitIslet, state.Pages.IndexOfPage(state.SplitIslets[i].Page), Index: i);
             }

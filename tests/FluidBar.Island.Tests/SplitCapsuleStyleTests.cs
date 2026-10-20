@@ -159,5 +159,8 @@ public sealed class SplitCapsuleStyleTests
             renderer.HitTest(state, ball.MidX, ball.MidY).Kind);
         Assert.NotEqual(IslandHitKind.SplitIslet,
             renderer.HitTest(state, ball.MidX, ball.Top - 6).Kind);
+        // The square corner outside the circle must be click-through too.
+        Assert.NotEqual(IslandHitKind.SplitIslet,
+            renderer.HitTest(state, ball.Left + 1, ball.Top + 1).Kind);
     }
 }
