@@ -56,6 +56,7 @@ public static class AvaloniaTest
 public sealed class FakeTimeProvider : TimeProvider
 {
     private DateTimeOffset _now;
+    private long _timestamp;
 
     /// <summary>Creates a fake clock at <paramref name="start"/>.</summary>
     public FakeTimeProvider(DateTimeOffset? start = null) => _now = start ?? new DateTimeOffset(2026, 10, 18, 9, 41, 0, TimeSpan.Zero);
@@ -66,8 +67,21 @@ public sealed class FakeTimeProvider : TimeProvider
     /// <inheritdoc />
     public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
 
+    /// <summary>
+    /// Monotonic timestamp on the same fake clock (per-frame animation code reads this instead of
+    /// <see cref="GetUtcNow"/>, so it has to advance with <see cref="Advance"/> too).
+    /// </summary>
+    public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+    /// <inheritdoc />
+    public override long GetTimestamp() => _timestamp;
+
     /// <summary>Advances the fake clock.</summary>
-    public void Advance(TimeSpan delta) => _now += delta;
+    public void Advance(TimeSpan delta)
+    {
+        _now += delta;
+        _timestamp += delta.Ticks;
+    }
 }
 
 /// <summary>Shared catalog/service fixtures.</summary>

@@ -539,19 +539,46 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 
-    private (string? Current, string? Next, double Highlight) ResolveLyrics(MediaSnapshot media, TimeSpan position)
+    private (string? Current, string? Next, double Highlight, FluidBar.Island.KaraokeTrack? Karaoke) ResolveLyrics(
+        MediaSnapshot media, TimeSpan position)
     {
         var document = _lyricsDocument;
         if (document is null || document.IsEmpty
             || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
         {
-            return (null, null, -1);
+            return (null, null, -1, null);
         }
 
         // SelectDetailed also returns the karaoke sweep of the current line (KRC word timeline).
         var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
-        return (selection.Current, selection.Next, selection.Highlight);
+        return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line));
     }
+
+    /// <summary>Portable per-word timeline for the island (which advances the sweep per frame).</summary>
+    private static FluidBar.Island.KaraokeTrack? ToKaraokeTrack(LyricsLine? line)
+    {
+        if (line is null || !line.HasWordTiming)
+        {
+            return null;
+        }
+
+        var spans = System.Collections.Immutable.ImmutableArray.CreateBuilder<FluidBar.Island.KaraokeSpan>(
+            line.Words.Length);
+        var lastOffset = 0;
+        foreach (var word in line.Words)
+        {
+            spans.Add(new FluidBar.Island.KaraokeSpan(word.OffsetMs, word.Length));
+            lastOffset = Math.Max(lastOffset, Math.Max(0, word.OffsetMs));
+        }
+
+        return FluidBar.Island.KaraokeTrack.Create(
+            (int)Math.Round(line.Time.TotalMilliseconds),
+            lastOffset + KaraokeTailMs,
+            spans.MoveToImmutable());
+    }
+
+    /// <summary>Trailing duration given to the last span when the file carries no line duration.</summary>
+    private const int KaraokeTailMs = 400;
 
     /// <summary>
     /// Track length for sources that expose none of their own (the window-title fallback). The lyric
@@ -605,7 +632,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             ? artworkEntry.Data
             : null;
 
-        var (lyricLine, nextLyricLine, lyricHighlight) = ResolveLyrics(media, position);
+        var (lyricLine, nextLyricLine, lyricHighlight, karaoke) = ResolveLyrics(media, position);
 
         // A fallback source can know the position without knowing the track length (KuGou persists the
         // position but no duration): show the elapsed time instead of pretending nothing is known.
@@ -628,6 +655,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             LyricLine = lyricLine,
             NextLyricLine = nextLyricLine,
             LyricHighlight = lyricHighlight,
+            Karaoke = karaoke,
+            // The island extrapolates this sample with its own frame clock; the sample time is "now" here
+            // because the position above was already interpolated to the current instant.
+            PositionMs = position.TotalMilliseconds,
             TrackIndex = 0,
             TrackCount = 0,
         };

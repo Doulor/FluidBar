@@ -64,7 +64,8 @@ public static class LyricsTimelineSelector
         return new LyricSelection(
             current.Text,
             next,
-            LyricKaraoke.Progress(current, position));
+            LyricKaraoke.Progress(current, position),
+            current);
     }
 
     /// <summary>
@@ -109,7 +110,12 @@ public static class LyricsTimelineSelector
     /// <param name="Current">Current line text.</param>
     /// <param name="Next">Next line text.</param>
     /// <param name="Highlight">Swept fraction 0..1; negative when the line has no word timing.</param>
-    public readonly record struct LyricSelection(string? Current, string? Next, double Highlight);
+    /// <param name="Line">
+    /// The timed line the sweep belongs to (null when there is none). Callers use it to keep sweeping the
+    /// line between position samples instead of only when a sample arrives.
+    /// </param>
+    public readonly record struct LyricSelection(string? Current, string? Next, double Highlight,
+        LyricsLine? Line = null);
 
     /// <summary>Walks from <paramref name="start"/> towards the start/end until a real lyric line.</summary>
     public static int FindLine(ImmutableArray<LyricsLine> lines, int start, bool forward)

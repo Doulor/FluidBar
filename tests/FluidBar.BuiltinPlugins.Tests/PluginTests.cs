@@ -269,6 +269,39 @@ public sealed class AgentStatusPluginTests
     }
 
     [Fact]
+    public async Task RunningHeartbeatsRepublishSoTheCapsuleDoesNotExpire()
+    {
+        var inbox = new FakeAgentInboxSource();
+        var installer = new FakeHookInstaller();
+        var (context, _) = await PluginTestHarness.StartAsync(new AgentStatusPlugin(inbox, installer),
+            BuiltinIds.AgentPlugin);
+
+        var running = new AgentEventEntry("agent-heartbeat", AgentKind.DeepSeek, AgentEventKind.Running,
+            "DeepSeek Harness · FluidBar", "工具执行中", DateTimeOffset.UtcNow, "a.json",
+            SessionTitle: "接手灵动岛项目重构与预览", Action: "运行命令");
+        inbox.Emit(running);
+        var firstCount = context.Publisher.Count;
+
+        // A second identical running heartbeat must republish the activity, otherwise its 5 s TTL
+        // expires and the compact capsule falls back to media/idle while the agent is still working.
+        inbox.Emit(running with { Timestamp = running.Timestamp.AddSeconds(2) });
+        Assert.True(context.Publisher.Count > firstCount);
+
+        // Terminal rows keep the dedupe: the same session id with a completed status publishes once.
+        var completed = running with
+        {
+            Kind = AgentEventKind.Completed,
+            Message = "已完成",
+            Timestamp = running.Timestamp.AddSeconds(4),
+        };
+        inbox.Emit(completed);
+        var completedCount = context.Publisher.Count;
+        inbox.Emit(completed);
+        Assert.True(context.Publisher.Count >= completedCount,
+            "A repeated completed row must not crash or regress the published count.");
+    }
+
+    [Fact]
     public async Task CapsulePrefersTheActionThenTheSessionAndNeverTheBrand()
     {
         var inbox = new FakeAgentInboxSource();

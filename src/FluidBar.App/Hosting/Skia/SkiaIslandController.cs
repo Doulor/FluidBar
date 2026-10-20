@@ -78,6 +78,18 @@ public sealed class SkiaIslandController : IDisposable
     private readonly TextEngine _lyricMeasure = new(cacheCapacity: 64);
     private string? _compactLyricText;
     private long _compactLyricChangedAtMs = -1;
+
+    /// <summary>Per-word timeline of the line being sung (null when the source has none).</summary>
+    private KaraokeTrack? _karaokeTrack;
+
+    /// <summary>Extrapolated playback position: turns the 250 ms poll into a per-frame value.</summary>
+    private readonly MediaPositionClock _karaokeClock = new();
+
+    /// <summary>Sweep fraction currently painted (compared with a 1/255 tolerance to avoid useless frames).</summary>
+    private double _karaokeHighlight = -1;
+
+    /// <summary>Whether the karaoke sweep needs frames right now.</summary>
+    private bool _karaokeActive;
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -226,10 +238,22 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
-        || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive();
+        || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating;
+
+    /// <summary>
+    /// Whether the karaoke sweep still needs frames: a per-word line is on screen and playing, so the
+    /// highlight advances every frame instead of stepping once per position poll.
+    /// </summary>
+    public bool IsKaraokeAnimating => _karaokeActive
+        && _karaokeTrack is not null
+        && _karaokeClock.IsAdvancing
+        && (_hasRenderState && _renderState.Form == ShellForm.Expanded
+            ? _renderState.PageIndex == 1
+            : _compact.Kind == ActivityKind.Media);
 
     /// <summary>Whether the island is only animating the media waveform (lower frame rate is enough).</summary>
-    public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive();
+    public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive()
+        && !IsKaraokeAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
     public TimeSpan PreferredFrameInterval => IsWaveOnly
@@ -1291,6 +1315,8 @@ public sealed class SkiaIslandController : IDisposable
         _structuralSignature = structural;
         _dynamicSignature = dynamicSignature;
 
+        SyncKaraoke(content);
+
         var peeked = State.Kind == IslandStateKind.Peek;
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked, showCompactLyrics);
@@ -1689,6 +1715,80 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>
+    /// Keeps the karaoke sweep in step with the extrapolated position: anchors the clock on every content
+    /// sample (this is where seeks/loops show up as a jump) and remembers the per-word timeline.
+    /// </summary>
+    private void SyncKaraoke(IslandContent content)
+    {
+        var media = content.Media;
+        var now = NowMs();
+        if (media?.Karaoke is not { } track)
+        {
+            _karaokeTrack = null;
+            _karaokeHighlight = -1;
+            _karaokeActive = false;
+            _karaokeClock.Reset();
+            return;
+        }
+
+        var sameLine = _karaokeTrack is { } previous
+            && previous.LineStartMs == track.LineStartMs
+            && previous.TotalChars == track.TotalChars
+            && previous.Spans.Length == track.Spans.Length;
+        _karaokeTrack = track;
+        _karaokeActive = true;
+
+        if (!sameLine || !_karaokeClock.HasAnchor || _karaokeClock.IsJump(media.PositionMs, now))
+        {
+            // New line, first sample or a seek: snap instead of easing (a seek must not fast-forward
+            // through the words between the old and the new position).
+            _karaokeClock.Anchor(media.PositionMs, now, media.IsPlaying);
+            _karaokeHighlight = track.Progress(media.PositionMs);
+        }
+        else
+        {
+            _karaokeClock.SetPlaying(media.IsPlaying, now);
+        }
+    }
+
+    /// <summary>
+    /// Paints the karaoke sweep for the current frame. Returns true when the sweep changed enough to need a
+    /// repaint (1/255 of the line, i.e. sub-pixel on a normal-width line).
+    /// </summary>
+    private bool ApplyKaraokeSweep()
+    {
+        if (_karaokeTrack is not { } track || !_karaokeActive)
+        {
+            return false;
+        }
+
+        var position = _karaokeClock.PositionAt(NowMs());
+        var highlight = track.Progress(position);
+        var finished = track.IsFinished(position);
+        _karaokeActive = !finished;
+        if (Math.Abs(highlight - _karaokeHighlight) < KaraokeHighlightTolerance && !finished)
+        {
+            return false;
+        }
+
+        _karaokeHighlight = highlight;
+        if (_compact.Model is { ShowLyrics: true } compact)
+        {
+            _compact = _compact with { Model = compact with { LyricHighlight = highlight } };
+        }
+
+        if (_pages.Media.LyricLine is not null)
+        {
+            _pages = _pages with { Media = _pages.Media with { LyricHighlight = highlight } };
+        }
+
+        return true;
+    }
+
+    /// <summary>1/255: the smallest sweep change that can move a lit pixel on a normal-width line.</summary>
+    private const double KaraokeHighlightTolerance = 1.0 / 255.0;
+
+    /// <summary>
     /// Applies the lyric fade-in to the compact model and keeps the text column repainting while the
     /// line is still fading. Returns true when the pill's lyric text needs a repaint this frame.
     /// </summary>
@@ -1718,6 +1818,12 @@ public sealed class SkiaIslandController : IDisposable
     private void BuildRenderState()
     {
         SyncRailMotion(0);
+        if (ApplyKaraokeSweep() && _hasRenderState)
+        {
+            // The sweep only repaints the lyric text, never the whole island.
+            InvalidateKaraokeDamage();
+        }
+
         if (ApplyCompactLyricFade() && _hasRenderState)
         {
             // The text column sits outside the wave damage box, so repaint it explicitly while fading.
@@ -1846,6 +1952,33 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         InvalidateFull();
+    }
+
+    /// <summary>Damage of whatever the karaoke sweep paints (compact lyric column or the media lyric card).</summary>
+    private void InvalidateKaraokeDamage()
+    {
+        if (!_hasRenderState)
+        {
+            InvalidateFull();
+            return;
+        }
+
+        if (_renderState.Form == ShellForm.Expanded)
+        {
+            if (_renderState.PageIndex == 1)
+            {
+                var page = IslandMetrics.PageRect(_renderState, 1);
+                var lyric = PageLayout.MediaLyricCard(page);
+                InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
+            }
+
+            return;
+        }
+
+        if (_compact.Kind == ActivityKind.Media && _compact.Model is { ShowLyrics: true })
+        {
+            InvalidateDirty(CompactLyricDamage());
+        }
     }
 
     private VisualRect ContentDamage()

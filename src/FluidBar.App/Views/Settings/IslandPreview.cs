@@ -5,31 +5,44 @@ using Avalonia.Media;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Theme;
-using FluidBar.Core.Layout;
 
 namespace FluidBar.App.Views.Settings;
 
 /// <summary>
 /// Live appearance preview (<c>.appearance-preview</c> → <c>.ap-canvas</c> → <c>.ap-shell</c>): an 84 px
-/// gradient canvas holding the prototype's 300×62 shell, which reflects palette, accent, fill opacity,
-/// panel radius and font scale immediately as the user drags a slider.
+/// gradient canvas holding the prototype's 300×62 shell.
+/// <para>
+/// Everything inside the shell is painted from <see cref="IslandPreviewModel"/>, which is built by the
+/// same <c>SkiaIslandThemeMapper</c> the real island uses. A settings change calls
+/// <see cref="Update"/>, which rebuilds the model, raises <see cref="ModelChanged"/> (the pane's meta
+/// line) and repaints — no blur timing, no window reopen.
+/// </para>
 /// </summary>
 public sealed class IslandPreview : Control
 {
-    private AppSettings _settings = AppSettings.Default;
     private ILocalizer? _localizer;
 
     /// <summary>Creates the preview (.ap-canvas height).</summary>
     public IslandPreview()
     {
         Height = SettingsMetrics.ApCanvasHeight;
+        Model = IslandPreviewModel.From(AppSettings.Default);
     }
 
+    /// <summary>Current preview model (settings → island tokens).</summary>
+    public IslandPreviewModel Model { get; private set; }
+
+    /// <summary>Raised after every model rebuild so callers can refresh derived chrome (meta line).</summary>
+    public event Action<IslandPreviewModel>? ModelChanged;
+
     /// <summary>Applies a settings snapshot and repaints.</summary>
-    public void Update(AppSettings settings, ILocalizer localizer)
+    /// <param name="settings">Live App settings.</param>
+    /// <param name="localizer">Localizer for the preview copy (clock/meta).</param>
+    public void Update(AppSettings settings, ILocalizer? localizer)
     {
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        Model = IslandPreviewModel.From(settings ?? throw new ArgumentNullException(nameof(settings)));
         _localizer = localizer;
+        ModelChanged?.Invoke(Model);
         InvalidateVisual();
     }
 
@@ -42,8 +55,9 @@ public sealed class IslandPreview : Control
     {
         var width = Bounds.Width;
         var height = Bounds.Height;
+        _ = _localizer;
 
-        // .ap-canvas background: linear wash + two radial glows.
+        // .ap-canvas background: linear wash + two radial glows (the stage, not the island).
         context.FillRectangle(new LinearGradientBrush
         {
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -80,13 +94,12 @@ public sealed class IslandPreview : Control
             },
         }, new Rect(0, 0, width, height));
 
-        var palette = _settings.Colors;
-        var accent = Accents.ParseOrDefault(_settings.AccentFallback, Accents.Fallback);
-        var scale = Math.Clamp(_settings.FontScale, 0.8, 1.6);
+        var model = Model;
+        var scale = model.FontScale;
         var shellWidth = SettingsMetrics.ApShellWidth * scale;
         var shellHeight = SettingsMetrics.ApShellHeight;
         var shell = new Rect((width - shellWidth) / 2, (height - shellHeight) / 2, shellWidth, shellHeight);
-        var radius = Math.Clamp(_settings.PanelRadius, 0, shellHeight / 2);
+        var radius = model.RadiusFor(shellHeight);
 
         // box-shadow: 0 18px 36px -18px rgba(0,0,0,.8)
         for (var i = 3; i >= 1; i--)
@@ -100,17 +113,33 @@ public sealed class IslandPreview : Control
                 Math.Max(0, radius - (spread / 2)));
         }
 
-        var fill = Math.Clamp(_settings.FillOpacity, LayoutTokens.MinFillOpacity, 1);
+        // Shell body: island Background token at the effective fill opacity (glass overrides it, as in
+        // the renderer). Border: prototype .ap-shell hairline (foreground @ 8%).
         context.DrawRectangle(
-            new SolidColorBrush(Color.Parse("#08080A"), fill),
-            new Pen(new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)), 1),
+            new SolidColorBrush(model.Background, model.EffectiveFillOpacity),
+            new Pen(new SolidColorBrush(WithAlpha(model.Foreground, 0.08)), 1),
             shell,
             radius,
             radius);
 
+        // Simulated glass: same top highlight the renderer paints (white 0x20 → transparent at 35%).
+        if (model.Glass)
+        {
+            context.DrawRectangle(new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF), 0),
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.35),
+                },
+            }, null, shell, radius, radius);
+        }
+
         using (context.PushClip(new RoundedRect(shell, radius)))
         {
-            // .ap-art 34×34, 8 px radius, gradient from the accent.
+            // .ap-art 34×34, 8 px radius, gradient from the accent to the island ArtEnd token.
             var art = new Rect(
                 shell.X + SettingsMetrics.ApShellPadX,
                 shell.Center.Y - (SettingsMetrics.ApArtSize / 2),
@@ -122,12 +151,12 @@ public sealed class IslandPreview : Control
                 EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
                 GradientStops =
                 {
-                    new GradientStop(accent, 0),
-                    new GradientStop(Color.FromArgb(255, 40, 44, 60), 1),
+                    new GradientStop(model.Accent, 0),
+                    new GradientStop(model.ArtEnd, 1),
                 },
             }, null, art, SettingsMetrics.ApArtRadius, SettingsMetrics.ApArtRadius);
 
-            // .ap-copy b 18 px / 700 display, span 8.5 px --ui-fg-2.
+            // .ap-copy b 18 px / 700 display, span 8.5 px secondary foreground.
             var textLeft = art.Right + SettingsMetrics.ApShellGap;
             var clock = new FormattedText(
                 DateTimeOffset.Now.ToString("HH:mm", CultureInfo.CurrentCulture),
@@ -135,7 +164,7 @@ public sealed class IslandPreview : Control
                 FlowDirection.LeftToRight,
                 new Typeface(Fonts.Display, FontStyle.Normal, FontWeight.Bold),
                 SettingsMetrics.ApClockSize * scale,
-                Brushes.White);
+                new SolidColorBrush(model.Foreground));
             context.DrawText(clock, new Point(textLeft, shell.Center.Y - clock.Height + 1));
 
             var track = new FormattedText(
@@ -144,7 +173,7 @@ public sealed class IslandPreview : Control
                 FlowDirection.LeftToRight,
                 Fonts.Regular,
                 SettingsMetrics.ApTrackSize,
-                new SolidColorBrush(Color.Parse("#9B9BA5")));
+                new SolidColorBrush(model.ForegroundSecondary));
             context.DrawText(track, new Point(textLeft, shell.Center.Y + 2));
 
             // .ap-wave: four 2 px bars (4/11/7/13 px, 90/75/90/60% opacity).
@@ -156,29 +185,34 @@ public sealed class IslandPreview : Control
             {
                 var barHeight = heights[i];
                 context.DrawRectangle(
-                    new SolidColorBrush(accent, opacities[i]),
+                    new SolidColorBrush(WithAlpha(model.Accent, opacities[i])),
                     null,
                     new Rect(waveRight - ((heights.Length - i) * 4), shell.Center.Y - (barHeight / 2), 2, barHeight),
                     1,
                     1);
             }
 
-            // .ap-play 25×25 circle at rgba(255,255,255,.10) with a pause glyph.
+            // .ap-play 25×25 circle at foreground 10% with a pause glyph.
             var playCenter = new Point(playCenterX, shell.Center.Y);
             context.DrawEllipse(
-                new SolidColorBrush(Color.FromArgb(26, 255, 255, 255)),
+                new SolidColorBrush(WithAlpha(model.Foreground, 0.10)),
                 null,
                 playCenter,
                 SettingsMetrics.ApPlaySize / 2,
                 SettingsMetrics.ApPlaySize / 2);
-            context.DrawRectangle(Brushes.White, null, new Rect(playCenter.X - 3.5, playCenter.Y - 5, 2.5, 10), 1, 1);
-            context.DrawRectangle(Brushes.White, null, new Rect(playCenter.X + 1, playCenter.Y - 5, 2.5, 10), 1, 1);
+            context.DrawRectangle(new SolidColorBrush(model.Foreground), null,
+                new Rect(playCenter.X - 3.5, playCenter.Y - 5, 2.5, 10), 1, 1);
+            context.DrawRectangle(new SolidColorBrush(model.Foreground), null,
+                new Rect(playCenter.X + 1, playCenter.Y - 5, 2.5, 10), 1, 1);
 
-            // .ap-progress: 2 px bar pinned to the bottom edge, 62% accent.
-            context.FillRectangle(new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+            // .ap-progress: 2 px bar pinned to the bottom edge, 62% accent over the hairline track.
+            context.FillRectangle(new SolidColorBrush(model.Line),
                 new Rect(shell.X, shell.Bottom - 2, shell.Width, 2));
-            context.FillRectangle(new SolidColorBrush(accent),
+            context.FillRectangle(new SolidColorBrush(model.Accent),
                 new Rect(shell.X, shell.Bottom - 2, shell.Width * 0.62, 2));
         }
     }
+
+    private static Color WithAlpha(Color color, double alpha)
+        => Color.FromArgb((byte)Math.Clamp(Math.Round(alpha * 255), 0, 255), color.R, color.G, color.B);
 }

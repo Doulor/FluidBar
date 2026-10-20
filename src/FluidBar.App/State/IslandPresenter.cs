@@ -225,6 +225,8 @@ public static class IslandPresenter
             NextLyricLine = primary.SecondaryLyricLine ?? fallback?.NextLyricLine,
             // The karaoke sweep only exists in the platform snapshot (the activity carries no word timings).
             LyricHighlight = fallback?.LyricHighlight ?? -1,
+            Karaoke = fallback?.Karaoke,
+            PositionMs = fallback?.PositionMs ?? 0,
             TrackIndex = fallback?.TrackIndex ?? 0,
             TrackCount = fallback?.TrackCount ?? 0,
         };

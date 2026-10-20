@@ -510,9 +510,9 @@ public static class SkiaIslandStateBuilder
             .Append(media?.ProgressPercent).Append('|').Append(media?.PositionText).Append('|')
             .Append(media?.DurationText).Append('|').Append(media?.LyricLine).Append('|')
             .Append(media?.NextLyricLine).Append('|').Append(media?.IsPlaying).Append('|')
-            // Karaoke sweep in ~2 % steps: it advances *inside* a line, so the dynamic frame has to
-            // repaint while the line text itself is unchanged.
-            .Append(Math.Round(Math.Max(-1, media?.LyricHighlight ?? -1) * 50));
+            // Karaoke sweep in 0.2 % steps: the controller repaints per frame, and this signature must not
+            // quantise the sweep into visible jumps when content is re-synced.
+            .Append(Math.Round(Math.Max(-1, media?.LyricHighlight ?? -1) * 500));
         return builder.ToString();
     }
 

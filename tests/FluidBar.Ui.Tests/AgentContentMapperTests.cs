@@ -43,11 +43,26 @@ public sealed class AgentContentMapperTests
 
         Assert.Single(rows);
         Assert.Equal("运行中", rows[0].StatusText);
-        // prototype2 durations are numeric ("02:14", "48s"), not localized sentences.
+        // prototype2 durations are numeric ("02:14"/"0:45"), not localized sentences.
         Assert.Equal("03:12", rows[0].TimeText);
         Assert.Equal(StatusTone.Info, rows[0].Tone);
         Assert.Equal(AgentKind.DeepSeek, rows[0].Kind);
         Assert.Equal("session-x", rows[0].SessionId);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_SubMinuteDurationUsesTheMssForm()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(startedAt: Now.AddSeconds(-45))), Now, localizer);
+        });
+
+        // Under a minute prototype2 still uses a clock form ("0:45"), never a bare "45s".
+        Assert.Equal("0:45", rows[0].TimeText);
         await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
 

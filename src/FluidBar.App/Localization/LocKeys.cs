@@ -731,6 +731,8 @@ public static partial class LocKeys
             /// <summary><c>Settings.Appearance.FillOpacity</c></summary>
             public const string FillOpacity = "Settings.Appearance.FillOpacity";
             /// <summary><c>Settings.Appearance.FillOpacityHint</c></summary>
+            /// <summary><c>Settings.Appearance.FillOpacityAcrylicHint</c></summary>
+            public const string FillOpacityAcrylicHint = "Settings.Appearance.FillOpacityAcrylicHint";
             public const string FillOpacityHint = "Settings.Appearance.FillOpacityHint";
             /// <summary><c>Settings.Appearance.FontScale</c></summary>
             public const string FontScale = "Settings.Appearance.FontScale";

@@ -60,6 +60,16 @@ public sealed record MediaSessionData
     /// </summary>
     public double LyricHighlight { get; init; } = -1;
 
+    /// <summary>
+    /// Per-word timeline of <see cref="LyricLine"/> so the island can advance the sweep every frame from its
+    /// own extrapolated position instead of only when a new position sample arrives. Null when the lyric
+    /// source has no per-word timing.
+    /// </summary>
+    public FluidBar.Island.KaraokeTrack? Karaoke { get; init; }
+
+    /// <summary>Sampled playback position in milliseconds (the anchor for the island's extrapolation).</summary>
+    public double PositionMs { get; init; }
+
     /// <summary>Track index for "n of m" displays, 1-based; 0 when unknown.</summary>
     public int TrackIndex { get; init; }
 

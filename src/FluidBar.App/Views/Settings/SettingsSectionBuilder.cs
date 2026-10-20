@@ -154,7 +154,8 @@ public static class SettingsSectionBuilder
     }
 
     private static Control SliderRow(SettingsWindowContext context, string label, string? description,
-        double min, double max, double step, double value, Func<double, string> format, Action<double> changed)
+        double min, double max, double step, double value, Func<double, string> format, Action<double> changed,
+        bool enabled = true)
     {
         var palette = context.Palette;
         var slider = new SettingsSlider
@@ -174,6 +175,14 @@ public static class SettingsSectionBuilder
             tagText.Text = format(next);
             changed(next);
         };
+        if (!enabled)
+        {
+            // A value that cannot reach the island must not look adjustable (no silent no-op).
+            slider.IsEnabled = false;
+            slider.Opacity = 0.45;
+            tag.Opacity = 0.45;
+        }
+
         return SettingsWidgets.Row(label, description, SettingsControls.Range(slider, tag), palette);
     }
 
@@ -321,8 +330,9 @@ public static class SettingsSectionBuilder
     {
         var settings = ctx.Settings.Current;
         var palette = ctx.Palette;
+        // Same rule the mapper applies: acrylic degrades to obsidian in safe mode.
+        var acrylic = settings.Material == IslandMaterial.Acrylic && !settings.Advanced.SafeMode;
         var preview = new IslandPreview();
-        preview.Update(settings, ctx.Localizer);
 
         var swatches = new StackPanel
         {
@@ -369,15 +379,42 @@ public static class SettingsSectionBuilder
                     {
                         Material = value == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
                     })),
+                // Palette moved here from the advanced pane: it is a 1:1 island token (the preview
+                // repaints on every switch) and belongs next to the material.
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabelHint),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
+                    ],
+                    settings.Palette,
+                    value => ctx.Settings.Update(s => s with { Palette = value })),
                 SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Desc), swatches, palette),
+                // Artwork accent moved here as well; its hint states that the preview always paints the
+                // fallback colour (it is static, so there is no artwork to sample).
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkHint),
+                    settings.AccentMode == "artwork",
+                    value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
                     value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacity),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityHint),
+                    // Acrylic pins the fill to 72% in the renderer, so the slider is disabled with an
+                    // explanation instead of silently doing nothing.
+                    acrylic
+                        ? ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityAcrylicHint)
+                        : ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityHint),
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
-                    value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }))));
+                    value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }),
+                    enabled: !acrylic),
+                // Text size moved here: it is an island token, so the preview clock scales live.
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
+                    0.8, 1.6, 0.05, settings.FontScale,
+                    value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value }))));
 
         // .appearance-preview { margin-top:16; padding-top:12; border-top }
         var previewHead = new Grid
@@ -392,9 +429,6 @@ public static class SettingsSectionBuilder
             palette.TertiaryBrush));
         var meta = new TextBlock
         {
-            Text = ctx.Localizer.Format(LocKeys.Settings.Appearance.Meta,
-                ("radius", $"{settings.PanelRadius:0}"),
-                ("opacity", $"{settings.FillOpacity * 100:0}")),
             FontFamily = Fonts.Mono,
             FontSize = SettingsMetrics.ApMetaSize,
             Foreground = palette.TertiaryBrush,
@@ -402,6 +436,25 @@ public static class SettingsSectionBuilder
         };
         Grid.SetColumn(meta, 1);
         previewHead.Children.Add(meta);
+
+        // The meta line is derived chrome, not part of the painted shell: rebuild it from the same
+        // model so "30 px · 97%" can never go stale while the shell is already repainting.
+        void SyncMeta(IslandPreviewModel model)
+        {
+            meta.Text = ctx.Localizer.Format(
+                LocKeys.Settings.Appearance.Meta,
+                ("palette", PaletteLabel(ctx, model.Palette)),
+                ("material", model.Glass
+                    ? ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Acrylic)
+                    : ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Obsidian)),
+                ("radius", $"{model.PanelRadius:0}"),
+                ("opacity", $"{model.EffectiveFillOpacity * 100:0}"),
+                ("scale", $"{model.FontScale:0.00}"));
+        }
+
+        preview.ModelChanged += SyncMeta;
+        preview.Update(settings, ctx.Localizer);
+        SyncMeta(preview.Model);
 
         var canvas = new Border
         {
@@ -428,6 +481,15 @@ public static class SettingsSectionBuilder
         panel.Children.Add(SettingsControls.FooterNote(ctx.Localizer.Get(LocKeys.Settings.Appearance.LiveHint), palette));
         return panel;
     }
+
+    /// <summary>Localized palette name for the preview meta line.</summary>
+    private static string PaletteLabel(SettingsWindowContext ctx, string palette) => palette switch
+    {
+        "graphite" => ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite),
+        "slate" => ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate),
+        "nord" => ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord),
+        _ => ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian),
+    };
 
     // ---- island -----------------------------------------------------------------------------
 
@@ -966,24 +1028,7 @@ public static class SettingsSectionBuilder
                         OffHairline = palette.LineStrongBrush,
                         OffKnob = palette.SecondaryBrush,
                     },
-                    palette),
-                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabelHint),
-                    [
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Obsidian), "obsidian"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Graphite), "graphite"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Slate), "slate"),
-                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Palette.Nord), "nord"),
-                    ],
-                    settings.Palette,
-                    value => ctx.Settings.Update(s => s with { Palette = value })),
-                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkHint),
-                    settings.AccentMode == "artwork",
-                    value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
-                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
-                    0.8, 1.6, 0.05, settings.FontScale,
-                    value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value })))});
+                    palette))});
         // The reset action must be the chip's own callback: SmallAction marks PointerPressed as
         // handled, so a second handler appended after creation would never run (the reset chip used
         // to be a dead button).

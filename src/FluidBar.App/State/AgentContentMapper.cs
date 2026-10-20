@@ -146,9 +146,10 @@ public static class AgentContentMapper
         }
 
         var totalSeconds = (int)elapsed.TotalSeconds;
-        // prototype2 durations: "48s" under a minute, zero-padded "02:14" above.
-        return totalSeconds >= 60
-            ? $"{totalSeconds / 60:00}:{totalSeconds % 60:00}"
-            : $"{totalSeconds}s";
+        // prototype2 numeric duration: "02:14" (mm:ss), and "0:45" under a minute - never a bare
+        // seconds count ("75s" is wrong; a 75 s row must read "01:15").
+        var minutes = totalSeconds / 60;
+        var seconds = totalSeconds % 60;
+        return minutes > 0 ? $"{minutes:00}:{seconds:00}" : $"0:{seconds:00}";
     }
 }
