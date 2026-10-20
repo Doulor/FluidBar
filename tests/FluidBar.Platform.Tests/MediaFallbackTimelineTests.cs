@@ -545,6 +545,49 @@ public sealed class KugouArtworkCacheTests : IDisposable
         => Assert.Equal(expected, KugouArtworkCache.Matches(folderTitle, trackTitle));
 
     [Fact]
+    public void Matches_FoldsAwayFeaturingDecorationsThePlayerDropped()
+    {
+        // Real instance from the user machine: the player cached the cover as "Miss You a Little"
+        // while the window title reported "Miss You a Little (feat. lovelytheband)".
+        Assert.True(KugouArtworkCache.Matches("Miss You a Little", "miss you a little (feat. lovelytheband)"));
+        Assert.True(KugouArtworkCache.Matches("Untamed（失 控）", "untamed (失 控)"));
+        Assert.False(KugouArtworkCache.Matches("Some Other Song", "miss you a little (feat. lovelytheband)"));
+    }
+
+    [Fact]
+    public void Matches_RejectsAShortPrefixThatWouldShowAnotherSongsCover()
+    {
+        // "Miss You" exists in the cache as a different song; it must not answer this query.
+        Assert.False(KugouArtworkCache.Matches("Miss You", "miss you a little (feat. lovelytheband)"));
+    }
+
+    [Fact]
+    public void StripDecorations_RemovesBracketedGroupsAndSpaces()
+    {
+        Assert.Equal("missyoualittle", KugouArtworkCache.StripDecorations("miss you a little (feat. lovelytheband)"));
+        Assert.Equal("untamed", KugouArtworkCache.StripDecorations("untamed (失 控)"));
+        Assert.Equal("song", KugouArtworkCache.StripDecorations("song[live]"));
+    }
+
+    [Fact]
+    public void FindBestFile_PrefersTheDecoratedExactFolderOverAShorterPrefix()
+    {
+        var correct = Path.Combine(_root, "Miss You a Little_47552533", "120");
+        Directory.CreateDirectory(correct);
+        var correctFile = Path.Combine(correct, "cover.jpg");
+        File.WriteAllBytes(correctFile, Jpeg(200, 200));
+
+        var other = Path.Combine(_root, "Miss You_102910095", "120");
+        Directory.CreateDirectory(other);
+        File.WriteAllBytes(Path.Combine(other, "cover.jpg"), Jpeg(120, 120));
+        KugouArtworkCache.InvalidateIndex();
+
+        var found = KugouArtworkCache.FindBestFile(_root, "Miss You a Little (feat. lovelytheband)");
+
+        Assert.Equal(correctFile, found);
+    }
+
+    [Fact]
     public void FindBestFile_FindsTheWidthFoldedFolderAndPrefersTheLargest()
     {
         var folder = Path.Combine(_root, "Untamed（失 控）_203532254", "120");

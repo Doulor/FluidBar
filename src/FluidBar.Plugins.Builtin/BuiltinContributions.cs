@@ -143,7 +143,9 @@ public static class BuiltinContributions
         [
             Page(BuiltinIds.MediaSettings,
                 Toggle("media.showWave", "setting.media.showWave.title"),
-                Toggle("media.showLyrics", "setting.media.showLyrics.title")),
+                Toggle("media.showLyrics", "setting.media.showLyrics.title"),
+                // Island pill form: cover + live lyric + wave instead of title/artist (default on).
+                Toggle("media.compactLyrics", "setting.media.compactLyrics.title")),
         ],
         Commands =
         [

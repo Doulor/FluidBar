@@ -798,6 +798,12 @@ public static partial class LocKeys
             public const string SettingsButton = "Settings.Plugins.SettingsButton";
             /// <summary><c>Settings.Plugins.Commands</c></summary>
             public const string Commands = "Settings.Plugins.Commands";
+            /// <summary><c>Settings.Plugins.Detail.Empty</c></summary>
+            public const string DetailEmpty = "Settings.Plugins.Detail.Empty";
+            /// <summary><c>Settings.Plugins.Detail.Run</c></summary>
+            public const string DetailRun = "Settings.Plugins.Detail.Run";
+            /// <summary><c>Settings.Plugins.Detail.Meta</c></summary>
+            public const string DetailMeta = "Settings.Plugins.Detail.Meta";
         }
         /// <summary>Keys in the 'Marketplace' area.</summary>
         public static class Marketplace
@@ -1359,6 +1365,15 @@ public static partial class LocKeys
             {
                 /// <summary><c>setting.media.showLyrics.title</c></summary>
                 public const string title = "setting.media.showLyrics.title";
+            }
+            /// <summary>Keys in the 'compactLyrics' area.</summary>
+            public static class compactLyrics
+            {
+                /// <summary><c>setting.media.compactLyrics.title</c></summary>
+                public const string title = "setting.media.compactLyrics.title";
+
+                /// <summary><c>setting.media.compactLyrics.description</c></summary>
+                public const string description = "setting.media.compactLyrics.description";
             }
         }
         /// <summary>Keys in the 'clipboard' area.</summary>

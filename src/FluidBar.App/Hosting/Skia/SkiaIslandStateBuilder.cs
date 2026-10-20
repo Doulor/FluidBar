@@ -26,11 +26,20 @@ public static class SkiaIslandStateBuilder
     /// <param name="content">Non-activity content snapshot.</param>
     /// <param name="localizer">Localizer for labels.</param>
     /// <param name="peeked">Whether the pill is in the hover-peek form.</param>
+    /// <param name="island">Activity view model from the Core presenter.</param>
+    /// <param name="content">Non-activity content snapshot.</param>
+    /// <param name="localizer">Localizer for labels.</param>
+    /// <param name="peeked">Whether the pill is in the hover-peek form.</param>
+    /// <param name="compactLyrics">
+    /// Media setting "lyrics in the pill": when true and a lyric line is known, the compact pill swaps the
+    /// title/artist for the live lyric (cover + lyric + wave). A missing lyric keeps the title form.
+    /// </param>
     public static CompactActivity BuildCompact(
         IslandViewModel island,
         IslandContent content,
         ILocalizer localizer,
-        bool peeked)
+        bool peeked,
+        bool compactLyrics = false)
     {
         ArgumentNullException.ThrowIfNull(island);
         ArgumentNullException.ThrowIfNull(content);
@@ -45,8 +54,15 @@ public static class SkiaIslandStateBuilder
             ? (media.HasTimeline ? media.ProgressPercent : -1)
             : model.ProgressPercent ?? -1;
         var unread = kind == ActivityKind.Notification ? Math.Max(0, content.UnreadCount) : 0;
+        // Lyric mode only replaces the two text rows; artwork/progress/wave stay exactly the same, and an
+        // empty lyric falls back to the title form (never a blank line).
+        var lyricLine = compactLyrics && kind == ActivityKind.Media && media is not null
+            ? NullIfEmpty(media.LyricLine)
+            : null;
         return new CompactActivity(kind, new CompactModel
         {
+            ShowLyrics = lyricLine is not null,
+            LyricLine = lyricLine,
             Title = NullIfEmpty(model.Title),
             Subtitle = NullIfEmpty(model.Subtitle),
             Body = NullIfEmpty(model.Body),

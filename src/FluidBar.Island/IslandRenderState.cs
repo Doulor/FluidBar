@@ -412,6 +412,18 @@ public sealed record CompactModel
     /// <summary>Stable cache key for <see cref="Artwork"/>.</summary>
     public string? ArtworkKey { get; init; }
 
+    /// <summary>
+    /// Live lyric line for the compact lyric layout (null = no lyric available, so the pill keeps the
+    /// title/artist form instead of showing an empty row).
+    /// </summary>
+    public string? LyricLine { get; init; }
+
+    /// <summary>Whether the media pill paints the lyric layout (cover + lyric line + wave, no title).</summary>
+    public bool ShowLyrics { get; init; }
+
+    /// <summary>Fade-in progress of the current lyric line (0..1) so a line change is not a hard cut.</summary>
+    public float LyricFade { get; init; } = 1f;
+
     /// <summary>Optional leading icon override.</summary>
     public IconKind? Icon { get; init; }
 

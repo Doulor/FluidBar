@@ -127,10 +127,20 @@ internal sealed class CompactRenderer : IDisposable
         // subtitle, 20×15 wave, 26 DIP translucent play button, full-width 1.5 DIP progress bar.
         var wave = new SKRect(width - 65, (height - 15) / 2, width - 45, (height + 15) / 2);
         var textRight = wave.Left - 9;
-        _text.Draw(canvas, model.Title, IslandType.CompactMediaTitle,
-            new SKRect(45, 5.5f, textRight, 21), _theme.Foreground, TextAlign.Left, _opacity);
-        _text.Draw(canvas, model.Subtitle, IslandType.CompactMediaSub,
-            new SKRect(45, 21, textRight, 35), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        if (model.ShowLyrics && !string.IsNullOrEmpty(model.LyricLine))
+        {
+            // Lyric layout (media setting "lyrics in the pill"): cover + live lyric + wave, no title/artist.
+            // The single line is vertically centred in the two-row band and ellipsised by the text engine,
+            // so an overlong lyric can never push the wave or the play button.
+            DrawLyricLine(canvas, model, new SKRect(45, 5.5f, textRight, height - 5.5f));
+        }
+        else
+        {
+            _text.Draw(canvas, model.Title, IslandType.CompactMediaTitle,
+                new SKRect(45, 5.5f, textRight, 21), _theme.Foreground, TextAlign.Left, _opacity);
+            _text.Draw(canvas, model.Subtitle, IslandType.CompactMediaSub,
+                new SKRect(45, 21, textRight, 35), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
 
         DrawWave(canvas, wave, accent, model.IsActive);
 
@@ -147,6 +157,26 @@ internal sealed class CompactRenderer : IDisposable
             DrawTrack(canvas, track, Math.Clamp(model.ProgressPercent / 100.0, 0, 1), accent,
                 SKColors.White.WithAlpha(20));
         }
+    }
+
+    /// <summary>Draws the live lyric line with its fade-in, clipped to the text column.</summary>
+    private void DrawLyricLine(SKCanvas canvas, CompactModel model, SKRect rect)
+    {
+        var fade = Math.Clamp(model.LyricFade, 0, 1);
+        var alpha = _opacity * fade;
+        if (alpha <= 0.01f)
+        {
+            return;
+        }
+
+        // A fade that slides up two DIP makes the line change read as a scroll rather than a hard cut.
+        var lift = (1 - fade) * 2f;
+        var line = new SKRect(rect.Left, rect.Top + lift, rect.Right, rect.Bottom + lift);
+        canvas.Save();
+        canvas.ClipRect(new SKRect(rect.Left - 1, rect.Top - 3, rect.Right + 1, rect.Bottom + 3));
+        _text.Draw(canvas, model.LyricLine, IslandType.CompactMediaTitle, line, _theme.Foreground,
+            TextAlign.Left, alpha);
+        canvas.Restore();
     }
 
     // ------------------------------------------------------------------- hud

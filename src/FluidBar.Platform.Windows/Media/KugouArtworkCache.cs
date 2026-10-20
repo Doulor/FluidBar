@@ -68,12 +68,14 @@ internal static class KugouArtworkCache
         }
     }
 
-    /// <summary>Finds the largest cached cover for a track title (pure-ish; unit-tested).</summary>
+    /// <summary>Finds the best cached cover for a track title (pure-ish; unit-tested).</summary>
     /// <remarks>
-    /// The cache folder is named <c>{title}_{songId}</c>, but the player writes the title in its own
-    /// typography: "Untamed（失 控）_203532254" for the track the window title reports as
-    /// "Untamed (失 控)". Matching therefore folds full-width punctuation/space and falls back to a
-    /// whitespace-free comparison, otherwise a perfectly cached cover is never found.
+    /// <para>The cache folder is named <c>{title}_{songId}</c>, but the player writes the title with its
+    /// own typography and often drops decorations: the window title reports
+    /// "Miss You a Little (feat. lovelytheband)" while the folder is "Miss You a Little_47552533", and
+    /// "Untamed (失 控)" is cached as "Untamed（失 控）_203532254". Matching therefore scores candidates
+    /// (exact folded, whitespace-free, decorations stripped, long prefix) instead of requiring equality,
+    /// otherwise perfectly cached covers are never found.</para>
     /// </remarks>
     internal static string? FindBestFile(string albumImageRoot, string? title)
     {
@@ -83,17 +85,26 @@ internal static class KugouArtworkCache
             return null;
         }
 
+        var targetBase = StripDecorations(Fold(title));
         var candidates = Directories(albumImageRoot);
         string? bestPath = null;
+        var bestScore = -1;
+        var bestPrefix = -1;
+        DateTime bestWriteTime = DateTime.MinValue;
         long bestLength = -1;
+
         foreach (var directory in candidates)
         {
             var folderTitle = FolderTitle(Path.GetFileName(directory));
-            if (!Matches(folderTitle, target))
+            var score = ScoreMatch(folderTitle, target, targetBase, out var prefixLength);
+            if (score < 0)
             {
                 continue;
             }
 
+            string? directoryBest = null;
+            long directoryLength = -1;
+            var directoryWriteTime = DateTime.MinValue;
             foreach (var file in EnumerateImages(directory))
             {
                 long length;
@@ -111,34 +122,147 @@ internal static class KugouArtworkCache
                     continue;
                 }
 
-                if (length > bestLength)
+                if (length > directoryLength)
                 {
-                    bestPath = file;
-                    bestLength = length;
+                    directoryBest = file;
+                    directoryLength = length;
                 }
+
+                try
+                {
+                    var writeTime = File.GetLastWriteTimeUtc(file);
+                    if (writeTime > directoryWriteTime)
+                    {
+                        directoryWriteTime = writeTime;
+                    }
+                }
+                catch (IOException)
+                {
+                }
+            }
+
+            if (directoryBest is null)
+            {
+                continue;
+            }
+
+            // Higher score wins; then the longer matched prefix, then the most recently written cover
+            // (the player rewrites the current song's artwork when it starts).
+            if (score > bestScore
+                || (score == bestScore && prefixLength > bestPrefix)
+                || (score == bestScore && prefixLength == bestPrefix && directoryWriteTime > bestWriteTime)
+                || (score == bestScore && prefixLength == bestPrefix && directoryWriteTime == bestWriteTime
+                    && directoryLength > bestLength))
+            {
+                bestPath = directoryBest;
+                bestScore = score;
+                bestPrefix = prefixLength;
+                bestWriteTime = directoryWriteTime;
+                bestLength = directoryLength;
             }
         }
 
         return bestPath;
     }
 
-    /// <summary>True when a cache folder title denotes the queried track title.</summary>
-    internal static bool Matches(string? folderTitle, string? normalizedTitle)
+    /// <summary>
+    /// Scores how well a cache-folder title denotes the queried track title: -1 when it does not,
+    /// 4 exact, 3 whitespace-free, 2 to-bracketed-decorations stripped, 1 long prefix.
+    /// </summary>
+    internal static int ScoreMatch(string? folderTitle, string? normalizedTitle, string? targetBase,
+        out int prefixLength)
     {
+        prefixLength = 0;
         var foldedFolder = Fold(folderTitle);
         var foldedTitle = Fold(normalizedTitle);
         if (foldedFolder.Length == 0 || foldedTitle.Length == 0)
         {
-            return false;
+            return -1;
         }
 
-        if (foldedFolder.Equals(foldedTitle, StringComparison.Ordinal)
-            || foldedFolder.StartsWith(foldedTitle, StringComparison.Ordinal))
+        prefixLength = CommonPrefixLength(foldedFolder, foldedTitle);
+
+        if (foldedFolder.Equals(foldedTitle, StringComparison.Ordinal))
         {
-            return true;
+            return 4;
         }
 
-        return Compact(foldedFolder).Equals(Compact(foldedTitle), StringComparison.Ordinal);
+        if (Compact(foldedFolder).Equals(Compact(foldedTitle), StringComparison.Ordinal))
+        {
+            return 3;
+        }
+
+        var folderBase = StripDecorations(foldedFolder);
+        var baseTarget = StripDecorations(targetBase ?? foldedTitle);
+        if (baseTarget.Length > 0 && folderBase.Length > 0
+            && folderBase.Equals(baseTarget, StringComparison.Ordinal))
+        {
+            return 2;
+        }
+
+        // Last resort: the folder carries a long prefix of the title (the player truncated it). Requiring
+        // most of the title keeps "Miss You" from answering a query for "Miss You a Little".
+        if (folderBase.Length >= 6
+            && baseTarget.StartsWith(folderBase, StringComparison.Ordinal)
+            && folderBase.Length * 10 >= baseTarget.Length * 6)
+        {
+            return 1;
+        }
+
+        return -1;
+    }
+
+    /// <summary>True when a cache folder title denotes the queried track title.</summary>
+    internal static bool Matches(string? folderTitle, string? normalizedTitle)
+        => ScoreMatch(folderTitle, normalizedTitle, null, out _) >= 0;
+
+    /// <summary>Removes bracketed decorations ("(feat. X)", "[Live]", "（失 控）") and collapses space.</summary>
+    internal static string StripDecorations(string? folded)
+    {
+        if (string.IsNullOrWhiteSpace(folded))
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder(folded.Length);
+        var depth = 0;
+        foreach (var character in folded)
+        {
+            if (character is '(' or '[' or '{')
+            {
+                depth++;
+                continue;
+            }
+
+            if (character is ')' or ']' or '}')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                continue;
+            }
+
+            if (depth == 0)
+            {
+                builder.Append(character);
+            }
+        }
+
+        return Compact(builder.ToString()).Trim();
+    }
+
+    private static int CommonPrefixLength(string left, string right)
+    {
+        var limit = Math.Min(left.Length, right.Length);
+        var index = 0;
+        while (index < limit && left[index] == right[index])
+        {
+            index++;
+        }
+
+        return index;
     }
 
     /// <summary>Drops the "_songId" suffix the player appends to the cache folder.</summary>

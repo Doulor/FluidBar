@@ -54,6 +54,13 @@ public sealed class SkiaIslandController : IDisposable
     private IslandStateController _controller;
 
     private CompactActivity _compact = new(ActivityKind.Idle, new CompactModel());
+
+    // Compact lyric mode: the setting is read live from the media plugin's store, and a line change
+    // animates in over CompactLyricFadeMs so the pill does not hard-cut twice per line.
+    private const double CompactLyricFadeMs = 220;
+    private readonly MediaPillPreferences _mediaPill;
+    private string? _compactLyricText;
+    private long _compactLyricChangedAtMs = -1;
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -102,9 +109,12 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Creates the controller (call <see cref="Start"/> to begin producing content).</summary>
     /// <param name="options">Composition options.</param>
     /// <param name="dispatcher">Optional dispatcher (defaults to a UI-thread synchronization-context dispatcher).</param>
-    public SkiaIslandController(SkiaIslandHostOptions options, SkiaHostDispatcher? dispatcher = null)
+    /// <param name="mediaPill">Media pill preferences (defaults to the media plugin's settings file).</param>
+    public SkiaIslandController(SkiaIslandHostOptions options, SkiaHostDispatcher? dispatcher = null,
+        MediaPillPreferences? mediaPill = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _mediaPill = mediaPill ?? new MediaPillPreferences();
         _localizer = options.Localizer;
         _settings = options.Settings;
         _data = options.Data;
@@ -1160,7 +1170,9 @@ public sealed class SkiaIslandController : IDisposable
         _dynamicSignature = dynamicSignature;
 
         var peeked = State.Kind == IslandStateKind.Peek;
-        _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked);
+        var showCompactLyrics = _mediaPill.ShowCompactLyrics;
+        _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked, showCompactLyrics);
+        TrackCompactLyric();
         _pages = ApplyPageScroll(ApplyCopyFeedback(
             SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
             _time.GetLocalNow()));
@@ -1517,8 +1529,54 @@ public sealed class SkiaIslandController : IDisposable
 
     // ------------------------------------------------------------------ render state
 
+    /// <summary>Notes when the pill's lyric line changed so the next frames can fade it in.</summary>
+    private void TrackCompactLyric()
+    {
+        var lyric = _compact.Model.ShowLyrics ? _compact.Model.LyricLine : null;
+        if (string.Equals(lyric, _compactLyricText, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _compactLyricText = lyric;
+        _compactLyricChangedAtMs = lyric is null ? -1 : NowMs();
+    }
+
+    /// <summary>
+    /// Applies the lyric fade-in to the compact model and keeps the text column repainting while the
+    /// line is still fading. Returns true when the pill's lyric text needs a repaint this frame.
+    /// </summary>
+    private bool ApplyCompactLyricFade()
+    {
+        if (!_compact.Model.ShowLyrics || _compact.Model.LyricLine is null)
+        {
+            return false;
+        }
+
+        var fade = 1f;
+        if (_compactLyricChangedAtMs >= 0 && !_motion.ReducedMotion)
+        {
+            var elapsed = NowMs() - _compactLyricChangedAtMs;
+            fade = (float)Math.Clamp(elapsed / CompactLyricFadeMs, 0, 1);
+        }
+
+        if (Math.Abs(_compact.Model.LyricFade - fade) < 0.01f)
+        {
+            return fade < 1f;
+        }
+
+        _compact = _compact with { Model = _compact.Model with { LyricFade = fade } };
+        return true;
+    }
+
     private void BuildRenderState()
     {
+        if (ApplyCompactLyricFade() && _hasRenderState)
+        {
+            // The text column sits outside the wave damage box, so repaint it explicitly while fading.
+            InvalidateDirty(CompactLyricDamage());
+        }
+
         var mode = _settings.Current.IslandMode;
         _motion.PanelRadius = _settings.Current.PanelRadius;
         var form = ResolveVisualForm();
@@ -1653,6 +1711,20 @@ public sealed class SkiaIslandController : IDisposable
 
         var shell = IslandMetrics.ShellRect(_renderState);
         return new VisualRect(shell.Right - 62, shell.Top + 11, 26, 18);
+    }
+
+    /// <summary>Damage box of the compact media text column (the lyric line when lyric mode is on).</summary>
+    private VisualRect CompactLyricDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        var shell = IslandMetrics.ShellRect(_renderState);
+        var left = shell.Left + 45;
+        var right = Math.Max(left + 1, shell.Right - 65 - 9);
+        return new VisualRect(left - 1, shell.Top + 2, right - left + 2, shell.Height - 4);
     }
 
     // ------------------------------------------------------------------ pointer zones
