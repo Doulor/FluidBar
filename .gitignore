@@ -26,3 +26,4 @@ docs/rewrite/prototype/_shots/
 *.zip
 example.txt
 
+third_party/
