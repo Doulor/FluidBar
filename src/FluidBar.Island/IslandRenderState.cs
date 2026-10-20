@@ -163,6 +163,46 @@ public readonly record struct IslandRenderState
     /// <summary>Compact primary height the split capsules match (DIP), frozen while expanding.</summary>
     public double SplitIsletHeight { get; init; }
 
+    /// <summary>
+    /// Animated poses of the split satellites, projected once per frame from
+    /// <c>SplitSatelliteMotion.Values</c> (see docs/satellite-render-contract.md). Ordered like
+    /// <see cref="SplitIslets"/>: index <c>i</c> belongs to <c>SplitIslets[i]</c>. Empty when the host
+    /// does not drive the motion (settled snapshots, tests): the renderer then falls back to the
+    /// <see cref="SplitProgress"/> birth path and behaves exactly as before.
+    /// </summary>
+    public IslandSatelliteFrame[] SatelliteFrames { get; init; } = [];
+
+    /// <summary>
+    /// Render-ready pose of one split satellite. Only the pose lives here; the icon, title and colour
+    /// still come from <see cref="IslandSplitIslet"/> (contract §2.3).
+    /// </summary>
+    /// <param name="State">Lifecycle; <see cref="SplitSatelliteState.Hidden"/> and
+    /// <see cref="SplitSatelliteState.Merged"/> frames are not drawn.</param>
+    /// <param name="X">Centre X in DIP: signed offset from the island anchor (the shell centre).</param>
+    /// <param name="Y">Centre Y in DIP: signed offset from the shell centre (positive = down).</param>
+    /// <param name="Scale">Composed scale (birth/merge × press × hover × breathing); multiply the base
+    /// diameter with it and add no further scaling.</param>
+    /// <param name="StretchX">Normalised directional stretch along X (0.08 = +8 %), applied about the
+    /// satellite centre; stroke widths are compensated so the rim keeps its weight.</param>
+    /// <param name="StretchY">Normalised directional stretch along Y.</param>
+    /// <param name="Highlight">Hover highlight strength (0..1), multiplied into the white rim and the
+    /// cover hairline; the body colour never changes.</param>
+    /// <param name="Brightness">Brightness delta (−0.06 while pressed), applied as a neutral darkening
+    /// so the ball never picks up a hue.</param>
+    /// <param name="RingAngleDegrees">Agent ring start angle in degrees (cumulative).</param>
+    /// <param name="PressDepth">Press depth (0..1) → top inner shadow alpha = 0.18 × depth.</param>
+    public readonly record struct IslandSatelliteFrame(
+        SplitSatelliteState State,
+        double X,
+        double Y,
+        double Scale,
+        double StretchX,
+        double StretchY,
+        double Highlight,
+        double Brightness,
+        double RingAngleDegrees,
+        double PressDepth);
+
     /// <summary>One-shot 0..1 ghost-exchange phase after a wheel rotation of the stacked order.</summary>
     public double StackSpin { get; init; }
 

@@ -15,17 +15,17 @@ namespace FluidBar.Island;
 /// </remarks>
 public static class CompactMediaLayout
 {
-    /// <summary>Left padding before the artwork.</summary>
-    public const float LeftPadding = 8f;
+    /// <summary>Left padding before the artwork (10: the iOS inset, was 8).</summary>
+    public const float LeftPadding = 10f;
 
-    /// <summary>Artwork edge length.</summary>
-    public const float ArtworkSize = 28f;
+    /// <summary>Artwork edge length (22 ≈ 0.6 × the 36-40 DIP pill height; was 28 = 0.70 h).</summary>
+    public const float ArtworkSize = 22f;
 
     /// <summary>Gap between the artwork and the text column.</summary>
     public const float ArtworkGap = 9f;
 
-    /// <summary>Audio wave width.</summary>
-    public const float WaveWidth = 20f;
+    /// <summary>Audio wave width (18: tightened with the narrower pill; was 20).</summary>
+    public const float WaveWidth = 18f;
 
     /// <summary>Audio wave height.</summary>
     public const float WaveHeight = 15f;
@@ -33,13 +33,13 @@ public static class CompactMediaLayout
     /// <summary>Gap between the text column and the wave.</summary>
     public const float GapBeforeWave = 9f;
 
-    /// <summary>Right padding after the wave.</summary>
-    public const float RightPadding = 10f;
+    /// <summary>Right padding after the wave (8: tightened, was 10).</summary>
+    public const float RightPadding = 8f;
 
-    /// <summary>Left edge of the text column (8 + 28 + 9).</summary>
+    /// <summary>Left edge of the text column (10 + 22 + 9 = 41).</summary>
     public const float TextLeft = LeftPadding + ArtworkSize + ArtworkGap;
 
-    /// <summary>Width from the text column's right edge to the pill's right edge (39).</summary>
+    /// <summary>Width from the text column's right edge to the pill's right edge (35).</summary>
     public const float TextToTrailingEdge = GapBeforeWave + WaveWidth + RightPadding;
 
     /// <summary>Pill width that carries no text at all (artwork + paddings + wave).</summary>
@@ -53,7 +53,7 @@ public static class CompactMediaLayout
 
     /// <summary>
     /// Smallest content-fit width: fixed chrome plus the anti-ellipsis slack. The lyric pill uses this
-    /// instead of the 226 DIP media token, so a short line hugs its text instead of leaving a large
+    /// instead of the 180 DIP media token, so a short line hugs its text instead of leaving a large
     /// asymmetric blank on the right.
     /// </summary>
     public const float MinContentWidth = FixedWidth + TextSlack;

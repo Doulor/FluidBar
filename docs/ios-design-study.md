@@ -154,6 +154,7 @@ FluidBar 密度规则：紧凑最多 2 个文本 run + 1 trailing 值；圆形�
 | 10 | 中 | Split .46/.68；活动切换无统一方向位移 | iOS 0.35–0.6；press .2/.6 | 保留 Press .18/.65；活动卡进入 16 DIP + stagger 40ms；数字 .3 ease-out；Split .42/.72 | S–M（0.5–1 天） |
 | 11 | 低–中 | 部分时间/百分比非 tabular | Live Activity monospacedDigit | 时间/百分比/倒计时统一 Mono；数字更新不改变布局 | S（0.5 天） |
 | 12 | 低 | PageTitle 10/页码 8.5 与内容比例失衡 | iOS 层级更高 | PageTitle 13、页码 9.5、eyebrow 9；标题左对齐 | S（0.5 天） |
+| 13 | 低（已实施，有意偏离原型） | Rail 当前胶囊标签 **9 DIP**（原型 `.mini-label` 9 pt 的实测基线：胶囊 64/70/73、标签宽 18.188/24.406/27.271） | iOS caption2 ≈ 11 pt；rail 在 150 % DPI 下 9 pt 偏小，低于可读性下限 | **已实施**：`IslandMetrics.MiniLabelSize` 9 → **11**（对齐 `TypographyScale.RailLabel` 11/14）；胶囊宽度随标签自动增长（64→67、70→75、73→79），远点簇随之平移 1.5–3 DIP；`MiniRailPrototypeTests` 已迁移到 11 pt 基线并在文件头保留原型值（可读性优先，非随手改动） | 已做（2026-10-21） |
 
 实施顺序：1（字体）→4（紧凑 padding/封面）→5（材质）→2/3（比例，需设计确认）→9（密度）→10/11（动效/数字）。1/4/5 低风险高收益；2/3 需同步 layout 测试与 golden，独立 PR。
 

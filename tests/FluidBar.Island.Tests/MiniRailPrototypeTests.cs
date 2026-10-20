@@ -6,8 +6,18 @@ using SkiaSharp;
 namespace FluidBar.Island.Tests;
 
 /// <summary>
-/// Pixel/layout contract for the prototype2 transient preview rail (`.mini-rail`). The expected
-/// numbers are the live measurements from
+/// Pixel/layout contract for the prototype2 transient preview rail (mini-rail).
+/// <para>
+/// <b>Baseline note (deliberate deviation, 2026-10-21).</b> Every number in this file was measured
+/// from prototype2 with a <b>9 DIP</b> rail label (mini-label, 9 pt). The shipped rail renders the
+/// label at <b>11 DIP</b> - the readability floor agreed with the iOS study - so the expectations
+/// below were migrated to the 11 pt baseline and the prototype values are kept inline in comments
+/// (capsule 64 -> 67, 70 -> 75, 73 -> 79; label width 18.188 -> 22.22, 24.406 -> 29.83,
+/// 27.271 -> 33.33; far-dot centres 317/321.5 -> 318.5/324.5). This is a documented product
+/// decision recorded in docs/ios-design-study.md (rail label row), not a silent re-baseline.
+/// </para>
+/// <para>
+/// The expected numbers are the live measurements from
 /// <c>docs/rewrite/prototype2/index.html?state=expanded&amp;tab=…&amp;arch=1</c> in a 1440×900 Edge
 /// viewport: shell (500,12) 440×284, rail y 304 height 32, prev/next 26×26 centred on y 320,
 /// current capsule 28 DIP tall with label-grown width, 8 DIP island gaps, 3 DIP dots on a 7 DIP pitch
@@ -24,20 +34,22 @@ public sealed class MiniRailPrototypeTests
     private static readonly string[] ZhLabels = ["主页", "媒体", "通知", "剪贴板", "Agent", "小组件"];
 
     [Theory]
-    [InlineData("主页", 64f)]
-    [InlineData("媒体", 64f)]
-    [InlineData("通知", 64f)]
-    [InlineData("剪贴板", 73f)]
-    [InlineData("小组件", 73f)]
-    [InlineData("Agent", 70f)]
+    // 11 pt labels: 64 -> 67, 73 -> 79, 70 -> 75 (prototype 9 pt values in the comments).
+    [InlineData("主页", 67f)]   // prototype 64f
+    [InlineData("媒体", 67f)]   // prototype 64f
+    [InlineData("通知", 67f)]   // prototype 64f
+    [InlineData("剪贴板", 79f)] // prototype 73f
+    [InlineData("小组件", 79f)] // prototype 73f
+    [InlineData("Agent", 75f)]  // prototype 70f
     public void CapsuleWidth_MatchesThePrototypeMeasuredWidths(string label, float expected)
         => Assert.Equal(expected, MiniRailLayout.CapsuleWidth(label), Eps);
 
     [Theory]
-    [InlineData("主页", 18.188f)]
-    [InlineData("通知", 18.188f)]
-    [InlineData("剪贴板", 27.271f)]
-    [InlineData("Agent", 24.406f)]
+    // 11 pt label advances (prototype 9 pt: 18.188 / 18.188 / 27.271 / 24.406).
+    [InlineData("主页", 22.22f)]
+    [InlineData("通知", 22.22f)]
+    [InlineData("剪贴板", 33.33f)]
+    [InlineData("Agent", 29.83f)]
     public void LabelWidth_MatchesTheBrowserMeasurement(string label, float expected)
         => Assert.Equal(expected, MiniRailLayout.LabelWidth(label), 0.05f);
 
@@ -45,6 +57,8 @@ public sealed class MiniRailPrototypeTests
     [Fact]
     public void CapsuleWidth_ClampsToThePrototypeRange()
     {
+        // The 64 DIP floor is a token, not label-dependent: an empty/absent label keeps it at any
+        // label size (only the label-grown part above the floor scales with the 11 pt label).
         Assert.Equal(64f, MiniRailLayout.CapsuleWidth(""), Eps);
         Assert.Equal(64f, MiniRailLayout.CapsuleWidth(null), Eps);
         Assert.Equal(104f, MiniRailLayout.CapsuleWidth(new string('W', 40)), Eps);
@@ -81,18 +95,18 @@ public sealed class MiniRailPrototypeTests
         var offsetX = shell.Left - 500f;
         var offsetY = shell.Top - 12f;
 
-        Assert.Equal(73f, layout.Current.Width, 0.001f);
-        Assert.Equal(683.5f + offsetX, layout.Current.Left, 0.001f);
+        Assert.Equal(79f, layout.Current.Width, 0.001f);
+        Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
         Assert.Equal(306f + offsetY, layout.Current.Top, 0.001f);
-        Assert.Equal(662.5f + offsetX, layout.Previous.MidX, 0.001f);
-        Assert.Equal(777.5f + offsetX, layout.Next.MidX, 0.001f);
+        Assert.Equal(659.5f + offsetX, layout.Previous.MidX, 0.001f);
+        Assert.Equal(780.5f + offsetX, layout.Next.MidX, 0.001f);
         Assert.Equal(320f + offsetY, layout.Current.MidY, 0.001f);
 
         Assert.Equal(2, layout.DotsLeft.Length);
         Assert.Equal(1, layout.DotsRight.Length);
-        Assert.Equal(632.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
-        Assert.Equal(639.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(797.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
+        Assert.Equal(629.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
+        Assert.Equal(636.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
+        Assert.Equal(800.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
         Assert.Equal(3f, layout.DotsLeft[0].Width, 0.001f);
         Assert.Equal(318.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
 
@@ -113,9 +127,10 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Empty(layout.DotsLeft);
         Assert.Equal(3, layout.DotsRight.Length);
-        Assert.Equal(793f + offsetX, layout.DotsRight[0].Left, 0.001f);
-        Assert.Equal(800f + offsetX, layout.DotsRight[1].Left, 0.001f);
-        Assert.Equal(807f + offsetX, layout.DotsRight[2].Left, 0.001f);
+        // 11 pt: 794.5 / 801.5 / 808.5 (prototype 9 pt: 793 / 800 / 807).
+        Assert.Equal(794.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
+        Assert.Equal(801.5f + offsetX, layout.DotsRight[1].Left, 0.001f);
+        Assert.Equal(808.5f + offsetX, layout.DotsRight[2].Left, 0.001f);
         Assert.Equal(3f, layout.DotsRight[1].Width, 0.001f);
         Assert.Equal(7f, layout.DotsRight[2].Width, 0.001f);
         var offsetY = IslandMetrics.ShellRect(State(0)).Top - 12f;
@@ -136,9 +151,9 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Empty(layout.DotsRight);
         Assert.Equal(3, layout.DotsLeft.Length);
-        Assert.Equal(621.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
-        Assert.Equal(628.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(635.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
+        Assert.Equal(618.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
+        Assert.Equal(625.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
+        Assert.Equal(632.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
         Assert.Equal(7f, layout.DotsLeft[2].Width, 0.001f);
         Assert.True(layout.Next.IsEmpty, "the last page has no next island");
     }
@@ -235,12 +250,13 @@ public sealed class MiniRailPrototypeTests
 
 
     [Theory]
-    [InlineData(0, 64f, 667f, 773f, 0, 3)]
-    [InlineData(1, 64f, 667f, 773f, 0, 3)]
-    [InlineData(2, 64f, 667f, 773f, 1, 2)]
-    [InlineData(3, 73f, 662.5f, 777.5f, 2, 1)]
-    [InlineData(4, 70f, 664f, 776f, 3, 0)]
-    [InlineData(5, 73f, 662.5f, 777.5f, 3, 0)]
+    // 11 pt: capsule 64->67 / 70->75 / 73->79, neighbour centres move by half the width delta.
+    [InlineData(0, 67f, 665.5f, 774.5f, 0, 3)]   // prototype 64f, 667, 773
+    [InlineData(1, 67f, 665.5f, 774.5f, 0, 3)]
+    [InlineData(2, 67f, 665.5f, 774.5f, 1, 2)]
+    [InlineData(3, 79f, 659.5f, 780.5f, 2, 1)]   // prototype 73f, 662.5, 777.5
+    [InlineData(4, 75f, 661.5f, 778.5f, 3, 0)]   // prototype 70f, 664, 776
+    [InlineData(5, 79f, 659.5f, 780.5f, 3, 0)]
     public void PrototypePageTable_IsReproduced(
         int page, float capsule, float prevCentre, float nextCentre, int leftDots, int rightDots)
     {
@@ -321,10 +337,11 @@ public sealed class MiniRailPrototypeTests
     }
 
     [Theory]
-    [InlineData(0, new[] { 793f, 800f, 807f })]
-    [InlineData(1, new[] { 793f, 800f, 807f })]
-    [InlineData(2, new[] { 793f, 800f })]
-    [InlineData(3, new[] { 797.5f })]
+    // 11 pt: +1.5 DIP on the 64-wide pages, +3 on the 73-wide page (prototype 9 pt: 793/800/807/797.5).
+    [InlineData(0, new[] { 794.5f, 801.5f, 808.5f })]
+    [InlineData(1, new[] { 794.5f, 801.5f, 808.5f })]
+    [InlineData(2, new[] { 794.5f, 801.5f })]
+    [InlineData(3, new[] { 800.5f })]
     [InlineData(4, new float[0])]
     [InlineData(5, new float[0])]
     public void RightDotCluster_MatchesThePrototypeRects(int page, float[] expected)
@@ -344,23 +361,23 @@ public sealed class MiniRailPrototypeTests
     [Fact]
     public void CapsuleWidth_MorphsBetweenNeighbouringLabels_WithoutJumps()
     {
-        var width64 = MiniRailLayout.CapsuleWidth("通知");
-        var width73 = MiniRailLayout.CapsuleWidth("剪贴板");
-        Assert.Equal(64f, width64, Eps);
-        Assert.Equal(73f, width73, Eps);
+        var widthNarrow = MiniRailLayout.CapsuleWidth("通知");
+        var widthWide = MiniRailLayout.CapsuleWidth("剪贴板");
+        Assert.Equal(67f, widthNarrow, Eps);   // 11 pt (prototype 64f)
+        Assert.Equal(79f, widthWide, Eps);     // 11 pt (prototype 73f)
 
         var content = IslandTestFixtures.Content() with { ShortTitles = ZhLabels };
         var previous = MiniRailLayout.CapsuleWidthAt(2, content);
         var settled = MiniRailLayout.CapsuleWidthAt(3, content);
-        Assert.Equal(64f, previous, 0.001f);
-        Assert.Equal(73f, settled, 0.001f);
+        Assert.Equal(67f, previous, 0.001f);
+        Assert.Equal(79f, settled, 0.001f);
 
         var last = previous;
         var maxStep = 0f;
         for (var i = 1; i <= 120; i++)
         {
             var width = MiniRailLayout.CapsuleWidthAt(2 + (i / 120.0), content);
-            Assert.InRange(width, 64f - Eps, 73f + Eps);
+            Assert.InRange(width, 67f - Eps, 79f + Eps);
             Assert.True(width >= last - 0.001f, "the capsule only grows while the pager advances");
             maxStep = Math.Max(maxStep, width - last);
             last = width;
@@ -368,13 +385,13 @@ public sealed class MiniRailPrototypeTests
 
         // 64 → 73 over a 400 DIP page; one 16.6 ms frame of the pager spring stays well below 2 DIP.
         Assert.True(maxStep < 2f, $"max frame-to-frame capsule jump {maxStep:0.000} DIP");
-        Assert.Equal(73f, MiniRailLayout.CapsuleWidthAt(3.0, content), 0.001f);
-        Assert.Equal(64f, MiniRailLayout.CapsuleWidthAt(2.0, content), 0.001f);
+        Assert.Equal(79f, MiniRailLayout.CapsuleWidthAt(3.0, content), 0.001f);
+        Assert.Equal(67f, MiniRailLayout.CapsuleWidthAt(2.0, content), 0.001f);
 
         // Leaving page 3 towards 代理 (shorter label) shrinks the capsule again, still inside 64..73.
         var leaving = MiniRailLayout.CapsuleWidthAt(3.4, content);
-        Assert.InRange(leaving, 64f, 73f);
-        Assert.True(leaving < 73f && leaving > 64f, $"mid-morph width {leaving:0.00} should sit between the two labels");
+        Assert.InRange(leaving, 67f, 79f);
+        Assert.True(leaving < 79f && leaving > 67f, $"mid-morph width {leaving:0.00} should sit between the two labels");
     }
 
     [Fact]

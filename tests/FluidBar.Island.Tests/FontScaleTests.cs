@@ -180,7 +180,8 @@ public sealed class FontScaleTests
         Assert.Equal(1.0, FontScaleMetrics.From(double.NaN).Value, 6);
         Assert.Equal(LayoutTokens.CompactSize(null).Width * 0.8, LayoutTokens.CompactSizeFor(null, IslandMode.Float, 0.1).Width, 3);
         // The agent token is 236 wide now (prototype2), so 236 × 1.6 still fits under the 440 ceiling.
-        Assert.Equal(377.6, LayoutTokens.CompactSizeFor(FluidBar.Core.Activities.ActivityKind.Agent, IslandMode.Float, 9).Width, 6);
+        // 1.6 × the 180 DIP agent token (the width pass replaced the old 236 token: 377.6 -> 288).
+        Assert.Equal(288, LayoutTokens.CompactSizeFor(FluidBar.Core.Activities.ActivityKind.Agent, IslandMode.Float, 9).Width, 6);
     }
 
     public static TheoryData<string, string, double> RailLabels => new()

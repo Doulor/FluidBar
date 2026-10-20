@@ -123,7 +123,7 @@ internal sealed partial class PageRenderer : IDisposable
                         DrawClipboard(canvas, state.Pages.Clipboard, pageRect);
                         return;
                     default:
-                        DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
+                        DrawPlaceholder(canvas, slot?.Kind ?? PageSlotKind.Plugin, state.Pages.Title(page), pageRect);
                         return;
                 }
             case "custom":
@@ -133,7 +133,7 @@ internal sealed partial class PageRenderer : IDisposable
                 }
                 else
                 {
-                    DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
+                    DrawPlaceholder(canvas, slot?.Kind ?? PageSlotKind.Plugin, state.Pages.Title(page), pageRect);
                 }
 
                 return;
@@ -144,7 +144,7 @@ internal sealed partial class PageRenderer : IDisposable
                 DrawWidgets(canvas, state.Pages.Widgets, pageRect);
                 return;
             default:
-                DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
+                DrawPlaceholder(canvas, slot?.Kind ?? PageSlotKind.Plugin, state.Pages.Title(page), pageRect);
                 return;
         }
     }
@@ -523,13 +523,22 @@ internal sealed partial class PageRenderer : IDisposable
 
     // ------------------------------------------------------------- placeholder
 
-    private void DrawPlaceholder(SKCanvas canvas, string title, SKRect page)
+    /// <summary>
+    /// Friendly empty state for a page whose plugin has not delivered content yet. This used to be the
+    /// developer placeholder "Page content arrives in a later milestone", which leaked into the UI
+    /// whenever a plugin was disabled or still starting; it now names the page and tells the user how
+    /// to fill it.
+    /// </summary>
+    private void DrawPlaceholder(SKCanvas canvas, PageSlotKind kind, string title, SKRect page)
     {
-        IconSet.Draw(canvas, IconKind.Grid, PageLayout.EmptyIcon(page), Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-        _text.Draw(canvas, title, IslandType.EmptyTitle, PageLayout.EmptyTitle(page),
-            _theme.ForegroundSecondary, TextAlign.Center, _opacity);
-        _text.Draw(canvas, "Page content arrives in a later milestone", IslandType.EmptyHint,
-            PageLayout.EmptyHint(page), _theme.ForegroundTertiary, TextAlign.Center, _opacity);
+        var (icon, hint) = kind switch
+        {
+            PageSlotKind.Plugin => (IconKind.Agent, "接入 Agent 插件后，运行中的任务会显示在这里 · Connect an agent plugin"),
+            PageSlotKind.Media => (IconKind.Media, "播放音乐后这里会显示实时封面与歌词 · Play something to see it here"),
+            PageSlotKind.Home => (IconKind.Grid, "接入插件后，这里会显示实时内容 · Connect a plugin to see live content"),
+            _ => (IconKind.Grid, "接入插件后，这里会显示实时内容 · Connect a plugin to see live content"),
+        };
+        DrawEmpty(canvas, icon, title, hint, page);
     }
 
     private void DrawEmpty(SKCanvas canvas, IconKind icon, string title, string hint, SKRect page)

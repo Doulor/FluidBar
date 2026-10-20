@@ -27,6 +27,12 @@ public sealed record IslandRendererOptions
 
     /// <summary>Record frame timings in <see cref="IslandRenderer.Stats"/>.</summary>
     public bool TrackTimings { get; init; } = true;
+
+    /// <summary>
+    /// Freezes the split satellites' agent ring at this angle (degrees) instead of spinning it from
+    /// the renderer's monotonic clock. Deterministic golden/evidence captures only.
+    /// </summary>
+    public double? SplitRingAngleDegrees { get; init; }
 }
 
 /// <summary>Frame timing snapshot (milliseconds, wall clock).</summary>
@@ -74,6 +80,15 @@ public sealed class IslandRenderer : IDisposable
     private IslandTheme _theme;
     private SKShader? _glassShader;
     private float _glassHeight;
+
+    // Split satellites: one monotonic clock for the legacy ring spin (the contract path carries its
+    // own RingAngleDegrees) and two cached blur filters for the ball/cover contact shadows, so a warm
+    // frame allocates nothing beyond the small gradient shaders.
+    private readonly Stopwatch _ringClock = Stopwatch.StartNew();
+    private SKMaskFilter? _splitBallBlur;
+    private float _splitBallBlurScale;
+    private SKMaskFilter? _splitCoverBlur;
+    private float _splitCoverBlurScale;
     private ShellGeometry? _hitGeometry;
     private HitGeometryKey _hitGeometryKey;
     private bool _disposed;
@@ -526,23 +541,44 @@ public sealed class IslandRenderer : IDisposable
     }
 
     /// <summary>
-    /// Paints the split previews as pure circles on the primary pill's baseline. Every circle has
-    /// exactly one element: an agent gets only its blue spinning 180° arc, media gets only a
-    /// rounded-square contain-fit album thumbnail inside the black circle (or a neutral note),
-    /// and everything else gets one icon.
-    /// No labels, badges, status dots, action buttons or decorative rings.
+    /// Paints the split previews as pure circles on the primary pill's baseline. The pose comes from
+    /// <see cref="IslandRenderState.SatelliteFrames"/> when the host drives the satellites
+    /// (docs/satellite-render-contract.md); otherwise the legacy SplitProgress birth path runs
+    /// unchanged, so settled snapshots keep their pixels.
+    /// <para>
+    /// Every circle carries exactly one element: an agent gets only its blue round-capped ring, media
+    /// gets a rounded-square contain-fit cover inside a hairline well (or a neutral note), everything
+    /// else one white icon. The polish is pure light modelling (SplitSatelliteStyle): 1 DIP top rim
+    /// highlight, a barely visible bottom shade, a soft contact shadow, and a 1 DIP cover hairline with
+    /// a recessed top shade. No labels, badges, status dots and never an accent-tinted body.
+    /// </para>
     /// </summary>
     private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
     {
-        if (state.SplitIslets.Length == 0 || state.SplitProgress <= 0.01)
+        if (state.SplitIslets.Length == 0)
         {
             return;
         }
 
-        var finals = IslandMetrics.SplitIsletRects(state);
+        var framed = state.SatelliteFrames.Length == state.SplitIslets.Length;
+        if (!framed && state.SplitProgress <= 0.01)
+        {
+            return;
+        }
+
         var fillOpacity = _theme.Material == IslandMaterial.SimulatedGlass
             ? 0.72f
             : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+
+        if (framed)
+        {
+            DrawSplitFrames(canvas, state, opacity, dpiScale, fillOpacity);
+            return;
+        }
+
+        var finals = IslandMetrics.SplitIsletRects(state);
+        var ringAngle = _options.SplitRingAngleDegrees
+            ?? SplitSatelliteStyle.RingAngleDegrees(_ringClock.Elapsed.TotalSeconds);
         for (var i = 0; i < finals.Length && i < state.SplitIslets.Length; i++)
         {
             var progress = (float)IslandMetrics.SplitIsletProgress(state, i);
@@ -551,52 +587,362 @@ public sealed class IslandRenderer : IDisposable
                 continue;
             }
 
-            var islet = state.SplitIslets[i];
             var rect = IslandMetrics.SplitIsletAnimatedRect(state, finals, i);
             var alpha = Math.Clamp(progress * 1.35f, 0, 1) * opacity;
-            var radius = rect.Width / 2;
-
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.BlendMode = SKBlendMode.Src;
-            _fill.Color = SplitFillColor(fillOpacity, alpha);
-            canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
-            _fill.BlendMode = SKBlendMode.SrcOver;
-
-            if (islet.Kind == ActivityKind.Media)
-            {
-                var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
-                if (cover is not null)
-                {
-                    var thumbnail = IslandMetrics.SplitIsletThumbnailRect(rect);
-                    var thumbRadius = IslandMetrics.SplitIsletThumbnailRadius(thumbnail);
-                    canvas.Save();
-                    using var ballClip = new SKPath();
-                    ballClip.AddCircle(rect.MidX, rect.MidY, radius);
-                    canvas.ClipPath(ballClip, SKClipOperation.Intersect, antialias: true);
-                    using var squircle = new SKPath();
-                    squircle.AddRoundRect(new SKRoundRect(thumbnail, thumbRadius, thumbRadius));
-                    canvas.ClipPath(squircle, SKClipOperation.Intersect, antialias: true);
-                    _icon.Color = Alpha(SKColors.White, alpha);
-                    // Contain: the whole image is visible; any spare space stays the black ball fill.
-                    var imageRect = IslandMetrics.SplitIsletContainRect(
-                        thumbnail, cover.Width, cover.Height);
-                    canvas.DrawImage(cover, imageRect, _icon);
-                    canvas.Restore();
-                    continue;
-                }
-            }
-
-            // One glyph only, painted white over the neutral circle (media without cover: note).
-            var iconKind = islet.Kind == ActivityKind.Media ? IconKind.Media : islet.Icon;
-            var iconSize = radius * 0.9f;
-            IconSet.Draw(canvas, iconKind,
-                new SKRect(rect.MidX - (iconSize / 2), rect.MidY - (iconSize / 2),
-                    rect.MidX + (iconSize / 2), rect.MidY + (iconSize / 2)),
-                Alpha(SKColors.White, alpha), _icon);
+            DrawSplitSurface(canvas, state.SplitIslets[i], rect, new SplitSurfaceStyle(
+                alpha, 0f, 0f, 0f, 1f, ringAngle, fillOpacity, dpiScale));
         }
     }
 
+    /// <summary>
+    /// Contract path: one frame per satellite, already carrying the composed scale (birth/merge ×
+    /// press × hover × breathing), the directional stretch about the centre and the ring angle.
+    /// </summary>
+    private void DrawSplitFrames(SKCanvas canvas, in IslandRenderState state, float opacity,
+        float dpiScale, float fillOpacity)
+    {
+        var shell = IslandMetrics.ShellRect(state);
+        var baseDiameter = IslandMetrics.SplitIsletDiameter(state);
+        for (var i = 0; i < state.SplitIslets.Length; i++)
+        {
+            var frame = state.SatelliteFrames[i];
+            if (frame.State is SplitSatelliteState.Hidden or SplitSatelliteState.Merged)
+            {
+                continue;
+            }
+
+            if (!double.IsFinite(frame.Scale) || !double.IsFinite(frame.X) || !double.IsFinite(frame.Y))
+            {
+                continue;
+            }
+
+            var radius = (float)(baseDiameter * 0.5 * Math.Clamp(frame.Scale, 0.1, 2.0));
+            if (radius < 0.5f)
+            {
+                continue;
+            }
+
+            // Directional stretch: scale about the centre, then compensate the stroke weight so the
+            // rim/hairline/ring keep their DIP width instead of being stretched into ellipses.
+            var sx = 1f + (float)Math.Clamp(frame.StretchX, -0.4, 0.4);
+            var sy = 1f + (float)Math.Clamp(frame.StretchY, -0.4, 0.4);
+            var strokeScale = 1f / Math.Max(0.5f, Math.Max(sx, sy));
+            var surface = new SplitSurfaceStyle(
+                Math.Clamp(opacity, 0f, 1f),
+                (float)Math.Clamp(frame.PressDepth, 0, 1),
+                (float)Math.Clamp(frame.Highlight, 0, 1),
+                (float)Math.Clamp(frame.Brightness, -1, 0),
+                strokeScale,
+                frame.RingAngleDegrees,
+                fillOpacity,
+                dpiScale);
+
+            canvas.Save();
+            canvas.Translate(shell.MidX + (float)frame.X, shell.MidY + (float)frame.Y);
+            canvas.Scale(sx, sy);
+            DrawSplitSurface(canvas, state.SplitIslets[i], new SKRect(-radius, -radius, radius, radius), surface);
+            canvas.Restore();
+        }
+    }
+
+    /// <summary>Paints one satellite ball (body, light modelling, content) into <paramref name="ball"/>.</summary>
+    private void DrawSplitSurface(SKCanvas canvas, in IslandSplitIslet islet, SKRect ball, in SplitSurfaceStyle surface)
+    {
+        var radius = ball.Width / 2;
+        var alpha = surface.Alpha;
+
+        // 1) Soft contact shadow: lifts the ball off the desktop without a visible halo.
+        DrawSplitBlurredCircle(canvas, ball.MidX, ball.MidY + SplitSatelliteStyle.BallShadowOffsetYDip,
+            radius * 0.98f, SplitSatelliteStyle.BallShadowAlpha, alpha, surface.DpiScale, cover: false);
+
+        // 2) Body: byte-identical to the primary pill while split previews are visible (Src).
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.BlendMode = SKBlendMode.Src;
+        _fill.Color = SplitFillColor(surface.FillOpacity, alpha);
+        canvas.DrawCircle(ball.MidX, ball.MidY, radius, _fill);
+        _fill.BlendMode = SKBlendMode.SrcOver;
+
+        // 3) Light modelling: bottom shade, top rim highlight, press inner shadow, brightness lift.
+        DrawSplitBallLight(canvas, ball, surface);
+
+        // 4) Content: exactly one element per ball.
+        if (islet.Kind == ActivityKind.Agent)
+        {
+            DrawSplitAgentRing(canvas, ball, surface);
+            return;
+        }
+
+        if (islet.Kind == ActivityKind.Media)
+        {
+            DrawSplitCover(canvas, islet, ball, surface);
+            return;
+        }
+
+        var iconSize = radius * 0.9f;
+        IconSet.Draw(canvas, islet.Icon,
+            new SKRect(ball.MidX - (iconSize / 2), ball.MidY - (iconSize / 2),
+                ball.MidX + (iconSize / 2), ball.MidY + (iconSize / 2)),
+            Alpha(SKColors.White, alpha), _icon);
+    }
+
+    /// <summary>Bottom volume shade + 1 DIP top rim highlight + press inner shadow + press darkening.</summary>
+    private void DrawSplitBallLight(SKCanvas canvas, SKRect ball, in SplitSurfaceStyle surface)
+    {
+        var radius = ball.Width / 2;
+        var alpha = surface.Alpha;
+        var strokeScale = surface.StrokeScale;
+
+        if (surface.Brightness < -0.001f)
+        {
+            // Pressed: a neutral darkening (never a hue shift), clipped to the ball.
+            canvas.Save();
+            using var clip = new SKPath();
+            clip.AddCircle(ball.MidX, ball.MidY, radius);
+            canvas.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.Black.WithAlpha(
+                (byte)Math.Clamp(-surface.Brightness * alpha * 255f, 0, 255));
+            canvas.DrawRect(ball, _fill);
+            canvas.Restore();
+        }
+
+        if (surface.PressDepth > 0.01f)
+        {
+            // Contract §4.4: top inner shadow, alpha = 0.18 × depth at full press.
+            canvas.Save();
+            using var clip = new SKPath();
+            clip.AddCircle(ball.MidX, ball.MidY, radius);
+            canvas.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+            using var pressShade = SKShader.CreateLinearGradient(
+                new SKPoint(0, ball.Top),
+                new SKPoint(0, ball.Top + (ball.Height * 0.55f)),
+                [
+                    SKColors.Black.WithAlpha((byte)Math.Clamp(
+                        SplitSatelliteStyle.PressShadeAlpha * surface.PressDepth * alpha, 0, 255)),
+                    SKColors.Transparent,
+                ],
+                [0f, 1f],
+                SKShaderTileMode.Clamp);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = SKColors.White;
+            _fill.Shader = pressShade;
+            canvas.DrawRect(ball, _fill);
+            _fill.Shader = null;
+            canvas.Restore();
+        }
+
+        // Bottom volume shade: transparent above the midline, faint black at the very bottom.
+        canvas.Save();
+        using (var clip = new SKPath())
+        {
+            clip.AddCircle(ball.MidX, ball.MidY, radius);
+            canvas.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+            using var shade = SKShader.CreateLinearGradient(
+                new SKPoint(0, ball.Top + (ball.Height * SplitSatelliteStyle.BallShadeStart)),
+                new SKPoint(0, ball.Bottom),
+                [
+                    SKColors.Transparent,
+                    SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(
+                        SplitSatelliteStyle.BallShadeAlpha, alpha)),
+                ],
+                [0f, 1f],
+                SKShaderTileMode.Clamp);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = SKColors.White;
+            _fill.Shader = shade;
+            canvas.DrawRect(ball, _fill);
+            _fill.Shader = null;
+        }
+
+        canvas.Restore();
+
+        // Top rim highlight: one DIP of white 8.6 % on the top edge, fading out by 55 % of the height.
+        // Hover adds to the same light (never a hue), as the contract asks.
+        var rimAlpha = (byte)(SplitSatelliteStyle.BallRimAlpha
+            + (byte)Math.Clamp(surface.Highlight * SplitSatelliteStyle.HoverRimBoost, 0, 255 - SplitSatelliteStyle.BallRimAlpha));
+        using var rim = SKShader.CreateLinearGradient(
+            new SKPoint(0, ball.Top),
+            new SKPoint(0, ball.Top + (ball.Height * SplitSatelliteStyle.BallRimFade)),
+            [
+                SKColors.White.WithAlpha(SplitSatelliteStyle.Alpha(rimAlpha, alpha)),
+                SKColors.Transparent,
+            ],
+            [0f, 1f],
+            SKShaderTileMode.Clamp);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = SplitSatelliteStyle.BallRimWidthDip * strokeScale;
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+        _stroke.Color = SKColors.White;
+        _stroke.Shader = rim;
+        canvas.DrawCircle(ball.MidX, ball.MidY, radius - (_stroke.StrokeWidth / 2), _stroke);
+        _stroke.Shader = null;
+    }
+
+    /// <summary>Rounded-square cover well: contain-fit artwork, recessed top shade and a 1 DIP hairline.</summary>
+    private void DrawSplitCover(SKCanvas canvas, in IslandSplitIslet islet, SKRect ball, in SplitSurfaceStyle surface)
+    {
+        var alpha = surface.Alpha;
+        var strokeScale = surface.StrokeScale;
+        var frame = SplitSatelliteStyle.InnerFrameRect(ball);
+        var frameRadius = SplitSatelliteStyle.InnerFrameRadius(frame);
+        if (frame.Width <= 0)
+        {
+            return;
+        }
+
+        // Contact shadow of the cover inside the ball: a soft dark rim under the well.
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.MaskFilter = SplitBlur(surface.DpiScale, cover: true);
+        _fill.Color = SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(SplitSatelliteStyle.CoverShadowAlpha, alpha));
+        canvas.DrawRoundRect(
+            frame.Left, frame.Top + SplitSatelliteStyle.CoverShadowOffsetYDip,
+            frame.Width, frame.Height, frameRadius, frameRadius, _fill);
+        _fill.MaskFilter = null;
+
+        var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
+        canvas.Save();
+        using (var clip = new SKPath())
+        {
+            clip.AddRoundRect(new SKRoundRect(frame, frameRadius, frameRadius));
+            canvas.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+
+            if (cover is not null)
+            {
+                // Contain: the whole cover stays visible, any spare space is the well's black fill.
+                var imageRect = IslandMetrics.SplitIsletContainRect(frame, cover.Width, cover.Height);
+                _icon.Color = Alpha(SKColors.White, alpha);
+                canvas.DrawImage(cover, imageRect, _icon);
+            }
+            else
+            {
+                // No artwork: the well itself is the single element (a neutral note sits inside it).
+                _fill.Style = SKPaintStyle.Fill;
+                _fill.Shader = null;
+                _fill.Color = Alpha(_theme.BackgroundInset, alpha);
+                canvas.DrawRoundRect(frame, frameRadius, frameRadius, _fill);
+                var iconSize = frame.Width * 0.52f;
+                IconSet.Draw(canvas, IconKind.Media,
+                    new SKRect(frame.MidX - (iconSize / 2), frame.MidY - (iconSize / 2),
+                        frame.MidX + (iconSize / 2), frame.MidY + (iconSize / 2)),
+                    Alpha(SKColors.White, alpha), _icon);
+            }
+
+            // Recessed inner shade: the top of the cover sits in shadow.
+            using var inner = SKShader.CreateLinearGradient(
+                new SKPoint(0, frame.Top),
+                new SKPoint(0, frame.Top + (frame.Height * SplitSatelliteStyle.CoverInnerShadeDepth)),
+                [
+                    SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(
+                        SplitSatelliteStyle.CoverInnerShadeAlpha, alpha)),
+                    SKColors.Transparent,
+                ],
+                [0f, 1f],
+                SKShaderTileMode.Clamp);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = SKColors.White;
+            _fill.Shader = inner;
+            canvas.DrawRect(frame, _fill);
+            _fill.Shader = null;
+        }
+
+        canvas.Restore();
+
+        // 1 DIP inner stroke on the well edge, as a vertical bevel: white 7 % on the top edge (the
+        // light catches the rim), black 25 % on the bottom edge (the well sits in shadow). A flat
+        // white hairline disappeared into bright artwork, which is what made the cover read as a
+        // full-bleed circle instead of a square well. Hover lifts the white half only.
+        var hairline = (byte)(SplitSatelliteStyle.InnerFrameStrokeAlpha
+            + (byte)Math.Clamp(surface.Highlight * SplitSatelliteStyle.HoverRimBoost, 0, 255 - SplitSatelliteStyle.InnerFrameStrokeAlpha));
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = SplitSatelliteStyle.InnerFrameStrokeWidthDip * strokeScale;
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+        using var bevel = SKShader.CreateLinearGradient(
+            new SKPoint(0, frame.Top),
+            new SKPoint(0, frame.Bottom),
+            [
+                SKColors.White.WithAlpha(SplitSatelliteStyle.Alpha(hairline, alpha)),
+                SKColors.White.WithAlpha(SplitSatelliteStyle.Alpha((byte)(hairline / 3), alpha)),
+                SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(
+                    SplitSatelliteStyle.InnerFrameBevelShadeAlpha, alpha)),
+            ],
+            [0f, 0.45f, 1f],
+            SKShaderTileMode.Clamp);
+        _stroke.Shader = bevel;
+        _stroke.Color = SKColors.White;
+        var inset = _stroke.StrokeWidth / 2;
+        canvas.DrawRoundRect(
+            frame.Left + inset, frame.Top + inset, frame.Width - (inset * 2), frame.Height - (inset * 2),
+            Math.Max(0f, frameRadius - inset), Math.Max(0f, frameRadius - inset), _stroke);
+        _stroke.Shader = null;
+    }
+
+    /// <summary>Agent ball content: a 2 DIP round-capped ring, the only chromatic element.</summary>
+    private void DrawSplitAgentRing(SKCanvas canvas, SKRect ball, in SplitSurfaceStyle surface)
+    {
+        var ring = SplitSatelliteStyle.RingRect(ball);
+        if (ring.Width <= 1f)
+        {
+            return;
+        }
+
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = SplitSatelliteStyle.RingWidthDip * surface.StrokeScale;
+        _stroke.StrokeCap = SKStrokeCap.Round;
+        _stroke.Shader = null;
+        _stroke.Color = Alpha(_theme.Info, surface.Alpha);
+        canvas.DrawArc(ring, (float)surface.RingAngleDegrees, SplitSatelliteStyle.RingSweepDegrees, false, _stroke);
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+    }
+
+    /// <summary>Soft black disc used for the ball/cover contact shadows (cached blur, no per-frame filter).</summary>
+    private void DrawSplitBlurredCircle(SKCanvas canvas, float centreX, float centreY, float radius, byte tokenAlpha, float alpha, float dpiScale, bool cover)
+    {
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.MaskFilter = SplitBlur(dpiScale, cover);
+        _fill.Color = SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(tokenAlpha, alpha));
+        canvas.DrawCircle(centreX, centreY, radius, _fill);
+        _fill.MaskFilter = null;
+    }
+
+    private SKMaskFilter SplitBlur(float dpiScale, bool cover)
+    {
+        var sigma = (cover ? SplitSatelliteStyle.CoverShadowBlurDip : SplitSatelliteStyle.BallShadowBlurDip) * dpiScale;
+        if (cover)
+        {
+            if (_splitCoverBlur is null || Math.Abs(_splitCoverBlurScale - dpiScale) > 0.01f)
+            {
+                _splitCoverBlur?.Dispose();
+                _splitCoverBlur = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, sigma);
+                _splitCoverBlurScale = dpiScale;
+            }
+
+            return _splitCoverBlur;
+        }
+
+        if (_splitBallBlur is null || Math.Abs(_splitBallBlurScale - dpiScale) > 0.01f)
+        {
+            _splitBallBlur?.Dispose();
+            _splitBallBlur = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, sigma);
+            _splitBallBlurScale = dpiScale;
+        }
+
+        return _splitBallBlur;
+    }
+
+    /// <summary>One satellite draw: composed opacity plus the per-frame pose modifiers.</summary>
+    private readonly record struct SplitSurfaceStyle(
+        float Alpha,
+        float PressDepth,
+        float Highlight,
+        float Brightness,
+        float StrokeScale,
+        double RingAngleDegrees,
+        float FillOpacity,
+        float DpiScale);
 
     /// <summary>Opaque split-surface fill: the primary pill and every capsule use the same byte values
     /// so a pixel sample of their backgrounds is identical while split previews are visible.</summary>
@@ -946,6 +1292,10 @@ public sealed class IslandRenderer : IDisposable
         _strip.Dispose();
         _glassShader?.Dispose();
         _glassShader = null;
+        _splitBallBlur?.Dispose();
+        _splitBallBlur = null;
+        _splitCoverBlur?.Dispose();
+        _splitCoverBlur = null;
         _fill.Dispose();
         _stroke.Dispose();
         _clear.Dispose();

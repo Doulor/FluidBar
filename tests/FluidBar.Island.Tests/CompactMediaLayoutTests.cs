@@ -6,24 +6,27 @@ namespace FluidBar.Island.Tests;
 /// </summary>
 public sealed class CompactMediaLayoutTests
 {
-    private const float TokenWidth = 226f;
+    // iOS-proportion pass: the media token moved 226 -> 180 (see LayoutTokens.MediaSize).
+    private const float TokenWidth = 180f;
     private const float SurfaceWidth = 440f;
 
     [Fact]
     public void Fixed_chrome_is_artwork_gaps_wave_and_paddings()
     {
-        Assert.Equal(45, CompactMediaLayout.TextLeft, 0.001);
-        Assert.Equal(39, CompactMediaLayout.TextToTrailingEdge, 0.001);
-        Assert.Equal(84, CompactMediaLayout.FixedWidth, 0.001);
+        // Spec arithmetic re-derived for the new chrome (left 10 + artwork 22 + gap 9 = 41; wave 18 +
+        // gap 9 + right 8 = 35). These are spec values, not relaxed thresholds.
+        Assert.Equal(41, CompactMediaLayout.TextLeft, 0.001);
+        Assert.Equal(35, CompactMediaLayout.TextToTrailingEdge, 0.001);
+        Assert.Equal(76, CompactMediaLayout.FixedWidth, 0.001);
     }
 
     [Fact]
     public void Width_for_text_adds_the_measured_line_to_the_fixed_chrome()
     {
         // Fixed chrome + slack so the shaper never ellipsises a line that "exactly" fits.
-        Assert.Equal(84 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(0), 0.001);
-        Assert.Equal(206, CompactMediaLayout.WidthForText(120), 0.001);
-        Assert.Equal(84 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(float.NaN), 0.001);
+        Assert.Equal(76 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(0), 0.001);
+        Assert.Equal(198, CompactMediaLayout.WidthForText(120), 0.001);
+        Assert.Equal(76 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(float.NaN), 0.001);
     }
 
     [Fact]
@@ -38,7 +41,7 @@ public sealed class CompactMediaLayoutTests
     {
         var width = CompactMediaLayout.AdaptiveWidth(200, TokenWidth, SurfaceWidth);
 
-        Assert.Equal(286, width, 0.001);
+        Assert.Equal(278, width, 0.001);
         Assert.True(width > TokenWidth);
         // The measured text still fits between the artwork and the wave, with the slack on top.
         Assert.True(CompactMediaLayout.TextRight(width) - CompactMediaLayout.TextLeft > 200);

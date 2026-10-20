@@ -325,12 +325,16 @@ public static class LayoutTokens
     public const double SplitPrimaryMaxWidth = 300;
 
     private static readonly VisualSize IdleSize = new(132, 36);
-    private static readonly VisualSize MediaSize = new(226, 40);
+    // iOS-proportion pass (audit 2026-10-21): the compact pill had drifted to 226-264 DIP, which reads
+    // as a wide banner rather than an island. Titles now ellipsise in the text column instead of
+    // stretching the pill; the widths sit at the top of the audited band so the longest real titles
+    // stay readable (media 192 of 168-192, the text pills 180 of 144-180).
+    private static readonly VisualSize MediaSize = new(192, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    private static readonly VisualSize NotificationSize = new(248, 36);
-    private static readonly VisualSize ClipboardSize = new(264, 36);
-    // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
-    private static readonly VisualSize AgentSize = new(236, 36);
+    private static readonly VisualSize NotificationSize = new(180, 36);
+    private static readonly VisualSize ClipboardSize = new(180, 36);
+    // Prototype2 .island[data-view="agent"]: action/session title, not the brand name.
+    private static readonly VisualSize AgentSize = new(180, 36);
     private static readonly VisualSize TimerSize = new(190, 36);
     private static readonly VisualSize BatterySize = new(208, 36);
     private static readonly VisualSize LookupSize = new(480, 44);

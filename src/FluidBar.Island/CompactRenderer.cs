@@ -240,6 +240,12 @@ internal sealed class CompactRenderer : IDisposable
 
     // ---------------------------------------------------------- notification
 
+    /// <summary>
+    /// Shortest title run (DIP) that still reads as words instead of a fragment. Used to decide which
+    /// secondary element gives way first: the "App · " prefix, then the trailing status text.
+    /// </summary>
+    private const float TitleReadableMinimumDip = 96f;
+
     private void DrawNotification(SKCanvas canvas, CompactModel model, float width, float height)
     {
         // prototype2 .pill-notif: padding 0 10 0 8, gap 8; 20 DIP app glyph (radius 6, app colour, white
@@ -247,7 +253,8 @@ internal sealed class CompactRenderer : IDisposable
         // number inset 10 DIP from the right edge.
         var hasChip = !string.IsNullOrEmpty(model.VerificationCode);
         var chipWidth = hasChip ? 46f : 0f;
-        var hasBadge = !hasChip && model.UnreadCount > 0;
+        // Badge only while the title still keeps a readable run; otherwise the text wins.
+        var hasBadge = !hasChip && model.UnreadCount > 0 && (width - 10 - 24 - 36) >= TitleReadableMinimumDip;
         var trailing = hasChip ? chipWidth + 8 : hasBadge ? 24 : 0;
         var right = width - 10 - trailing;
 
@@ -263,17 +270,32 @@ internal sealed class CompactRenderer : IDisposable
         if (!string.IsNullOrEmpty(app))
         {
             var appLayout = _text.GetLayout(app, IslandType.CompactNoticeStrong, area.Width);
-            _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
-                _theme.Foreground, TextAlign.Left, _opacity);
             var separator = area.Left + appLayout.Width + 5;
-            if (separator < area.Right - 12)
+            // Title-first: the "App · " prefix stays only while the title still gets a readable run.
+            // The pill is now 180 DIP wide, so "Teams · Design review in 5 minutes" would leave the
+            // title four characters; the app name is secondary and is dropped instead.
+            var titleText = model.Title ?? model.Body ?? string.Empty;
+            var titleNatural = _text.Measure(titleText, IslandType.CompactNotice);
+            var titleRoomWithPrefix = area.Right - (separator + 8);
+            var keepPrefix = separator < area.Right - 12
+                && titleRoomWithPrefix >= Math.Min(titleNatural, TitleReadableMinimumDip);
+            if (keepPrefix)
             {
+                _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
+                    _theme.Foreground, TextAlign.Left, _opacity);
+                separator = area.Left + appLayout.Width + 5;
                 _text.Draw(canvas, "·", IslandType.CompactNotice,
                     new SKRect(separator, area.Top, separator + 8, area.Bottom), _theme.ForegroundSecondary,
                     TextAlign.Left, _opacity);
                 _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNotice,
                     new SKRect(separator + 8, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
                     TextAlign.Left, _opacity);
+            }
+            else
+            {
+                // Prefix dropped: the title owns the whole text column and stays the primary element.
+                _text.Draw(canvas, titleText, IslandType.CompactNoticeStrong, area,
+                    _theme.Foreground, TextAlign.Left, _opacity);
             }
         }
         else
@@ -382,7 +404,10 @@ internal sealed class CompactRenderer : IDisposable
         DrawIcon(canvas, icon, new SKRect(16, (height - 16) / 2, 32, (height + 16) / 2),
             _accents.Get(model.AccentHex, kind == ActivityKind.Focus ? _theme.ForegroundSecondary : _theme.Accent));
 
-        var hasStatus = !string.IsNullOrEmpty(model.StatusText);
+        // Same rule in the generic/agent pill: drop the trailing status when the title would fall below
+        // the readable minimum, so the action title is never reduced to "Refactor…".
+        var hasStatus = !string.IsNullOrEmpty(model.StatusText)
+            && (width - 12 - 60 - 40) >= TitleReadableMinimumDip;
         var textRight = width - 12 - (hasStatus ? 60 : 0);
         if (height >= 42)
         {
@@ -395,8 +420,11 @@ internal sealed class CompactRenderer : IDisposable
         {
             _text.Draw(canvas, model.Title, IslandType.CompactTitle,
                 new SKRect(40, 0, textRight, height), _theme.Foreground, TextAlign.Left, _opacity);
-            _text.Draw(canvas, model.StatusText, IslandType.CompactCaption,
-                new SKRect(width - 72, 0, width - 12, height), Tone(model.Status), TextAlign.Right, _opacity);
+            if (hasStatus)
+            {
+                _text.Draw(canvas, model.StatusText, IslandType.CompactCaption,
+                    new SKRect(width - 72, 0, width - 12, height), Tone(model.Status), TextAlign.Right, _opacity);
+            }
         }
 
         if (kind == ActivityKind.Progress && model.ProgressPercent >= 0)

@@ -103,8 +103,9 @@ public static class IslandMetrics
     /// <summary>Icon-to-label gap inside the current capsule (4 DIP; `.mini-content` gap).</summary>
     public const double MiniContentGap = 4;
 
-    /// <summary>Current capsule label font size (9 DIP; `.mini-label`).</summary>
-    public const double MiniLabelSize = 9;
+    /// <summary>Current capsule label font size (11 DIP, matching TypographyScale.RailLabel 11/14; the
+    /// 9 DIP prototype value was raised by the iOS-proportion pass).</summary>
+    public const double MiniLabelSize = 11;
 
     /// <summary>Current capsule label letter spacing (0.01em on a 9 DIP label = 0.09 DIP per character).</summary>
     public const double MiniLabelLetterSpacingEm = 0.01;
@@ -255,9 +256,9 @@ public static class IslandMetrics
             circle.MidY + (side / 2));
     }
 
-    /// <summary>Corner radius of the inner thumbnail: 22.5% of its side.</summary>
+    /// <summary>Corner radius of the inner cover well (Single source: SplitSatelliteStyle).</summary>
     public static float SplitIsletThumbnailRadius(SKRect thumbnail)
-        => thumbnail.Width * 0.225f;
+        => SplitSatelliteStyle.InnerFrameRadius(thumbnail);
 
     /// <summary>Contain-fit rectangle: the whole image is visible, spare space stays black.</summary>
     public static SKRect SplitIsletContainRect(SKRect square, int imageWidth, int imageHeight)
