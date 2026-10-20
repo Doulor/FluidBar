@@ -531,33 +531,48 @@ internal sealed class AppBootstrap
                     }
                 }
 
+                var auditCoverPath = Path.Combine(Path.GetTempPath(), "fluidbar-audit-cover.png");
+                try
+                {
+                    File.WriteAllBytes(auditCoverPath, Convert.FromBase64String(
+                        "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAEqUlEQVR4nNWZz2/URhTH34s49cLfwAHEQgHxG/4BhCpEEAhEaNISCNAAqrMxNEsARUFakjQsxBCiNBEQJaCmKnDgyF+AxIEDBypC4MadC9epdp7tHXvt8Rvbycrfw2oysscfe968+b4JHtn4FUAgCkSQv24DGj1x/bIBTf1ej2yD2+8/wmu4DwW6xbuRrodADw1Yv97/s9GAtkLTA4i2QtOjfIEC0yNAW6HpUQ2hItKjH0IFpUcKoeLSI4i2QtODkoUKSY8Aa1aC/t7AHYjR4N3fc6RHIbBjx5e86J3KOLB1c+JSDvQAeGrn54z0D66NQQYNO73p6UHgz7uWc6e/cqccF/fV8mTz9becCynphcDO3cvp6CcHw+j2uM1ftcN9U6Hbq845Y3oA7NrzKTt9/592upwzZE2r44w4PWb0ILBr71IW+vLYlewZ84Y14w846pzl04MIudFW0COI2845f8yK9YhPH3SjLaJH2Rh1evyR/7AeM+kVN9pSepRxP+acaeQxa45Dj24I8TLmitKjbIw73cqSTqaXIWSY71eOHmWj5px2M5s1n0jvzYDJbrUqLs1VX9+Cnr6pHojxOdnzvQm9uOf84j9RT1+fAY5Lawy3Kg4ZhfJELb1SDzA8ppFTyEKPAPcnOumhl8vPNPQoqB7Q+ntFZvRDtffqzbftEpMeJWtoEiLp5SJOqk6U+ElPXy9lah+MfI4vDX3wYEtbW2kcMoeeVKn9x6RHEA/vdtBdvf2LcfQofCsRU9cqnyErPWmg9pFDD6FJiKH3rISuKveGyIOedLW2xPQ5oH6+KHpaA7ozhaYZSMg5ifTeaCyfA8oMRNLXQ0h/IhKcgeSMyXwBps9RFE3v1QPx5zm+mPmeKQ49BmYgmt43c7GnUeojObsV9wUY9Bi+PoKezFwsfeCLMmsru5RIP9G/jkOPgb0sml6tB6I9ZmAIZm1lb8yJXihfL5pe7gPac8z6SaBUtTxpUFvZG7LT91x9TnfNjR6No2+UlBqfE54Ehkv7rTQ5bq/PQo/KatLQoxBrEh2yMhCXHgDOlx7W7IvMfI9Re60SP7H0ch9I8pg3Jy7RQMN9U0x6Uk9pKjX9mYEXNMj8yBENPe0DOnrqUQKBS086W5pOQY/B5auhd61Eos/xNWRN8+lJ3Zv+MqXvHnipfDEdvXewleQU5Am4upQD9L2lB3H0pF83zfDpUZnvhWq7nl6dgQSncMu5QIPesGZC9MBQ1+ZZJv3pyks+vVcPGPqcQWvWiJ7U+eMjPj34fklLX/+tHHrDr8qvW7P+A769/g7mWnzfzaF/Wm1n0TfqAZ5TGPGOYNPRA8DJLU9ypEe3HmD7HJTn96npSSe2zuVFD/Wd2ITeNO7jdHzb/It3XeGMaU4vrcSq05OObV9Ye+CHjPTKwdbq0pO+vf5O78DMmM30NAPJ9L2l+/miq+/w6m1HanpvI2sRPenw7r9T0/sFTcvoSYf2LKajd0vK1tKTftr3Twp6rx5oNT3p4P5/TekB1EUczDnTHy6H+lNXJ7RbBSIkw6pFhV5ZxE3+vhD06C7iwtKj+w+OwtKjEkKFpEcvhIpKj249UFh6FPA/Dq6mRTU/7jcAAAAASUVORK5CYII="));
+                }
+                catch
+                {
+                    auditCoverPath = string.Empty;
+                }
+
+                // Notification is the actionable primary; the circle previews are Agent (blue ring)
+                // and Media (real album cover). Timer joins only for the stacked-wheel evidence.
+                _skiaHost?.PublishActivity(ActivityKind.Notification, new ActivityPayload
+                {
+                    Title = "新消息", Body = "预览圆球只有一个元素", IsActive = true,
+                    Ttl = TimeSpan.FromSeconds(30),
+                }, 1, "audit");
                 _skiaHost?.PublishActivity(ActivityKind.Media, new ActivityPayload
                 {
                     Title = "Midnight Drive", Subtitle = "Lumen Fields", IsActive = true,
                     ShowsAudioWave = true, ProgressPercent = 42,
-                }, 1, "audit");
+                    AlbumArtPath = auditCoverPath,
+                }, 2, "audit");
                 _skiaHost?.PublishActivity(ActivityKind.Agent, new ActivityPayload
                 {
-                    Title = "运行中", Subtitle = "deepseek", Badge = "6", IsActive = true,
-                }, 2, "audit");
-                _skiaHost?.PublishActivity(ActivityKind.Timer, new ActivityPayload
-                {
-                    Title = "Pomodoro", Level = 8, IsActive = true,
+                    Title = "运行中", Subtitle = "deepseek", IsActive = true,
                 }, 3, "audit");
                 await FramesAsync("split-birth", 10, 30).ConfigureAwait(true);
                 await ShotAsync("split-settled");
 
-                // Activate the agent preview (index 0; media is the main pill) so the expanded page is
-                // a visibly different page and proves the kind → page mapping.
+                // Activate the first preview (Agent) so the expanded page proves the kind → page mapping.
                 var splitClicked = _skiaHost?.SimulateSplitIsletClick(0) == true;
                 log.AppendLine("split-islet-clicked=" + splitClicked);
                 await FramesAsync("split-merge", 10, 30).ConfigureAwait(true);
                 await ShotAsync("split-merge-expanded");
 
-                _settings?.Update(settings => settings with
+                _skiaHost?.PublishActivity(ActivityKind.Timer, new ActivityPayload
                 {
-                    Stacking = StackingStrategySetting.Stacked,
-                });
+                    Title = "Pomodoro", Level = 8, IsActive = true,
+                }, 4, "audit");
+
                 _skiaHost?.SimulateEscape();
                 await Task.Delay(1200).ConfigureAwait(true);
                 await ShotAsync("stack-before-wheel");

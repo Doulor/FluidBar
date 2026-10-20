@@ -524,9 +524,10 @@ public sealed class IslandRenderer : IDisposable
     }
 
     /// <summary>
-    /// Paints the split previews as dark glass capsules on the same baseline as the primary pill:
-    /// left circular thumbnail/icon, middle rounded-square status slot with optional red count badge,
-    /// optional circular action on the right. No text lives outside the capsule.
+    /// Paints the split previews as pure circles on the primary pill's baseline. Every circle has
+    /// exactly one element: an agent gets only its blue spinning 180° arc, media gets only its
+    /// circular album cover (or a neutral music-note fallback), and everything else gets one icon.
+    /// No labels, badges, status dots, action buttons or decorative rings.
     /// </summary>
     private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
     {
@@ -536,8 +537,6 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var finals = IslandMetrics.SplitIsletRects(state);
-        var shell = IslandMetrics.ShellRect(state);
-        // Exactly the primary pill's material: same palette background, same fill opacity, no tint.
         var fillOpacity = _theme.Material == IslandMaterial.SimulatedGlass
             ? 0.72f
             : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
@@ -552,107 +551,62 @@ public sealed class IslandRenderer : IDisposable
             var islet = state.SplitIslets[i];
             var rect = IslandMetrics.SplitIsletAnimatedRect(state, finals, i);
             var alpha = Math.Clamp(progress * 1.35f, 0, 1) * opacity;
-            // Bud: the capsule edge bulges out of the pill before the capsule separates.
-            if (progress < 0.6f)
-            {
-                var bud = Math.Clamp(progress / 0.6f, 0, 1);
-                var edgeX = finals[i].MidX >= shell.MidX ? shell.Right : shell.Left;
-                var budWidth = finals[i].Width * 0.45f * bud;
-                var budHeight = finals[i].Height * (0.55f + (0.45f * bud));
-                var budRect = new SKRect(
-                    edgeX - (budWidth / 2),
-                    shell.MidY - (budHeight / 2),
-                    edgeX + (budWidth / 2),
-                    shell.MidY + (budHeight / 2));
-                _fill.Style = SKPaintStyle.Fill;
-                _fill.Shader = null;
-                _fill.Color = Alpha(_theme.Background, fillOpacity * bud * opacity);
-                canvas.DrawRoundRect(budRect, budHeight / 2, budHeight / 2, _fill);
-            }
-
-            var radius = rect.Height / 2;
-            // Capsule shadow is intentionally omitted: the primary pill's shadow already grounds the
-            // row, and the capsule fill stays byte-identical to the pill interior.
-
+            var radius = rect.Width / 2;
 
             _fill.Style = SKPaintStyle.Fill;
             _fill.Shader = null;
-            // Src inside the capsule: the opaque slot replaces the shadow beneath, so the capsule
-            // interior is exactly the same palette colour as the primary pill even though the two
-            // shadows have different shapes.
             _fill.BlendMode = SKBlendMode.Src;
             _fill.Color = SplitFillColor(fillOpacity, alpha);
-            canvas.DrawRoundRect(rect, radius, radius, _fill);
+            canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
             _fill.BlendMode = SKBlendMode.SrcOver;
-            _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeWidth = 1f;
-            _stroke.Shader = null;
-            _stroke.Color = Alpha(_theme.LineStrong, alpha);
-            canvas.DrawRoundRect(rect, radius, radius, _stroke);
 
-            // Content is clipped to the capsule so the birth animation can never leak glyphs outside.
-            canvas.Save();
-            canvas.ClipRoundRect(new SKRoundRect(rect, radius, radius), SKClipOperation.Intersect, antialias: true);
-
-            var disc = IslandMetrics.SplitIsletDiscHeight(state);
-            var discCentre = new SKPoint(rect.Left + 4 + (disc / 2), rect.MidY);
-            // Thumbnail fallback: neutral dark disc + white glyph (no accent ring).
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.Color = Alpha(_theme.LineStrong, 0.16f * alpha);
-            canvas.DrawCircle(discCentre.X, discCentre.Y, disc / 2, _fill);
-            var iconSize = disc * 0.5f;
-            IconSet.Draw(canvas, islet.Icon,
-                new SKRect(discCentre.X - (iconSize / 2), discCentre.Y - (iconSize / 2),
-                    discCentre.X + (iconSize / 2), discCentre.Y + (iconSize / 2)),
-                Alpha(SKColors.White, alpha), _icon);
-
-            // Middle slot: a red semantic count badge when the activity carries one, otherwise a
-            // neutral rounded square with a white/grey status dot. No accent decoration anywhere.
-            var slotWidth = IslandMetrics.SplitIsletSlotWidth(islet);
-            var slot = new SKRect(
-                rect.Left + 4 + disc + 3,
-                rect.MidY - 7,
-                rect.Left + 4 + disc + 3 + slotWidth,
-                rect.MidY + 7);
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            var badgeText = islet.Badge;
-            if (!string.IsNullOrWhiteSpace(badgeText))
+            if (islet.Kind == ActivityKind.Agent)
             {
-                _fill.Color = Alpha(new SKColor(0xFF, 0x45, 0x3A), alpha);
-                canvas.DrawRoundRect(slot, 7, 7, _fill);
-                _text.Draw(canvas, badgeText,
-                    new TextStyle(FontRole.Mono, 8.5f), slot, SKColors.White, TextAlign.Center, alpha);
-            }
-            else
-            {
-                _fill.Color = Alpha(_theme.LineStrong, 0.22f * alpha);
-                canvas.DrawRoundRect(slot, 5, 5, _fill);
-                _fill.Color = Alpha(_theme.ForegroundSecondary, alpha);
-                canvas.DrawCircle(slot.MidX, slot.MidY, 2.8f, _fill);
-            }
-
-            if (islet.ShowAction)
-            {
-                var action = new SKRect(rect.Right - 20, rect.MidY - 8, rect.Right - 4, rect.MidY + 8);
-                _fill.Style = SKPaintStyle.Fill;
-                _fill.Shader = null;
-                _fill.Color = Alpha(_theme.LineStrong, 0.22f * alpha);
-                canvas.DrawCircle(action.MidX, action.MidY, 8, _fill);
+                // The ring is the agent's entire content: 2 DIP, 180° arc, 900 ms linear clockwise.
+                var phase = (float)((state.AgentAnimationSeconds / 0.9) % 1.0);
+                if (phase < 0) { phase += 1f; }
+                var ringInset = Math.Max(1f, radius * 0.12f);
+                var ringRect = new SKRect(
+                    rect.Left + ringInset,
+                    rect.Top + ringInset,
+                    rect.Right - ringInset,
+                    rect.Bottom - ringInset);
                 _stroke.Style = SKPaintStyle.Stroke;
-                _stroke.StrokeWidth = 1f;
+                _stroke.StrokeWidth = 2f;
+                _stroke.StrokeCap = SKStrokeCap.Round;
                 _stroke.Shader = null;
-                _stroke.Color = Alpha(_theme.LineStrong, alpha);
-                canvas.DrawCircle(action.MidX, action.MidY, 8, _stroke);
-                IconSet.Draw(canvas, IconKind.Pause,
-                    new SKRect(action.MidX - 4, action.MidY - 4, action.MidX + 4, action.MidY + 4),
-                    Alpha(SKColors.White, alpha), _icon);
+                _stroke.Color = Alpha(_theme.Info, alpha);
+                canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
+                _stroke.StrokeCap = SKStrokeCap.Butt;
+                continue;
             }
 
-            canvas.Restore();
+            if (islet.Kind == ActivityKind.Media)
+            {
+                var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
+                if (cover is not null)
+                {
+                    canvas.Save();
+                    using var circle = new SKPath();
+                    circle.AddCircle(rect.MidX, rect.MidY, radius);
+                    canvas.ClipPath(circle, SKClipOperation.Intersect, antialias: true);
+                    _icon.Color = Alpha(SKColors.White, alpha);
+                    canvas.DrawImage(cover, rect, _icon);
+                    canvas.Restore();
+                    continue;
+                }
+            }
+
+            // One glyph only, painted white over the neutral circle (media without cover: note).
+            var iconKind = islet.Kind == ActivityKind.Media ? IconKind.Media : islet.Icon;
+            var iconSize = radius * 0.9f;
+            IconSet.Draw(canvas, iconKind,
+                new SKRect(rect.MidX - (iconSize / 2), rect.MidY - (iconSize / 2),
+                    rect.MidX + (iconSize / 2), rect.MidY + (iconSize / 2)),
+                Alpha(SKColors.White, alpha), _icon);
         }
     }
+
 
     /// <summary>Opaque split-surface fill: the primary pill and every capsule use the same byte values
     /// so a pixel sample of their backgrounds is identical while split previews are visible.</summary>

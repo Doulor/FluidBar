@@ -19,7 +19,9 @@ public sealed record IslandSplitIslet(
     PageRef Page,
     uint AccentArgb,
     string? Badge = null,
-    bool ShowAction = false);
+    bool ShowAction = false,
+    byte[]? Artwork = null,
+    string? ArtworkKey = null);
 
 /// <summary>
 /// One immutable island frame: the animating shell geometry, the active surface, the page strip

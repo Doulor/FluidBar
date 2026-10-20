@@ -125,6 +125,7 @@ public sealed class SkiaIslandController : IDisposable
     // outlives the point where an islet is activated so the merge animation has something to shrink.
     private ActivityViewModel[] _splitPreviews = [];
     private readonly SplitStackPolicy _splitPolicy = new();
+    private readonly Dictionary<string, byte[]?> _splitArtwork = new(StringComparer.Ordinal);
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -319,6 +320,12 @@ public sealed class SkiaIslandController : IDisposable
             if (_hasRenderState && _renderState.Form == ShellForm.Expanded)
             {
                 return _renderState.PageIndex == 4 && HasActiveAgentRow(_renderState.Pages.Agent);
+            }
+
+            // An agent preview ball also spins (the split strategy can keep the agent off the pill).
+            if (_splitPreviews.Any(preview => preview.Kind == ActivityKind.Agent && preview.IsActive))
+            {
+                return true;
             }
 
             return _compact.Kind == ActivityKind.Agent
@@ -2080,11 +2087,43 @@ public sealed class SkiaIslandController : IDisposable
                 view.Title,
                 view.Page,
                 ParseAccent(view.AccentColorHex),
-                badge,
-                view.Kind == ActivityKind.Agent && view.IsActive);
+                null,
+                view.Kind == ActivityKind.Agent && view.IsActive,
+                SplitArtwork(view),
+                view.AlbumArtPath);
         }
 
         return islets;
+    }
+
+    /// <summary>Reads and caches the album cover for a split preview (one decode per path).</summary>
+    private byte[]? SplitArtwork(ActivityViewModel view)
+    {
+        if (view.Kind != ActivityKind.Media || string.IsNullOrWhiteSpace(view.AlbumArtPath))
+        {
+            return null;
+        }
+
+        if (_splitArtwork.TryGetValue(view.AlbumArtPath, out var cached))
+        {
+            return cached;
+        }
+
+        byte[]? bytes = null;
+        try
+        {
+            if (System.IO.File.Exists(view.AlbumArtPath))
+            {
+                bytes = System.IO.File.ReadAllBytes(view.AlbumArtPath);
+            }
+        }
+        catch (Exception)
+        {
+            bytes = null;
+        }
+
+        _splitArtwork[view.AlbumArtPath] = bytes;
+        return bytes;
     }
 
     /// <summary>Maps the Core activity icon identity onto the Island vector icon set.</summary>

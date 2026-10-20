@@ -169,69 +169,17 @@ public static class IslandMetrics
         (float)(state.ShellOrigin.X + state.ShellWidth),
         (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.ShellHeight));
 
-    /// <summary>Gap between split capsules and between a capsule and the primary pill (DIP).</summary>
+    /// <summary>Gap between split circles and between a circle and the primary pill (DIP).</summary>
     public const double SplitIsletGap = 8;
 
-    /// <summary>Minimum split-capsule width (DIP).</summary>
-    public const double SplitIsletMinWidth = 56;
-
-    /// <summary>Height of the split capsules: the compact primary height (36-40 DIP).</summary>
-    public static float SplitIsletHeight(in IslandRenderState state)
+    /// <summary>Split circle diameter: exactly the compact primary height (36-40 DIP).</summary>
+    public static float SplitIsletDiameter(in IslandRenderState state)
     {
         var height = state.SplitIsletHeight > 0 ? state.SplitIsletHeight : state.ShellHeight;
         return (float)Math.Clamp(height, 34, 44);
     }
 
-    /// <summary>Painted badge chip width for a split capsule badge text (0 when absent).</summary>
-    public static float SplitIsletBadgeWidth(string? badge)
-    {
-        if (string.IsNullOrWhiteSpace(badge))
-        {
-            return 0;
-        }
-
-        var digits = Math.Clamp(badge.Length, 1, 3);
-        return (digits * 7f) + 8f;
-    }
-
-    /// <summary>Thumbnail diameter inside a capsule (height - 12 DIP).</summary>
-    public static float SplitIsletDiscHeight(in IslandRenderState state)
-        => SplitIsletHeight(state) - 12f;
-
-    /// <summary>Middle status/badge slot width; a numeric badge gets its own red pill in this slot.</summary>
-    public static float SplitIsletSlotWidth(IslandSplitIslet islet)
-        => Math.Max(14f, SplitIsletBadgeWidth(islet.Badge));
-
-    /// <summary>Badge rectangle inside the middle slot (empty when the capsule has no numeric badge).</summary>
-    public static SKRect SplitIsletBadgeRect(in IslandRenderState state, IslandSplitIslet islet, SKRect capsule)
-    {
-        var width = SplitIsletBadgeWidth(islet.Badge);
-        if (width <= 0)
-        {
-            return SKRect.Empty;
-        }
-
-        var disc = SplitIsletDiscHeight(state);
-        var slotLeft = capsule.Left + 4 + disc + 3;
-        var slotWidth = SplitIsletSlotWidth(islet);
-        return new SKRect(slotLeft, capsule.MidY - 7, slotLeft + slotWidth, capsule.MidY + 7);
-    }
-
-    /// <summary>Content-adaptive capsule width: thumbnail disc + middle slot + optional action (min 56).</summary>
-    public static float SplitIsletWidth(in IslandRenderState state, IslandSplitIslet islet)
-    {
-        var height = SplitIsletHeight(state);
-        var disc = SplitIsletDiscHeight(state);
-        var width = 4f + disc + 3f + SplitIsletSlotWidth(islet) + 4f;
-        if (islet.ShowAction)
-        {
-            width += 3f + 16f;
-        }
-
-        return Math.Max((float)SplitIsletMinWidth, width);
-    }
-
-    /// <summary>Final (settled) rectangles of the split capsules, in host-local DIP, priority order.</summary>
+    /// <summary>Final (settled) rectangles of the split circles, in host-local DIP, priority order.</summary>
     public static SKRect[] SplitIsletRects(in IslandRenderState state)
     {
         var count = state.SplitIslets.Length;
@@ -242,32 +190,31 @@ public static class IslandMetrics
 
         var shell = ShellRect(state);
         var surface = HostSurface.ForMode(state.Mode);
-        var height = SplitIsletHeight(state);
+        var size = SplitIsletDiameter(state);
         var gap = (float)SplitIsletGap;
-        var top = shell.MidY - (height / 2);
+        var top = shell.MidY - (size / 2);
         var margin = (float)surface.SidePadding;
         var rects = new SKRect[count];
         var right = shell.Right + gap;
         var left = shell.Left - gap;
         for (var i = 0; i < count; i++)
         {
-            var width = SplitIsletWidth(state, state.SplitIslets[i]);
-            if (right + width <= surface.Width - (margin / 2))
+            if (right + size <= surface.Width - (margin / 2))
             {
-                rects[i] = new SKRect(right, top, right + width, top + height);
-                right += width + gap;
+                rects[i] = new SKRect(right, top, right + size, top + size);
+                right += size + gap;
             }
             else
             {
-                rects[i] = new SKRect(left - width, top, left, top + height);
-                left -= width + gap;
+                rects[i] = new SKRect(left - size, top, left, top + size);
+                left -= size + gap;
             }
         }
 
         return rects;
     }
 
-    /// <summary>Animated capsule of islet <paramref name="index"/> (squeezed out of the pill edge → seat).</summary>
+    /// <summary>Animated circle of islet <paramref name="index"/> (bud at the pill edge → round seat).</summary>
     public static SKRect SplitIsletAnimatedRect(in IslandRenderState state, SKRect[] finals, int index)
     {
         var final = finals[index];
@@ -277,10 +224,9 @@ public static class IslandMetrics
         var centre = new SKPoint(
             (float)(edgeX + ((final.MidX - edgeX) * progress)),
             (float)(shell.MidY + ((final.MidY - shell.MidY) * progress)));
-        var width = final.Width * (float)(0.16 + (0.84 * progress));
-        var height = final.Height * (float)(0.28 + (0.72 * progress));
-        return new SKRect(centre.X - (width / 2), centre.Y - (height / 2),
-            centre.X + (width / 2), centre.Y + (height / 2));
+        var size = final.Width * (float)(0.12 + (0.88 * progress));
+        return new SKRect(centre.X - (size / 2), centre.Y - (size / 2),
+            centre.X + (size / 2), centre.Y + (size / 2));
     }
 
     /// <summary>Staggered 0..1 progress for one islet (later previews separate slightly later).</summary>

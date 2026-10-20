@@ -1,4 +1,5 @@
 using FluidBar.Core.Activities;
+using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
 using SkiaSharp;
@@ -6,165 +7,157 @@ using SkiaSharp;
 namespace FluidBar.Island.Tests;
 
 /// <summary>
-/// Split capsules follow the primary pill's glass language: same height/baseline, content-adaptive
-/// width, all content inside the capsule, optional red count badge and action, no external labels.
+/// Split previews are minimal pure circles: one element each, no labels/badges/status dots/action
+/// buttons/borders. Agent = blue 180° ring only; media = circular cover or one neutral note.
 /// </summary>
 public sealed class SplitCapsuleStyleTests
 {
-    private static IslandRenderState CapsuleState()
+    private static IslandRenderState CircleState(bool withMedia = false, byte[]? cover = null)
     {
-        var media = IslandTestFixtures.MediaCompact() with
+        var islets = new List<IslandSplitIslet>
+        {
+            new(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent,
+                0, null, true),
+        };
+        if (withMedia)
+        {
+            islets.Add(new IslandSplitIslet(ActivityKind.Media, IconKind.Media, "媒体", "Midnight Drive",
+                PageRef.Media, 0, null, false, cover, cover is null ? null : "test-cover"));
+        }
+
+        return IslandTestFixtures.MediaCompact() with
         {
             SplitProgress = 1,
             SplitIsletHeight = 40,
-            SplitIslets =
-            [
-                new IslandSplitIslet(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent,
-                    0xFF4CC9F0, "6", ShowAction: true),
-                new IslandSplitIslet(ActivityKind.Timer, IconKind.Clock, "计时器", "Pomodoro", PageRef.Home,
-                    0xFF4CC9F0),
-            ],
+            AgentAnimationSeconds = 0.225,
+            SplitIslets = islets.ToArray(),
         };
-        return media;
     }
 
     [Fact]
-    public void Capsules_match_the_primary_height_and_share_its_baseline()
+    public void Split_targets_are_pure_circles_on_the_primary_baseline()
     {
-        var state = CapsuleState();
+        var state = CircleState(withMedia: true);
         var shell = IslandMetrics.ShellRect(state);
         var balls = IslandMetrics.SplitIsletRects(state);
         Assert.Equal(2, balls.Length);
         foreach (var ball in balls)
         {
-            Assert.Equal(IslandMetrics.SplitIsletHeight(state), ball.Height, 0.001);
+            Assert.Equal(IslandMetrics.SplitIsletDiameter(state), ball.Width, 0.001);
+            Assert.Equal(ball.Width, ball.Height, 0.001);
             Assert.Equal(shell.MidY, ball.MidY, 0.001);
-            Assert.True(ball.Width >= IslandMetrics.SplitIsletMinWidth, "capsule narrower than 56 DIP");
             Assert.True(ball.Left >= 0 && ball.Right <= LayoutTokens.HostSurfaceWidth);
         }
     }
 
     [Fact]
-    public void Badge_and_action_grow_the_capsule_and_paint_inside_it()
+    public void Agent_circle_contains_only_the_blue_ring()
     {
-        var state = CapsuleState();
-        var balls = IslandMetrics.SplitIsletRects(state);
-        Assert.True(balls[0].Width > balls[1].Width, "badge/action capsule must be content-adaptive");
-        Assert.True(IslandMetrics.SplitIsletBadgeWidth("6") > 0);
-
+        var state = CircleState();
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        var blue = 0;
+        var white = 0;
         var red = 0;
-        var left = (int)Math.Floor(balls[0].Left * IslandTestFixtures.Scale);
-        var top = (int)Math.Floor(balls[0].Top * IslandTestFixtures.Scale);
-        var right = (int)Math.Ceiling(balls[0].Right * IslandTestFixtures.Scale);
-        var bottom = (int)Math.Ceiling(balls[0].Bottom * IslandTestFixtures.Scale);
-        for (var y = Math.Max(0, top); y < Math.Min(bitmap.Height, bottom); y++)
+        var scale = IslandTestFixtures.Scale;
+        for (var y = (int)(ball.Top * scale); y < (int)(ball.Bottom * scale); y++)
         {
-            for (var x = Math.Max(0, left); x < Math.Min(bitmap.Width, right); x++)
+            for (var x = (int)(ball.Left * scale); x < (int)(ball.Right * scale); x++)
             {
                 var pixel = bitmap.Pixels[(y * bitmap.Width) + x];
-                if (pixel.Red > 180 && pixel.Green < 110 && pixel.Blue < 110 && pixel.Alpha > 100)
-                {
-                    red++;
-                }
+                if (pixel.Alpha < 100) continue;
+                if (pixel.Blue > 150 && pixel.Blue > pixel.Red + 60 && pixel.Blue > pixel.Green + 20) blue++;
+                if (pixel.Red > 200 && pixel.Green > 200 && pixel.Blue > 200) white++;
+                if (pixel.Red > 150 && pixel.Red > pixel.Green + 60 && pixel.Red > pixel.Blue + 60) red++;
             }
         }
 
-        Assert.True(red > 30, "red count badge did not paint inside the capsule: " + red);
+        Assert.True(blue > 30, "agent ring missing: " + blue);
+        Assert.Equal(0, white);
+        Assert.Equal(0, red);
     }
 
     [Fact]
-    public void Capsule_pixels_are_neutral_except_the_red_semantic_badge()
+    public void Media_circle_without_cover_is_a_single_white_note()
     {
-        var state = CapsuleState();
-        var balls = IslandMetrics.SplitIsletRects(state);
+        var state = CircleState(withMedia: true);
+        var ball = IslandMetrics.SplitIsletRects(state)[1];
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        var scale = IslandTestFixtures.Scale;
-        var violations = 0;
+        var white = 0;
         var red = 0;
-        for (var i = 0; i < balls.Length; i++)
+        var scale = IslandTestFixtures.Scale;
+        for (var y = (int)(ball.Top * scale); y < (int)(ball.Bottom * scale); y++)
         {
-            var badge = IslandMetrics.SplitIsletBadgeRect(state, state.SplitIslets[i], balls[i]);
-            badge = new SKRect(badge.Left - 2, badge.Top - 2, badge.Right + 2, badge.Bottom + 2);
-            var left = (int)Math.Floor(balls[i].Left * scale);
-            var top = (int)Math.Floor(balls[i].Top * scale);
-            var right = (int)Math.Ceiling(balls[i].Right * scale);
-            var bottom = (int)Math.Ceiling(balls[i].Bottom * scale);
-            for (var y = Math.Max(0, top); y < Math.Min(bitmap.Height, bottom); y++)
+            for (var x = (int)(ball.Left * scale); x < (int)(ball.Right * scale); x++)
             {
-                for (var x = Math.Max(0, left); x < Math.Min(bitmap.Width, right); x++)
-                {
-                    var pixel = bitmap.Pixels[(y * bitmap.Width) + x];
-                    if (pixel.Alpha <= 100)
-                    {
-                        continue;
-                    }
-
-                    var max = Math.Max(pixel.Red, Math.Max(pixel.Green, pixel.Blue));
-                    var min = Math.Min(pixel.Red, Math.Min(pixel.Green, pixel.Blue));
-                    if (max > 150 && pixel.Red == max && pixel.Green < 110 && pixel.Blue < 110)
-                    {
-                        red++;
-                    }
-
-                    var insideBadge = x >= badge.Left * scale && x <= badge.Right * scale
-                        && y >= badge.Top * scale && y <= badge.Bottom * scale;
-                    if (insideBadge)
-                    {
-                        continue;
-                    }
-
-                    // Near-black pixels are the shared palette background (#08080A): at 3% luminance
-                    // HSV saturation is numerically noisy and identical to the main pill, so the
-                    // neutral scan only judges visible content (V >= 40), not the flat backdrop.
-                    if (max < 40)
-                    {
-                        continue;
-                    }
-
-                    var saturation = max <= 0 ? 0 : (max - min) / (float)max;
-                    if (saturation >= 0.08f)
-                    {
-                        violations++;
-                    }
-                }
+                var pixel = bitmap.Pixels[(y * bitmap.Width) + x];
+                if (pixel.Alpha < 100) continue;
+                if (pixel.Red > 200 && pixel.Green > 200 && pixel.Blue > 200) white++;
+                if (pixel.Red > 150 && pixel.Red > pixel.Green + 60) red++;
             }
         }
 
-        Assert.True(red > 30, "the red semantic badge is missing: " + red);
-        Assert.True(violations == 0, "saturated pixels outside the semantic badge: " + violations);
+        Assert.True(white > 15, "fallback music note missing: " + white);
+        Assert.Equal(0, red);
     }
 
     [Fact]
-    public void Capsule_background_matches_the_primary_pill_exactly()
+    public void Media_cover_is_clipped_to_the_circle()
     {
-        var state = CapsuleState();
-        var shell = IslandMetrics.ShellRect(state);
-        var balls = IslandMetrics.SplitIsletRects(state);
+        // 2x2 red PNG: proves the cover path paints and the circle clip leaves the corners clean.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGO8o2HDgA0wYRUdtBIA/ygBUI2ZtV0AAAAASUVORK5CYII=");
+        var state = CircleState(withMedia: true, cover: png);
+        var ball = IslandMetrics.SplitIsletRects(state)[1];
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         var scale = IslandTestFixtures.Scale;
-        SKColor At(float xDip, float yDip)
-            => bitmap.Pixels[((int)Math.Round(yDip * scale) * bitmap.Width) + (int)Math.Round(xDip * scale)];
+        var redInside = 0;
+        for (var y = (int)(ball.Top * scale); y < (int)(ball.Bottom * scale); y++)
+        {
+            for (var x = (int)(ball.Left * scale); x < (int)(ball.Right * scale); x++)
+            {
+                var pixel = bitmap.Pixels[(y * bitmap.Width) + x];
+                if (pixel.Red > 180 && pixel.Green < 120 && pixel.Blue < 120) redInside++;
+            }
+        }
 
-        var primary = At(shell.MidX, shell.Top + 3);
-        var capsule = At(balls[0].MidX, balls[0].Top + 3);
-        Assert.Equal(primary.Red, capsule.Red);
-        Assert.Equal(primary.Green, capsule.Green);
-        Assert.Equal(primary.Blue, capsule.Blue);
+        Assert.True(redInside > 100, "cover was not painted inside the circle: " + redInside);
+        var corner = bitmap.Pixels[(int)((ball.Top + 1) * scale) * bitmap.Width + (int)((ball.Left + 1) * scale)];
+        Assert.True(corner.Alpha < 40, "cover leaked into the square corner: " + corner.Alpha);
     }
 
     [Fact]
-    public void Capsule_hit_rect_is_the_whole_capsule_and_nothing_outside()
+    public void Circle_background_is_the_primary_pill_colour()
     {
-        var state = CapsuleState();
-        var balls = IslandMetrics.SplitIsletRects(state);
+        var state = CircleState();
+        var shell = IslandMetrics.ShellRect(state);
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        Assert.Equal(IslandHitKind.SplitIslet, renderer.HitTest(state, balls[0].MidX, balls[0].MidY).Kind);
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        var scale = IslandTestFixtures.Scale;
+        SKColor At(float x, float y)
+            => bitmap.Pixels[((int)Math.Round(y * scale) * bitmap.Width) + (int)Math.Round(x * scale)];
+
+        // Sample an empty top-centre pixel of each surface (away from ring/icon).
+        var primary = At(shell.MidX, shell.Top + 4);
+        var circle = At(ball.MidX, ball.Top + 4);
+        Assert.Equal(primary.Red, circle.Red);
+        Assert.Equal(primary.Green, circle.Green);
+        Assert.Equal(primary.Blue, circle.Blue);
+    }
+
+    [Fact]
+    public void Circle_hit_rect_is_the_whole_circle_and_nothing_outside()
+    {
+        var state = CircleState();
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        Assert.Equal(IslandHitKind.SplitIslet,
+            renderer.HitTest(state, ball.MidX, ball.MidY).Kind);
         Assert.NotEqual(IslandHitKind.SplitIslet,
-            renderer.HitTest(state, balls[0].MidX, balls[0].Top - 6).Kind);
+            renderer.HitTest(state, ball.MidX, ball.Top - 6).Kind);
     }
 }
-
