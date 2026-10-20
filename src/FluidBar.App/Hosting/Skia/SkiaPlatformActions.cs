@@ -566,6 +566,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         // Optimistic play state (see SetOptimisticPlaying): until the source agrees, publish the flip.
         var isPlaying = _optimisticPlay.Resolve(media.IsPlaying, _time.GetUtcNow());
+        _publishedPlaying = isPlaying;
 
         // Interpolate from the last sampled position: the platform layer has no frame clock, so
         // between GSMTC events the position only advances because we add the elapsed wall time.
@@ -819,6 +820,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     // refused command rolls the flip back instead of leaving a lie on screen.
     private readonly OptimisticPlayState _optimisticPlay = new();
 
+    /// <summary>Play state the island currently shows (the toggle flips this when the source has no snapshot).</summary>
+    private bool _publishedPlaying;
+
     /// <inheritdoc />
     public IslandActionResult Invoke(in IslandPlatformAction action)
     {
@@ -831,7 +835,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         {
             IslandPlatformActionKind.MediaTogglePlay => DispatchMedia(
                 () => _media.TogglePlayPauseAsync(), "island.actions.media-toggle",
-                optimisticPlaying: _media.Current is { IsEmpty: false } current ? !current.IsPlaying : null),
+                optimisticPlaying: !(_media.Current is { IsEmpty: false } current ? current.IsPlaying : _publishedPlaying)),
             IslandPlatformActionKind.MediaPrevious => DispatchMedia(
                 () => _media.PreviousAsync(), "island.actions.media-previous"),
             IslandPlatformActionKind.MediaNext => DispatchMedia(
@@ -864,12 +868,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return Unsupported("GsmtcMediaSessionService is not running (no media session source)");
         }
 
-        var snapshot = _media.Current;
-        if (snapshot is null || snapshot.IsEmpty)
-        {
-            return Unsupported("no active GSMTC media session; media transport is ignored until a session exists");
-        }
-
+        // An empty snapshot is not "no media": on the window-title fallback the island's content comes
+        // from the plugin lane, and refusing the command there made the tap do nothing at all.
         if (optimisticPlaying is { } optimistic)
         {
             SetOptimisticPlaying(optimistic);

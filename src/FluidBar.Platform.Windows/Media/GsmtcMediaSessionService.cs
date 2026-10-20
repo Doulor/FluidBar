@@ -35,17 +35,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 {
     private static readonly TimeSpan EventRefreshDebounce = TimeSpan.FromMilliseconds(120);
 
-    /// <summary>Consecutive empty fallback polls that mean the player is really gone (~3 s).</summary>
-    /// <summary>
-    /// How many empty fallback polls mean "nothing is playing" (a *time* budget, not a tick count: the
-    /// poll runs every 250 ms, so a fixed tick count would drop the session after 750 ms of a track
-    /// switch, which is exactly when the player is briefly unresolvable).
-    /// </summary>
-    private static readonly int FallbackMissThreshold = Math.Max(3,
-        (int)Math.Round(FallbackMissGrace.TotalMilliseconds / FallbackPollInterval.TotalMilliseconds));
-
     /// <summary>How long the fallback tolerates an unresolvable player before publishing "no session".</summary>
     public static readonly TimeSpan FallbackMissGrace = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>Empty fallback polls tolerated before "nothing is playing" (a *time* budget: the poll runs
+    /// every 250 ms, so a fixed tick count would drop the session after 750 ms of a track switch, which is
+    /// exactly when the player is briefly unresolvable).</summary>
+    public static int FallbackMissThreshold => Math.Max(1,
+        (int)Math.Round(FallbackMissGrace.TotalMilliseconds / FallbackPollInterval.TotalMilliseconds));
 
     private static readonly TimeSpan ArtworkFetchTimeout = TimeSpan.FromSeconds(10);
     private const int MaxArtworkBytes = 4 * 1024 * 1024;
@@ -172,7 +169,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             // A track change briefly makes the player unresolvable (its audio session and window title
             // are rewritten). Only a run of empty polls really means "nothing is playing", otherwise the
-            // island flickers to the empty state and transport commands are dropped mid-switch.
+            // island flickers to the empty state and transport commands are dropped mid-switch: the last
+            // snapshot stays published for FallbackMissGrace so the island keeps showing the track.
             if (Interlocked.Increment(ref _fallbackMissCount) < FallbackMissThreshold)
             {
                 return;
