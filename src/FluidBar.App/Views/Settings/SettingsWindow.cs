@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Avalonia.Styling;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -158,6 +159,59 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     private static IMarketplaceUiService CreateDefaultMarketplace(ILocalizer localizer)
         => new MarketplaceFallbackUiService(null, new DesignMarketplaceUiService(), localizer);
+
+    /// <summary>Visual material state that can be forced for evidence rendering (no pointer needed).</summary>
+    public enum SettingsMaterialVisualState
+    {
+        /// <summary>Resting card: no shadow.</summary>
+        Idle,
+
+        /// <summary>Pointer over the card: soft outer glow.</summary>
+        Hover,
+
+        /// <summary>Card pressed: L4 inset shadow.</summary>
+        Pressed,
+    }
+
+    /// <summary>
+    /// Forces the material state of every card in the window (idle/hover/pressed). Evidence rendering uses
+    /// this to capture press/hover states offscreen without moving the real pointer. The shadow values
+    /// mirror the production ones in SettingsWidgets.SettingsMaterialStates (kept in sync by tests).
+    /// </summary>
+    /// <param name="state">State to paint on all cards.</param>
+    /// <returns>Number of cards that received the state.</returns>
+    public int ForceMaterialState(SettingsMaterialVisualState state)
+    {
+        var shadows = state switch
+        {
+            SettingsMaterialVisualState.Pressed => new BoxShadows(new BoxShadow
+            {
+                Blur = 4,
+                Spread = -8,
+                OffsetY = 8,
+                IsInset = true,
+                Color = Color.FromArgb(46, 0, 0, 0),
+            }),
+            SettingsMaterialVisualState.Hover => new BoxShadows(new BoxShadow
+            {
+                Blur = 10,
+                Color = Color.FromArgb(20, 255, 255, 255),
+            }),
+            _ => default,
+        };
+
+        var count = 0;
+        foreach (var card in this.GetVisualDescendants().OfType<Border>())
+        {
+            if (card.Child is Grid && card.BorderThickness.Left == 1 && card.CornerRadius.TopLeft > 0)
+            {
+                card.BoxShadow = shadows;
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     /// <summary>Raised when a status line should be surfaced (tests/accessibility).</summary>
     public event Action<string>? StatusChanged;
