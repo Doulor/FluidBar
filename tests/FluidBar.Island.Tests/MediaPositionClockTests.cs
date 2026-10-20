@@ -86,4 +86,52 @@ public sealed class MediaPositionClockTests
         Assert.False(clock.IsAdvancing);
         Assert.Equal(0, clock.PositionAt(2_000), 3);
     }
+
+    [Fact]
+    public void Position_is_capped_by_the_track_length()
+    {
+        var clock = new MediaPositionClock();
+        clock.SetLimit(60_000);
+        clock.Anchor(59_900, nowMs: 1_000, playing: true);
+
+        Assert.Equal(60_000, clock.PositionAt(2_000), 3);
+        Assert.Equal(60_000, clock.PositionAt(30_000), 3);
+    }
+
+    [Fact]
+    public void Small_sample_disagreement_is_eased_out_instead_of_jumping_back()
+    {
+        var clock = new MediaPositionClock();
+        clock.Anchor(10_000, nowMs: 1_000, playing: true);
+
+        // The next sample is 200 ms behind the extrapolation (normal poll lag): not a seek.
+        var snapped = clock.Reconcile(10_200, nowMs: 1_400, playing: true);
+        Assert.False(snapped);
+        var eased = clock.PositionAt(1_400);
+        Assert.InRange(eased, 10_200, 10_500);
+        // The drift is gone a decay window later, so the position does not stay offset.
+        Assert.Equal(10_400 + 400, clock.PositionAt(1_800), 0);
+    }
+
+    [Fact]
+    public void A_large_disagreement_snaps_and_is_reported_as_a_seek()
+    {
+        var clock = new MediaPositionClock();
+        clock.Anchor(10_000, nowMs: 1_000, playing: true);
+
+        var snapped = clock.Reconcile(45_000, nowMs: 1_200, playing: true);
+
+        Assert.True(snapped);
+        Assert.Equal(45_000, clock.PositionAt(1_200), 3);
+    }
+
+    [Fact]
+    public void Extrapolation_keeps_running_while_the_source_stops_publishing()
+    {
+        // The player hides its time label: no new sample for 30 s, the position must keep moving.
+        var clock = new MediaPositionClock();
+        clock.Anchor(5_000, nowMs: 0, playing: true);
+
+        Assert.Equal(35_000, clock.PositionAt(30_000), 3);
+    }
 }

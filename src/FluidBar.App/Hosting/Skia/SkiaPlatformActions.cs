@@ -664,30 +664,30 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var duration = media.Duration > TimeSpan.Zero ? media.Duration : LyricDurationFor(media);
 
         // Optimistic play state (see SetOptimisticPlaying): until the source agrees, publish the flip.
-        var isPlaying = _optimisticPlay.Resolve(media.IsPlaying, _time.GetUtcNow());
+        var sourcePlaying = media.IsPlaying;
+        var isPlaying = _optimisticPlay.Resolve(sourcePlaying, _time.GetUtcNow());
+        if (isPlaying != _publishedPlaying || _optimisticPlay.IsPending)
+        {
+            // Play-state provenance: what the island paints, what the source reported, which channel the
+            // reading came from (window-title fallback = MSAA glyph, otherwise the GSMTC session) and
+            // whether an optimistic flip is still pending.
+            _logger.Debug(LogCategories.Platform, "media.play-state",
+                $"island={(isPlaying ? "playing" : "paused")} " +
+                $"source={(sourcePlaying ? "playing" : "paused")} " +
+                $"channel={(media.TrackKey.StartsWith("win:", StringComparison.Ordinal) ? "msaa-fallback" : "gsmtc")} " +
+                $"optimistic={(_optimisticPlay.IsPending ? "pending" : "settled")} track='{media.Title}'");
+        }
+
         _publishedPlaying = isPlaying;
 
-        // Interpolate from the last sampled position: the platform layer has no frame clock, so
-        // between GSMTC events the position only advances because we add the elapsed wall time.
-        var position = media.Position;
-        if (isPlaying && media.PositionUpdatedAtUtc > DateTimeOffset.MinValue)
+        if (_optimisticPlay.LastResolveRolledBack)
         {
-            var elapsed = _time.GetUtcNow() - media.PositionUpdatedAtUtc;
-            if (elapsed > TimeSpan.Zero && elapsed < TimeSpan.FromHours(1))
-            {
-                position += elapsed;
-            }
+            // The player never confirmed the flip inside the optimism window: re-read the source once
+            // instead of keeping a stale reading (this is what made the icon disagree with the audio).
+            RequestSourceReread();
         }
 
-        if (position < TimeSpan.Zero)
-        {
-            position = TimeSpan.Zero;
-        }
-
-        if (duration > TimeSpan.Zero && position > duration)
-        {
-            position = duration;
-        }
+        var position = ResolvePosition(media, duration, isPlaying);
 
         var progress = duration.TotalMilliseconds > 0
             ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
@@ -728,6 +728,67 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             TrackIndex = 0,
             TrackCount = 0,
         };
+    }
+
+    /// <summary>Monotonic playback position shared by every media mapping (progress, lyrics, karaoke).</summary>
+    /// <summary>Monotonic playback position shared by every media mapping (progress, lyrics, karaoke).</summary>
+    private readonly FluidBar.Island.MediaPositionClock _positionClock = new();
+
+    private string? _positionTrackKey;
+    private TimeSpan _positionSample = TimeSpan.MinValue;
+    private DateTimeOffset _positionSampleAt = DateTimeOffset.MinValue;
+    private long _lastRereadAtMs = -1;
+
+    /// <summary>
+    /// Playback position at "now".
+    /// </summary>
+    /// <remarks>
+    /// The source publishes a position once per poll (and the accessibility fallback sometimes not at all
+    /// once the player hides its time label). Anchoring the sample and extrapolating with the monotonic
+    /// clock keeps the progress bar and lyric sweep moving in between; the value is bounded by the track
+    /// length and a new sample eases out any drift instead of jumping the picture backwards.
+    /// </remarks>
+    private TimeSpan ResolvePosition(MediaSnapshot media, TimeSpan duration, bool isPlaying)
+    {
+        var nowMs = _time.GetTimestamp() * 1000.0 / _time.TimestampFrequency;
+        if (!string.Equals(_positionTrackKey, media.TrackKey, StringComparison.Ordinal))
+        {
+            _positionTrackKey = media.TrackKey;
+            _positionClock.Reset();
+            _positionSample = TimeSpan.MinValue;
+            _positionSampleAt = DateTimeOffset.MinValue;
+        }
+
+        _positionClock.SetLimit(duration.TotalMilliseconds);
+        var freshSample = media.Position != _positionSample || media.PositionUpdatedAtUtc != _positionSampleAt;
+        if (freshSample)
+        {
+            _positionSample = media.Position;
+            _positionSampleAt = media.PositionUpdatedAtUtc;
+            _positionClock.Reconcile(media.Position.TotalMilliseconds, nowMs, isPlaying);
+        }
+        else
+        {
+            // No new sample: keep the play state in step and let the clock carry the position forward.
+            _positionClock.SetPlaying(isPlaying, nowMs);
+        }
+
+        return TimeSpan.FromMilliseconds(_positionClock.PositionAt(nowMs));
+    }
+
+    /// <summary>Asks the media service to re-read its source (rate-limited to once every two seconds).</summary>
+    private void RequestSourceReread()
+    {
+        var nowMs = (long)(_time.GetTimestamp() * 1000.0 / _time.TimestampFrequency);
+        if (_lastRereadAtMs >= 0 && nowMs - _lastRereadAtMs < 2000)
+        {
+            return;
+        }
+
+        _lastRereadAtMs = nowMs;
+        _logger.Debug(LogCategories.Platform, "island.actions.media-reread",
+            "The optimistic play state expired without confirmation; re-reading the media source.");
+        _ = RunAsync(() => _media.RefreshAsync(), "island.actions.media-reread");
     }
 
     private ClipboardItemData MapClipboard(ClipboardEntry entry)
@@ -948,6 +1009,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 () => _media.NextAsync(), "island.actions.media-next"),
             IslandPlatformActionKind.MediaSeek => Seek(action.Value),
             IslandPlatformActionKind.VolumeSet => SetVolume(action.Value),
+            IslandPlatformActionKind.VolumeMute => ToggleVolumeMute(),
             IslandPlatformActionKind.BrightnessSet => SetBrightness(action.Value),
             IslandPlatformActionKind.QuickToggle => Toggle(action.Toggle),
             IslandPlatformActionKind.MediaOutput => Unsupported(
@@ -1050,6 +1112,29 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         var percent = ToPercent(fraction);
         _ = RunAsync(() => _volume.SetVolumeAsync(percent), "island.actions.volume-set");
+        return IslandActionResult.Handled;
+    }
+
+    /// <summary>
+    /// Toggles the default endpoint mute through <c>IAudioEndpointVolume.SetMute</c> (WASAPI). The
+    /// media footer speaker used to be a painted glyph only; this is the action its hit target and
+    /// UIA Invoke pattern now dispatch.
+    /// </summary>
+    private IslandActionResult ToggleVolumeMute()
+    {
+        if (_volume.State != PlatformMonitorState.Running)
+        {
+            return Unsupported("VolumeMonitor is not running (no default audio endpoint)");
+        }
+
+        var snapshot = _volume.Current;
+        if (snapshot is null || !snapshot.HasDevice)
+        {
+            return Unsupported("no default audio endpoint is available for mute control");
+        }
+
+        var target = !snapshot.IsMuted;
+        _ = RunAsync(() => _volume.SetMuteAsync(target), "island.actions.volume-mute");
         return IslandActionResult.Handled;
     }
 

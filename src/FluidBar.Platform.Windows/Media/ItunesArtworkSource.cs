@@ -13,21 +13,6 @@ namespace FluidBar.Platform.Windows.Media;
 public sealed record ArtworkCandidate(byte[] Bytes, string SourceUrl, double Score, string Artist, string Title,
     string Album);
 
-/// <summary>A place covers can be fetched from.</summary>
-public interface IArtworkSource
-{
-    /// <summary>Source name (diagnostics).</summary>
-    string Name { get; }
-
-    /// <summary>Searches the source for a cover; null when nothing matched confidently.</summary>
-    /// <param name="artist">Artist to look up.</param>
-    /// <param name="title">Title to look up.</param>
-    /// <param name="album">Album to look up (may be empty).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task<ArtworkCandidate?> FindAsync(string? artist, string? title, string? album,
-        CancellationToken cancellationToken);
-}
-
 /// <summary>
 /// iTunes Search API artwork source: no key, fast, and it reports both the track and the artist, which is
 /// what the confidence check needs to reject covers of other songs.
@@ -53,12 +38,12 @@ public sealed class ItunesArtworkSource : IArtworkSource
     public string Name => "itunes";
 
     /// <inheritdoc />
-    public async Task<ArtworkCandidate?> FindAsync(string? artist, string? title, string? album,
+    public async Task<ArtworkSourceResult> FindAsync(string? artist, string? title, string? album,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.NoResults);
         }
 
         // Search with the primary artist (multi-artist credits return nothing) but validate against the
@@ -72,18 +57,22 @@ public sealed class ItunesArtworkSource : IArtworkSource
         {
             response = await _http.GetFromJsonAsync<SearchResponse>(url, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception)
         {
-            // A catalogue outage must never surface: the island keeps the gradient placeholder.
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.NetworkError);
         }
 
         if (response?.Results is not { Count: > 0 } results)
         {
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.NoResults);
         }
 
         Candidate? best = null;
+        var bestScore = 0.0;
         foreach (var result in results)
         {
             if (string.IsNullOrWhiteSpace(result.ArtworkUrl100))
@@ -92,6 +81,7 @@ public sealed class ItunesArtworkSource : IArtworkSource
             }
 
             var score = ArtworkTitleMatcher.Score(artist, title, result.ArtistName, result.TrackName);
+            bestScore = Math.Max(bestScore, score);
             if (score < _threshold || (best is not null && score <= best.Score))
             {
                 continue;
@@ -102,7 +92,7 @@ public sealed class ItunesArtworkSource : IArtworkSource
 
         if (best is null)
         {
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.BelowThreshold, bestScore);
         }
 
         var artworkUrl = UpgradeArtworkUrl(best.Result.ArtworkUrl100!);
@@ -111,21 +101,25 @@ public sealed class ItunesArtworkSource : IArtworkSource
         {
             bytes = await _http.GetByteArrayAsync(artworkUrl, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception)
         {
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.NetworkError, bestScore);
         }
 
         if (bytes is null || bytes.Length == 0 || bytes.Length > MaxArtworkBytes
             || ImageHeaderReader.TryReadDimensions(bytes) is null)
         {
-            return null;
+            return new ArtworkSourceResult(null, ArtworkFetchFailure.DecodeFailed, bestScore);
         }
 
-        return new ArtworkCandidate(bytes, artworkUrl, best.Score,
+        return new ArtworkSourceResult(new ArtworkCandidate(bytes, artworkUrl, best.Score,
             best.Result.ArtistName ?? string.Empty,
             best.Result.TrackName ?? string.Empty,
-            best.Result.CollectionName ?? string.Empty);
+            best.Result.CollectionName ?? string.Empty), ArtworkFetchFailure.None, best.Score);
     }
 
     /// <summary>Swaps the 100 px thumb for the 600 px variant of the same asset.</summary>

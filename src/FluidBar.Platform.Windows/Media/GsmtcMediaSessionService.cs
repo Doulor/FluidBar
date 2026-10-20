@@ -111,6 +111,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return _artworkFetcher;
             }
 
+            // Two independent public catalogues: iTunes answers most Latin releases, Deezer often has the
+            // CJK/remix editions iTunes lacks. Each source is tried once (no retries) inside a 4 s budget.
+            var http = CreateArtworkHttpClient();
             return _defaultArtworkFetcher ??= new ArtworkFetcher(
                 new ArtworkDiskCache(new ArtworkDiskCacheOptions
                 {
@@ -118,7 +121,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "FluidBar", "artwork"),
                 }),
-                [new ItunesArtworkSource(CreateArtworkHttpClient())]);
+                [new ItunesArtworkSource(http), new DeezerArtworkSource(http)]);
         }
     }
 
@@ -712,10 +715,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             try
             {
-                var entry = await fetcher.GetAsync(candidate.Artist, candidate.Title, album: null)
+                var outcome = await fetcher.FetchAsync(candidate.Artist, candidate.Title, album: null)
                     .ConfigureAwait(false);
-                if (entry is null || string.IsNullOrEmpty(candidate.TrackKey))
+                if (!outcome.Succeeded || outcome.Entry is not { } entry || string.IsNullOrEmpty(candidate.TrackKey))
                 {
+                    // Attributable failure: which level missed and how close the best candidate was.
+                    _logger.LogInfo(PlatformLogCategory.Media, "media.artwork-miss",
+                        "No cover for '" + candidate.Title + "': " + outcome.Failure + " (source=" + outcome.Source
+                        + ", bestScore=" + outcome.Score.ToString("0.000") + ").");
                     return;
                 }
 

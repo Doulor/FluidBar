@@ -15,8 +15,11 @@ namespace FluidBar.Platform.Windows.Media;
 /// </remarks>
 public static class ArtworkTitleMatcher
 {
-    /// <summary>Default acceptance threshold (0..1).</summary>
-    public const double DefaultThreshold = 0.72;
+    /// <summary>
+    /// Default acceptance threshold (0..1). 0.65 keeps the artist guard (a zero artist score still rejects)
+    /// while letting catalogue versions through ("(Remix)", "- Single", spelling differences).
+    /// </summary>
+    public const double DefaultThreshold = 0.65;
 
     /// <summary>True when the candidate scores at or above the threshold.</summary>
     /// <param name="queryArtist">Artist from the player.</param>

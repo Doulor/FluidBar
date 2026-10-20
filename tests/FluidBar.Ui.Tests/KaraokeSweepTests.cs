@@ -99,4 +99,35 @@ public sealed class KaraokeSweepTests
             Assert.False(fixture.Controller.IsKaraokeAnimating);
         });
     }
+
+    [Fact]
+    public Task Karaoke_sweep_stops_on_the_pause_frame_and_stays_put()
+    {
+        return AvaloniaTest.Run(() =>
+        {
+            using var fixture = StartMedia();
+            fixture.ExpandAndSettle();
+            fixture.GoToPage(1);
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(300));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            var playing = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+            Assert.True(playing > 0, "the sweep has to be running before the pause");
+
+            // Pause arrives: the content publish flips the play state (optimistic or real).
+            fixture.Data.Update(_ => MediaContent(300, playing: false));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            var frozen = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+
+            // Time keeps passing while paused: the phase must not move, not even a pixel.
+            for (var frame = 0; frame < 10; frame++)
+            {
+                fixture.Time.Advance(TimeSpan.FromMilliseconds(40));
+                fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+                Assert.Equal(frozen, fixture.Controller.RenderState.Pages.Media.LyricHighlight, 6);
+            }
+
+            Assert.False(fixture.Controller.IsKaraokeAnimating);
+        });
+    }
+
 }

@@ -2197,6 +2197,7 @@ public sealed class SkiaIslandController : IDisposable
         _karaokeTrack = track;
         _karaokeActive = true;
 
+        _karaokeClock.SetLimit(media.DurationMs);
         if (!sameLine || !_karaokeClock.HasAnchor || _karaokeClock.IsJump(media.PositionMs, now))
         {
             // New line, first sample or a seek: snap instead of easing (a seek must not fast-forward
@@ -2204,9 +2205,18 @@ public sealed class SkiaIslandController : IDisposable
             _karaokeClock.Anchor(media.PositionMs, now, media.IsPlaying);
             _karaokeHighlight = track.Progress(media.PositionMs);
         }
-        else
+        else if (_karaokeClock.Reconcile(media.PositionMs, now, media.IsPlaying))
         {
-            _karaokeClock.SetPlaying(media.IsPlaying, now);
+            // Snapped on a seek: take the new position immediately.
+            _karaokeHighlight = track.Progress(media.PositionMs);
+        }
+
+        if (!media.IsPlaying)
+        {
+            // Paused: freeze the sweep on the frame the pause arrives. A later sample must not push the
+            // phase forward again (the "keeps sweeping then snaps back" bug).
+            _karaokeClock.SetPlaying(false, now);
+            _karaokeHighlight = track.Progress(_karaokeClock.PositionAt(now));
         }
     }
 
@@ -2218,6 +2228,12 @@ public sealed class SkiaIslandController : IDisposable
     {
         if (_karaokeTrack is not { } track || !_karaokeActive)
         {
+            return false;
+        }
+
+        if (!_karaokeClock.IsAdvancing)
+        {
+            // Paused: the phase is frozen, so there is nothing to advance and no frame to request.
             return false;
         }
 
