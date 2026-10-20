@@ -1,6 +1,6 @@
 namespace FluidBar.App.Views.Settings;
 
-/// <summary>The seven settings sections (spec §8 / deliverable 5).</summary>
+/// <summary>The eight settings sections (spec §8 / deliverable 5 + agent integration).</summary>
 public enum SettingsWindowSection
 {
     /// <summary>Language, startup, updates, tray, hotkeys.</summary>
@@ -14,6 +14,9 @@ public enum SettingsWindowSection
 
     /// <summary>Installed plugin list and enable toggles.</summary>
     Plugins,
+
+    /// <summary>Native, read-only agent support status (no install actions).</summary>
+    AgentSupport,
 
     /// <summary>Marketplace browse/install/update/rollback.</summary>
     Marketplace,

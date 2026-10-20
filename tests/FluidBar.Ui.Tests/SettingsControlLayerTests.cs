@@ -35,6 +35,7 @@ public sealed class SettingsControlLayerTests
     [InlineData(SettingsWindowSection.Appearance)]
     [InlineData(SettingsWindowSection.Island)]
     [InlineData(SettingsWindowSection.Plugins)]
+    [InlineData(SettingsWindowSection.AgentSupport)]
     [InlineData(SettingsWindowSection.Marketplace)]
     [InlineData(SettingsWindowSection.Advanced)]
     [InlineData(SettingsWindowSection.About)]

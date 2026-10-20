@@ -50,6 +50,7 @@ internal static class Program
             foreach (var culture in new[] { "zh-Hans", "en-US" })
             {
                 await CaptureCultureAsync(output, culture);
+                await CaptureAgentsAsync(output, culture);
             }
 
             status = 0;
@@ -95,6 +96,36 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
             Save(content, Path.Combine(output, "settings-island-" + culture + "-city.png"));
             Console.WriteLine(culture + ": city row bounds=" + text.Bounds);
+        }
+        finally
+        {
+            window.Close();
+            await Task.Delay(300);
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>Renders the read-only agent support page in one culture.</summary>
+    private static async Task CaptureAgentsAsync(string output, string culture)
+    {
+        var localizer = LocalizationService.CreateDefault(culture, showMissingKeys: false, enablePseudoLocale: false);
+        LocalizationRuntime.Current = localizer;
+        var store = new InMemoryUiSettingsStore(AppSettings.Default);
+        var controller = new SettingsController(store.LastSaved, store, NullAppLogger.Instance);
+        var window = new SettingsWindow(controller, localizer, SettingsWindowSection.AgentSupport)
+        {
+            Width = 1400,
+            Height = 1750,
+        };
+        window.Show();
+        try
+        {
+            await Task.Delay(1200);
+            Dispatcher.UIThread.RunJobs();
+
+            var content = window.Content as Control
+                ?? throw new InvalidOperationException("The settings window has no content.");
+            Save(content, Path.Combine(output, "settings-support-" + culture + ".png"));
         }
         finally
         {

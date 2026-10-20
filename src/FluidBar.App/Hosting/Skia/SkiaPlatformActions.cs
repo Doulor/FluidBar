@@ -52,6 +52,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
     private readonly AgentInboxWatcher _agentInbox;
+    private readonly AgentProviderRegistry _agentNative;
+    private readonly AgentEventSourceAggregator _agentSources;
     private readonly AgentHookInstaller _agentHooks;
     private readonly IRadioToggleService _wifi;
     private readonly IRadioToggleService _bluetooth;
@@ -139,7 +141,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             HookCommand = BuildAgentHookCommand(inboxDirectory),
             BackupDirectory = Path.Combine(dataDirectory, "backups", "agent-hooks"),
         }, _platformLogger);
-        _agentInbox.SnapshotChanged += OnSnapshotChanged;
+        // Native, read-only agent providers: DSH, Claude Code, Codex, Copilot CLI and Aider are observed
+        // purely by reading the local files they already write. No plugin, no script, no configuration.
+        _agentNative = new AgentProviderRegistry(NativeAgentProviders.CreateDefault(),
+            new AgentProviderRegistryOptions(), _platformLogger, _counters, time);
+        _agentSources = new AgentEventSourceAggregator(_agentInbox, _agentNative);
+        _agentSources.SnapshotChanged += OnSnapshotChanged;
         _lyricsHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _lyricsCache = new LyricsCache(timeProvider: time, counters: _counters);
         _lyrics = new LyricsService(
@@ -213,7 +220,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     public IClipboardSource ClipboardSource => _clipboard;
 
     /// <summary>Agent event inbox exposed to first-party plugins (Claude Code / Codex hooks).</summary>
-    public IAgentInboxSource AgentInboxSource => _agentInbox;
+    public IAgentInboxSource AgentInboxSource => _agentSources;
 
     /// <summary>Consent-gated agent hook installer exposed to first-party plugins.</summary>
     public IAgentHookInstaller AgentHookInstaller => _agentHooks;
@@ -328,7 +335,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
                 _notifications.Current, PageNotificationLimit, now, _localizer),
-            Agents = MapAgents(_agentInbox.Current),
+            Agents = MapAgents(_agentSources.Current),
             Tasks = tasks.Tasks,
             TasksEmptyHint = tasks.EmptyHint,
             TasksMoreText = tasks.MoreText,
@@ -760,6 +767,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("agent-native", () => _agentNative.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("notifications", () => _notifications.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("weather", () => _weather.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("tasks", () => _tasks.StartAsync(cancellationToken)).ConfigureAwait(false);
@@ -1190,6 +1198,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _settings.Changed -= OnSettingsChanged;
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
+        await StopOneAsync("agent-native", () => _agentNative.StopAsync()).ConfigureAwait(false);
+        _agentSources.Dispose();
         await StopOneAsync("notifications", () => _notifications.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("weather", () => _weather.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("tasks", () => _tasks.DisposeAsync().AsTask()).ConfigureAwait(false);

@@ -84,6 +84,123 @@ public static class AgentHookConfigMerger
         return changed ? Serialize(root) : (existingJson ?? Serialize(root));
     }
 
+    /// <summary>
+    /// Adds several (event → command) hook pairs in one pass. Used by the agent integration page, where
+    /// one agent needs a different adapter command per lifecycle event. Idempotent per command.
+    /// </summary>
+    public static string MergeCommands(string? existingJson,
+        IReadOnlyList<(string Event, string Command)> hooks, out bool changed)
+    {
+        ArgumentNullException.ThrowIfNull(hooks);
+        changed = false;
+        var root = ParseRoot(existingJson);
+        if (root["hooks"] is not JsonObject hookObject)
+        {
+            hookObject = new JsonObject();
+            root["hooks"] = hookObject;
+        }
+
+        foreach (var (eventName, command) in hooks)
+        {
+            if (string.IsNullOrWhiteSpace(eventName) || string.IsNullOrWhiteSpace(command))
+            {
+                continue;
+            }
+
+            if (hookObject[eventName] is not JsonArray entries)
+            {
+                entries = new JsonArray();
+                hookObject[eventName] = entries;
+            }
+
+            if (entries.OfType<JsonObject>().Any(entry => ContainsCommand(entry, command)))
+            {
+                continue;
+            }
+
+            entries.Add(new JsonObject
+            {
+                ["matcher"] = string.Empty,
+                ["hooks"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = command,
+                }),
+            });
+            changed = true;
+        }
+
+        return changed ? Serialize(root) : (existingJson ?? Serialize(root));
+    }
+
+    /// <summary>Removes every hook entry that references one of the given commands.</summary>
+    public static string RemoveCommands(string? existingJson, IReadOnlyList<string> commands, out bool changed)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        changed = false;
+        if (string.IsNullOrWhiteSpace(existingJson))
+        {
+            return existingJson ?? "{}";
+        }
+
+        var root = ParseRoot(existingJson);
+        if (root["hooks"] is not JsonObject hooks)
+        {
+            return existingJson;
+        }
+
+        foreach (var eventName in hooks.Select(pair => pair.Key).ToArray())
+        {
+            if (hooks[eventName] is not JsonArray entries)
+            {
+                continue;
+            }
+
+            for (var index = entries.Count - 1; index >= 0; index--)
+            {
+                if (entries[index] is JsonObject entry && commands.Any(command => ContainsCommand(entry, command)))
+                {
+                    entries.RemoveAt(index);
+                    changed = true;
+                }
+            }
+
+            if (entries.Count == 0)
+            {
+                hooks.Remove(eventName);
+            }
+        }
+
+        if (hooks.Count == 0)
+        {
+            root.Remove("hooks");
+        }
+
+        return changed ? Serialize(root) : existingJson;
+    }
+
+    /// <summary>True when the settings already contain any of the given hook commands.</summary>
+    public static bool ContainsAnyCommand(string? existingJson, IReadOnlyList<string> commands)
+    {
+        if (string.IsNullOrWhiteSpace(existingJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            var root = ParseRoot(existingJson);
+            return root["hooks"] is JsonObject hooks
+                   && hooks.Any(pair => pair.Value is JsonArray entries
+                                        && entries.OfType<JsonObject>()
+                                            .Any(entry => commands.Any(command => ContainsCommand(entry, command))));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Removes only FluidBar-owned hook entries. Returns the new JSON text.</summary>
     public static string Remove(string? existingJson, string hookCommand, out bool changed)
     {

@@ -13,6 +13,7 @@ using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.App.Views.Plugins;
 using FluidBar.Core.Layout;
+using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Update;
 
 namespace FluidBar.App.Views.Settings;
@@ -52,6 +53,7 @@ public sealed record SettingsWindowContext
 
     /// <summary>Launches the verified installer and exits (About "restart and install").</summary>
     public Action? RestartToInstall { get; init; }
+
 }
 
 /// <summary>Builds the seven settings sections from the strongly typed settings model.</summary>
@@ -75,6 +77,7 @@ public static class SettingsSectionBuilder
                 SettingsWindowSection.Appearance => BuildAppearance(context),
                 SettingsWindowSection.Island => BuildIsland(context),
                 SettingsWindowSection.Plugins => BuildPlugins(context),
+                SettingsWindowSection.AgentSupport => BuildAgentSupport(context),
                 SettingsWindowSection.Marketplace => BuildMarketplace(context),
                 SettingsWindowSection.Advanced => BuildAdvanced(context),
                 SettingsWindowSection.About => BuildAbout(context),
@@ -86,6 +89,9 @@ public static class SettingsSectionBuilder
             _ambientContext = null;
         }
     }
+
+    private static Control BuildAgentSupport(SettingsWindowContext context)
+        => AgentSupportSectionView.Build(AgentSupportCatalog.CreateDefault(), context);
 
     // ---- shared helpers ---------------------------------------------------------------------
 

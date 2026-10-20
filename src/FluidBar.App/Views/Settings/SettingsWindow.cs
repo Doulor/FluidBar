@@ -26,6 +26,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         (SettingsWindowSection.Appearance, LocKeys.Settings.Appearance.Title, SettingsIconKind.Palette),
         (SettingsWindowSection.Island, LocKeys.Settings.Island.Title, SettingsIconKind.Island),
         (SettingsWindowSection.Plugins, LocKeys.Settings.Plugins.Title, SettingsIconKind.Puzzle),
+        (SettingsWindowSection.AgentSupport, LocKeys.Settings.Support.Title, SettingsIconKind.Chat),
         (SettingsWindowSection.Marketplace, LocKeys.Settings.Marketplace.Title, SettingsIconKind.Storefront),
         (SettingsWindowSection.Advanced, LocKeys.Settings.Advanced.Title, SettingsIconKind.Sliders),
         (SettingsWindowSection.About, LocKeys.Settings.About.NavLabel, SettingsIconKind.Info),

@@ -491,6 +491,166 @@ public static partial class LocKeys
         public const string VersionLine = "Settings.VersionLine";
         /// <summary><c>Settings.FooterNote</c></summary>
         public const string FooterNote = "Settings.FooterNote";
+        /// <summary>Keys in the 'Support' area (native, read-only agent support).</summary>
+        public static class Support
+        {
+            /// <summary><c>Settings.Support.Title</c></summary>
+            public const string Title = "Settings.Support.Title";
+            /// <summary><c>Settings.Support.Subtitle</c></summary>
+            public const string Subtitle = "Settings.Support.Subtitle";
+            /// <summary>Keys in the 'Status' area.</summary>
+            public static class Status
+            {
+                /// <summary><c>Settings.Support.Status.Native</c></summary>
+                public const string Native = "Settings.Support.Status.Native";
+                /// <summary><c>Settings.Support.Status.Partial</c></summary>
+                public const string Partial = "Settings.Support.Status.Partial";
+                /// <summary><c>Settings.Support.Status.NotDetected</c></summary>
+                public const string NotDetected = "Settings.Support.Status.NotDetected";
+                /// <summary><c>Settings.Support.Status.Infeasible</c></summary>
+                public const string Infeasible = "Settings.Support.Status.Infeasible";
+            }
+            /// <summary>Keys in the 'Group' area.</summary>
+            public static class Group
+            {
+                /// <summary><c>Settings.Support.Group.Native</c></summary>
+                public const string Native = "Settings.Support.Group.Native";
+                /// <summary><c>Settings.Support.Group.Infeasible</c></summary>
+                public const string Infeasible = "Settings.Support.Group.Infeasible";
+            }
+            /// <summary><c>Settings.Support.Label.DataSource</c></summary>
+            public const string DataSource = "Settings.Support.Label.DataSource";
+            /// <summary>Keys in the 'Note' area.</summary>
+            public static class Note
+            {
+                /// <summary><c>Settings.Support.Note.NotDetected</c></summary>
+                public const string NotDetected = "Settings.Support.Note.NotDetected";
+                /// <summary><c>Settings.Support.Note.NoActivity</c></summary>
+                public const string NoActivity = "Settings.Support.Note.NoActivity";
+                /// <summary><c>Settings.Support.Note.SqliteState</c></summary>
+                public const string SqliteState = "Settings.Support.Note.SqliteState";
+                /// <summary><c>Settings.Support.Note.IdeOnly</c></summary>
+                public const string IdeOnly = "Settings.Support.Note.IdeOnly";
+                /// <summary><c>Settings.Support.Note.ElectronOnly</c></summary>
+                public const string ElectronOnly = "Settings.Support.Note.ElectronOnly";
+                /// <summary><c>Settings.Support.Note.NoPublicState</c></summary>
+                public const string NoPublicState = "Settings.Support.Note.NoPublicState";
+            }
+            /// <summary>Keys in the 'Fields' area.</summary>
+            public static class Fields
+            {
+                /// <summary><c>Settings.Support.Fields.Dsh</c></summary>
+                public const string Dsh = "Settings.Support.Fields.Dsh";
+                /// <summary><c>Settings.Support.Fields.Claude</c></summary>
+                public const string Claude = "Settings.Support.Fields.Claude";
+                /// <summary><c>Settings.Support.Fields.Codex</c></summary>
+                public const string Codex = "Settings.Support.Fields.Codex";
+                /// <summary><c>Settings.Support.Fields.Copilot</c></summary>
+                public const string Copilot = "Settings.Support.Fields.Copilot";
+                /// <summary><c>Settings.Support.Fields.Aider</c></summary>
+                public const string Aider = "Settings.Support.Fields.Aider";
+            }
+        }
+        /// <summary>Keys in the 'Agents' area (legacy one-click hook page; kept for fallback copy).</summary>
+        public static class Agents
+        {
+            /// <summary><c>Settings.Agents.Title</c></summary>
+            public const string Title = "Settings.Agents.Title";
+            /// <summary><c>Settings.Agents.Subtitle</c></summary>
+            public const string Subtitle = "Settings.Agents.Subtitle";
+            /// <summary>Keys in the 'Status' area.</summary>
+            public static class Status
+            {
+                /// <summary><c>Settings.Agents.Status.BuiltIn</c></summary>
+                public const string BuiltIn = "Settings.Agents.Status.BuiltIn";
+                /// <summary><c>Settings.Agents.Status.Installed</c></summary>
+                public const string Installed = "Settings.Agents.Status.Installed";
+                /// <summary><c>Settings.Agents.Status.Detected</c></summary>
+                public const string Detected = "Settings.Agents.Status.Detected";
+                /// <summary><c>Settings.Agents.Status.NotInstalled</c></summary>
+                public const string NotInstalled = "Settings.Agents.Status.NotInstalled";
+                /// <summary><c>Settings.Agents.Status.WrapperOnly</c></summary>
+                public const string WrapperOnly = "Settings.Agents.Status.WrapperOnly";
+                /// <summary><c>Settings.Agents.Status.Unsupported</c></summary>
+                public const string Unsupported = "Settings.Agents.Status.Unsupported";
+            }
+            /// <summary>Keys in the 'Action' area.</summary>
+            public static class Action
+            {
+                /// <summary><c>Settings.Agents.Action.Install</c></summary>
+                public const string Install = "Settings.Agents.Action.Install";
+                /// <summary><c>Settings.Agents.Action.Remove</c></summary>
+                public const string Remove = "Settings.Agents.Action.Remove";
+                /// <summary><c>Settings.Agents.Action.Copy</c></summary>
+                public const string Copy = "Settings.Agents.Action.Copy";
+                /// <summary><c>Settings.Agents.Action.Copied</c></summary>
+                public const string Copied = "Settings.Agents.Action.Copied";
+            }
+            /// <summary>Keys in the 'Result' area.</summary>
+            public static class Result
+            {
+                /// <summary><c>Settings.Agents.Result.Installed</c></summary>
+                public const string Installed = "Settings.Agents.Result.Installed";
+                /// <summary><c>Settings.Agents.Result.Removed</c></summary>
+                public const string Removed = "Settings.Agents.Result.Removed";
+                /// <summary><c>Settings.Agents.Result.Failed</c></summary>
+                public const string Failed = "Settings.Agents.Result.Failed";
+            }
+            /// <summary>Keys in the 'Reason' area.</summary>
+            public static class Reason
+            {
+                /// <summary><c>Settings.Agents.Reason.NotDetected</c></summary>
+                public const string NotDetected = "Settings.Agents.Reason.NotDetected";
+                /// <summary><c>Settings.Agents.Reason.Unsupported</c></summary>
+                public const string Unsupported = "Settings.Agents.Reason.Unsupported";
+                /// <summary><c>Settings.Agents.Reason.AdapterMissing</c></summary>
+                public const string AdapterMissing = "Settings.Agents.Reason.AdapterMissing";
+                /// <summary><c>Settings.Agents.Reason.CopilotConfig</c></summary>
+                public const string CopilotConfig = "Settings.Agents.Reason.CopilotConfig";
+                /// <summary><c>Settings.Agents.Reason.ElectronOnly</c></summary>
+                public const string ElectronOnly = "Settings.Agents.Reason.ElectronOnly";
+            }
+            /// <summary>Keys in the 'Group' area.</summary>
+            public static class Group
+            {
+                /// <summary><c>Settings.Agents.Group.Installable</c></summary>
+                public const string Installable = "Settings.Agents.Group.Installable";
+                /// <summary><c>Settings.Agents.Group.BuiltIn</c></summary>
+                public const string BuiltIn = "Settings.Agents.Group.BuiltIn";
+                /// <summary><c>Settings.Agents.Group.Wrapper</c></summary>
+                public const string Wrapper = "Settings.Agents.Group.Wrapper";
+                /// <summary><c>Settings.Agents.Group.Unsupported</c></summary>
+                public const string Unsupported = "Settings.Agents.Group.Unsupported";
+            }
+            /// <summary><c>Settings.Agents.Label.ConfigPath</c></summary>
+            public const string ConfigPath = "Settings.Agents.Label.ConfigPath";
+            /// <summary><c>Settings.Agents.Label.Command</c></summary>
+            public const string Command = "Settings.Agents.Label.Command";
+            /// <summary>Keys in the 'Agent' area.</summary>
+            public static class Agent
+            {
+                /// <summary><c>Settings.Agents.Agent.Claude</c></summary>
+                public const string Claude = "Settings.Agents.Agent.Claude";
+                /// <summary><c>Settings.Agents.Agent.Codex</c></summary>
+                public const string Codex = "Settings.Agents.Agent.Codex";
+                /// <summary><c>Settings.Agents.Agent.Copilot</c></summary>
+                public const string Copilot = "Settings.Agents.Agent.Copilot";
+                /// <summary><c>Settings.Agents.Agent.Dsh</c></summary>
+                public const string Dsh = "Settings.Agents.Agent.Dsh";
+                /// <summary><c>Settings.Agents.Agent.Cursor</c></summary>
+                public const string Cursor = "Settings.Agents.Agent.Cursor";
+                /// <summary><c>Settings.Agents.Agent.Windsurf</c></summary>
+                public const string Windsurf = "Settings.Agents.Agent.Windsurf";
+                /// <summary><c>Settings.Agents.Agent.Aider</c></summary>
+                public const string Aider = "Settings.Agents.Agent.Aider";
+                /// <summary><c>Settings.Agents.Agent.Zcode</c></summary>
+                public const string Zcode = "Settings.Agents.Agent.Zcode";
+                /// <summary><c>Settings.Agents.Agent.Qoder</c></summary>
+                public const string Qoder = "Settings.Agents.Agent.Qoder";
+                /// <summary><c>Settings.Agents.Agent.WorkBuddy</c></summary>
+                public const string WorkBuddy = "Settings.Agents.Agent.WorkBuddy";
+            }
+        }
         /// <summary>Keys in the 'General' area.</summary>
         public static class General
         {

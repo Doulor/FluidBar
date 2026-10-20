@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FluidBar.App\FluidBar.App.csproj" />
+    <ProjectReference Include="..\..\src\FluidBar.Platform.Windows\FluidBar.Platform.Windows.csproj" />
   </ItemGroup>
 
 </Project>
