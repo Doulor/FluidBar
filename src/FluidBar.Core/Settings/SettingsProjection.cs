@@ -61,9 +61,12 @@ public static class SettingsProjection
 
         return new ActivityStackPolicy
         {
-            Stacking = settings.Island.Stacking == StackingPreference.Latest
-                ? StackingStrategy.LatestOnly
-                : StackingStrategy.Stacked,
+            Stacking = settings.Island.Stacking switch
+            {
+                StackingPreference.Latest => StackingStrategy.LatestOnly,
+                StackingPreference.Split => StackingStrategy.Split,
+                _ => StackingStrategy.Stacked,
+            },
             TtlOverrides = overrides.ToImmutable(),
         };
     }
@@ -102,9 +105,12 @@ public static class SettingsProjection
             anchor: placement.Anchor,
             offsetX: placement.OffsetX,
             offsetY: placement.OffsetY ?? double.NaN,
-            stacking: settings.Island.Stacking == StackingPreference.Latest
-                ? StackingStrategy.LatestOnly
-                : StackingStrategy.Stacked,
+            stacking: settings.Island.Stacking switch
+            {
+                StackingPreference.Latest => StackingStrategy.LatestOnly,
+                StackingPreference.Split => StackingStrategy.Split,
+                _ => StackingStrategy.Stacked,
+            },
             hiddenHoverStrip: settings.Island.HiddenHoverStrip);
     }
 

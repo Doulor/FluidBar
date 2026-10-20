@@ -21,6 +21,9 @@ public static class SkiaIslandUiaElementIds
     /// <summary>Compact "+N" overflow chip (button; opens the oldest background activity's page).</summary>
     public const string Overflow = "island.compact.overflow";
 
+    /// <summary>Split-island preview button id ("island.compact.split.N").</summary>
+    public static string SplitIslet(int index) => $"island.compact.split.{index.ToString(CultureInfo.InvariantCulture)}";
+
     /// <summary>Expanded page tab list.</summary>
     public const string Pages = "island.pages";
 
@@ -300,8 +303,28 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                     "Press Enter to open the page of the oldest background activity.")));
         }
 
+        if (state.Form != ShellForm.Expanded && state.SplitIslets.Length > 0)
+        {
+            var islets = IslandMetrics.SplitIsletRects(state);
+            for (var i = 0; i < islets.Length && i < state.SplitIslets.Length; i++)
+            {
+                var islet = state.SplitIslets[i];
+                var kind = _localizer.Get("Activity." + islet.Kind);
+                var name = string.IsNullOrWhiteSpace(kind) ? islet.Kind.ToString() : kind;
+                children.Add(Node(
+                    SkiaIslandUiaElementIds.SplitIslet(i),
+                    UiaElementRole.Button,
+                    string.IsNullOrWhiteSpace(islet.Title) ? name : $"{name} · {islet.Title}",
+                    ToRect(islets[i]),
+                    UiaPatternKind.Invoke,
+                    new UiaElementState { IsFocusable = true },
+                    help: L("Island.Accessibility.SplitIsletHelp",
+                        "Press Enter to merge this preview back into the pill and open its page.")));
+            }
+        }
+
         // The compact media pill has no play/pause button (removed on request), so the tree exposes the
-        // pill as one expand group plus the overflow chip.
+        // pill as one expand group plus the overflow chip and the split previews.
         return children;
     }
 
@@ -998,6 +1021,14 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         if (string.Equals(id, SkiaIslandUiaElementIds.Overflow, StringComparison.Ordinal))
         {
             _controller.ActivateOverflowBadge();
+            return;
+        }
+
+        if (id.StartsWith("island.compact.split.", StringComparison.Ordinal)
+            && int.TryParse(id.AsSpan("island.compact.split.".Length), NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out var splitIndex))
+        {
+            _controller.ActivateSplitIslet(splitIndex);
             return;
         }
 

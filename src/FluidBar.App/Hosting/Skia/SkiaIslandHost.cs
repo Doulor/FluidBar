@@ -249,6 +249,21 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.HandlePointerReleased(shell.MidX, shell.MidY);
     }
 
+    /// <summary>Simulates a click on split preview <paramref name="index"/> (smoke/tests).</summary>
+    /// <returns>Whether the rendered state had that preview ball.</returns>
+    public bool SimulateSplitIsletClick(int index)
+    {
+        var state = _controller.RenderState;
+        var balls = IslandMetrics.SplitIsletRects(state);
+        if (index < 0 || index >= balls.Length)
+        {
+            return false;
+        }
+
+        _controller.HandlePointerPressed(balls[index].MidX, balls[index].MidY);
+        _controller.HandlePointerReleased(balls[index].MidX, balls[index].MidY);
+        return true;
+    }
     /// <summary>Simulates a click on the compact "+N" overflow chip (smoke/tests).</summary>
     /// <returns>Whether the rendered state had an overflow chip to click.</returns>
     public bool SimulateOverflowBadgeClick()
@@ -1124,7 +1139,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             placement.Anchor,
             placement.OffsetX,
             placement.OffsetY ?? double.NaN,
-            stacking: settings.Stacking == StackingStrategySetting.Stacked ? StackingStrategy.Stacked : StackingStrategy.LatestOnly,
+            stacking: settings.Stacking switch
+            {
+                StackingStrategySetting.Stacked => StackingStrategy.Stacked,
+                StackingStrategySetting.Latest => StackingStrategy.LatestOnly,
+                _ => StackingStrategy.Split,
+            },
             hiddenHoverStrip: false,
             pagePosition: _controller.Pager.PagePosition,
             archipelagoVisible: _controller.Archipelago.IsVisible);

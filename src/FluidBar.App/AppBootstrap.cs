@@ -499,6 +499,77 @@ internal sealed class AppBootstrap
             }
 
             var auditMode = Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_MODE");
+            var splitAudit = string.Equals(auditMode, "split", StringComparison.OrdinalIgnoreCase);
+            if (splitAudit)
+            {
+                _settings?.Update(settings => settings with
+                {
+                    AutoCollapseMs = 0,
+                    Language = "zh-Hans",
+                    Stacking = StackingStrategySetting.Split,
+                    Plugins = settings.Plugins with { Enabled = [] },
+                });
+                await Task.Delay(1200).ConfigureAwait(true);
+
+                async Task FramesAsync(string prefix, int count, int intervalMs)
+                {
+                    for (var i = 0; i < count; i++)
+                    {
+                        _skiaHost?.RenderNow(forceFull: true);
+                        _skiaHost?.SavePrimaryFramePng(
+                            Path.Combine(directory, $"{prefix}-{i + 1:00}.png"));
+                        await Task.Delay(intervalMs).ConfigureAwait(true);
+                    }
+                }
+
+                _skiaHost?.PublishActivity(ActivityKind.Media, new ActivityPayload
+                {
+                    Title = "Midnight Drive", Subtitle = "Lumen Fields", IsActive = true,
+                    ShowsAudioWave = true, ProgressPercent = 42,
+                }, 1, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.Agent, new ActivityPayload
+                {
+                    Title = "运行中", Subtitle = "deepseek", Badge = "running", IsActive = true,
+                }, 2, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.Timer, new ActivityPayload
+                {
+                    Title = "Pomodoro", Level = 8, IsActive = true,
+                }, 3, "audit");
+                await FramesAsync("split-birth", 10, 30).ConfigureAwait(true);
+                await ShotAsync("split-settled");
+
+                // Activate the agent preview (index 0; media is the main pill) so the expanded page is
+                // a visibly different page and proves the kind → page mapping.
+                var splitClicked = _skiaHost?.SimulateSplitIsletClick(0) == true;
+                log.AppendLine("split-islet-clicked=" + splitClicked);
+                await FramesAsync("split-merge", 10, 30).ConfigureAwait(true);
+                await ShotAsync("split-merge-expanded");
+
+                _settings?.Update(settings => settings with
+                {
+                    Stacking = StackingStrategySetting.Stacked,
+                });
+                _skiaHost?.SimulateEscape();
+                await Task.Delay(1200).ConfigureAwait(true);
+                await ShotAsync("stack-before-wheel");
+                log.AppendLine("stack-before-wheel=" + (_skiaHost?.DescribeWindows() ?? string.Empty));
+                _skiaHost?.SimulateWheel(-120);
+                await FramesAsync("stack-rotate", 10, 30).ConfigureAwait(true);
+                log.AppendLine("stack-after-wheel=" + (_skiaHost?.DescribeWindows() ?? string.Empty));
+                await ShotAsync("stack-rotated");
+
+                _skiaHost?.SimulateEscape();
+                await Task.Delay(350).ConfigureAwait(true);
+                _settings?.Update(settings => settings with
+                {
+                    Stacking = StackingStrategySetting.Split,
+                });
+                _skiaHost?.RequestSettings();
+                log.AppendLine("settings-opened=1");
+                await Task.Delay(20000).ConfigureAwait(true);
+                return;
+            }
+
             var overflowAudit = string.Equals(auditMode, "overflow", StringComparison.OrdinalIgnoreCase);
             if (overflowAudit)
             {

@@ -96,7 +96,11 @@ public enum MotionPreference
 /// <summary>Stacking strategy setting (spec 2.5).</summary>
 public enum StackingPreference
 {
-    /// <summary>Primary + up to two ghost pills (default).</summary>
+    /// <summary>Primary pill splits off up to two preview islets beside it (default).</summary>
+    [JsonStringEnumMemberName("split")]
+    Split,
+
+    /// <summary>Primary + up to two ghost pills behind it.</summary>
     [JsonStringEnumMemberName("stack")]
     Stack,
 
@@ -226,7 +230,7 @@ public sealed record IslandSettings
     public IslandAnchor Anchor { get; init; } = IslandAnchor.TopCenter;
 
     /// <summary>Stacking strategy.</summary>
-    public StackingPreference Stacking { get; init; } = StackingPreference.Stack;
+    public StackingPreference Stacking { get; init; } = StackingPreference.Split;
 
     /// <summary>Hover peek enabled.</summary>
     public bool HoverPeek { get; init; } = true;

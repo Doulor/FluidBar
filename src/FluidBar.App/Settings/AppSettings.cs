@@ -34,6 +34,9 @@ public enum IslandMaterial
 /// <summary>Stacking strategy for concurrent activities.</summary>
 public enum StackingStrategySetting
 {
+    /// <summary>Primary pill splits preview islets beside it (default).</summary>
+    Split,
+
     /// <summary>Main pill + up to two ghost pills.</summary>
     Stacked,
 
@@ -204,7 +207,7 @@ public sealed record AppSettings
         = ImmutableDictionary<string, MonitorPlacementSetting>.Empty;
 
     /// <summary>Stacking strategy.</summary>
-    public StackingStrategySetting Stacking { get; init; } = StackingStrategySetting.Stacked;
+    public StackingStrategySetting Stacking { get; init; } = StackingStrategySetting.Split;
 
     /// <summary>Hover peek enabled.</summary>
     public bool HoverPeek { get; init; } = true;
@@ -400,7 +403,7 @@ public sealed record AppSettings
             ? Anchor
             : "top-center",
         Placement = NormalizePlacement(Placement),
-        Stacking = Enum.IsDefined(Stacking) ? Stacking : StackingStrategySetting.Stacked,
+        Stacking = Enum.IsDefined(Stacking) ? Stacking : StackingStrategySetting.Split,
         AutoCollapseMs = Math.Clamp(AutoCollapseMs, 0, 60000),
         AutoHideMs = Math.Clamp(AutoHideMs, 0, 3_600_000),
         WeatherCity = NormalizeWeatherCity(WeatherCity),
@@ -452,7 +455,12 @@ public sealed record AppSettings
             {
                 Mode = Mode,
                 Anchor = Anchor,
-                Stacking = Stacking == StackingStrategySetting.Stacked ? "stack" : "latest",
+                Stacking = Stacking switch
+                {
+                    StackingStrategySetting.Latest => "latest",
+                    StackingStrategySetting.Stacked => "stack",
+                    _ => "split",
+                },
                 HoverPeek = HoverPeek,
                 AutoCollapseMs = AutoCollapseMs,
                 AutoHideMs = AutoHideMs,
@@ -520,7 +528,12 @@ public sealed record AppSettings
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
                 Mode = document.Island?.Mode ?? defaults.Mode,
                 Anchor = document.Island?.Anchor ?? defaults.Anchor,
-                Stacking = document.Island?.Stacking == "latest" ? StackingStrategySetting.Latest : StackingStrategySetting.Stacked,
+                Stacking = document.Island?.Stacking switch
+                {
+                    "latest" => StackingStrategySetting.Latest,
+                    "stack" => StackingStrategySetting.Stacked,
+                    _ => StackingStrategySetting.Split,
+                },
                 HoverPeek = document.Island?.HoverPeek ?? defaults.HoverPeek,
                 AutoCollapseMs = document.Island?.AutoCollapseMs ?? defaults.AutoCollapseMs,
                 AutoHideMs = document.Island?.AutoHideMs ?? defaults.AutoHideMs,

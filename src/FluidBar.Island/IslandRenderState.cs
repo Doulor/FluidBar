@@ -4,6 +4,21 @@ using FluidBar.Core.Interaction;
 
 namespace FluidBar.Island;
 
+/// <summary>One split-island preview: activity identity plus the minimal glyph/label the ball paints.</summary>
+/// <param name="Kind">Activity class (used by UIA and click navigation).</param>
+/// <param name="Icon">Icon glyph identity.</param>
+/// <param name="Label">Localized short activity label (2-4 characters).</param>
+/// <param name="Title">Activity title, kept for UIA help text.</param>
+/// <param name="Page">Expanded page opened when the ball is activated.</param>
+/// <param name="AccentArgb">0xAARRGGBB accent for the icon ring, or 0 for the theme accent.</param>
+public sealed record IslandSplitIslet(
+    ActivityKind Kind,
+    IconKind Icon,
+    string Label,
+    string? Title,
+    IslandPage Page,
+    uint AccentArgb);
+
 /// <summary>
 /// One immutable island frame: the animating shell geometry, the active surface, the page strip
 /// position, the compact activity, the expanded page content and the detached strip state.
@@ -128,6 +143,18 @@ public readonly record struct IslandRenderState
     /// and paints the "+N" chip.
     /// </summary>
     public int OverflowCount { get; init; }
+
+    /// <summary>
+    /// Split-island previews (cell division): one small islet per extra visible activity, ordered by
+    /// priority. Empty for every other stacking strategy.
+    /// </summary>
+    public IslandSplitIslet[] SplitIslets { get; init; } = [];
+
+    /// <summary>0 = islets merged into the pill, 1 = fully separated (spring driven).</summary>
+    public double SplitProgress { get; init; }
+
+    /// <summary>One-shot 0..1 ghost-exchange phase after a wheel rotation of the stacked order.</summary>
+    public double StackSpin { get; init; }
 
     /// <summary>Continuous pager position, committed page and gesture flags.</summary>
     public PagerRenderState Pager { get; init; }
@@ -541,6 +568,18 @@ public sealed record ExpandedPageContent
     /// <summary>Widgets page model (page 5).</summary>
     public WidgetsPageModel Widgets { get; init; } = new();
 
+    /// <summary>Extra host-rendered plugin pages appended after the six built-in pages (M0).</summary>
+    public IReadOnlyList<PluginPageModel> PluginPages { get; init; } = [];
+
+    /// <summary>Total page count: six built-in pages plus registered plugin pages.</summary>
+    public int PageCount => PagerConstants.PageCount + PluginPages.Count;
+
+    /// <summary>Returns the plugin page at a total page index, or null for a built-in page.</summary>
+    public PluginPageModel? PluginPageAt(int page)
+        => page >= PagerConstants.PageCount && page - PagerConstants.PageCount < PluginPages.Count
+            ? PluginPages[page - PagerConstants.PageCount]
+            : null;
+
     /// <summary>Localized page titles (six); missing entries fall back to the defaults.</summary>
     public IReadOnlyList<string> PageTitles { get; init; } = DefaultPageTitles;
 
@@ -556,6 +595,11 @@ public sealed record ExpandedPageContent
     /// <summary>Returns the title for a page index (clamped, never null).</summary>
     public string Title(int page)
     {
+        if (PluginPageAt(page) is { } plugin)
+        {
+            return plugin.Title;
+        }
+
         var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
         var titles = PageTitles;
         return titles is not null && index < titles.Count && !string.IsNullOrEmpty(titles[index])
@@ -566,6 +610,11 @@ public sealed record ExpandedPageContent
     /// <summary>Returns the short strip label for a page index (clamped, never null).</summary>
     public string ShortTitle(int page)
     {
+        if (PluginPageAt(page) is { } plugin)
+        {
+            return string.IsNullOrWhiteSpace(plugin.ShortTitle) ? plugin.Title : plugin.ShortTitle;
+        }
+
         var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
         var titles = ShortTitles;
         return titles is not null && index < titles.Count && !string.IsNullOrEmpty(titles[index])

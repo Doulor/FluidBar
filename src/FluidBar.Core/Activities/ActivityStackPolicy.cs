@@ -10,6 +10,12 @@ public enum StackingStrategy
 
     /// <summary>Only the latest/highest-priority activity is visible; no ghosts.</summary>
     LatestOnly,
+
+    /// <summary>
+    /// Split mode (cell division): the primary pill previews the other visible activities as small
+    /// islets beside it. Visible capacity matches <see cref="Stacked"/>; those previews are not ghosts.
+    /// </summary>
+    Split,
 }
 
 /// <summary>

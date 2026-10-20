@@ -10,6 +10,7 @@ namespace FluidBar.App.Hosting.Skia;
 /// <param name="Anchor">Anchor within the work area.</param>
 /// <param name="CompactSize">Core compact size token for the active activity.</param>
 /// <param name="GhostCount">Live ghost layer count (stacking strategy already applied).</param>
+/// <param name="SplitCount">Live split-islet count (split strategy); 0 merges the islets.</param>
 /// <param name="HideTarget">Whether the shell fades out.</param>
 public readonly record struct SkiaMotionTarget(
     ShellForm Form,
@@ -17,6 +18,7 @@ public readonly record struct SkiaMotionTarget(
     IslandAnchor Anchor,
     VisualSize CompactSize,
     int GhostCount,
+    int SplitCount,
     bool HideTarget)
 {
     /// <summary>Hidden target for a mode/anchor.</summary>
@@ -27,6 +29,7 @@ public readonly record struct SkiaMotionTarget(
         mode,
         anchor,
         LayoutTokens.CompactSize(null),
+        0,
         0,
         true);
 }
@@ -58,6 +61,8 @@ public sealed class SkiaIslandMotion : IDisposable
     private readonly Spring _press;
     private readonly Spring _nudge;
     private readonly Spring _hide;
+    private readonly Spring _split;
+    private readonly Spring _stackSpin;
 
     // Prototype2 shell geometry is time-based.
     private readonly CssTransition _width;
@@ -81,6 +86,8 @@ public sealed class SkiaIslandMotion : IDisposable
         _press = _springs.Add(new Spring(_profile.ResolveParameters(MotionTokens.Press), 0));
         _nudge = _springs.Add(new Spring(_profile.ResolveParameters(MotionTokens.Nudge), 0));
         _hide = _springs.Add(new Spring(_profile.ResolveParameters(MotionTokens.Hide), 1));
+        _split = _springs.Add(new Spring(_profile.ResolveParameters(MotionTokens.Split), 0));
+        _stackSpin = _springs.Add(new Spring(_profile.ResolveParameters(MotionTokens.StackExchange), 0));
 
         var compact = LayoutTokens.CompactSize(null);
         _width = new CssTransition(compact.Width);
@@ -110,6 +117,12 @@ public sealed class SkiaIslandMotion : IDisposable
 
     /// <summary>Whole-shell opacity (hide spring).</summary>
     public double Opacity => Math.Clamp(_hide.Value, 0, 1);
+
+    /// <summary>Split-islet separation 0..1 (can overshoot slightly while the spring settles).</summary>
+    public double SplitProgress => _split.Value;
+
+    /// <summary>One-shot ghost-exchange phase after a wheel rotation (1 → 0).</summary>
+    public double StackSpin => Math.Clamp(_stackSpin.Value, 0, 1);
 
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
     public double PressScale => 1.0 - (Math.Clamp(_press.Value, 0, 1) * 0.03);
@@ -230,6 +243,7 @@ public sealed class SkiaIslandMotion : IDisposable
         else if (_profile.ReducedMotion)
         {
             SnapGeometry(baseWidth, baseHeight, wantsExpanded);
+            _split.SnapTo(target.SplitCount > 0 ? 1 : 0);
         }
         else
         {
@@ -267,6 +281,7 @@ public sealed class SkiaIslandMotion : IDisposable
         _wasExpanded = wantsExpanded;
         _hover.Retarget(target.Form == ShellForm.Peek ? 1 : 0, RetargetDeltaSeconds);
         _hide.Retarget(target.HideTarget ? 0 : 1, RetargetDeltaSeconds);
+        _split.Retarget(target.SplitCount > 0 ? 1 : 0, RetargetDeltaSeconds);
     }
 
     /// <summary>Snaps every spring and transition to its target (mode/DPI change, restore, reduced motion).</summary>
@@ -281,6 +296,8 @@ public sealed class SkiaIslandMotion : IDisposable
         _press.SnapTo(0);
         _nudge.SnapTo(0);
         _hide.SnapTo(_target.HideTarget ? 0 : 1);
+        _split.SnapTo(_target.SplitCount > 0 ? 1 : 0);
+        _stackSpin.SnapTo(0);
         _wasExpanded = wantsExpanded;
     }
 
@@ -295,6 +312,8 @@ public sealed class SkiaIslandMotion : IDisposable
         _press.SetParameters(profile.ResolveParameters(MotionTokens.Press));
         _nudge.SetParameters(profile.ResolveParameters(MotionTokens.Nudge));
         _hide.SetParameters(profile.ResolveParameters(MotionTokens.Hide));
+        _split.SetParameters(profile.ResolveParameters(MotionTokens.Split));
+        _stackSpin.SetParameters(profile.ResolveParameters(MotionTokens.StackExchange));
         if (!wasReduced && profile.ReducedMotion)
         {
             SnapToTarget();
@@ -324,6 +343,18 @@ public sealed class SkiaIslandMotion : IDisposable
 
         _nudge.SnapTo(-amplitude);
         _nudge.Retarget(0, RetargetDeltaSeconds);
+    }
+
+    /// <summary>Plays the one-shot stack-exchange animation after a wheel rotation (no-op when reduced motion).</summary>
+    public void PlayStackRotation()
+    {
+        if (_profile.ReducedMotion)
+        {
+            return;
+        }
+
+        _stackSpin.SnapTo(1);
+        _stackSpin.Retarget(0, RetargetDeltaSeconds);
     }
 
     /// <summary>Steps every spring and transition by a frame delta; returns whether motion continues.</summary>

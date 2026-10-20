@@ -15,6 +15,9 @@ public enum IslandHitKind
     /// <summary>Compact "+N" overflow chip (opens the page of the oldest background activity).</summary>
     OverflowBadge,
 
+    /// <summary>Split-island preview ball; <see cref="IslandHitTarget.Index"/> is the preview index.</summary>
+    SplitIslet,
+
     /// <summary>Expanded page content (not a control).</summary>
     Page,
 

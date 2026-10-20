@@ -260,9 +260,12 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 FluidBar.Core.Layout.IslandAnchor.BottomRight => "bottom-right",
                 _ => "top-center",
             },
-            Stacking = core.Island.Stacking == CoreStacking.Latest
-                ? AppAppearance.StackingStrategySetting.Latest
-                : AppAppearance.StackingStrategySetting.Stacked,
+            Stacking = core.Island.Stacking switch
+            {
+                CoreStacking.Latest => AppAppearance.StackingStrategySetting.Latest,
+                CoreStacking.Stack => AppAppearance.StackingStrategySetting.Stacked,
+                _ => AppAppearance.StackingStrategySetting.Split,
+            },
             HoverPeek = core.Island.HoverPeek,
             AutoCollapseMs = core.Island.AutoCollapseMs,
             AutoHideMs = core.Island.AutoHideMs,
@@ -367,7 +370,12 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                     "bottom-right" => FluidBar.Core.Layout.IslandAnchor.BottomRight,
                     _ => FluidBar.Core.Layout.IslandAnchor.TopCenter,
                 },
-                Stacking = app.Stacking == AppAppearance.StackingStrategySetting.Latest ? CoreStacking.Latest : CoreStacking.Stack,
+                Stacking = app.Stacking switch
+                {
+                    AppAppearance.StackingStrategySetting.Latest => CoreStacking.Latest,
+                    AppAppearance.StackingStrategySetting.Stacked => CoreStacking.Stack,
+                    _ => CoreStacking.Split,
+                },
                 HoverPeek = app.HoverPeek,
                 AutoCollapseMs = app.AutoCollapseMs,
                 AutoHideMs = app.AutoHideMs,

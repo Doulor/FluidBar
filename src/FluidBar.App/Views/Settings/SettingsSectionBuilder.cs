@@ -575,13 +575,24 @@ public static class SettingsSectionBuilder
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Desc),
                     [
+                        (ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Split), "split"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Stacked), "stacked"),
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Latest), "latest"),
                     ],
-                    settings.Stacking == StackingStrategySetting.Latest ? "latest" : "stacked",
+                    settings.Stacking switch
+                    {
+                        StackingStrategySetting.Stacked => "stacked",
+                        StackingStrategySetting.Latest => "latest",
+                        _ => "split",
+                    },
                     value => ctx.Settings.Update(s => s with
                     {
-                        Stacking = value == "latest" ? StackingStrategySetting.Latest : StackingStrategySetting.Stacked,
+                        Stacking = value switch
+                        {
+                            "latest" => StackingStrategySetting.Latest,
+                            "stacked" => StackingStrategySetting.Stacked,
+                            _ => StackingStrategySetting.Split,
+                        },
                     })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.HoverPeek),
                     ctx.Localizer.Get(LocKeys.Settings.Island.HoverPeekHint), settings.HoverPeek,

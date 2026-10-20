@@ -17,6 +17,7 @@ public class SettingsSerializationTests
         Assert.Equal(FluidBarSettings.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Equal(IslandMode.Float, settings.Island.Mode);
         Assert.Equal(IslandAnchor.TopCenter, settings.Island.Anchor);
+        Assert.Equal(StackingPreference.Split, settings.Island.Stacking);
         Assert.Equal(0.96, settings.Appearance.FillOpacity, 1e-9);
     }
 
@@ -29,7 +30,7 @@ public class SettingsSerializationTests
         Assert.Contains("\"theme\":\"dark\"", json);
         Assert.Contains("\"mode\":\"float\"", json);
         Assert.Contains("\"anchor\":\"top-center\"", json);
-        Assert.Contains("\"stacking\":\"stack\"", json);
+        Assert.Contains("\"stacking\":\"split\"", json);
         Assert.Contains("\"displayOn\":\"primary\"", json);
         Assert.Contains("\"autoUpdate\":\"notify\"", json);
         Assert.Contains("\"reducedMotion\":\"system\"", json);

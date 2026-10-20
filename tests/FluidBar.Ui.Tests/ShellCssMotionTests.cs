@@ -215,10 +215,10 @@ public sealed class ShellCssMotionTests
     }
 
     private static SkiaMotionTarget CompactTarget() => new(
-        ShellForm.Compact, IslandMode.Float, IslandAnchor.TopCenter, Idle, 0, false);
+        ShellForm.Compact, IslandMode.Float, IslandAnchor.TopCenter, Idle, 0, 0, false);
 
     private static SkiaMotionTarget ExpandedTarget() => new(
-        ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter, Idle, 0, false);
+        ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter, Idle, 0, 0, false);
 
     /// <summary>Drives a motion instance on a monotonic clock so tests can sample absolute times.</summary>
     private sealed class MotionRun

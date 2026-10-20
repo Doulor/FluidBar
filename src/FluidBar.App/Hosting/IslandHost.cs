@@ -528,7 +528,7 @@ public sealed class IslandHost : IDisposable
         var mode = settings.IslandMode;
         var compactKind = state.ContentKind ?? viewModel.Primary?.Kind;
         var compact = LayoutTokens.CompactSize(compactKind);
-        var stacking = settings.Stacking == StackingStrategySetting.Stacked;
+        var stacking = settings.Stacking == StackingStrategySetting.Stacked; // split islets: 见 Skia host
         var ghosts = stacking ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts) : 0;
         var form = state.Kind switch
         {

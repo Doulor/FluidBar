@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
@@ -116,11 +117,16 @@ public sealed class SkiaIslandController : IDisposable
     private double _trackTransitionScale = 1;
     private double _trackTransitionOpacity = 1;
 
+    // Split-strategy previews are snapshotted from the presenter's ghost view models; the snapshot
+    // outlives the point where an islet is activated so the merge animation has something to shrink.
+    private ActivityViewModel[] _splitPreviews = [];
+    private readonly SplitStackPolicy _splitPolicy = new();
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
     private string _dynamicSignature = string.Empty;
     private string _agentTimingSignature = string.Empty;
+    private string _visibleStackSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
     private VisualRect? _accessibilityFocus;
@@ -346,9 +352,17 @@ public sealed class SkiaIslandController : IDisposable
         && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
-    public TimeSpan PreferredFrameInterval => IsWaveOnly
+    public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
         ? TimeSpan.FromMilliseconds(33)
         : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+
+    /// <summary>
+    /// Whether the only animated thing is the karaoke sweep / progress clock on a rested shell. 30 fps is
+    /// enough for text sweeping (the frame loop was running at ~120 fps, repainting the lyric strip for
+    /// sub-pixel changes and making the sweep visibly uneven under load).
+    /// </summary>
+    public bool IsKaraokeOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating
+        && (IsKaraokeAnimating || IsMediaProgressAnimating) && !IsWaveActive();
 
     /// <summary>Whether a deadline timer is needed (hover/auto-collapse/scheduler/strip auto-hide).</summary>
     public bool HasPendingDeadline
@@ -453,6 +467,9 @@ public sealed class SkiaIslandController : IDisposable
             {
                 _schedulerState = update.State;
                 ApplyInput(IslandInput.ForActivityUpdate(update));
+                // Expiry can change the visible stack without changing the island state kind; a
+                // transition-less update must still refresh the preview/ghost snapshots.
+                SyncContent(full: false);
             }
         }
 
@@ -825,6 +842,19 @@ public sealed class SkiaIslandController : IDisposable
     /// <param name="page">Target page.</param>
     public void HandlePageRequest(CoreIslandPage page)
     {
+        if (_settings.Current.Stacking == StackingStrategySetting.Split)
+        {
+            // Opening an activity's page counts as "the user interacted with it": it keeps the pill.
+            foreach (var record in _schedulerState.Visible)
+            {
+                if (record.Payload.PreferredPage == page || record.Kind.ToPage() == page)
+                {
+                    _splitPolicy.NoteUserInteraction(record.Key, _time.GetLocalNow());
+                    break;
+                }
+            }
+        }
+
         if ((int)page == _pager.SelectedIndex)
         {
             return;
@@ -858,6 +888,34 @@ public sealed class SkiaIslandController : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Activates one split preview ball: expands the island to that activity's page while the split
+    /// spring runs in reverse, so the ball visibly fuses back into the pill.
+    /// </summary>
+    /// <param name="index">Preview index from the hit target.</param>
+    /// <returns>Whether a preview existed at <paramref name="index"/>.</returns>
+    public bool ActivateSplitIslet(int index)
+    {
+        if (index < 0 || index >= _splitPreviews.Length)
+        {
+            return false;
+        }
+
+        var preview = _splitPreviews[index];
+        _splitPolicy.NoteUserInteraction(preview.Key, _time.GetLocalNow());
+        var page = preview.Page;
+        if (State.Kind != IslandStateKind.Expanded)
+        {
+            ApplyInput(IslandInput.PrimaryClick());
+            ApplyInput(IslandInput.PageRequested(page));
+        }
+
+        HandlePageRequest(page);
+        InvalidateFull();
+        StateChanged?.Invoke();
+        return true;
+    }
+
     /// <summary>Page of the oldest background activity (the +N chip's navigation target).</summary>
     private CoreIslandPage OverflowPage()
     {
@@ -867,6 +925,31 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         return _schedulerState.PrimaryPage;
+    }
+
+    /// <summary>Rotates the visible activity stack by <paramref name="direction"/> (+1 forwards).</summary>
+    private void RotateStack(int direction)
+    {
+        var visible = _schedulerState.Visible;
+        if (visible.Length < 2)
+        {
+            return;
+        }
+
+        if (direction >= 0)
+        {
+            _schedulerState = _schedulerState with
+            {
+                Visible = visible.RemoveAt(0).Add(visible[0]),
+            };
+        }
+        else
+        {
+            _schedulerState = _schedulerState with
+            {
+                Visible = visible.Insert(0, visible[^1]).RemoveAt(visible.Length),
+            };
+        }
     }
 
     /// <summary>Moves one page left/right (keyboard arrows).</summary>
@@ -1138,6 +1221,10 @@ public sealed class SkiaIslandController : IDisposable
 
         switch (hit.Kind)
         {
+            case IslandHitKind.SplitIslet:
+                // A split ball merges back into the primary pill (the motion target drops its count)
+                // and opens the previewed activity's page.
+                return ActivateSplitIslet(hit.Index);
             case IslandHitKind.OverflowBadge:
                 // The +N chip opens the page of the oldest background activity instead of the primary's.
                 return ActivateOverflowBadge();
@@ -1380,6 +1467,32 @@ public sealed class SkiaIslandController : IDisposable
 
         var now = _time.GetLocalNow();
 
+        // Stacked strategy: the wheel over the compact pill rotates the visible stack, bringing the
+        // next ghost to the front and pushing the former primary to the back (cyclic). Split mode and
+        // latest-only have nothing to rotate.
+        if (!horizontal && !shift
+            && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek
+            && _schedulerState.Visible.Length > 1)
+        {
+            if (_settings.Current.Stacking == StackingStrategySetting.Split)
+            {
+                ReorderSplitVisible(deltaDip < 0 ? -1 : 1);
+                _motion.PlayStackRotation();
+                SyncContent(full: true);
+                StateChanged?.Invoke();
+                return new SkiaWheelOutcome(true, false, (int)State.Page, false, false);
+            }
+
+            if (_settings.Current.Stacking == StackingStrategySetting.Stacked)
+            {
+                RotateStack(deltaDip < 0 ? -1 : 1);
+                _motion.PlayStackRotation();
+                SyncContent(full: true);
+                StateChanged?.Invoke();
+                return new SkiaWheelOutcome(true, false, (int)State.Page, false, false);
+            }
+        }
+
         // Wheel arbitration: scrollable content owns the wheel until it reaches an edge; at the edge
         // the gesture must accumulate overscroll (and dwell) before the pager turns one page, so a
         // clipboard or notification list scrolls natively and only then flips. Short pages flip at once.
@@ -1558,6 +1671,9 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         ApplyInput(IslandInput.ForActivityUpdate(update));
+        // Producer activity updates can leave the island state kind untouched (Compact -> Compact);
+        // the transition callback then never fires, so refresh the content/preview snapshot here.
+        SyncContent(full: false);
     }
 
     private void OnTransition(IslandTransition transition)
@@ -1637,10 +1753,25 @@ public sealed class SkiaIslandController : IDisposable
     private bool SyncContent(bool full)
     {
         var content = _data.Snapshot();
-        var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         var settings = _settings.Current;
+        if (settings.Stacking == StackingStrategySetting.Split)
+        {
+            // The split strategy owns the "who is the main island" decision; the scheduler order is a
+            // priority suggestion, not the presentation order.
+            ReorderSplitVisible();
+        }
+
+        var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         ObserveTrackChange(content, settings);
         ObserveTrackTransition(content, viewModel);
+
+        // The primary's content signature does not include the ghost previews: a new activity behind
+        // the pill (or a split reorder) must still refresh the target/snapshots.
+        var stackSignature = string.Join(
+            '|', _schedulerState.Visible.Select(record => record.Key.ToString())) +
+            "#" + viewModel.Ghosts.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var stackChanged = !string.Equals(stackSignature, _visibleStackSignature, StringComparison.Ordinal);
+        _visibleStackSignature = stackSignature;
 
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
@@ -1652,13 +1783,13 @@ public sealed class SkiaIslandController : IDisposable
         _dynamicSignature = dynamicSignature;
         _agentTimingSignature = timingSignature;
 
-        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && !timingChanged)
+        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && !timingChanged && !stackChanged)
         {
             // A producer heartbeat with identical content: no relayout, no transition retarget, no frame.
             return false;
         }
 
-        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && timingChanged)
+        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && timingChanged && !stackChanged)
         {
             // Elapsed-time-only update: patch the duration strings and repaint the time strip. The
             // page models, shell target and text layout stay untouched, so the one-second tick can
@@ -1685,6 +1816,7 @@ public sealed class SkiaIslandController : IDisposable
             SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
             _time.GetLocalNow()));
         _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
+        UpdateSplitPreviews(viewModel, settings);
         _motion.SetTarget(BuildTarget(viewModel));
         BuildRenderState();
 
@@ -1808,6 +1940,10 @@ public sealed class SkiaIslandController : IDisposable
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
             : 0;
+        var splitCount = settings.Stacking == StackingStrategySetting.Split
+            && State.Kind != IslandStateKind.Expanded
+            ? Math.Min(viewModel.Ghosts.Length, LayoutTokens.MaxGhosts)
+            : 0;
 
         // With more activities than the visible stack can hold, the compact pill reserves a column for
         // the "+N" chip. Keeping the reservation here (not only in the renderer) means the shell, its
@@ -1827,7 +1963,113 @@ public sealed class SkiaIslandController : IDisposable
             IslandStateKind.Closing => ShellForm.Closing,
             _ => ShellForm.Hidden,
         };
-        return new SkiaMotionTarget(form, mode, settings.IslandAnchor, compactSize, ghosts, State.Kind == IslandStateKind.Hidden);
+        return new SkiaMotionTarget(
+            form, mode, settings.IslandAnchor, compactSize, ghosts, splitCount,
+            State.Kind == IslandStateKind.Hidden);
+    }
+
+    /// <summary>Applies the split policy's presentation order to the visible stack.</summary>
+    private void ReorderSplitVisible(int wheelSteps = 0)
+    {
+        if (_schedulerState.Visible.Length < 2 && wheelSteps == 0)
+        {
+            return;
+        }
+
+        var ordered = _splitPolicy.Order(_schedulerState.Visible, _time.GetLocalNow(), wheelSteps);
+        if (!ordered.SequenceEqual(_schedulerState.Visible))
+        {
+            _schedulerState = _schedulerState with { Visible = ordered };
+        }
+    }
+
+    /// <summary>Snapshots the split previews for the current strategy (kept while the merge animates).</summary>
+    private void UpdateSplitPreviews(IslandViewModel viewModel, AppSettings settings)
+    {
+        if (settings.Stacking == StackingStrategySetting.Split
+            && State.Kind is not (IslandStateKind.Expanded or IslandStateKind.Closing))
+        {
+            _splitPreviews = viewModel.Ghosts.Take(LayoutTokens.MaxGhosts).ToArray();
+            return;
+        }
+
+        if (_motion.SplitProgress <= 0.02)
+        {
+            _splitPreviews = [];
+        }
+    }
+
+    /// <summary>Builds the render-state split-islet snapshots from the cached presenter models.</summary>
+    private IslandSplitIslet[] BuildSplitIslets()
+    {
+        if (_splitPreviews.Length == 0)
+        {
+            return [];
+        }
+
+        var islets = new IslandSplitIslet[_splitPreviews.Length];
+        for (var i = 0; i < _splitPreviews.Length; i++)
+        {
+            var view = _splitPreviews[i];
+            var label = _localizer.Get(ActivityPresenter.KindLabelKeyFor(view.Kind));
+            if (string.IsNullOrWhiteSpace(label) || label == ActivityPresenter.KindLabelKeyFor(view.Kind))
+            {
+                label = _localizer.Get("Activity." + view.Kind);
+            }
+
+            islets[i] = new IslandSplitIslet(
+                view.Kind,
+                MapSplitIcon(view.Icon),
+                string.IsNullOrWhiteSpace(label) ? view.Kind.ToString() : label,
+                view.Title,
+                view.Page,
+                ParseAccent(view.AccentColorHex));
+        }
+
+        return islets;
+    }
+
+    /// <summary>Maps the Core activity icon identity onto the Island vector icon set.</summary>
+    private static FluidBar.Island.IconKind MapSplitIcon(ActivityIconKind icon) => icon switch
+    {
+        ActivityIconKind.Media => FluidBar.Island.IconKind.Media,
+        ActivityIconKind.Clipboard => FluidBar.Island.IconKind.Clipboard,
+        ActivityIconKind.Notification => FluidBar.Island.IconKind.Bell,
+        ActivityIconKind.Volume => FluidBar.Island.IconKind.VolumeMedium,
+        ActivityIconKind.Brightness => FluidBar.Island.IconKind.BrightnessHigh,
+        ActivityIconKind.Battery => FluidBar.Island.IconKind.Battery,
+        ActivityIconKind.Timer => FluidBar.Island.IconKind.Clock,
+        ActivityIconKind.LockKeys => FluidBar.Island.IconKind.Lock,
+        ActivityIconKind.Device => FluidBar.Island.IconKind.Usb,
+        ActivityIconKind.Bluetooth => FluidBar.Island.IconKind.Bluetooth,
+        ActivityIconKind.Focus => FluidBar.Island.IconKind.Focus,
+        ActivityIconKind.Progress => FluidBar.Island.IconKind.Download,
+        ActivityIconKind.Search => FluidBar.Island.IconKind.Search,
+        ActivityIconKind.Agent => FluidBar.Island.IconKind.Agent,
+        _ => FluidBar.Island.IconKind.Clock,
+    };
+
+    private static uint ParseAccent(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return 0;
+        }
+
+        var span = hex.AsSpan().TrimStart('#');
+        if (span.Length == 6 && uint.TryParse(span, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out var rgb))
+        {
+            return 0xFF000000u | rgb;
+        }
+
+        if (span.Length == 8 && uint.TryParse(span, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out var argb))
+        {
+            return argb;
+        }
+
+        return 0;
     }
 
     /// <summary>Measures the compact lyric line at the current font scale (cached by the text engine).</summary>
@@ -2429,6 +2671,9 @@ public sealed class SkiaIslandController : IDisposable
             PointerY = _pointerInside ? _pointerY : double.NaN,
             GhostCount = expanded ? 0 : _motion.Target.GhostCount,
             OverflowCount = expanded ? 0 : _schedulerState.BadgeCount,
+            SplitIslets = expanded && _motion.SplitProgress <= 0.02 ? [] : BuildSplitIslets(),
+            SplitProgress = _motion.SplitProgress,
+            StackSpin = _motion.StackSpin,
             FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,
@@ -2555,7 +2800,10 @@ public sealed class SkiaIslandController : IDisposable
             if (_renderState.PageIndex == 1)
             {
                 var page = IslandMetrics.PageRect(_renderState, 1);
-                var lyric = PageLayout.MediaLyricCard(page);
+                // Same geometry the renderer paints (font scale + squeeze applied); the old PageLayout
+                // constant was a fixed 400×46 box that did not match what was drawn.
+                var lyric = PageMetricsLayout.MediaLyricCard(page,
+                    FontScaleMetrics.From(_settings.Current.FontScale));
                 InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
             }
 

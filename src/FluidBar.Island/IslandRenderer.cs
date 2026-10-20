@@ -65,6 +65,7 @@ public sealed class IslandRenderer : IDisposable
     private readonly TransientStripRenderer _strip;
 
     private readonly SKPaint _fill = new() { IsAntialias = true };
+    private readonly SKPaint _icon = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
     private readonly SKPaint _clear = new() { IsAntialias = false, BlendMode = SKBlendMode.Src };
     private readonly SKPaint _glassPaint = new() { IsAntialias = true };
@@ -290,6 +291,10 @@ public sealed class IslandRenderer : IDisposable
                     : new IslandHitTarget(IslandHitKind.Shell, page);
             }
         }
+        else if (SplitIsletHit(state, x, y) is { } split)
+        {
+            return split;
+        }
         else if (IslandMetrics.OverflowBadgeRect(state) is { Width: > 0 } badge && badge.Contains(x, y))
         {
             return new IslandHitTarget(IslandHitKind.OverflowBadge, state.PageIndex);
@@ -358,6 +363,10 @@ public sealed class IslandRenderer : IDisposable
         // the primary shell (LayoutTokens.Ghost* tokens). The "latest only" strategy reports
         // GhostCount = 0, so the renderer draws nothing extra.
         DrawGhostStack(canvas, state, shell, opacity);
+
+        // Split islets are painted before the shell body so their birth bud is hidden behind the pill
+        // edge and only the separated ball becomes visible (cell-division read).
+        DrawSplitIslets(canvas, state, opacity);
 
         canvas.Save();
         canvas.Translate(shell.Left, shell.Top);
@@ -452,20 +461,25 @@ public sealed class IslandRenderer : IDisposable
         var scales = new[] { LayoutTokens.GhostScale1, LayoutTokens.GhostScale2 };
         var opacities = new[] { LayoutTokens.GhostOpacity1, LayoutTokens.GhostOpacity2 };
         var count = Math.Min(state.GhostCount, LayoutTokens.MaxGhosts);
+        // Wheel rotation: the layers slide down/fade while the new order flies in, so the exchange
+        // reads as a stack shuffle instead of an instant content swap.
+        var spin = (float)Math.Clamp(state.StackSpin, 0, 1);
+        var spinWave = (float)Math.Sin(Math.PI * spin);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
         for (var i = 0; i < count; i++)
         {
-            var scale = (float)scales[i];
+            var scale = (float)scales[i] * (1f - (0.04f * spinWave));
             var ghostWidth = shell.Width * scale;
             var ghostHeight = shell.Height * scale;
             var ghost = new SKRect(
                 shell.Left + (shell.Width - ghostWidth) / 2,
-                shell.Top + (float)offsets[i],
+                shell.Top + (float)offsets[i] + (spinWave * 7f),
                 shell.Left + (shell.Width + ghostWidth) / 2,
-                shell.Top + (float)offsets[i] + ghostHeight);
+                shell.Top + (float)offsets[i] + (spinWave * 7f) + ghostHeight);
+            var layerOpacity = (float)opacities[i] * (1f - (0.45f * spinWave));
             _fill.Color = Alpha(_theme.Background,
-                fillOpacity * (float)opacities[i] * compactOpacity);
+                fillOpacity * layerOpacity * compactOpacity);
             canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _fill);
             // Key line: without it the ghost silhouette disappears into the dark shell/desktop
             // (prototype README: "softened fills and key lines"). Legacy Avalonia shell used the same
@@ -473,7 +487,7 @@ public sealed class IslandRenderer : IDisposable
             _stroke.Style = SKPaintStyle.Stroke;
             _stroke.StrokeWidth = (float)LayoutTokens.HairlineWidth;
             _stroke.Shader = null;
-            _stroke.Color = Alpha(_theme.LineStrong, (float)opacities[i] * compactOpacity);
+            _stroke.Color = Alpha(_theme.LineStrong, layerOpacity * compactOpacity);
             canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _stroke);
         }
     }
@@ -507,6 +521,103 @@ public sealed class IslandRenderer : IDisposable
         canvas.DrawRoundRect(rect, radius, radius, _stroke);
         _text.Draw(canvas, "+" + state.OverflowCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             IslandType.OverflowBadge, rect, _theme.ForegroundSecondary, TextAlign.Center, alpha);
+    }
+
+    /// <summary>
+    /// Paints the split-island previews: a bud grows on the pill edge, then detaches and springs to
+    /// its seat beside the pill. Each ball is a small circle with the activity icon and a tiny label.
+    /// </summary>
+    private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity)
+    {
+        if (state.SplitIslets.Length == 0 || state.SplitProgress <= 0.01)
+        {
+            return;
+        }
+
+        var finals = IslandMetrics.SplitIsletRects(state);
+        var shell = IslandMetrics.ShellRect(state);
+        var scale = (float)Math.Clamp(state.FontScale, 0.8, 1.6);
+        var labelStyle = new TextStyle(FontRole.Ui, 6.8f * scale);
+        for (var i = 0; i < finals.Length && i < state.SplitIslets.Length; i++)
+        {
+            var progress = (float)IslandMetrics.SplitIsletProgress(state, i);
+            if (progress <= 0.01f)
+            {
+                continue;
+            }
+
+            var islet = state.SplitIslets[i];
+            var rect = IslandMetrics.SplitIsletAnimatedRect(state, finals, i);
+            var alpha = Math.Clamp(progress * 1.35f, 0, 1) * opacity;
+            var accent = islet.AccentArgb == 0
+                ? _theme.Accent
+                : new SKColor(
+                    (byte)((islet.AccentArgb >> 16) & 0xFF),
+                    (byte)((islet.AccentArgb >> 8) & 0xFF),
+                    (byte)(islet.AccentArgb & 0xFF));
+
+            // Bud: a half-hidden circle on the pill edge while the ball is still separating.
+            if (progress < 0.6f)
+            {
+                var bud = Math.Clamp(progress / 0.6f, 0, 1);
+                var radius = (float)IslandMetrics.SplitIsletSize * 0.55f * bud;
+                var edgeX = finals[i].MidX >= shell.MidX ? shell.Right : shell.Left;
+                _fill.Style = SKPaintStyle.Fill;
+                _fill.Shader = null;
+                _fill.Color = Alpha(_theme.BackgroundRaised, 0.85f * bud * opacity);
+                canvas.DrawCircle(edgeX, shell.MidY, radius, _fill);
+            }
+
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = Alpha(_theme.BackgroundRaised, 0.92f * alpha);
+            canvas.DrawCircle(rect.MidX, rect.MidY, rect.Width / 2, _fill);
+            _stroke.Style = SKPaintStyle.Stroke;
+            _stroke.StrokeWidth = 1f;
+            _stroke.Shader = null;
+            _stroke.Color = Alpha(_theme.LineStrong, alpha);
+            canvas.DrawCircle(rect.MidX, rect.MidY, rect.Width / 2, _stroke);
+
+            var iconSize = rect.Width * 0.52f;
+            IconSet.Draw(canvas, islet.Icon,
+                new SKRect(
+                    rect.MidX - (iconSize / 2),
+                    rect.MidY - (iconSize / 2),
+                    rect.MidX + (iconSize / 2),
+                    rect.MidY + (iconSize / 2)),
+                Alpha(accent, alpha), _icon);
+
+            if (progress > 0.6f && state.Form != ShellForm.Expanded)
+            {
+                var labelAlpha = Math.Clamp((progress - 0.6f) / 0.4f, 0, 1) * opacity;
+                var labelRect = new SKRect(
+                    rect.MidX - 24,
+                    rect.Bottom + 1,
+                    rect.MidX + 24,
+                    rect.Bottom + 11);
+                _text.Draw(canvas, islet.Label, labelStyle, labelRect,
+                    _theme.ForegroundSecondary, TextAlign.Center, labelAlpha);
+            }
+        }
+    }
+
+    private IslandHitTarget? SplitIsletHit(in IslandRenderState state, float x, float y)
+    {
+        if (state.Form == ShellForm.Expanded || state.SplitIslets.Length == 0)
+        {
+            return null;
+        }
+
+        var finals = IslandMetrics.SplitIsletRects(state);
+        for (var i = 0; i < finals.Length && i < state.SplitIslets.Length; i++)
+        {
+            if (finals[i].Contains(x, y))
+            {
+                return new IslandHitTarget(IslandHitKind.SplitIslet, (int)state.SplitIslets[i].Page, Index: i);
+            }
+        }
+
+        return null;
     }
 
     private void DrawShellBody(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity)

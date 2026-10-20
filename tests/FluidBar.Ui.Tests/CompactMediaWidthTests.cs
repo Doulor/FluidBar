@@ -117,5 +117,6 @@ public sealed class CompactMediaWidthTests
         IslandAnchor.TopCenter,
         new VisualSize(compactWidth, 40),
         0,
+        0,
         false);
 }

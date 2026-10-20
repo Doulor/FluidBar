@@ -164,6 +164,8 @@ public static partial class LocKeys
             public const string Unpin = "Island.Accessibility.Unpin";
             /// <summary><c>Island.Accessibility.PageNavigation</c></summary>
             public const string PageNavigation = "Island.Accessibility.PageNavigation";
+            /// <summary><c>Island.Accessibility.SplitIsletHelp</c></summary>
+            public const string SplitIsletHelp = "Island.Accessibility.SplitIsletHelp";
             /// <summary><c>Island.Accessibility.MoreActivities</c></summary>
             public const string MoreActivities = "Island.Accessibility.MoreActivities";
             /// <summary><c>Island.Accessibility.MoreActivitiesHelp</c></summary>
@@ -907,6 +909,8 @@ public static partial class LocKeys
             {
                 /// <summary><c>Settings.Island.Stacking.Title</c></summary>
                 public const string Title = "Settings.Island.Stacking.Title";
+                /// <summary><c>Settings.Island.Stacking.Split</c></summary>
+                public const string Split = "Settings.Island.Stacking.Split";
                 /// <summary><c>Settings.Island.Stacking.Stacked</c></summary>
                 public const string Stacked = "Settings.Island.Stacking.Stacked";
                 /// <summary><c>Settings.Island.Stacking.Latest</c></summary>

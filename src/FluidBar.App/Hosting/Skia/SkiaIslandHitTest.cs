@@ -61,6 +61,19 @@ public static class SkiaIslandHitTest
         var shell = IslandMetrics.ShellRect(state);
         var content = IslandMetrics.ContentRect(shell);
 
+        if (state.Form != ShellForm.Expanded && state.SplitIslets.Length > 0)
+        {
+            var islets = IslandMetrics.SplitIsletRects(state);
+            for (var i = 0; i < islets.Length && i < state.SplitIslets.Length; i++)
+            {
+                if (islets[i].Contains(x, y))
+                {
+                    return new IslandHitTarget(
+                        IslandHitKind.SplitIslet, (int)state.SplitIslets[i].Page, Index: i);
+                }
+            }
+        }
+
         if (state.Form != ShellForm.Expanded
             && IslandMetrics.OverflowBadgeRect(state) is { Width: > 0 } badge
             && badge.Contains(x, y))

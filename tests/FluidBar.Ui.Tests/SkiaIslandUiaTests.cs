@@ -620,6 +620,46 @@ public sealed class SkiaIslandUiaTests
         Assert.Equal(UiaExpandCollapseState.Expanded, source.BuildSnapshot().State.ExpandCollapse);
     }
 
+
+    [Fact]
+    public void SplitSnapshot_ExposesPreviewBallsAsButtons_AndInvokeOpensTheirPage()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.Settle();
+        var controller = fixture.Controller;
+        controller.PublishActivity(ActivityKind.Media,
+            new ActivityPayload { Title = "Midnight City", IsActive = true }, 1, "test");
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(120));
+        fixture.Settle();
+        controller.PublishActivity(ActivityKind.Timer,
+            new ActivityPayload { Title = "Pomodoro", Level = 8 }, 2, "test");
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(120));
+        fixture.Settle();
+        controller.PublishActivity(ActivityKind.BatteryLow,
+            new ActivityPayload { Title = "Low battery", Level = 12 }, 3, "test");
+        fixture.Settle();
+
+        var root = source.BuildSnapshot();
+        var first = root.Find(SkiaIslandUiaElementIds.SplitIslet(0));
+        var second = root.Find(SkiaIslandUiaElementIds.SplitIslet(1));
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.Equal(UiaElementRole.Button, first!.Role);
+        Assert.NotEqual(UiaPatternKind.None, first.Patterns & UiaPatternKind.Invoke);
+        Assert.True(first.State.IsFocusable);
+        Assert.False(string.IsNullOrWhiteSpace(first.Name));
+
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, SkiaIslandUiaElementIds.SplitIslet(0)));
+        fixture.Settle();
+
+        Assert.Equal(IslandStateKind.Expanded, controller.State.Kind);
+        var tabs = source.BuildSnapshot().Find(SkiaIslandUiaElementIds.Pages);
+        Assert.NotNull(tabs);
+        Assert.Contains(tabs!.Children, tab => tab.State.IsSelected);
+    }
+
     /// <summary>Converts a strip rectangle to the DIP rectangle the snapshot reports.</summary>
     private static UiaRect ToUia(SKRect rect)
         => rect.Width <= 0 || rect.Height <= 0

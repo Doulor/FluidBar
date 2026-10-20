@@ -169,6 +169,76 @@ public static class IslandMetrics
         (float)(state.ShellOrigin.X + state.ShellWidth),
         (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.ShellHeight));
 
+    /// <summary>Split-islet diameter (DIP).</summary>
+    public const double SplitIsletSize = 28;
+
+    /// <summary>Gap between split islets and between an islet and the primary pill (DIP).</summary>
+    public const double SplitIsletGap = 8;
+
+    /// <summary>Final (settled) rectangles of the split-islets, in host-local DIP, priority order.</summary>
+    public static SKRect[] SplitIsletRects(in IslandRenderState state)
+    {
+        var count = state.SplitIslets.Length;
+        if (count == 0 || state.Form == ShellForm.Expanded)
+        {
+            return [];
+        }
+
+        var shell = ShellRect(state);
+        var surface = HostSurface.ForMode(state.Mode);
+        var size = (float)SplitIsletSize;
+        var gap = (float)SplitIsletGap;
+        var top = shell.MidY - (size / 2);
+        var margin = (float)surface.SidePadding;
+        var rects = new SKRect[count];
+        var right = shell.Right + gap;
+        var left = shell.Left - gap - size;
+        for (var i = 0; i < count; i++)
+        {
+            // Alternate sides once the right lane reaches the surface padding: the widest lyric pill
+            // still leaves room on the left for the remaining previews.
+            if (right + size <= surface.Width - (margin / 2))
+            {
+                rects[i] = new SKRect(right, top, right + size, top + size);
+                right += size + gap;
+            }
+            else
+            {
+                rects[i] = new SKRect(left, top, left + size, top + size);
+                left -= size + gap;
+            }
+        }
+
+        return rects;
+    }
+
+    /// <summary>Animated rectangle of islet <paramref name="index"/> (bud at the shell edge → final seat).</summary>
+    public static SKRect SplitIsletAnimatedRect(in IslandRenderState state, SKRect[] finals, int index)
+    {
+        var final = finals[index];
+        var progress = SplitIsletProgress(state, index);
+        var shell = ShellRect(state);
+        // The bud leaves from the nearest shell edge, at the vertical centre.
+        var edgeX = final.MidX >= shell.MidX ? shell.Right : shell.Left;
+        var start = new SKPoint(edgeX, shell.MidY);
+        var centre = new SKPoint(
+            (float)(start.X + ((final.MidX - start.X) * progress)),
+            (float)(start.Y + ((final.MidY - start.Y) * progress)));
+        var size = final.Width * (float)(0.18 + (0.82 * progress));
+        return new SKRect(centre.X - (size / 2), centre.Y - (size / 2),
+            centre.X + (size / 2), centre.Y + (size / 2));
+    }
+
+    /// <summary>Staggered 0..1 progress for one islet (later previews separate slightly later).</summary>
+    public static double SplitIsletProgress(in IslandRenderState state, int index)
+    {
+        var raw = Math.Clamp(state.SplitProgress, 0, 1.2);
+        var stagger = index * 0.14;
+        var p = Math.Clamp((raw - stagger) / Math.Max(0.2, 1 - stagger), 0, 1);
+        // Smoothstep keeps the birth soft while the spring supplies the overshoot feel in SplitProgress.
+        return p * p * (3 - (2 * p));
+    }
+
     /// <summary>Content width available to the compact renderer (right edge reserved for the +N chip).</summary>
     public static float CompactContentWidth(in IslandRenderState state)
         => Math.Max(0f, (float)state.ShellWidth

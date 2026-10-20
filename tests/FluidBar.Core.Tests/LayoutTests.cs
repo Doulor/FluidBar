@@ -186,7 +186,11 @@ public class LayoutTests
             Assert.Equal(expectedWidth, result.Shell.Width, Eps);
             Assert.Equal(expectedHeight, result.Shell.Height, Eps);
 
-            var expectedGhosts = stacking == StackingStrategy.LatestOnly ? 0 : 2;
+            // The matrix already walks Enum.GetValues<StackingStrategy>(), so a new strategy needs no
+            // data change. Split keeps the same shell/placement geometry as Stacked and LatestOnly: its
+            // preview islets are painted by the Skia host beside the pill (inside the fixed 488 DIP host
+            // surface), so the layout reports the primary slot only and no ghost layers.
+            var expectedGhosts = IslandLayout.EffectiveGhostCount(2, stacking);
             Assert.Equal(1 + expectedGhosts, result.StackSlots.Length);
             Assert.Equal(expectedGhosts, result.GhostCount);
             Assert.Equal(1.0, result.StackSlots[0].Scale, Eps);

@@ -377,7 +377,7 @@ public static class IslandLayout
 
     /// <summary>Effective ghost count for a strategy.</summary>
     public static int EffectiveGhostCount(int requestedGhosts, Activities.StackingStrategy stacking)
-        => stacking == Activities.StackingStrategy.LatestOnly
+        => stacking is Activities.StackingStrategy.LatestOnly or Activities.StackingStrategy.Split
             ? 0
             : Math.Clamp(requestedGhosts, 0, LayoutTokens.MaxGhosts);
 
