@@ -50,6 +50,29 @@ public sealed class SkiaIslandUiaTests
     }
 
     [Fact]
+    public void CompactSnapshot_ExposesNoPlayControl()
+    {
+        var (fixture, source, _) = Create();
+        using var _fixture = fixture;
+        using var _source = source;
+        fixture.Settle();
+
+        var root = source.BuildSnapshot();
+
+        // The compact media pill no longer carries a play/pause button, so the tree must not expose a
+        // control rectangle over it (that is what used to swallow clicks on the pill).
+        Assert.Null(root.Find("island.compact.media.play"));
+
+        var shell = IslandMetrics.ShellRect(fixture.Controller.RenderState);
+        var compact = root.Find(SkiaIslandUiaElementIds.Compact);
+        Assert.NotNull(compact);
+
+        // The compact group tracks the animating shell width, so a widened lyric pill reports its new
+        // bounds (hit testing and dirty rects read the same rectangle).
+        Assert.Equal(new UiaRect(shell.Left, shell.Top, shell.Width, shell.Height), compact!.BoundsDip);
+    }
+
+    [Fact]
     public void ExpandedSnapshot_ExposesCollapseTabsAndHomeControls()
     {
         var (fixture, source, _) = Create();

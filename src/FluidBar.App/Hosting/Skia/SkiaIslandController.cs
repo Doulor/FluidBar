@@ -59,6 +59,9 @@ public sealed class SkiaIslandController : IDisposable
     // animates in over CompactLyricFadeMs so the pill does not hard-cut twice per line.
     private const double CompactLyricFadeMs = 220;
     private readonly MediaPillPreferences _mediaPill;
+
+    // Measure-only text engine for the adaptive lyric pill width (the renderer owns its own instance).
+    private readonly TextEngine _lyricMeasure = new(cacheCapacity: 64);
     private string? _compactLyricText;
     private long _compactLyricChangedAtMs = -1;
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
@@ -1048,6 +1051,7 @@ public sealed class SkiaIslandController : IDisposable
         _hub.Dispose();
         _motion.Dispose();
         _archipelago.Dispose();
+        _lyricMeasure.Dispose();
     }
 
     // ------------------------------------------------------------------ pipeline
@@ -1199,6 +1203,21 @@ public sealed class SkiaIslandController : IDisposable
         // content: a stale Core ContentKind used to leave a wide pill showing the idle clock.
         var compactKind = viewModel.Primary?.Kind;
         var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
+
+        // Lyric form: widen the pill so the whole line fits instead of ellipsising it. The motion driver
+        // tweens the width (380 ms shell transition), so a line change grows/shrinks the pill smoothly;
+        // the clamp keeps the token as the floor and the host surface as the ceiling (over-long lines
+        // then fall back to the ellipsis).
+        if (mode != IslandMode.Dock
+            && compactKind == ActivityKind.Media
+            && _compact.Model is { ShowLyrics: true } lyric
+            && !string.IsNullOrEmpty(lyric.LyricLine))
+        {
+            var measured = MeasureCompactLyric(lyric.LyricLine, settings.FontScale);
+            var width = CompactMediaLayout.AdaptiveWidth(
+                measured, (float)compactSize.Width, (float)LayoutTokens.ExpandedWidth);
+            compactSize = new VisualSize(width, compactSize.Height);
+        }
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
             : 0;
@@ -1211,6 +1230,15 @@ public sealed class SkiaIslandController : IDisposable
             _ => ShellForm.Hidden,
         };
         return new SkiaMotionTarget(form, mode, settings.IslandAnchor, compactSize, ghosts, State.Kind == IslandStateKind.Hidden);
+    }
+
+    /// <summary>Measures the compact lyric line at the current font scale (cached by the text engine).</summary>
+    private float MeasureCompactLyric(string lyric, double fontScale)
+    {
+        var style = IslandType.CompactMediaTitle;
+        var scale = double.IsFinite(fontScale) && fontScale > 0 ? fontScale : 1.0;
+        var scaled = new TextStyle(style.Role, (float)(style.Size * scale));
+        return _lyricMeasure.Measure(lyric, scaled);
     }
 
     private void SyncPagerFromState()
@@ -1710,7 +1738,10 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var shell = IslandMetrics.ShellRect(_renderState);
-        return new VisualRect(shell.Right - 62, shell.Top + 11, 26, 18);
+        // Same rectangle the compact media renderer paints the wave in (it tracks the adaptive width).
+        var wave = CompactMediaLayout.WaveRect((float)shell.Width, (float)shell.Height);
+        return new VisualRect(
+            shell.Left + wave.Left - 3, shell.Top + wave.Top - 3, wave.Width + 6, wave.Height + 6);
     }
 
     /// <summary>Damage box of the compact media text column (the lyric line when lyric mode is on).</summary>
@@ -1722,8 +1753,8 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var shell = IslandMetrics.ShellRect(_renderState);
-        var left = shell.Left + 45;
-        var right = Math.Max(left + 1, shell.Right - 65 - 9);
+        var left = shell.Left + CompactMediaLayout.TextLeft;
+        var right = Math.Max(left + 1, shell.Left + CompactMediaLayout.TextRight((float)shell.Width));
         return new VisualRect(left - 1, shell.Top + 2, right - left + 2, shell.Height - 4);
     }
 

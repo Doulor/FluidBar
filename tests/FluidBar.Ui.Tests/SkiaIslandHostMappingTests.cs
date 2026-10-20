@@ -66,13 +66,40 @@ public sealed class SkiaIslandHostMappingTests
         var state = fixture.Controller.RenderState;
         var media = LayoutTokens.CompactSize(ActivityKind.Media);
         Assert.Equal(ActivityKind.Media, state.Compact!.Value.Kind);
-        Assert.Equal(media.Width, state.ShellWidth, 1);
+        // "Lyrics in the pill" is on by default: a known lyric widens the pill past the token, while the
+        // token remains the floor and the expanded width the ceiling.
+        Assert.True(state.ShellWidth >= media.Width - 0.5, $"width {state.ShellWidth} below the token");
+        Assert.True(state.ShellWidth <= LayoutTokens.ExpandedWidth + 0.5, $"width {state.ShellWidth} above the surface");
+        Assert.True(state.ShellWidth > media.Width + 1, "a known lyric should widen the pill");
         Assert.Equal(media.Height, state.ShellHeight, 1);
         Assert.Equal("Midnight City", state.Compact.Value.Model.Title);
         Assert.Equal("M83", state.Compact.Value.Model.Subtitle);
         Assert.Equal(46, state.Compact.Value.Model.ProgressPercent, 1);
         Assert.Equal("#F06AB0", state.Compact.Value.Model.AccentHex);
         Assert.True(state.Compact.Value.Model.IsActive);
+    }
+
+    [Fact]
+    public void MediaActivity_WithLyricsSettingOff_KeepsTheCompactMediaToken()
+    {
+        using var fixture = ControllerFixture.Create(mediaPill: MediaPillPreferences.Off);
+
+        fixture.Controller.PublishActivity(
+            ActivityKind.Media,
+            new ActivityPayload
+            {
+                Title = "Midnight City",
+                Subtitle = "M83",
+                IsActive = true,
+                LyricLine = "Waiting for a car to drive me home",
+            },
+            sequence: 1);
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        var media = LayoutTokens.CompactSize(ActivityKind.Media);
+        Assert.Equal(media.Width, state.ShellWidth, 1);
+        Assert.False(state.Compact!.Value.Model.ShowLyrics);
     }
 
     [Fact]

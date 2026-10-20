@@ -95,11 +95,8 @@ public static class SkiaIslandHitTest
         }
         else if (ContainsShell(state, shell, x, y))
         {
-            if (state.Compact is { Kind: FluidBar.Core.Activities.ActivityKind.Media } && IsMediaPlay(state, shell, x, y))
-            {
-                return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex, IslandPageControl.PlayPause);
-            }
-
+            // The compact media pill carries no play/pause button (removed on request): every point in
+            // the pill is the expand target, so the old right-hand control area is gone with it.
             return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex);
         }
 
@@ -227,7 +224,4 @@ public static class SkiaIslandHitTest
         var page = (int)Math.Floor(local / pitch);
         return Math.Clamp(page, 0, PagerConstants.PageCount - 1);
     }
-
-    private static bool IsMediaPlay(in IslandRenderState state, SKRect shell, float x, float y)
-        => x >= shell.Right - 34 && x < shell.Right - 8 && y >= shell.Top + 7 && y < shell.Top + 33;
 }

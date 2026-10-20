@@ -42,7 +42,8 @@ internal sealed class ControllerFixture : IDisposable
         AppSettings? settings = null,
         IIslandPlatformActions? actions = null,
         RecordingAppLogger? logger = null,
-        Func<SystemAppearanceSnapshot>? appearance = null)
+        Func<SystemAppearanceSnapshot>? appearance = null,
+        MediaPillPreferences? mediaPill = null)
     {
         var time = new FakeTimeProvider();
         var localizer = new FakeLocalizer();
@@ -60,7 +61,7 @@ internal sealed class ControllerFixture : IDisposable
             PlatformActions = actions,
             TargetFrameRate = 120,
             AppearanceSnapshot = appearance,
-        });
+        }, mediaPill: mediaPill ?? MediaPillPreferences.Default);
         controller.Start();
         return new ControllerFixture(controller, settingsController, data, time, recording);
     }

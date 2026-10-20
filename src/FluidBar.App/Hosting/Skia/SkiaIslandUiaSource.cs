@@ -18,9 +18,6 @@ public static class SkiaIslandUiaElementIds
     /// <summary>Compact activity summary (informational group).</summary>
     public const string Compact = "island.compact";
 
-    /// <summary>Compact media play/pause button.</summary>
-    public const string CompactMediaPlay = "island.compact.media.play";
-
     /// <summary>Expanded page tab list.</summary>
     public const string Pages = "island.pages";
 
@@ -287,19 +284,8 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 state: new UiaElementState { IsOffscreen = false }),
         };
 
-        if (state.Compact is { Kind: ActivityKind.Media } media)
-        {
-            var play = CompactPlayRect(shell);
-            children.Add(Node(
-                SkiaIslandUiaElementIds.CompactMediaPlay,
-                UiaElementRole.Button,
-                media.Model.IsActive ? L("Media.Pause", "Pause") : L("Media.Play", "Play"),
-                ToRect(play),
-                UiaPatternKind.Invoke,
-                new UiaElementState { IsFocusable = true, IsOffscreen = false },
-                help: L("Island.Accessibility.CompactPlayHelp", "Play or pause the current media session.")));
-        }
-
+        // The compact media pill has no play/pause button (removed on request), so the tree exposes the
+        // pill as one expand group and nothing else: no stale control rectangle in the compact bounds.
         return children;
     }
 
@@ -923,12 +909,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
         }
 
-        if (string.Equals(id, SkiaIslandUiaElementIds.CompactMediaPlay, StringComparison.Ordinal))
-        {
-            _controller.ActivateAccessibleControl(IslandPageControl.PlayPause, _controller.RenderState.PageIndex);
-            return;
-        }
-
         if (id.StartsWith(StripPrefix, StringComparison.Ordinal))
         {
             ExecuteStrip(id);
@@ -1267,9 +1247,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         => dots.Length == 0
             ? SKRect.Empty
             : IslandStripLayout.DotHitRect(dots[Math.Clamp(index, 0, dots.Length - 1)]);
-
-    private static SKRect CompactPlayRect(SKRect shell)
-        => new(shell.Right - 34, shell.Top + 7, shell.Right - 8, shell.Top + 33);
 
     private static SKRect InflateVertical(SKRect rect, float amount)
         => new(rect.Left, rect.Top - amount, rect.Right, rect.Bottom + amount);

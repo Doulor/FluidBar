@@ -21,8 +21,11 @@ public sealed class MediaPillPreferences
     /// <summary>Setting key rendered by the media plugin's settings page.</summary>
     public const string CompactLyricsKey = "media.compactLyrics";
 
-    /// <summary>A reader that always reports the default (used by tests and headless hosts).</summary>
-    public static MediaPillPreferences Default { get; } = new(null, followFile: false);
+    /// <summary>A reader that always reports the default ("on"; used by tests and headless hosts).</summary>
+    public static MediaPillPreferences Default { get; } = new(showCompactLyrics: true);
+
+    /// <summary>A reader that always reports "off" (tests that pin the title form).</summary>
+    public static MediaPillPreferences Off { get; } = new(showCompactLyrics: false);
 
     private readonly string _path;
     private readonly bool _followFile;
@@ -38,6 +41,13 @@ public sealed class MediaPillPreferences
         _path = settingsPath ?? PluginRuntimePaths.SettingsFile(
             PluginRuntimePaths.ResolveRoot(), MediaPluginId);
         _followFile = followFile;
+    }
+
+    private MediaPillPreferences(bool showCompactLyrics)
+    {
+        _path = string.Empty;
+        _followFile = false;
+        _showCompactLyrics = showCompactLyrics;
     }
 
     /// <summary>Whether the compact pill should show the live lyric instead of the title/artist.</summary>

@@ -120,35 +120,33 @@ internal sealed class CompactRenderer : IDisposable
     private void DrawMedia(SKCanvas canvas, CompactModel model, float width, float height)
     {
         var accent = _accents.Get(model.AccentHex, _theme.TrackAccent);
-        var art = new SKRect(8, (height - 28) / 2, 36, (height + 28) / 2);
+        var art = CompactMediaLayout.ArtworkRect(height);
         DrawArt(canvas, art, 8, accent, model.Artwork, model.ArtworkKey);
 
-        // prototype2 .pill-media: padding 0 10 0 8, gap 9; 28 DIP artwork, 13/600 title, 10/400
-        // subtitle, 20×15 wave, 26 DIP translucent play button, full-width 1.5 DIP progress bar.
-        var wave = new SKRect(width - 65, (height - 15) / 2, width - 45, (height + 15) / 2);
-        var textRight = wave.Left - 9;
+        // prototype2 .pill-media without the compact play button (removed on request; transport stays on
+        // the expanded media page): padding 0 10 0 8, gap 9; 28 DIP artwork, 13/600 title, 10/400
+        // subtitle, 20×15 wave, full-width 1.5 DIP progress bar. The text column reaches the wave.
+        var wave = CompactMediaLayout.WaveRect(width, height);
+        var textRight = CompactMediaLayout.TextRight(width);
         if (model.ShowLyrics && !string.IsNullOrEmpty(model.LyricLine))
         {
             // Lyric layout (media setting "lyrics in the pill"): cover + live lyric + wave, no title/artist.
             // The single line is vertically centred in the two-row band and ellipsised by the text engine,
             // so an overlong lyric can never push the wave or the play button.
-            DrawLyricLine(canvas, model, new SKRect(45, 5.5f, textRight, height - 5.5f));
+            DrawLyricLine(canvas, model,
+                new SKRect(CompactMediaLayout.TextLeft, 5.5f, textRight, height - 5.5f));
         }
         else
         {
             _text.Draw(canvas, model.Title, IslandType.CompactMediaTitle,
-                new SKRect(45, 5.5f, textRight, 21), _theme.Foreground, TextAlign.Left, _opacity);
+                new SKRect(CompactMediaLayout.TextLeft, 5.5f, textRight, 21), _theme.Foreground,
+                TextAlign.Left, _opacity);
             _text.Draw(canvas, model.Subtitle, IslandType.CompactMediaSub,
-                new SKRect(45, 21, textRight, 35), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+                new SKRect(CompactMediaLayout.TextLeft, 21, textRight, 35), _theme.ForegroundSecondary,
+                TextAlign.Left, _opacity);
         }
 
         DrawWave(canvas, wave, accent, model.IsActive);
-
-        var play = new SKRect(width - 36, (height - 26) / 2, width - 10, (height + 26) / 2);
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(SKColors.White.WithAlpha(26), _opacity);
-        canvas.DrawCircle(play.MidX, play.MidY, play.Width / 2, _fill);
-        DrawIcon(canvas, model.IsActive ? IconKind.Pause : IconKind.Play, play.Deflate(7), _theme.Foreground);
 
         // No timeline = no bar at all (an always-empty 0 % bar read as a stuck progress).
         if (model.ProgressPercent >= 0)

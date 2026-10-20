@@ -25,14 +25,22 @@ public sealed class IslandHitTestTests
     }
 
     [Fact]
-    public void Compact_media_play_button_is_a_control_and_the_rest_expands()
+    public void Compact_media_has_no_play_button_and_the_whole_pill_expands()
     {
         var state = IslandTestFixtures.MediaCompact();
         var shell = IslandMetrics.ShellRect(state);
 
-        var play = Hit(state, shell.Right - 20, shell.MidY);
-        Assert.Equal(IslandHitKind.Compact, play.Kind);
-        Assert.Equal(IslandPageControl.PlayPause, play.Control);
+        // The old play/pause control area on the right of the pill is gone: it is plain pill surface now,
+        // so a click there expands the island instead of toggling playback.
+        var oldPlay = Hit(state, shell.Right - 20, shell.MidY);
+        Assert.Equal(IslandHitKind.Compact, oldPlay.Kind);
+        Assert.Equal(IslandPageControl.None, oldPlay.Control);
+
+        // Sweep the whole pill: no horizontal position exposes a control any more.
+        for (var x = shell.Left + 4; x < shell.Right - 2; x += 8)
+        {
+            Assert.Equal(IslandPageControl.None, Hit(state, x, shell.MidY).Control);
+        }
 
         var text = Hit(state, shell.Left + 60, shell.MidY);
         Assert.Equal(IslandHitKind.Compact, text.Kind);

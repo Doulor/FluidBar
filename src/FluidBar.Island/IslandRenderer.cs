@@ -269,11 +269,8 @@ public sealed class IslandRenderer : IDisposable
         }
         else if (ContainsShell(state, shell, x, y))
         {
-            if (state.Compact is { Kind: ActivityKind.Media } && IsMediaPlay(state, shell, x, y))
-            {
-                return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex, IslandPageControl.PlayPause);
-            }
-
+            // The compact media pill has no play/pause button (removed on request): the whole pill is a
+            // single expand target, so nothing in it can swallow the click.
             return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex);
         }
 
@@ -564,9 +561,6 @@ public sealed class IslandRenderer : IDisposable
         var page = (int)Math.Floor(local / pitch);
         return Math.Clamp(page, 0, FluidBar.Core.Interaction.PagerConstants.PageCount - 1);
     }
-
-    private static bool IsMediaPlay(in IslandRenderState state, SKRect shell, float x, float y)
-        => x >= shell.Right - 34 && x < shell.Right - 8 && y >= shell.Top + 7 && y < shell.Top + 33;
 
     private static float PageScrollOffset(in IslandRenderState state, int page, in FontScaleMetrics metrics, SKRect pageRect)
     {

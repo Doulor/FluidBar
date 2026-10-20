@@ -24,11 +24,15 @@ public sealed class CompactLyricPillRenderTests
             LyricFade = fade,
         }));
 
-    /// <summary>Text column between the artwork (45 DIP) and the wave (width - 74 DIP).</summary>
+    /// <summary>Text column between the artwork and the wave (the compact pill has no play button).</summary>
     private static SKRect TextColumn(IslandRenderState state)
     {
         var shell = IslandMetrics.ShellRect(state);
-        return new SKRect(shell.Left + 45, shell.Top + 5.5f, shell.Right - 74, shell.Bottom - 5.5f);
+        return new SKRect(
+            shell.Left + CompactMediaLayout.TextLeft,
+            shell.Top + 5.5f,
+            shell.Left + CompactMediaLayout.TextRight((float)shell.Width),
+            shell.Bottom - 5.5f);
     }
 
     [Fact]
@@ -90,7 +94,11 @@ public sealed class CompactLyricPillRenderTests
 
         // The gutter between the text column and the wave must be identical for a long and a short
         // line: an overlong lyric is ellipsised + clipped, it can never run into the wave/play buttons.
-        var gutter = new SKRect(shell.Right - 74, shell.Top + 4, shell.Right - 64, shell.Bottom - 8);
+        var gutter = new SKRect(
+            shell.Left + CompactMediaLayout.TextRight((float)shell.Width),
+            shell.Top + 4,
+            shell.Left + CompactMediaLayout.WaveLeft((float)shell.Width),
+            shell.Bottom - 8);
         Assert.Equal(0, DifferingPixels(longBitmap, shortBitmap, gutter));
 
         // The text column itself must differ (the long line is a different string).
