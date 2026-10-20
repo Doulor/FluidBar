@@ -23,17 +23,38 @@ public static class PagerConstants
     /// <summary>Edge rubber-band factor: overscroll beyond the first/last page reacts at 35 %.</summary>
     public const double EdgeResistance = 0.35;
 
-    /// <summary>Minimum drag distance (DIP) before a release may change page.</summary>
+    /// <summary>Minimum drag distance (DIP) before a release may change page at all.</summary>
     public const double PageThresholdDip = 26;
 
-    /// <summary>Velocity (DIP/ms) above which a short drag is treated as a flick.</summary>
+    /// <summary>Velocity (DIP/ms) above which a short drag is treated as a flick (prototype2 PAGER.flick).</summary>
     public const double FlickVelocityDipPerMs = 0.55;
 
-    /// <summary>Drag distance (in pages) that switches from "one page max" to distance-based paging.</summary>
-    public const double LongDragPageFraction = 0.5;
+    /// <summary>Minimum raw pointer travel (DIP) for a flick to count (prototype2: |dx| &gt; 10).</summary>
+    public const double FlickMinimumDragDip = 10;
 
-    /// <summary>Wheel/trackpad delta (DIP) accumulated before one page step (pager v2).</summary>
+    /// <summary>
+    /// Damped drag distance (in pages) above which the release decides by distance instead of the
+    /// one-page flick / nearest-page rules (prototype2 release: |distance| &gt;= 0.75 pages).
+    /// </summary>
+    public const double LongDragPageFraction = 0.75;
+
+    /// <summary>
+    /// Release velocity handoff ceiling in pages per second (prototype2 clamps its spring seed to
+    /// ±14 pages/s, i.e. ±5600 DIP/s at the 400 DIP page pitch).
+    /// </summary>
+    public const double MaxReleaseVelocityPagesPerSecond = 14;
+
+    /// <summary>
+    /// Wheel/trackpad delta (DIP) a page step consumes; prototype2's <c>PAGER.wheelStep</c> (140).
+    /// </summary>
     public const double WheelNotchDip = 140;
+
+    /// <summary>
+    /// DIP produced by ONE physical wheel notch (70). The host maps a notch's raw 120 to this value,
+    /// so two notches make one <see cref="WheelNotchDip"/> page step — the same cadence as
+    /// prototype2, whose 100 px Chrome notch needs 1.4 notches per 140 px step.
+    /// </summary>
+    public const double WheelDipPerNotch = WheelNotchDip / 2;
 
     /// <summary>Minimum time between two wheel-driven page changes (pager v2).</summary>
     public const int WheelCooldownMs = 180;

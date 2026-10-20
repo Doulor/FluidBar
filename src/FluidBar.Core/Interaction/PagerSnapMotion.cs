@@ -49,14 +49,37 @@ public sealed class PagerSnapMotion
     public void SnapToPage(int page, int pageCount = PagerConstants.PageCount)
         => SnapToOffset(PagePagerPolicy.PageToOffset(page, PagerConstants.PagePitchDip, pageCount));
 
-    /// <summary>Retargets the spring to an arbitrary content offset (DIP).</summary>
-    public void SnapToOffset(double offsetDip)
+    /// <summary>
+    /// Retargets the spring to a content offset (DIP) from rest, matching prototype2's
+    /// <c>springTo(target, 0)</c>: a wheel/keyboard page step always starts from zero velocity, so
+    /// every step follows the authored T/ζ curve instead of inheriting the previous step's speed.
+    /// </summary>
+    /// <param name="offsetDip">Target content offset in DIP.</param>
+    public void SnapToOffset(double offsetDip) => SnapToOffset(offsetDip, 0);
+
+    /// <summary>
+    /// Retargets the spring to a content offset (DIP) with an explicit release velocity handoff.
+    /// The velocity is the pointer's release speed (<see cref="PagerConstants.PointerDamping"/>) and
+    /// lets a flick keep travelling instead of stopping dead and re-accelerating from rest.
+    /// </summary>
+    /// <param name="offsetDip">Target content offset in DIP.</param>
+    /// <param name="velocityDipPerSecond">Initial content velocity in DIP/s (positive = next page).</param>
+    public void SnapToOffset(double offsetDip, double velocityDipPerSecond)
     {
         if (!double.IsFinite(offsetDip))
         {
             offsetDip = 0;
         }
 
+        if (!double.IsFinite(velocityDipPerSecond) || velocityDipPerSecond == 0)
+        {
+            // Start from rest: the spring keeps the visual value but no inherited velocity.
+            _spring.Reset(_spring.Value);
+            _spring.Retarget(offsetDip, PagerConstants.RetargetFrameSeconds);
+            return;
+        }
+
+        _spring.Reset(_spring.Value, velocityDipPerSecond);
         _spring.Retarget(offsetDip, PagerConstants.RetargetFrameSeconds);
     }
 

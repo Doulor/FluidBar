@@ -23,7 +23,10 @@ public class PagerPolicyTests
         Assert.Equal(0.35, PagerConstants.EdgeResistance, Eps);
         Assert.Equal(26, PagerConstants.PageThresholdDip, Eps);
         Assert.Equal(0.55, PagerConstants.FlickVelocityDipPerMs, Eps);
-        Assert.Equal(0.5, PagerConstants.LongDragPageFraction, Eps);
+        Assert.Equal(10, PagerConstants.FlickMinimumDragDip, Eps);
+        // prototype2 release: |distance| >= 0.75 pages decides by distance instead of nearest page.
+        Assert.Equal(0.75, PagerConstants.LongDragPageFraction, Eps);
+        Assert.Equal(14, PagerConstants.MaxReleaseVelocityPagesPerSecond, Eps);
         Assert.Equal(140, PagerConstants.WheelNotchDip, Eps);
         Assert.Equal(180, PagerConstants.WheelCooldownMs);
         Assert.Equal(0.38, PagerConstants.SnapSpringPeriodSeconds, Eps);
@@ -87,20 +90,35 @@ public class PagerPolicyTests
     }
 
     [Theory]
-    [InlineData(0.0, PagerSnapKind.Distance)]
-    [InlineData(0.54, PagerSnapKind.Distance)]
-    [InlineData(0.56, PagerSnapKind.Flick)]
-    [InlineData(1.5, PagerSnapKind.Flick)]
-    [InlineData(1000.0, PagerSnapKind.Flick)]
-    public void Release_ShortDragOrFlick_IsCappedAtOnePage(double velocity, PagerSnapKind expectedKind)
+    [InlineData(0.56)]
+    [InlineData(1.5)]
+    [InlineData(1000.0)]
+    public void Release_Flick_IsCappedAtOnePage(double velocity)
     {
+        // prototype2 release: a flick (velocity >= 0.55 DIP/ms, same direction, >= 10 DIP travel)
+        // always moves exactly one page, regardless of how large the velocity is.
         var decision = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
 
-        Assert.Equal(expectedKind, decision.Kind);
+        Assert.Equal(PagerSnapKind.Flick, decision.Kind);
         Assert.Equal(2, decision.StartPage);
         Assert.Equal(3, decision.TargetPage);
         Assert.Equal(1, decision.PageDelta);
         Assert.Equal(3 * 400, decision.TargetOffsetDip, Eps);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.54)]
+    public void Release_SlowShortDrag_SnapsBackToTheNearestPage(double velocity)
+    {
+        // 150 DIP raw = 0.375 page, 0.31875 page after the 0.85 pointer damping: below the 0.75-page
+        // long-drag threshold and not a flick, so prototype2 rounds to the nearest page (0) and snaps back.
+        var decision = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
+
+        Assert.Equal(PagerSnapKind.None, decision.Kind);
+        Assert.Equal(2, decision.TargetPage);
+        Assert.Equal(0, decision.PageDelta);
+        Assert.Equal(2 * 400, decision.TargetOffsetDip, Eps);
     }
 
     [Fact]
@@ -128,14 +146,15 @@ public class PagerPolicyTests
     }
 
     [Fact]
-    public void Release_LongDrag27Pages_CrossesThreePages()
+    public void Release_LongDrag27Pages_CrossesTwoDampedPages()
     {
+        // prototype2 counts the damped travel (2.7 × 0.85 = 2.295 pages) and rounds it to 2.
         var decision = PagePagerPolicy.Release(startPage: 1, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 0.2);
 
         Assert.Equal(PagerSnapKind.Distance, decision.Kind);
-        Assert.Equal(4, decision.TargetPage);
-        Assert.Equal(3, decision.PageDelta);
-        Assert.Equal(4 * 400, decision.TargetOffsetDip, Eps);
+        Assert.Equal(3, decision.TargetPage);
+        Assert.Equal(2, decision.PageDelta);
+        Assert.Equal(3 * 400, decision.TargetOffsetDip, Eps);
     }
 
     [Fact]
@@ -144,20 +163,24 @@ public class PagerPolicyTests
         var decision = PagePagerPolicy.Release(startPage: 5, accumulatedDragDip: -2.7 * 400, velocityDipPerMs: -0.1);
 
         Assert.Equal(PagerSnapKind.Distance, decision.Kind);
-        Assert.Equal(2, decision.TargetPage);
-        Assert.Equal(-3, decision.PageDelta);
+        Assert.Equal(3, decision.TargetPage);
+        Assert.Equal(-2, decision.PageDelta);
     }
 
     [Fact]
-    public void Release_HalfPage_RoundsAwayFromZero()
+    public void Release_HalfPage_SnapsBackBelowTheLongDragThreshold()
     {
+        // 200 DIP raw is only 0.425 page after pointer damping, so prototype2 settles back rather than
+        // flipping a page (a slow half-page drag reads as "not far enough", not an unrequested jump).
         var forward = PagePagerPolicy.Release(startPage: 1, accumulatedDragDip: 200, velocityDipPerMs: 0);
-        Assert.Equal(2, forward.TargetPage);
-        Assert.Equal(1, forward.PageDelta);
+        Assert.Equal(PagerSnapKind.None, forward.Kind);
+        Assert.Equal(1, forward.TargetPage);
+        Assert.Equal(0, forward.PageDelta);
 
         var backward = PagePagerPolicy.Release(startPage: 3, accumulatedDragDip: -200, velocityDipPerMs: 0);
-        Assert.Equal(2, backward.TargetPage);
-        Assert.Equal(-1, backward.PageDelta);
+        Assert.Equal(PagerSnapKind.None, backward.Kind);
+        Assert.Equal(3, backward.TargetPage);
+        Assert.Equal(0, backward.PageDelta);
     }
 
     [Fact]
@@ -187,8 +210,9 @@ public class PagerPolicyTests
             pageCount: 6,
             pagePitchDip: 300);
 
-        Assert.Equal(3, decision.TargetPage);
-        Assert.Equal(900, decision.TargetOffsetDip, Eps);
+        // 2.7 × 300 DIP raw, damped by 0.85 = 2.295 pages → rounds to 2 pages (600 DIP).
+        Assert.Equal(2, decision.TargetPage);
+        Assert.Equal(600, decision.TargetOffsetDip, Eps);
     }
 
     [Fact]
@@ -208,8 +232,8 @@ public class PagerPolicyTests
         Assert.Equal(PagerSnapKind.None, nanDrag.Kind);
 
         var nanVelocity = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: double.NaN);
-        Assert.Equal(3, nanVelocity.TargetPage);
-        Assert.Equal(PagerSnapKind.Distance, nanVelocity.Kind);
+        Assert.Equal(2, nanVelocity.TargetPage);
+        Assert.Equal(PagerSnapKind.None, nanVelocity.Kind);
     }
 
     [Fact]
@@ -309,10 +333,12 @@ public class PagerPolicyTests
         var policy = new PagerWheelPolicy();
         Assert.Equal(1, policy.Accumulate(140, T0).PageDelta);
 
+        // prototype2 keeps accumulating during the cooldown (a reversal drops the residual); only the
+        // page commit is paced, so the event is consumed with CooldownBlocked and no page delta.
         var blocked = policy.Accumulate(140, T0.AddMilliseconds(179));
         Assert.Equal(0, blocked.PageDelta);
         Assert.True(blocked.CooldownBlocked);
-        Assert.False(blocked.Consumed);
+        Assert.True(blocked.Consumed);
 
         var allowed = policy.Accumulate(140, T0.AddMilliseconds(180));
         Assert.Equal(1, allowed.PageDelta);

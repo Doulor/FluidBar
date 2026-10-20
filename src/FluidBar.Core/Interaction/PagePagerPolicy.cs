@@ -183,19 +183,28 @@ public static class PagePagerPolicy
     }
 
     /// <summary>
-    /// Resolves a released drag into a snap target applying the exact release rules:
-    /// (a) <c>|drag| &lt; threshold</c> → snap back; (b) short drag/flick
-    /// (<c>|drag| &lt; 0.5 page</c>) → at most ±1 page, never skipping regardless of velocity;
-    /// (c) long drag (<c>&gt;= 0.5 page</c>) → <c>clamp(start + round(drag / pitch))</c> so multiple
-    /// pages can be crossed; (d) targets are always clamped to <c>[0, pageCount-1]</c>.
+    /// Resolves a released drag into a snap target using prototype2's <c>onPointerUp</c> rules, so the
+    /// landing page is the one the finger actually left behind. The island used to flip a page after
+    /// only 26 DIP of travel, which read as an unrequested jump and made slow drags rebound.
+    /// <list type="bullet">
+    /// <item><b>sub-threshold</b> travel (&lt; <see cref="PagerConstants.PageThresholdDip"/>) → snap back;</item>
+    /// <item><b>long drag</b>: the damped travel reaches <see cref="PagerConstants.LongDragPageFraction"/>
+    /// (0.75) of a page → round the damped travel, so several pages stay reachable;</item>
+    /// <item><b>flick</b>: release speed ≥ <see cref="PagerConstants.FlickVelocityDipPerMs"/> with at
+    /// least <see cref="PagerConstants.FlickMinimumDragDip"/> of travel → exactly one page (never more);
+    /// a flick whose velocity reverses against the travel is ignored and falls through;</item>
+    /// <item><b>otherwise</b> the nearest page wins (round of the damped travel), so a slow drag below
+    /// half a page settles back instead of jumping forward.</item>
+    /// </list>
     /// </summary>
     /// <param name="startPage">Page the gesture started on.</param>
-    /// <param name="accumulatedDragDip">Accumulated drag in DIP (positive = next page).</param>
+    /// <param name="accumulatedDragDip">Accumulated raw pointer drag in DIP (positive = next page).</param>
     /// <param name="velocityDipPerMs">Release velocity in DIP/ms (positive = next page).</param>
     /// <param name="pageCount">Number of pages.</param>
     /// <param name="pagePitchDip">Page pitch in DIP.</param>
-    /// <param name="pageThresholdDip">Minimum drag to change page.</param>
+    /// <param name="pageThresholdDip">Minimum travel to change page.</param>
     /// <param name="flickVelocityDipPerMs">Velocity above which a short drag is a flick.</param>
+    /// <param name="pointerDamping">Pointer follow ratio used to derive the damped travel.</param>
     public static PagerSnapDecision Release(
         int startPage,
         double accumulatedDragDip,
@@ -203,59 +212,73 @@ public static class PagePagerPolicy
         int pageCount = PagerConstants.PageCount,
         double pagePitchDip = PagerConstants.PagePitchDip,
         double pageThresholdDip = PagerConstants.PageThresholdDip,
-        double flickVelocityDipPerMs = PagerConstants.FlickVelocityDipPerMs)
+        double flickVelocityDipPerMs = PagerConstants.FlickVelocityDipPerMs,
+        double pointerDamping = PagerConstants.PointerDamping)
     {
         ValidatePitch(pagePitchDip);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
         ArgumentOutOfRangeException.ThrowIfNegative(pageThresholdDip);
         ArgumentOutOfRangeException.ThrowIfNegative(flickVelocityDipPerMs);
+        ArgumentOutOfRangeException.ThrowIfNegative(pointerDamping);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(pointerDamping, 1);
 
         var start = ClampPage(startPage, pageCount);
         var drag = double.IsFinite(accumulatedDragDip) ? accumulatedDragDip : 0;
         var velocity = double.IsFinite(velocityDipPerMs) ? velocityDipPerMs : 0;
         var absolute = Math.Abs(drag);
 
-        // (a) too small: snap back, no page change.
+        // (a) too small: snap back, no page change (a stray click-drag never flips a page).
         if (absolute < pageThresholdDip)
         {
             return PagerSnapDecision.SnapBack(start, pagePitchDip);
         }
 
-        // (b) short drag / flick: at most one page, regardless of how large the velocity is.
-        if (absolute < PagerConstants.LongDragPageFraction * pagePitchDip)
+        // The page the finger is over: the content follows the pointer at the damping ratio.
+        var dampedPages = (drag * pointerDamping) / pagePitchDip;
+
+        // (b) long drag: distance decides, rounded the same way the visual offset rounds.
+        if (Math.Abs(dampedPages) >= PagerConstants.LongDragPageFraction)
         {
-            var direction = drag > 0 ? 1 : -1;
-            var target = ClampPage(start + direction, pageCount);
-            if (target == start)
+            var crossed = (int)Math.Round(dampedPages, MidpointRounding.AwayFromZero);
+            if (crossed == 0)
             {
-                return PagerSnapDecision.SnapBack(start, pagePitchDip);
+                crossed = dampedPages > 0 ? 1 : -1;
             }
 
-            return new PagerSnapDecision
-            {
-                StartPage = start,
-                TargetPage = target,
-                TargetOffsetDip = target * pagePitchDip,
-                Kind = Math.Abs(velocity) >= flickVelocityDipPerMs ? PagerSnapKind.Flick : PagerSnapKind.Distance,
-            };
+            return Decision(start, start + crossed, pageCount, pagePitchDip, PagerSnapKind.Distance);
         }
 
-        // (c) long continuous drag: round to the nearest page so 2.7 pages crosses three.
-        var pages = (int)Math.Round(drag / pagePitchDip, MidpointRounding.AwayFromZero);
-        if (pages == 0)
+        // (c) flick: exactly one page in the release direction, only when the finger was still
+        // travelling that way (prototype2 seeds the direction from the release velocity).
+        if (Math.Abs(velocity) >= flickVelocityDipPerMs
+            && absolute >= PagerConstants.FlickMinimumDragDip
+            && Math.Sign(velocity) == Math.Sign(drag))
         {
-            pages = drag > 0 ? 1 : -1;
+            return Decision(start, start + Math.Sign(velocity), pageCount, pagePitchDip, PagerSnapKind.Flick);
         }
 
-        var distanceTarget = ClampPage(start + pages, pageCount);
-        return distanceTarget == start
+        // (d) nearest page: a slow drag that never crossed half a page settles back.
+        return Decision(
+            start,
+            start + (int)Math.Round(dampedPages, MidpointRounding.AwayFromZero),
+            pageCount,
+            pagePitchDip,
+            PagerSnapKind.Distance);
+    }
+
+    /// <summary>Clamps a requested landing page and classifies it (snap-back when unchanged).</summary>
+    private static PagerSnapDecision Decision(
+        int start, int requested, int pageCount, double pagePitchDip, PagerSnapKind kind)
+    {
+        var target = ClampPage(requested, pageCount);
+        return target == start
             ? PagerSnapDecision.SnapBack(start, pagePitchDip)
             : new PagerSnapDecision
             {
                 StartPage = start,
-                TargetPage = distanceTarget,
-                TargetOffsetDip = distanceTarget * pagePitchDip,
-                Kind = PagerSnapKind.Distance,
+                TargetPage = target,
+                TargetOffsetDip = target * pagePitchDip,
+                Kind = kind,
             };
     }
 

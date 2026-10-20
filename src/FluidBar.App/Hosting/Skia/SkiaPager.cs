@@ -105,8 +105,12 @@ public sealed class SkiaPager
         _lastDragX = xDip;
         _lastDragTimestampMs = timestampMs;
 
-        // Low-pass smoothed velocity (0.75 previous / 0.25 new sample) for calmer flings.
-        _velocityDipPerMs = -((_velocityDipPerMs * 0.75) + (((dx / dt) * 0.25) / 1000.0));
+        // Low-pass smoothed velocity (prototype2: 72 % previous / 28 % new sample), in DIP/ms with
+        // positive = towards the next page. The previous formula negated the whole accumulator on
+        // every sample, so the smoothed speed oscillated around ~20 % of the real one and the flick
+        // threshold could never be reached.
+        var instantDipPerMs = (-dx / dt) / 1000.0;
+        _velocityDipPerMs = (_velocityDipPerMs * 0.72) + (instantDipPerMs * 0.28);
         _accumulatedDragDip = -(xDip - _dragStartX);
 
         var drag = PagePagerPolicy.Drag(_dragStartPage, _accumulatedDragDip);
@@ -129,7 +133,14 @@ public sealed class SkiaPager
         _dragging = false;
         var decision = PagePagerPolicy.Release(_dragStartPage, _accumulatedDragDip, _velocityDipPerMs);
         CommitPage(decision.TargetPage);
-        _snap.SnapToOffset(decision.TargetOffsetDip);
+
+        // Momentum handoff (prototype2 seeds its spring with the release velocity, clamped to ±14
+        // pages/s): a flick keeps travelling instead of stopping dead and easing from rest.
+        var pagesPerSecond = Math.Clamp(
+            _velocityDipPerMs * PagerConstants.PointerDamping * 1000.0 / PagerConstants.PagePitchDip,
+            -PagerConstants.MaxReleaseVelocityPagesPerSecond,
+            PagerConstants.MaxReleaseVelocityPagesPerSecond);
+        _snap.SnapToOffset(decision.TargetOffsetDip, pagesPerSecond * PagerConstants.PagePitchDip);
         return decision.TargetPage;
     }
 
@@ -173,6 +184,13 @@ public sealed class SkiaPager
             return SkiaWheelOutcome.None;
         }
 
+        // Queue from the page the snap is heading to (prototype2: `P.animating ? P.target : round(offset)`).
+        // The previous build froze the whole chain while the spring ran, so every notch during the
+        // ~0.5 s snap was swallowed and a fast gesture could only ever move one page.
+        var basePage = IsAnimating
+            ? PagePagerPolicy.OffsetToPage(_snap.TargetOffsetDip)
+            : SelectedIndex;
+
         var chainDelta = deltaDip;
         if (!contentScrollable && !horizontal && !shift)
         {
@@ -182,7 +200,10 @@ public sealed class SkiaPager
                 return SkiaWheelOutcome.None;
             }
 
-            chainDelta = notch.PageDelta * PagerConstants.WheelNotchDip;
+            // The notch policy already decided the step: step from the queued page, not from the
+            // (possibly stale) committed page.
+            SelectPage(basePage + notch.PageDelta);
+            return new SkiaWheelOutcome(true, true, SelectedIndex, false, false);
         }
 
         var decision = _chain.Handle(new PagerScrollChainRequest
@@ -190,10 +211,10 @@ public sealed class SkiaPager
             WheelDeltaDip = chainDelta,
             ContentScrollable = contentScrollable,
             ContentBoundary = PagerScrollBoundary.None,
-            CurrentPage = SelectedIndex,
+            CurrentPage = basePage,
             PageCount = PageCount,
             Now = now,
-            PageAnimationLocked = IsAnimating,
+            PageAnimationLocked = false,
             HorizontalWheel = horizontal,
             ShiftHeld = shift,
         });

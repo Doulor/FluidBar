@@ -12,7 +12,7 @@ public readonly record struct PagerWheelResult
     /// <summary>Whether the event was dropped because a slider/scrollable owns the gesture.</summary>
     public bool OwnerSuppressed { get; init; }
 
-    /// <summary>Whether the event was dropped because the wheel cooldown is active.</summary>
+    /// <summary>Whether a page step is being held back by the wheel cooldown (the delta is kept).</summary>
     public bool CooldownBlocked { get; init; }
 
     /// <summary>Accumulated (sub-threshold) wheel DIP after this event.</summary>
@@ -20,10 +20,13 @@ public readonly record struct PagerWheelResult
 }
 
 /// <summary>
-/// Pure wheel/trackpad pager policy: accumulate deltas until one 100 DIP notch is reached, then step
-/// exactly one page per notch/cooldown window. A 120 ms cooldown drops residual inertia so a single
-/// gesture cannot flip several pages. While a control inside the page (slider, scrollable, text
-/// field) owns the gesture the policy ignores the wheel entirely.
+/// Pure wheel/trackpad pager policy mirroring prototype2's <c>onWheel</c>: accumulate deltas until one
+/// <see cref="NotchDip"/> notch (140 DIP) is reached, then step one page; a
+/// <see cref="CooldownMs"/> window (180 ms) paces the steps so one gesture cannot flip several pages
+/// at once. Deltas arriving inside the window are still accumulated (a direction reversal drops the
+/// stale residual) and the committed notch is subtracted, so continuous scrolling keeps queueing
+/// pages instead of losing notches. While a control inside the page (slider, scrollable, text field)
+/// owns the gesture the policy ignores the wheel entirely.
 /// </summary>
 public sealed class PagerWheelPolicy
 {
@@ -76,6 +79,12 @@ public sealed class PagerWheelPolicy
     /// <param name="controlOwnsGesture">
     /// True when a slider/scrollable/text control inside the page should consume the wheel.
     /// </param>
+    /// <remarks>
+    /// Mirrors prototype2's <c>onWheel</c>: the accumulator always takes the delta (a reversal drops
+    /// the stale residual) and only the <i>commit</i> is paced by the cooldown window, which then
+    /// subtracts one notch and keeps the rest. Dropping the event instead — the old behaviour — made a
+    /// continuous wheel gesture flip a single page and then swallow everything until the snap ended.
+    /// </remarks>
     public PagerWheelResult Accumulate(double deltaDip, DateTimeOffset now, bool controlOwnsGesture = false)
     {
         if (controlOwnsGesture)
@@ -90,43 +99,27 @@ public sealed class PagerWheelPolicy
             };
         }
 
-        if (IsInCooldown(now))
-        {
-            // Drop residual inertia inside the cooldown window: at most one page per window.
-            return new PagerWheelResult
-            {
-                PageDelta = 0,
-                Consumed = false,
-                CooldownBlocked = true,
-                AccumulatedDip = AccumulatedDip,
-            };
-        }
-
         if (!double.IsFinite(deltaDip))
         {
             deltaDip = 0;
         }
 
-        AccumulatedDip += deltaDip;
-        if (AccumulatedDip >= NotchDip)
+        // A direction reversal throws away the stale residual before adding the new delta.
+        if (deltaDip != 0 && AccumulatedDip != 0 && Math.Sign(deltaDip) != Math.Sign(AccumulatedDip))
         {
             AccumulatedDip = 0;
-            _lastPageChangeAt = now;
-            return new PagerWheelResult
-            {
-                PageDelta = 1,
-                Consumed = true,
-                AccumulatedDip = AccumulatedDip,
-            };
         }
 
-        if (AccumulatedDip <= -NotchDip)
+        AccumulatedDip += deltaDip;
+        var inCooldown = IsInCooldown(now);
+        if (Math.Abs(AccumulatedDip) >= NotchDip && !inCooldown)
         {
-            AccumulatedDip = 0;
+            var sign = AccumulatedDip > 0 ? 1 : -1;
+            AccumulatedDip -= sign * NotchDip;
             _lastPageChangeAt = now;
             return new PagerWheelResult
             {
-                PageDelta = -1,
+                PageDelta = sign,
                 Consumed = true,
                 AccumulatedDip = AccumulatedDip,
             };
@@ -136,6 +129,7 @@ public sealed class PagerWheelPolicy
         {
             PageDelta = 0,
             Consumed = true,
+            CooldownBlocked = inCooldown,
             AccumulatedDip = AccumulatedDip,
         };
     }

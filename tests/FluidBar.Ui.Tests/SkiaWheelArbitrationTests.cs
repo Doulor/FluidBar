@@ -20,7 +20,10 @@ public sealed class SkiaWheelArbitrationTests
     /// <summary>Clipboard history page index (04 剪贴板历史).</summary>
     private const int ClipboardPage = 3;
 
-    /// <summary>One wheel notch, the delta a real mouse wheel delivers.</summary>
+    /// <summary>
+    /// One page-step worth of wheel (140 DIP = prototype2's wheelStep). The host delivers this as two
+    /// physical 70 DIP notches; these tests feed it as one event so each call is one arbitration unit.
+    /// </summary>
     private const double Notch = PagerConstants.WheelNotchDip;
 
     [Fact]
@@ -159,6 +162,23 @@ public sealed class SkiaWheelArbitrationTests
         var third = fixture.Controller.HandleWheel(Notch, horizontal: false, shift: false);
         Assert.True(third.Paged);
         Assert.Equal(page + 2, Page(fixture));
+    }
+
+    [Fact]
+    public void TwoPhysicalNotches_TurnOnePage_AndOneNotchAloneDoesNot()
+    {
+        using var fixture = CreateClipboardFixture(items: 1);
+        var page = Page(fixture);
+
+        var half = fixture.Controller.HandleWheel(
+            PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+        Assert.False(half.Paged);
+        Assert.Equal(page, Page(fixture));
+
+        var full = fixture.Controller.HandleWheel(
+            PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+        Assert.True(full.Paged);
+        Assert.Equal(page + 1, Page(fixture));
     }
 
     /// <summary>

@@ -203,39 +203,53 @@ public sealed class SkiaIslandHostMappingTests
     }
 
     [Fact]
-    public void Wheel_OneNotchOnePage_WithCooldownAndLocking()
+    public void Wheel_TwoNotchesOnePage_WithCooldownAndLocking()
     {
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        var first = fixture.Controller.HandleWheel(PagerNotchDip, horizontal: false, shift: false);
-        Assert.True(first.Paged);
-        Assert.Equal(1, first.Page);
+        // One physical notch is half a page step (70 of the 140 DIP prototype wheelStep): it is
+        // consumed but does not turn the page — prototype2's 100 px Chrome notch also falls short of
+        // its 140 px wheelStep, so a page needs two notches there as well.
+        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        Assert.False(first.Paged);
+        Assert.Equal(0, fixture.Controller.Pager.SelectedIndex);
+
+        var second = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        Assert.True(second.Paged);
+        Assert.Equal(1, second.Page);
         fixture.RunToRest();
 
-        var cooldown = fixture.Controller.HandleWheel(PagerNotchDip, horizontal: false, shift: false);
-        Assert.False(cooldown.Paged);
+        // Two more notches inside the 180 ms cooldown accumulate but must not flip a page.
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
 
-        fixture.Time.Advance(TimeSpan.FromMilliseconds(200));
-        var second = fixture.Controller.HandleWheel(PagerNotchDip, horizontal: false, shift: false);
-        Assert.True(second.Paged);
-        Assert.Equal(2, second.Page);
+        // After the cooldown the held pair commits the next page.
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(FluidBar.Core.Interaction.PagerConstants.WheelCooldownMs + 40));
+        var third = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        Assert.True(third.Paged);
+        Assert.Equal(2, third.Page);
     }
 
     [Fact]
-    public void Wheel_WhileTheSnapIsRunning_IsFrozenByTheScrollChain()
+    public void Wheel_RepeatsArePacedByTheCooldownWindow()
     {
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        var first = fixture.Controller.HandleWheel(PagerNotchDip, horizontal: false, shift: false);
+        fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.True(first.Paged);
-        fixture.Time.Advance(TimeSpan.FromMilliseconds(500));
 
-        // No Advance() between the two events: the snap spring is still running.
-        var locked = fixture.Controller.HandleWheel(PagerNotchDip, horizontal: false, shift: false);
-        Assert.False(locked.Paged);
-        Assert.True(locked.Locked);
+        // The next pair lands inside the cooldown: both notches are held, no page step.
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+
+        // After the cooldown the held pair is a fresh page step (prototype2 pacing); the old behaviour
+        // froze wheel input until the snap spring finished, which swallowed gestures.
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(500));
+        var next = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        Assert.True(next.Paged);
     }
 
     [Fact]
@@ -416,5 +430,6 @@ public sealed class SkiaIslandHostMappingTests
         Assert.False(home.HasBrightness);
     }
 
-    private const double PagerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelNotchDip;
+    /// <summary>One physical wheel notch (70 DIP; two notches make the 140 DIP page step).</summary>
+    private const double PerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
 }

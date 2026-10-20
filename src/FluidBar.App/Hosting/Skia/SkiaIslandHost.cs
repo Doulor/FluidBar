@@ -686,8 +686,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         };
         host.PointerWheel += wheel =>
         {
-            // One Win32 notch (120) equals one 140 DIP Core wheel notch; wheel-down advances a page.
-            var deltaDip = -(wheel.Delta / 120.0) * FluidBar.Core.Interaction.PagerConstants.WheelNotchDip;
+            // One Win32 notch (120 raw) is 70 DIP, i.e. half of a Core wheel notch: two notches make
+            // the 140 DIP page step (prototype2's 100 px Chrome notch also falls short of its 140 px
+            // wheelStep, so both need two notches per page). Wheel-down advances a page.
+            var deltaDip = -(wheel.Delta / 120.0) * FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
             var shift = (wheel.Pointer.Modifiers & LayeredKeyModifiers.Shift) != 0;
             _controller.HandleWheel(deltaDip, wheel.IsHorizontal, shift);
             EnsureFrameLoop();
@@ -1273,7 +1275,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
 
             _controller.HandleWheel(
-                -notches * FluidBar.Core.Interaction.PagerConstants.WheelNotchDip,
+                -notches * FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch,
                 horizontal: false,
                 shift: false);
             EnsureFrameLoop();
