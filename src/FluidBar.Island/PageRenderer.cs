@@ -60,18 +60,18 @@ internal sealed partial class PageRenderer : IDisposable
         // left aligned at the content inset (left 20 / top 11).
         var page = Math.Max(0, state.PageIndex);
         var number = page < PageNumbers.Length ? PageNumbers[page] : (page + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-        _text.Draw(canvas, number, IslandType.PageNumber, PageLayout.PageNumberRect(content),
+        _text.Draw(canvas, number, IslandType.PageNumber, PageVisual.PageNumber(content),
             _theme.Foreground.WithAlpha(82), TextAlign.Left, _opacity);
-        _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
+        _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageVisual.PageTitle(content),
             _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
 
         // The island had no in-island route to the settings window (only the global hotkey, which
         // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
         // gear next to the collapse chevron on every page; the same rectangle is the click target and
         // the UI Automation button, so pointer and screen-reader users find one control, not two.
-        IconSet.Draw(canvas, IconKind.Settings, PageLayout.SettingsRect(content).Deflate(5.5f),
+        IconSet.Draw(canvas, IconKind.Settings, PageVisual.Settings(content).Deflate(2),
             Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
-        IconSet.Draw(canvas, IconKind.ChevronDown, PageLayout.CollapseRect(content).Deflate(5),
+        IconSet.Draw(canvas, IconKind.ChevronDown, PageVisual.Collapse(content).Deflate(2),
             Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
     }
 
@@ -97,7 +97,8 @@ internal sealed partial class PageRenderer : IDisposable
             return;
         }
 
-        var slot = state.Pages.PageSlotAt(page);
+        var pages = state.Pages;
+        var slot = pages.PageSlotAt(page);
         var template = slot?.TemplateId ?? "list";
         if (slot is { Kind: PageSlotKind.Plugin } && slot.PluginPage is { } pluginPage)
         {
@@ -108,10 +109,10 @@ internal sealed partial class PageRenderer : IDisposable
         switch (template)
         {
             case "builtin.home":
-                DrawHome(canvas, state.Pages.Home, pageRect);
+                DrawInGridBodyNoShift(canvas, pageRect, () => DrawHome(canvas, pages.Home, pageRect));
                 return;
             case "builtin.media":
-                DrawMedia(canvas, state.Pages.Media, pageRect);
+                DrawMedia(canvas, pages.Media, pageRect);
                 return;
             case "list":
                 switch (slot?.Kind)
@@ -138,10 +139,10 @@ internal sealed partial class PageRenderer : IDisposable
 
                 return;
             case "calendar":
-                DrawWidgets(canvas, state.Pages.Widgets, pageRect);
+                DrawWidgets(canvas, pages.Widgets, pageRect);
                 return;
             case "stat-grid":
-                DrawWidgets(canvas, state.Pages.Widgets, pageRect);
+                DrawWidgets(canvas, pages.Widgets, pageRect);
                 return;
             default:
                 DrawPlaceholder(canvas, slot?.Kind ?? PageSlotKind.Plugin, state.Pages.Title(page), pageRect);
@@ -324,15 +325,15 @@ internal sealed partial class PageRenderer : IDisposable
         // Accent from the album cover (extracted upstream) drives the art glow, the progress track and
         // the karaoke sweep; without a cover the theme fallback rules stay in charge.
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
-        DrawArt(canvas, PageMetricsLayout.MediaArt(page), 14, accent, large: true, media.Artwork, media.ArtworkKey);
+        DrawArt(canvas, PageVisual.MediaArt(page), 12, accent, large: true, media.Artwork, media.ArtworkKey);
 
-        _text.Draw(canvas, media.Eyebrow, IslandType.MediaEyebrow, PageMetricsLayout.MediaEyebrow(page, m),
+        _text.Draw(canvas, media.Eyebrow, IslandType.MediaEyebrow, PageVisual.MediaEyebrow(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.Title, IslandType.MediaTitle, PageMetricsLayout.MediaTitle(page, m),
+        _text.Draw(canvas, media.Title, IslandType.MediaTitle, PageVisual.MediaTitle(page),
             _theme.Foreground, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.Artist, IslandType.MediaArtist, PageMetricsLayout.MediaArtist(page, m),
+        _text.Draw(canvas, media.Artist, IslandType.MediaArtist, PageVisual.MediaArtist(page),
             _theme.ForegroundSecondary, TextAlign.Left, _opacity);
-        _text.Draw(canvas, media.Album, IslandType.MediaAlbum, PageMetricsLayout.MediaAlbum(page, m),
+        _text.Draw(canvas, media.Album, IslandType.MediaAlbum, PageVisual.MediaAlbum(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
 
         // The lyric card only makes sense when a lyric line exists; an empty card with just the
@@ -340,7 +341,7 @@ internal sealed partial class PageRenderer : IDisposable
         // still occupies the approved geometry, so a light caption keeps it intentional instead of a
         // blank gap between the title block and the seek row.
         var hasLyrics = !string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine);
-        var lyricCard = PageMetricsLayout.MediaLyricCard(page, m);
+        var lyricCard = PageVisual.MediaLyricCard(page);
         if (hasLyrics)
         {
             DrawCard(canvas, lyricCard, 10);
@@ -384,13 +385,13 @@ internal sealed partial class PageRenderer : IDisposable
 
         // Window-title fallback sources have no track length; the player still reports the position,
         // so the elapsed time is drawn without a progress track instead of hiding the row entirely.
-        var seekRow = PageMetricsLayout.MediaSeekRow(page, m);
+        var seekRow = PageVisual.MediaSeekRow(page);
         var seekTextHeight = 16 + m.LineGrow(IslandType.SeekTime);
         var seekTextTop = seekRow.MidY - (seekTextHeight / 2);
         var seekTimeWidth = PageMetricsLayout.MediaSeekTimeWidth(m);
         if (media.HasTimeline)
         {
-            var seek = PageMetricsLayout.MediaSeekTrack(page, m);
+            var seek = PageVisual.MediaSeekTrack(page);
             var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
             DrawTrack(canvas, seek, progress, accent, _theme.LineStrong);
             _fill.Style = SKPaintStyle.Fill;
@@ -419,7 +420,7 @@ internal sealed partial class PageRenderer : IDisposable
         // Footer follows the requested split: volume + output on the left, transport exactly centred,
         // queue on the right. Unsupported slots are greyed with an honest placeholder; their hit
         // targets are refused by SkiaIslandHitTest (OutputAvailable/QueueAvailable stay false).
-        var volume = PageMetricsLayout.MediaVolume(page, m);
+        var volume = PageVisual.MediaVolume(page);
         var volumeAlpha = (media.HasVolume ? 1f : 0.45f) * _opacity;
         // The speaker is a real mute button, not a decorative glyph: paint the same hover/press
         // affordance as the transport buttons so the hit target is discoverable.
@@ -442,8 +443,8 @@ internal sealed partial class PageRenderer : IDisposable
             new SKRect(volume.Left + 19, volume.Top, volume.Right, volume.Bottom),
             _theme.ForegroundSecondary, TextAlign.Left, volumeAlpha);
 
-        var output = PageMetricsLayout.MediaOutput(page, m);
-        var queue = PageMetricsLayout.MediaQueue(page, m);
+        var output = PageVisual.MediaOutput(page);
+        var queue = PageVisual.MediaQueue(page);
         var hasOutput = media.OutputAvailable && !string.IsNullOrWhiteSpace(media.OutputName);
         var hasQueue = media.QueueAvailable && media.QueueCount > 0;
         var outputText = hasOutput ? media.OutputName : media.OutputPlaceholder;
@@ -484,9 +485,9 @@ internal sealed partial class PageRenderer : IDisposable
 
     private void DrawTransport(SKCanvas canvas, MediaPageModel media, SKRect page)
     {
-        var previous = PageMetricsLayout.MediaPrevious(page, _metrics);
-        var play = PageMetricsLayout.MediaPlay(page, _metrics);
-        var next = PageMetricsLayout.MediaNext(page, _metrics);
+        var previous = PageVisual.MediaPrevious(page);
+        var play = PageVisual.MediaPlay(page);
+        var next = PageVisual.MediaNext(page);
 
         // Press feedback: the held button shrinks slightly and brightens; hovering lifts it a touch.
         // (The old code painted three static glyphs, so a tap gave no visual answer at all.)
@@ -543,20 +544,44 @@ internal sealed partial class PageRenderer : IDisposable
 
     private void DrawEmpty(SKCanvas canvas, IconKind icon, string title, string hint, SKRect page)
     {
-        IconSet.Draw(canvas, icon, PageLayout.EmptyIcon(page), Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-        _text.Draw(canvas, title, IslandType.EmptyTitle, PageLayout.EmptyTitle(page),
+        IconSet.Draw(canvas, icon, PageVisual.EmptyIcon(page), Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+        _text.Draw(canvas, title, IslandType.PageTitle, PageVisual.EmptyTitle(page),
             _theme.ForegroundSecondary, TextAlign.Center, _opacity);
-        _text.Draw(canvas, hint, IslandType.EmptyHint, PageLayout.EmptyHint(page),
+        _text.Draw(canvas, hint, IslandType.RowBody, PageVisual.EmptyHint(page),
             _theme.ForegroundTertiary, TextAlign.Center, _opacity);
     }
 
     // ---------------------------------------------------------------- helpers
 
+    private void DrawInGridBody(SKCanvas canvas, SKRect page, System.Action draw)
+    {
+        // Widgets still use the legacy 400 DIP content columns; shift them into the 8-grid body.
+        var body = new SKRect(page.Left, page.Top + PageVisual.BodyTop, page.Right, page.Bottom - PageVisual.FooterSafe);
+        canvas.Save();
+        canvas.ClipRect(body);
+        canvas.Translate(0, 12);
+        draw();
+        canvas.Restore();
+    }
+
+    private void DrawInGridBodyNoShift(SKCanvas canvas, SKRect page, System.Action draw)
+    {
+        // Home's legacy column starts at 28 with glyphs that clear the 16/16 header; the renderer's
+        // page-level body clip handles wheel scroll, so do not clip again here.
+        draw();
+    }
+
     private void DrawCard(SKCanvas canvas, SKRect rect, float radius)
     {
+        // L1 card: 60 % raised fill; L3 top highlight 1.5 DIP. Every card uses the same radius
+        // and the same two layers, so the expanded pages read as one material family.
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.BackgroundRaised, _opacity);
-        canvas.DrawRoundRect(rect, radius, radius, _fill);
+        _fill.Color = Alpha(_theme.BackgroundRaised, 0.60f * _opacity);
+        canvas.DrawRoundRect(rect, PageVisual.CardRadius, PageVisual.CardRadius, _fill);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = 1.5f;
+        _stroke.Color = Alpha(SKColors.White, 0.05f * _opacity);
+        canvas.DrawLine(rect.Left + 2, rect.Top + 0.75f, rect.Right - 2, rect.Top + 0.75f, _stroke);
     }
 
     private void DrawArt(SKCanvas canvas, SKRect rect, float radius, SKColor accent, bool large,

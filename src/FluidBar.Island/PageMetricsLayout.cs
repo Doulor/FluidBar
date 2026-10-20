@@ -639,3 +639,134 @@ public static class PageMetricsLayout
         }
     }
 }
+
+/// <summary>
+/// The 8 DIP page grid used by the visual upgrade. These rectangles are deliberately separate from
+/// the legacy prototype geometry in <see cref="PageLayout"/>: existing hit-test and font-scale contracts
+/// stay stable while the renderer paints the calmer iOS spacing.
+/// </summary>
+public static class PageVisual
+{
+    /// <summary>Horizontal page inset (16 DIP).</summary>
+    public const float PageInset = 16;
+
+    /// <summary>Header top padding (16 DIP).</summary>
+    public const float HeaderTop = 16;
+
+    /// <summary>Header/title line box (16 DIP).</summary>
+    public const float HeaderHeight = 16;
+
+    /// <summary>Body starts below the title plus one 8 DIP gap (40 DIP).</summary>
+    public const float BodyTop = 40;
+
+    /// <summary>Bottom safe area (16 DIP).</summary>
+    public const float FooterSafe = 16;
+
+    /// <summary>Card/list corner radius (12 DIP).</summary>
+    public const float CardRadius = 12;
+
+    /// <summary>Unified list row height (44 DIP).</summary>
+    public const float RowHeight = 44;
+
+    /// <summary>Unified list row gap (4 DIP).</summary>
+    public const float RowGap = 4;
+
+    /// <summary>Header action icon box (20 DIP).</summary>
+    public const float ActionIcon = 20;
+
+    /// <summary>Page body after the title and before the bottom safe area.</summary>
+    public static SKRect Body(SKRect page) => new(
+        page.Left + PageInset, page.Top + BodyTop, page.Right - PageInset, page.Bottom - FooterSafe);
+
+    /// <summary>Page number rectangle (left of the title).</summary>
+    public static SKRect PageNumber(SKRect content) => new(
+        content.Left, content.Top + HeaderTop + 1, content.Left + 16, content.Top + HeaderTop + HeaderHeight + 1);
+
+    /// <summary>Page title rectangle; reserves the right operation icons.</summary>
+    public static SKRect PageTitle(SKRect content) => new(
+        content.Left + 20, content.Top + HeaderTop, content.Right - 72, content.Top + HeaderTop + HeaderHeight);
+
+    /// <summary>Settings gear hit/paint box (20 DIP).</summary>
+    public static SKRect Settings(SKRect content) => new(
+        content.Right - 64, content.Top + HeaderTop, content.Right - 44, content.Top + HeaderTop + ActionIcon);
+
+    /// <summary>Collapse chevron hit/paint box (20 DIP).</summary>
+    public static SKRect Collapse(SKRect content) => new(
+        content.Right - 40, content.Top + HeaderTop, content.Right - 20, content.Top + HeaderTop + ActionIcon);
+
+    /// <summary>Scrollable list body rectangle.</summary>
+    public static SKRect ListBody(SKRect page) => Body(page);
+
+    /// <summary>Unified list row at an index and scroll offset.</summary>
+    public static SKRect ListRow(SKRect page, int index, float scrollOffset = 0)
+    {
+        var body = Body(page);
+        var top = body.Top + (index * (RowHeight + RowGap)) - scrollOffset;
+        return new SKRect(body.Left, top, body.Right, top + RowHeight);
+    }
+
+    /// <summary>Empty-state icon: 28×28, vertically centred with the two text lines.</summary>
+    public static SKRect EmptyIcon(SKRect page)
+    {
+        var body = Body(page);
+        var top = body.MidY - 50;
+        return new SKRect(page.MidX - 14, top, page.MidX + 14, top + 28);
+    }
+
+    /// <summary>Empty-state title: 13 DIP, centred.</summary>
+    public static SKRect EmptyTitle(SKRect page)
+    {
+        var icon = EmptyIcon(page);
+        return new SKRect(page.Left + PageInset, icon.Bottom + 8, page.Right - PageInset, icon.Bottom + 28);
+    }
+
+    /// <summary>Empty-state hint: 11.5 DIP, centred.</summary>
+    public static SKRect EmptyHint(SKRect page)
+    {
+        var title = EmptyTitle(page);
+        return new SKRect(page.Left + PageInset, title.Bottom + 4, page.Right - PageInset, title.Bottom + 20);
+    }
+
+    /// <summary>Media artwork on the 8 DIP grid.</summary>
+    public static SKRect MediaArt(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop, page.Left + PageInset + 72, page.Top + BodyTop + 72);
+
+    /// <summary>Media eyebrow.</summary>
+    public static SKRect MediaEyebrow(SKRect page) => new(page.Left + 112, page.Top + BodyTop, page.Right - PageInset, page.Top + BodyTop + 12);
+
+    /// <summary>Media title.</summary>
+    public static SKRect MediaTitle(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 16, page.Right - PageInset, page.Top + BodyTop + 40);
+
+    /// <summary>Media artist.</summary>
+    public static SKRect MediaArtist(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 40, page.Right - PageInset, page.Top + BodyTop + 52);
+
+    /// <summary>Media album.</summary>
+    public static SKRect MediaAlbum(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 56, page.Right - PageInset, page.Top + BodyTop + 68);
+
+    /// <summary>Media lyric card.</summary>
+    public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 80, page.Right - PageInset, page.Top + BodyTop + 126);
+
+    /// <summary>Media seek row.</summary>
+    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 134, page.Right - PageInset, page.Top + BodyTop + 154);
+
+    /// <summary>Media seek track.</summary>
+    public static SKRect MediaSeekTrack(SKRect page) => new(page.Left + PageInset + 36, page.Top + BodyTop + 143, page.Right - PageInset - 36, page.Top + BodyTop + 146);
+
+    /// <summary>Media previous-track button.</summary>
+    public static SKRect MediaPrevious(SKRect page) => new(page.Left + 154, page.Top + BodyTop + 162, page.Left + 182, page.Top + BodyTop + 190);
+
+    /// <summary>Media play/pause button.</summary>
+    public static SKRect MediaPlay(SKRect page) => new(page.Left + 185, page.Top + BodyTop + 161, page.Left + 215, page.Top + BodyTop + 191);
+
+    /// <summary>Media next-track button.</summary>
+    public static SKRect MediaNext(SKRect page) => new(page.Left + 218, page.Top + BodyTop + 162, page.Left + 246, page.Top + BodyTop + 190);
+
+    /// <summary>Media volume/mute control.</summary>
+    public static SKRect MediaVolume(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 162, page.Left + PageInset + 66, page.Top + BodyTop + 190);
+
+    /// <summary>Media output control.</summary>
+    public static SKRect MediaOutput(SKRect page) => new(page.Left + 88, page.Top + BodyTop + 162, page.Left + 150, page.Top + BodyTop + 190);
+
+    /// <summary>Media queue control.</summary>
+    public static SKRect MediaQueue(SKRect page) => new(page.Right - PageInset - 74, page.Top + BodyTop + 162, page.Right - PageInset, page.Top + BodyTop + 190);
+}
+

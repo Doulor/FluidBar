@@ -18,7 +18,7 @@ internal sealed partial class PageRenderer
     {
         if (model.Canvas is { } canvasView)
         {
-            var canvasBody = PageLayout.ListBody(page);
+            var canvasBody = PageVisual.ListBody(page);
             CanvasPainter.DrawPage(canvas, canvasView, canvasBody, _theme, _text, _opacity);
             return;
         }
@@ -35,12 +35,12 @@ internal sealed partial class PageRenderer
         }
 
         var m = _metrics;
-        var body = PageLayout.ListBody(page);
+        var body = PageVisual.ListBody(page);
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = 0; i < model.Rows.Count; i++)
         {
-            var row = PageMetricsLayout.NotificationRow(page, i, 0, m);
+            var row = PageVisual.ListRow(page, i);
             if (row.Top >= body.Bottom)
             {
                 break;
@@ -57,23 +57,23 @@ internal sealed partial class PageRenderer
         DrawListRowBackground(canvas, row, index == _hoverPage, false);
         var hasTrailing = !string.IsNullOrWhiteSpace(item.TrailingLabel);
         var trailingWidth = hasTrailing ? 76f : 0f;
-        var glyph = new SKRect(row.Left + 10, row.Top + 10, row.Left + 30, row.Top + 30);
+        var glyph = new SKRect(row.Left + 8, row.Top + 12, row.Left + 28, row.Top + 32);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
         canvas.DrawRoundRect(glyph, 6, 6, _fill);
         IconSet.Draw(canvas, IconForPluginToken(item.IconToken), glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
 
-        var valueWidth = string.IsNullOrWhiteSpace(item.Value) ? 0f : 70f;
-        var titleRight = row.Right - 14 - trailingWidth - valueWidth - 8;
-        var lineTop = row.Top + 5;
-        var lineBottom = row.Top + 21;
+        var valueWidth = string.IsNullOrWhiteSpace(item.Value) ? 0f : 78f;
+        var titleRight = row.Right - 12 - trailingWidth - valueWidth - 8;
+        var lineTop = row.Top + 8;
+        var lineBottom = row.Top + 24;
         _text.Draw(canvas, item.Title, IslandType.RowTitle,
-            new SKRect(row.Left + 38, lineTop, titleRight, lineBottom),
+            new SKRect(row.Left + 40, lineTop, titleRight, lineBottom),
             _theme.Foreground, TextAlign.Left, _opacity);
         if (!string.IsNullOrWhiteSpace(item.Subtitle))
         {
             _text.Draw(canvas, item.Subtitle, IslandType.RowBody,
-                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
+                new SKRect(row.Left + 40, row.Top + 24, titleRight, row.Top + 40),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
         else if (!string.IsNullOrWhiteSpace(item.Value))
@@ -85,7 +85,7 @@ internal sealed partial class PageRenderer
 
         if (!string.IsNullOrWhiteSpace(item.Value))
         {
-            _text.Draw(canvas, item.Value!, IslandType.RowMetaMono,
+            _text.Draw(canvas, item.Value!, IslandType.CompactValue,
                 new SKRect(row.Right - 14 - trailingWidth - valueWidth, lineTop, row.Right - 14 - trailingWidth, lineBottom),
                 _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
@@ -128,17 +128,17 @@ internal sealed partial class PageRenderer
         }
 
         var m = _metrics;
-        var rowHeight = PageMetricsLayout.NotificationRowHeight(m);
-        var body = PageLayout.ListBody(page);
-        var maxScroll = Math.Max(0, (count * (rowHeight + 4)) - 4 - PageMetricsLayout.BodyHeight);
+        var rowHeight = PageVisual.RowHeight;
+        var body = PageVisual.ListBody(page);
+        var maxScroll = PageLayout.MaxScroll(count, PageLayout.NotificationRowHeight, PageLayout.NotificationRowGap);
         var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
-        var first = rowHeight + 4 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 4));
+        var first = (int)Math.Floor(scroll / (PageLayout.NotificationRowHeight + PageLayout.NotificationRowGap));
 
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = first; i < count; i++)
         {
-            var row = PageMetricsLayout.NotificationRow(page, i, scroll, m);
+            var row = PageVisual.ListRow(page, i, scroll);
             if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
                 // Real toasts made this visible: the list does not scroll (the wheel pages instead), so
@@ -218,7 +218,7 @@ internal sealed partial class PageRenderer
         // boundary with it so neither line overlaps the dismiss button.
         var timeWidth = string.IsNullOrEmpty(item.TimeText)
             ? 0
-            : Math.Min(96, _text.Measure(item.TimeText, IslandType.RowMeta) + 2f);
+            : Math.Min(104, _text.Measure(item.TimeText, IslandType.CompactValue) + 2f);
         var timeRight = row.Right - 36;
         var timeLeft = timeRight - timeWidth;
         var titleLeft = row.Left + 44 + (appWidth > 0 ? appWidth + 6 : 0);
@@ -235,7 +235,7 @@ internal sealed partial class PageRenderer
             _text.Draw(
                 canvas,
                 item.TimeText,
-                IslandType.RowMeta,
+                IslandType.CompactValue,
                 new SKRect(timeLeft, lineTop, timeRight, lineBottom),
                 _theme.ForegroundTertiary,
                 TextAlign.Right,
@@ -280,17 +280,17 @@ internal sealed partial class PageRenderer
         }
 
         var m = _metrics;
-        var rowHeight = PageMetricsLayout.ClipboardRowHeight(m);
-        var body = PageLayout.ListBody(page);
-        var maxScroll = Math.Max(0, (count * (rowHeight + 6)) - 6 - PageMetricsLayout.BodyHeight);
+        var rowHeight = PageVisual.RowHeight;
+        var body = PageVisual.ListBody(page);
+        var maxScroll = PageLayout.MaxScroll(count, PageLayout.ClipboardRowHeight, PageLayout.ClipboardRowGap);
         var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
-        var first = rowHeight + 6 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 6));
+        var first = (int)Math.Floor(scroll / (PageLayout.ClipboardRowHeight + PageLayout.ClipboardRowGap));
 
         canvas.Save();
         canvas.ClipRect(body);
         for (var i = first; i < count; i++)
         {
-            var row = PageMetricsLayout.ClipboardRow(page, i, scroll, m);
+            var row = PageVisual.ListRow(page, i, scroll);
             if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
                 break;
@@ -322,7 +322,7 @@ internal sealed partial class PageRenderer
             canvas.DrawRoundRect(row, PageLayout.ListRowRadius, PageLayout.ListRowRadius, _fill);
         }
 
-        var dy = (row.Height - 48f) / 2;
+        var dy = (row.Height - 44f) / 2;
         canvas.Save();
         canvas.Translate(0, dy);
         var tone = ClipboardTone(item.Kind);
@@ -811,9 +811,13 @@ internal sealed partial class PageRenderer
         _fill.Color = selected
             ? Alpha(_theme.Accent, 0.10f * _opacity)
             : hovered
-                ? Alpha(Mix(_theme.BackgroundRaised, SKColors.White, 0.06f), _opacity)
-                : Alpha(_theme.BackgroundRaised, _opacity);
-        canvas.DrawRoundRect(row, PageLayout.ListRowRadius, PageLayout.ListRowRadius, _fill);
+                ? Alpha(Mix(_theme.BackgroundRaised, SKColors.White, 0.06f), 0.68f * _opacity)
+                : Alpha(_theme.BackgroundRaised, 0.60f * _opacity);
+        canvas.DrawRoundRect(row, PageVisual.CardRadius, PageVisual.CardRadius, _fill);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = 1.5f;
+        _stroke.Color = Alpha(SKColors.White, 0.05f * _opacity);
+        canvas.DrawLine(row.Left + 2, row.Top + 0.75f, row.Right - 2, row.Top + 0.75f, _stroke);
     }
 
     private SKColor Tone(CompactStatus status) => status switch
