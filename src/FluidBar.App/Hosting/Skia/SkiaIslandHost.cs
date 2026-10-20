@@ -1072,7 +1072,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             return;
         }
 
-        if (!_controller.IsAnimating)
+        if (!_controller.IsAnimating && !_controller.IsAgentAnimating)
         {
             if (_frameClock.IsRunning)
             {
@@ -1105,7 +1105,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _controller.PumpTimers();
             _controller.Advance(delta);
             RenderAllLocked(forceFull: false);
-            if (_controller.IsAnimating)
+            if (_controller.IsAnimating || _controller.IsAgentAnimating)
             {
                 // The preview rail springs move the pills a few DIP during a page turn; keep the
                 // hook envelope on the painted geometry instead of the start-of-animation one.

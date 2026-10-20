@@ -23,6 +23,7 @@ internal sealed class CompactRenderer : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
     private double _phase;
+    private double _agentPhase;
     private bool _reduced;
     private bool _pressed;
 
@@ -50,6 +51,7 @@ internal sealed class CompactRenderer : IDisposable
         _opacity = Math.Clamp(opacity, 0, 1);
         _text.SetScale(state.FontScale);
         _phase = state.MotionPhase;
+        _agentPhase = state.AgentAnimationSeconds;
         _reduced = state.ReducedMotion;
         // Compact pill = one big button: the shell spring scales it on press, and the renderer adds a
         // light wash so the pressed frame is readable in a still capture too.
@@ -318,11 +320,16 @@ internal sealed class CompactRenderer : IDisposable
         // rgba(accent, .18) plus a spinning top/right arc (running); done/error replace the arc with a
         // 10 DIP glyph. The task line is 11.5px/500, the meta 9.5px fg-3, and nothing is drawn after the
         // meta (the old trailing status dot is gone).
+        // CSS border-box: a 1.5px border sits inside the 20×20 box, so the stroke radius is
+        // (20 - 1.5) / 2 = 9.25 DIP. The base ring keeps the prototype2 fixed accent tint even when
+        // the state turns done/error (::before is rgba(76,201,240,.18)).
         var ring = new SKRect(10, (height - 20) / 2, 30, (height + 20) / 2);
+        var ringRadius = (20f - AgentMotion.RingStrokeWidth) / 2f;
         _stroke.Style = SKPaintStyle.Stroke;
-        _stroke.StrokeWidth = 1.5f;
-        _stroke.Color = Alpha(tone, 0.18f * _opacity);
-        canvas.DrawCircle(ring.MidX, ring.MidY, 10, _stroke);
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+        _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
+        _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * _opacity);
+        canvas.DrawCircle(ring.MidX, ring.MidY, ringRadius, _stroke);
         if (model.Status == CompactStatus.Success)
         {
             DrawIcon(canvas, IconKind.Check, ring.Deflate(5), tone);
@@ -333,8 +340,17 @@ internal sealed class CompactRenderer : IDisposable
         }
         else if (model.Status is CompactStatus.Info or CompactStatus.Warning)
         {
-            _stroke.Color = Alpha(tone, _opacity);
-            canvas.DrawArc(ring, -90, 130, false, _stroke);
+            // prototype2 .agent-ring::after: spin 900ms linear infinite, border-top+right color =
+            // currentColor (= accent for running), i.e. a half-circle rotating clockwise.
+            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentPhase);
+            _stroke.Color = Alpha(model.Status == CompactStatus.Info ? _theme.Accent : tone, _opacity);
+            canvas.DrawArc(
+                new SKRect(ring.MidX - ringRadius, ring.MidY - ringRadius,
+                    ring.MidX + ringRadius, ring.MidY + ringRadius),
+                AgentMotion.ArcStartDegrees + (float)rotation,
+                AgentMotion.ArcSweepDegrees,
+                false,
+                _stroke);
         }
         else
         {

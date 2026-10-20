@@ -380,17 +380,23 @@ internal sealed partial class PageRenderer
         _fill.Color = Alpha(tone, 0.10f * _opacity);
         canvas.DrawCircle(stateCenter.X, stateCenter.Y, 10, _fill);
 
-        if (item.Tone == CompactStatus.Info)
+        if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
         {
+            // prototype2 .agent-state .spinner-ring: an 11×11 border ring (1.5px) whose top+right
+            // seams spin 900ms linear, exactly like the compact capsule ring.
+            const float spinnerRadius = (11f - AgentMotion.RingStrokeWidth) / 2f;
             _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeWidth = 1.5f;
-            _stroke.Color = Alpha(tone, 0.25f * _opacity);
-            canvas.DrawCircle(stateCenter.X, stateCenter.Y, 5.5f, _stroke);
-            _stroke.Color = Alpha(tone, 0.9f * _opacity);
+            _stroke.StrokeCap = SKStrokeCap.Butt;
+            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
+            _stroke.Color = Alpha(_theme.Accent, AgentMotion.SpinnerBaseAlpha * _opacity);
+            canvas.DrawCircle(stateCenter.X, stateCenter.Y, spinnerRadius, _stroke);
+            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentAnimationSeconds);
+            _stroke.Color = Alpha(tone, _opacity);
             canvas.DrawArc(
-                new SKRect(stateCenter.X - 5.5f, stateCenter.Y - 5.5f, stateCenter.X + 5.5f, stateCenter.Y + 5.5f),
-                -90,
-                130,
+                new SKRect(stateCenter.X - spinnerRadius, stateCenter.Y - spinnerRadius,
+                    stateCenter.X + spinnerRadius, stateCenter.Y + spinnerRadius),
+                AgentMotion.ArcStartDegrees + (float)rotation,
+                AgentMotion.ArcSweepDegrees,
                 false,
                 _stroke);
         }
@@ -494,20 +500,28 @@ internal sealed partial class PageRenderer
                 _opacity);
         }
 
-        if (item.Tone == CompactStatus.Info && item.ProgressPercent >= 0)
+        if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
         {
-            // prototype2 .agent-progress: 1.5 DIP track across the full row with an accent fill.
-            var track = new SKRect(row.Left, row.Bottom - 1.5f, row.Right, row.Bottom);
+            // prototype2 .agent-progress: a 1.5 DIP full-row track; the span pulses its width
+            // 48% → 72% over 2.4s ease-in-out alternate while the agent is active. A real provider
+            // progress (ProgressPercent >= 0) pins the width instead of pulsing.
+            var track = new SKRect(row.Left, row.Bottom - AgentMotion.ProgressHeight, row.Right, row.Bottom);
+            _fill.Style = SKPaintStyle.Fill;
             _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
-            canvas.DrawRoundRect(track, 0.75f, 0.75f, _fill);
-            var fraction = (float)Math.Clamp(item.ProgressPercent / 100.0, 0, 1);
+            canvas.DrawRect(track, _fill);
+            var fraction = item.ProgressPercent >= 0
+                ? (float)Math.Clamp(item.ProgressPercent / 100.0, 0, 1)
+                : _reduced
+                    ? (float)AgentMotion.ProgressMinFraction
+                    : (float)(AgentMotion.IndeterminateProgressPercent(_agentAnimationSeconds) / 100.0);
             if (fraction > 0)
             {
-                _fill.Color = Alpha(_theme.Accent, _opacity);
+                var fillColor = item.Tone == CompactStatus.Info ? _theme.Accent : tone;
+                _fill.Color = Alpha(fillColor, AgentMotion.ProgressOpacity * _opacity);
                 canvas.DrawRoundRect(
                     new SKRect(track.Left, track.Top, track.Left + (track.Width * fraction), track.Bottom),
-                    0.75f,
-                    0.75f,
+                    AgentMotion.ProgressRadius,
+                    AgentMotion.ProgressRadius,
                     _fill);
             }
         }

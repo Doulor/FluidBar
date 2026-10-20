@@ -144,6 +144,12 @@ public readonly record struct IslandRenderState
     public double MotionPhase { get; init; }
 
     /// <summary>
+    /// Host-driven agent animation clock in seconds (ring spin / indeterminate progress). It only
+    /// advances while an agent is running, so an idle island requests no frames.
+    /// </summary>
+    public double AgentAnimationSeconds { get; init; }
+
+    /// <summary>
     /// Logical keyboard/UIA focus ring in host-local DIP (null when nothing is focused). The renderer
     /// paints a 2 DIP informational outline; the host never activates for pointer clicks.
     /// </summary>

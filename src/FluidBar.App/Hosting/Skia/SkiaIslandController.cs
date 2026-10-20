@@ -103,6 +103,8 @@ public sealed class SkiaIslandController : IDisposable
     private VisualRect _pendingDamage;
 
     private double _motionPhase;
+    private double _agentAnimationSeconds;
+    private bool _agentLoopRequested;
     private double _waveAccumulator;
     private double _pointerX;
     private double _pointerY;
@@ -239,6 +241,48 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating;
+
+    /// <summary>
+    /// Whether the agent spinner / indeterminate progress needs continuous 60 fps frames. True only
+    /// while a running/waiting agent is actually painted (compact agent capsule or expanded page 5),
+    /// and false under reduced motion, so the idle island requests no frames at all.
+    /// </summary>
+    public bool IsAgentAnimating
+    {
+        get
+        {
+            if (!_started || _disposed || _motion.ReducedMotion)
+            {
+                return false;
+            }
+
+            if (_hasRenderState && _renderState.Form == ShellForm.Expanded)
+            {
+                return _renderState.PageIndex == 4 && HasActiveAgentRow(_renderState.Pages.Agent);
+            }
+
+            return _compact.Kind == ActivityKind.Agent
+                && _compact.Model.Status is CompactStatus.Info or CompactStatus.Warning;
+        }
+    }
+
+    private static bool HasActiveAgentRow(AgentPageModel page)
+    {
+        if (page.Items is null)
+        {
+            return false;
+        }
+
+        foreach (var item in page.Items)
+        {
+            if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Whether the karaoke sweep still needs frames: a per-word line is on screen and playing, so the
@@ -468,6 +512,13 @@ public sealed class SkiaIslandController : IDisposable
         if (dt <= 0)
         {
             return;
+        }
+
+        // Agent spinner / progress pulse use their own clock; it only advances while an agent is
+        // actually running, so the host's frame loop stops (and CPU drops) as soon as it finishes.
+        if (IsAgentAnimating)
+        {
+            _agentAnimationSeconds += dt;
         }
 
         var now = _time.GetLocalNow();
@@ -1336,6 +1387,14 @@ public sealed class SkiaIslandController : IDisposable
         {
             InvalidateDynamic();
         }
+
+        // A content change may have started an agent run: ask the host for a frame loop now so the
+        // spinner starts immediately (the loop keeps itself alive while IsAgentAnimating is true).
+        if (IsAgentAnimating)
+        {
+            InvalidateDirty(ContentDamage());
+            FrameRequested?.Invoke();
+        }
     }
 
     private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
@@ -1877,11 +1936,27 @@ public sealed class SkiaIslandController : IDisposable
                 : ArchipelagoState.HiddenState,
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
+            AgentAnimationSeconds = _agentAnimationSeconds,
             // A focused rail glass paints its own prototype accent outline in the strip renderer, so
             // the generic page-control ring stays off for those slots.
             FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,
         };
         _hasRenderState = true;
+
+        // The agent page can become visible without a content change (page switch / expand): start
+        // the 60 fps frame loop here too, and remember that we asked so the idle path stays quiet.
+        if (IsAgentAnimating)
+        {
+            if (!_agentLoopRequested)
+            {
+                _agentLoopRequested = true;
+                FrameRequested?.Invoke();
+            }
+        }
+        else
+        {
+            _agentLoopRequested = false;
+        }
     }
 
     private ShellForm ResolveVisualForm()
