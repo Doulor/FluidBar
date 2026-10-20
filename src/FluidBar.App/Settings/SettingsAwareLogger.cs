@@ -18,6 +18,8 @@ public sealed class SettingsAwareLogger : IAppLogger, IAsyncDisposable
     private readonly Func<string?> _levelToken;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private RollingFileLogger? _fileSink;
+    private ITimer? _flushTimer;
+    private int _flushing;
     private int _disposed;
 
     /// <summary>Creates the logger.</summary>
@@ -58,6 +60,39 @@ public sealed class SettingsAwareLogger : IAppLogger, IAsyncDisposable
         });
         await sink.StartAsync(cancellationToken).ConfigureAwait(false);
         _fileSink = sink;
+
+        // The platform sink keeps entries in a 16 KB buffer until a flush/shutdown. A forced process
+        // exit would lose the last seconds of diagnostics; a 250 ms flush makes the JSONL readable
+        // for live evidence/crash forensics without any per-entry disk sync.
+        _flushTimer = TimeProvider.System.CreateTimer(
+            static state => _ = ((SettingsAwareLogger)state!).FlushSinkAsync(),
+            this, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
+    }
+
+    /// <summary>Flushes the file sink if a write is not already pending (single-flight).</summary>
+    private async Task FlushSinkAsync()
+    {
+        if (Interlocked.Exchange(ref _flushing, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var sink = _fileSink;
+            if (sink is not null)
+            {
+                await sink.FlushAsync().ConfigureAwait(false);
+            }
+        }
+        catch (Exception)
+        {
+            // A failing flush must never affect the producer; the next tick retries.
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _flushing, 0);
+        }
     }
 
     /// <inheritdoc />
@@ -151,6 +186,9 @@ public sealed class SettingsAwareLogger : IAppLogger, IAsyncDisposable
         {
             return;
         }
+
+        _flushTimer?.Dispose();
+        _flushTimer = null;
 
         if (_fileSink is not null)
         {

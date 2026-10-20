@@ -148,6 +148,11 @@ public sealed class UpdateTests
         Assert.False(SemanticVersion.Parse("2.1.0-beta.1").IsNewerThan(SemanticVersion.Parse("2.1.0")));
         Assert.True(SemanticVersion.Parse("2.0.1").IsNewerThan(new Version(2, 0, 0)));
         Assert.False(SemanticVersion.Parse("2.0.0-beta").IsNewerThan(new Version(2, 0, 0)));
+        // Equal numeric release must be "up to date", not "update available" (a Version cannot carry
+        // the prerelease label, so equality is indistinguishable and must stay not-newer).
+        Assert.False(SemanticVersion.Parse("2.0.0").IsNewerThan(new Version(2, 0, 0)));
+        Assert.False(SemanticVersion.Parse("1.0.0").IsNewerThan(new Version(1, 0, 0, 0)));
+        Assert.False(SemanticVersion.Parse("1.0").IsNewerThan(new Version(1, 0, 0, 0)));
     }
 
     [Fact]

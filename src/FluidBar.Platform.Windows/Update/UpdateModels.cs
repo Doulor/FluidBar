@@ -40,6 +40,28 @@ public enum UpdateVerificationStatus
     Verified,
 }
 
+/// <summary>
+/// Which stage produced a failed update state. The settings About page uses it to show an honest
+/// localized message instead of presenting a verification failure as "check failed".
+/// </summary>
+public enum UpdateFailureKind
+{
+    /// <summary>No failure.</summary>
+    None,
+
+    /// <summary>The release check failed (feed missing/network/parse).</summary>
+    Check,
+
+    /// <summary>The installer download failed (HTTP/network/copy/precondition).</summary>
+    Download,
+
+    /// <summary>The downloaded installer failed SHA-256/Authenticode verification and was discarded.</summary>
+    Verification,
+
+    /// <summary>The operation was cancelled.</summary>
+    Cancelled,
+}
+
 /// <summary>Overall update state for the settings About page and the update activity.</summary>
 public enum UpdateState
 {
@@ -114,7 +136,8 @@ public sealed record UpdateStatusSnapshot(
     string? DownloadedFilePath,
     UpdateVerificationStatus Verification,
     DateTimeOffset? LastCheckedAtUtc,
-    string? Message)
+    string? Message,
+    UpdateFailureKind FailureKind = UpdateFailureKind.None)
 {
     public static UpdateStatusSnapshot Idle(Version currentVersion)
         => new(UpdateState.Idle, currentVersion, null, null, UpdateVerificationStatus.NotVerified, null, null);

@@ -271,14 +271,12 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
         if (release.Installer is null)
         {
-            return new UpdateDownloadResult(false, null, UpdateVerificationStatus.NotVerified, null,
-                "The release has no installer asset.");
+            return DownloadFailure("The release has no installer asset.");
         }
 
         if (release.Installer.SizeBytes > _options.MaxInstallerBytes)
         {
-            return new UpdateDownloadResult(false, null, UpdateVerificationStatus.NotVerified, null,
-                "The installer exceeds the configured size limit.");
+            return DownloadFailure("The installer exceeds the configured size limit.");
         }
 
         if (IsCachedInstallerValid(release) && _downloadedFilePath is not null)
@@ -289,8 +287,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
         if (!await _downloadGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
-            return new UpdateDownloadResult(false, null, UpdateVerificationStatus.NotVerified, null,
-                "A download is already running.");
+            return DownloadFailure("A download is already running.");
         }
 
         string? temporaryFilePath = null;
@@ -350,7 +347,8 @@ public sealed class UpdateCheckClient : IAsyncDisposable
                     });
                 DeleteFileQuietly(temporaryFilePath);
                 Publish(new UpdateStatusSnapshot(UpdateState.Failed, _currentVersion, release, null, verification,
-                    Current.LastCheckedAtUtc, "Installer verification failed."));
+                    Current.LastCheckedAtUtc, $"Installer verification failed ({verification}).",
+                    UpdateFailureKind.Verification));
                 return new UpdateDownloadResult(false, null, verification, null,
                     $"Installer verification failed ({verification}).");
             }
@@ -526,7 +524,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         _counters.IncrementUpdateCheckFailures();
         _logger.LogWarning(PlatformLogCategory.Update, "update.check-failed", reason, exception);
         Publish(new UpdateStatusSnapshot(UpdateState.Failed, _currentVersion, Current.AvailableRelease, null,
-            UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, reason));
+            UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, reason, UpdateFailureKind.Check));
         return new UpdateCheckResult(UpdateCheckStatus.Failed, null, etag, reason);
     }
 
@@ -535,7 +533,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
         _counters.IncrementUpdateCheckFailures();
         _logger.LogWarning(PlatformLogCategory.Update, "update.download-failed", reason, exception);
         Publish(new UpdateStatusSnapshot(UpdateState.Failed, _currentVersion, Current.AvailableRelease, null,
-            UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, reason));
+            UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, reason, UpdateFailureKind.Download));
         return new UpdateDownloadResult(false, null, UpdateVerificationStatus.NotVerified, null, reason);
     }
 

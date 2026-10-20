@@ -94,8 +94,11 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
             return Patch > (other.Build < 0 ? 0 : other.Build);
         }
 
-        // Same numeric release: a stable version is newer than the prerelease of the same numbers.
-        return Prerelease is null && other.Revision >= 0;
+        // Numeric equality: a System.Version cannot express a prerelease label, so a stable release
+        // with the same numbers is indistinguishable from the installed build. Treating it as newer
+        // made the updater report "update available" for the installed version itself; the honest
+        // answer is "not newer".
+        return false;
     }
 
     public static bool operator <(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) < 0;

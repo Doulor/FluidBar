@@ -221,14 +221,14 @@ public sealed class UpdateService : IAsyncDisposable
 
         _mode = mode;
         _channel = nextChannel;
-        _logger.LogInfo(PlatformLogCategory.Update, "update.policy",
+        _logger.LogInfo(PlatformLogCategory.Settings, "update.policy",
             "Update policy changed.",
             new Dictionary<string, object?>
             {
                 ["autoUpdate"] = mode.ToString(),
                 ["channel"] = nextChannel.ToString(),
             });
-        RearmSchedule();
+        RearmSchedule("policy-change");
     }
 
     /// <summary>Schedules the startup + interval checks (idempotent).</summary>
@@ -241,7 +241,7 @@ public sealed class UpdateService : IAsyncDisposable
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        RearmSchedule();
+        RearmSchedule("startup");
         return Task.CompletedTask;
     }
 
@@ -257,14 +257,45 @@ public sealed class UpdateService : IAsyncDisposable
     }
 
     /// <summary>Runs one explicit check now (works even when automatic checks are off).</summary>
-    public async Task<UpdateCheckResult> CheckNowAsync(CancellationToken cancellationToken = default)
+    public Task<UpdateCheckResult> CheckNowAsync(CancellationToken cancellationToken = default)
+        => CheckCoreAsync("manual", cancellationToken);
+
+    /// <summary>One check with a trigger label in the log (manual vs scheduled).</summary>
+    private async Task<UpdateCheckResult> CheckCoreAsync(string trigger, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _logger.LogInfo(PlatformLogCategory.Settings, "update.check-started",
+            "Update check started.",
+            new Dictionary<string, object?>
+            {
+                ["trigger"] = trigger,
+                ["channel"] = _channel.ToString(),
+                ["currentVersion"] = _options.CurrentVersion.ToString(),
+            });
+
         var result = await _client.CheckAsync(
             new UpdateCheckRequest(_options.CurrentVersion, _channel), cancellationToken).ConfigureAwait(false);
         if (result.Latest is { } latest)
         {
             _lastRelease = latest;
+        }
+
+        var data = new Dictionary<string, object?>
+        {
+            ["trigger"] = trigger,
+            ["status"] = result.Status.ToString(),
+            ["latest"] = result.Latest?.Version.ToString(),
+            ["reason"] = result.FailureReason,
+        };
+        if (result.Status == UpdateCheckStatus.Failed)
+        {
+            _logger.LogWarning(PlatformLogCategory.Settings, "update.check-finished",
+                "Update check failed.", exception: null, data: data);
+        }
+        else
+        {
+            _logger.LogInfo(PlatformLogCategory.Settings, "update.check-finished",
+                "Update check finished.", data: data);
         }
 
         if (result.Status == UpdateCheckStatus.UpdateAvailable && result.Latest is { } release
@@ -385,22 +416,49 @@ public sealed class UpdateService : IAsyncDisposable
         }
     }
 
-    private void RearmSchedule()
+    private void RearmSchedule(string reason)
     {
+        var started = Volatile.Read(ref _started) != 0;
+        var disabled = false;
         lock (_timerGate)
         {
             _timer?.Dispose();
             _timer = null;
-            if (Volatile.Read(ref _started) == 0 || _mode == AutoUpdateMode.Off)
+            if (!started || _mode == AutoUpdateMode.Off)
             {
-                return;
+                disabled = started;
             }
-
-            // First check after the startup delay, then every CheckInterval (spec §8.4).
-            _timer = _timeProvider.CreateTimer(
-                static state => _ = ((UpdateService)state!).RunScheduledCheckAsync(),
-                this, _options.StartupDelay, _options.CheckInterval);
+            else
+            {
+                // First check after the startup delay, then every CheckInterval (spec §8.4).
+                _timer = _timeProvider.CreateTimer(
+                    static state => _ = ((UpdateService)state!).RunScheduledCheckAsync(),
+                    this, _options.StartupDelay, _options.CheckInterval);
+            }
         }
+
+        if (!started)
+        {
+            return;
+        }
+
+        if (disabled)
+        {
+            _logger.LogInfo(PlatformLogCategory.Settings, "update.auto-check-disabled",
+                "Automatic update checks are disabled by the user policy.",
+                new Dictionary<string, object?> { ["reason"] = reason, ["policy"] = _mode.ToString() });
+            return;
+        }
+
+        _logger.LogInfo(PlatformLogCategory.Settings, "update.auto-check-armed",
+            "Automatic update checks armed.",
+            new Dictionary<string, object?>
+            {
+                ["reason"] = reason,
+                ["policy"] = _mode.ToString(),
+                ["dueSeconds"] = _options.StartupDelay.TotalSeconds,
+                ["intervalHours"] = _options.CheckInterval.TotalHours,
+            });
     }
 
     private async Task RunScheduledCheckAsync()
@@ -412,11 +470,11 @@ public sealed class UpdateService : IAsyncDisposable
 
         try
         {
-            await CheckNowAsync().ConfigureAwait(false);
+            await CheckCoreAsync("scheduled", CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(PlatformLogCategory.Update, "update.scheduled-check-failed",
+            _logger.LogWarning(PlatformLogCategory.Settings, "update.scheduled-check-failed",
                 "The scheduled update check failed.", ex);
         }
     }

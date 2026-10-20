@@ -999,6 +999,16 @@ public static partial class LocKeys
                 public const string Discard = "Settings.About.Update.Discard";
                 /// <summary><c>Settings.About.Update.Feed</c></summary>
                 public const string Feed = "Settings.About.Update.Feed";
+                /// <summary><c>Settings.About.Update.DownloadingProgress</c></summary>
+                public const string DownloadingProgress = "Settings.About.Update.DownloadingProgress";
+                /// <summary><c>Settings.About.Update.DownloadFailed</c></summary>
+                public const string DownloadFailed = "Settings.About.Update.DownloadFailed";
+                /// <summary><c>Settings.About.Update.VerificationFailed</c></summary>
+                public const string VerificationFailed = "Settings.About.Update.VerificationFailed";
+                /// <summary><c>Settings.About.Update.Off</c></summary>
+                public const string Off = "Settings.About.Update.Off";
+                /// <summary><c>Settings.About.Update.Retry</c></summary>
+                public const string Retry = "Settings.About.Update.Retry";
             }
         }
         /// <summary>Keys in the 'Market' area.</summary>

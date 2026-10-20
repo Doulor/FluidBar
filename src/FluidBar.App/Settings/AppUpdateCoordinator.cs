@@ -26,6 +26,9 @@ public interface IUpdateUiService
     /// <summary>Whether a check or download is in flight.</summary>
     bool IsBusy { get; }
 
+    /// <summary>Download progress 0..1, or -1 when no download is running.</summary>
+    double DownloadProgress { get; }
+
     /// <summary>Raised when the state changes (thread pool; UI marshals).</summary>
     event EventHandler? Changed;
 
@@ -71,6 +74,8 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
     private readonly UpdateService _service;
     private readonly Uri _feedUrl;
     private readonly bool _feedFromEnvironment;
+    private double _downloadProgress = -1;
+    private int _lastReportedPercent = -1;
     private int _disposed;
 
     /// <summary>Creates the coordinator and the underlying update service.</summary>
@@ -144,6 +149,9 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
     public bool IsBusy => Current.State is UpdateState.Checking or UpdateState.Downloading;
 
     /// <inheritdoc />
+    public double DownloadProgress => Volatile.Read(ref _downloadProgress);
+
+    /// <inheritdoc />
     public event EventHandler? Changed;
 
     /// <summary>Schedules the automatic checks (startup + interval).</summary>
@@ -175,7 +183,35 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
     /// <inheritdoc />
     public async Task DownloadCurrentAsync(CancellationToken cancellationToken = default)
     {
-        var result = await _service.DownloadCurrentAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        Interlocked.Exchange(ref _lastReportedPercent, -1);
+        Volatile.Write(ref _downloadProgress, 0);
+        Changed?.Invoke(this, EventArgs.Empty);
+
+        // One UI rebuild per whole percent: the About pane reads DownloadProgress and repaints the
+        // "downloading" line with a truthful percentage instead of an opaque spinner.
+        var progress = new Progress<double>(value =>
+        {
+            var clamped = Math.Clamp(value, 0, 1);
+            var percent = (int)Math.Round(clamped * 100);
+            if (Interlocked.Exchange(ref _lastReportedPercent, percent) == percent)
+            {
+                return;
+            }
+
+            Volatile.Write(ref _downloadProgress, clamped);
+            Changed?.Invoke(this, EventArgs.Empty);
+        });
+
+        UpdateDownloadResult result;
+        try
+        {
+            result = await _service.DownloadCurrentAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _downloadProgress, -1);
+        }
+
         if (!result.Success)
         {
             _logger.Warning(LogCategories.Settings, "update.download-failed",

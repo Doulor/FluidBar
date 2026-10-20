@@ -69,7 +69,7 @@ public sealed class UpdateServiceTests
 
     private static UpdateService CreateService(Feed feed, string autoUpdate = "notify",
         IUpdatePackageVerifier? verifier = null, IUpdateInstallerLauncher? launcher = null,
-        TimeProvider? time = null, Version? current = null)
+        TimeProvider? time = null, Version? current = null, CapturingLogger? logger = null)
         => new(
             new UpdateServiceOptions
             {
@@ -80,7 +80,7 @@ public sealed class UpdateServiceTests
                 StartupDelay = TimeSpan.FromSeconds(5),
                 CheckInterval = TimeSpan.FromHours(24),
             },
-            new CapturingLogger(),
+            logger ?? new CapturingLogger(),
             new PlatformCounters(),
             time,
             verifier ?? new Sha256UpdateVerifier(),
@@ -162,6 +162,7 @@ public sealed class UpdateServiceTests
         Assert.Contains("does not exist", check.FailureReason!);
         await WaitUntilAsync(() => service.Current.State == UpdateState.Failed,
             "a missing local feed must publish the failed state");
+        Assert.Equal(UpdateFailureKind.Check, service.Current.FailureKind);
     }
 
     [Fact]
@@ -180,6 +181,7 @@ public sealed class UpdateServiceTests
             $"expected a hash mismatch, got success={download.Success} verification={download.Verification} reason={download.FailureReason}");
         await WaitUntilAsync(() => service.Current.State == UpdateState.Failed,
             "a hash mismatch must publish the failed state");
+        Assert.Equal(UpdateFailureKind.Verification, service.Current.FailureKind);
         Assert.False(service.CanInstall);
         Assert.False(service.Install().Launched);
         Assert.Null(launcher.LaunchedPath);
@@ -285,6 +287,90 @@ public sealed class UpdateServiceTests
             new FakeSignatureVerifier { Status = AuthenticodeStatus.Verified }, new CapturingLogger());
         Assert.Equal(UpdateVerificationStatus.Verified,
             await trusted.VerifyAsync(file, release, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LocalFeed_MissingAssetPublishesADownloadFailure()
+    {
+        var feed = await CreateFeedAsync();
+        File.Delete(feed.ArtifactPath); // manifest points at a real (now missing) asset
+        await using var service = CreateService(feed);
+
+        await service.CheckNowAsync();
+        await WaitUntilAsync(() => service.Current.State == UpdateState.Available,
+            "the release is still advertised even when the asset disappeared");
+
+        var download = await service.DownloadCurrentAsync();
+        Assert.False(download.Success);
+        await WaitUntilAsync(() => service.Current.State == UpdateState.Failed,
+            "a missing asset must publish the failed state");
+        Assert.Equal(UpdateFailureKind.Download, service.Current.FailureKind);
+        Assert.Null(service.Current.DownloadedFilePath);
+    }
+
+    [Fact]
+    public async Task Policy_OffLogsDisabledAndDoesNotScheduleACheck()
+    {
+        var feed = await CreateFeedAsync();
+        var logger = new CapturingLogger();
+        var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 20, 3, 0, 0, TimeSpan.Zero));
+        await using var service = CreateService(feed, autoUpdate: "off", time: time, logger: logger);
+        await service.StartAsync();
+
+        time.Advance(TimeSpan.FromSeconds(6));
+        await Task.Delay(150);
+
+        var entries = logger.Entries.ToArray();
+        Assert.Contains(entries, entry => entry.EventId == "update.auto-check-disabled");
+        Assert.DoesNotContain(entries, entry => entry.EventId == "update.auto-check-armed");
+        Assert.DoesNotContain(entries, entry => entry.EventId == "update.check-started");
+        Assert.DoesNotContain(entries, entry => entry.EventId == "update.check-finished");
+        Assert.Equal(UpdateState.Idle, service.Current.State);
+    }
+
+    [Fact]
+    public async Task Policy_NotifyLogsTheStartupDelayAndTheScheduledCheck()
+    {
+        var feed = await CreateFeedAsync();
+        var logger = new CapturingLogger();
+        var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 20, 3, 0, 0, TimeSpan.Zero));
+        await using var service = CreateService(feed, autoUpdate: "notify", time: time, logger: logger);
+        await service.StartAsync();
+
+        var armed = Assert.Single(logger.Entries, entry => entry.EventId == "update.auto-check-armed");
+        Assert.Equal(5d, Convert.ToDouble(armed.Data!["dueSeconds"], System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("startup", armed.Data!["reason"]?.ToString());
+
+        time.Advance(TimeSpan.FromSeconds(6));
+        await WaitUntilAsync(() => service.Current.State == UpdateState.Available,
+            "the delayed check must run and publish the release");
+
+        var started = Assert.Single(logger.Entries, entry => entry.EventId == "update.check-started");
+        Assert.Equal("scheduled", started.Data!["trigger"]?.ToString());
+        var finished = Assert.Single(logger.Entries, entry => entry.EventId == "update.check-finished");
+        Assert.Equal("UpdateAvailable", finished.Data!["status"]?.ToString());
+        Assert.Equal("scheduled", finished.Data!["trigger"]?.ToString());
+    }
+
+    [Fact]
+    public async Task Policy_ChangeLogsAndRearmsLive()
+    {
+        var feed = await CreateFeedAsync();
+        var logger = new CapturingLogger();
+        var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 20, 3, 0, 0, TimeSpan.Zero));
+        await using var service = CreateService(feed, autoUpdate: "off", time: time, logger: logger);
+        await service.StartAsync();
+
+        service.ApplyPolicy("notify", "stable");
+
+        var policy = Assert.Single(logger.Entries, entry => entry.EventId == "update.policy");
+        Assert.Equal("Notify", policy.Data!["autoUpdate"]?.ToString());
+        var armed = Assert.Single(logger.Entries, entry => entry.EventId == "update.auto-check-armed");
+        Assert.Equal("policy-change", armed.Data!["reason"]?.ToString());
+
+        time.Advance(TimeSpan.FromSeconds(6));
+        await WaitUntilAsync(() => service.Current.State == UpdateState.Available,
+            "the re-armed schedule must run the check");
     }
 
     [Fact]

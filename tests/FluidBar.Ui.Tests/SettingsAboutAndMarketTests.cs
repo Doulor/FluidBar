@@ -77,6 +77,9 @@ public sealed class SettingsAboutAndMarketTests
 
         public bool IsBusy => _snapshot.State is UpdateState.Checking or UpdateState.Downloading;
 
+        /// <summary>Unknown progress: the status line falls back to the version-only copy.</summary>
+        public double DownloadProgress => -1;
+
         public event EventHandler? Changed
         {
             add { }

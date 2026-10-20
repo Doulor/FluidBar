@@ -1375,6 +1375,38 @@ public static class SettingsSectionBuilder
                         SettingsIconKind.Refresh,
                         () => ctx.RestartToInstall?.Invoke(), palette));
                     break;
+                case UpdateState.Failed:
+                {
+                    var snapshot = updateService.Current;
+                    var retryableDownload = snapshot.AvailableRelease is not null
+                        && snapshot.FailureKind is UpdateFailureKind.Download or UpdateFailureKind.Verification;
+                    if (retryableDownload)
+                    {
+                        actions.Children.Add(SettingsWidgets.PillAction(
+                            ctx.Localizer.Get(LocKeys.Settings.About.Update.Download),
+                            SettingsIconKind.Download,
+                            () => _ = updateService.DownloadCurrentAsync(), palette));
+                    }
+
+                    // A failed check/download never traps the user: they can re-run the check.
+                    var retryChip = SettingsWidgets.PillAction(
+                        ctx.Localizer.Get(LocKeys.Settings.About.Update.Retry),
+                        SettingsIconKind.Refresh,
+                        () =>
+                        {
+                            if (!busy)
+                            {
+                                _ = updateService.CheckNowAsync();
+                            }
+                        }, palette);
+                    if (busy)
+                    {
+                        retryChip.Opacity = 0.55;
+                    }
+
+                    actions.Children.Add(retryChip);
+                    break;
+                }
             }
         }
         actions.Children.Add(SettingsWidgets.PillAction(ctx.Localizer.Get(LocKeys.Settings.About.Website),
@@ -1386,8 +1418,9 @@ public static class SettingsSectionBuilder
 
         if (updateService is not null)
         {
-            // An idle update service yields no status line: the prototype has no empty placeholder row.
-            var (statusText, statusColor) = DescribeUpdate(updateService, ctx.Localizer);
+            // An idle update service yields no status line unless the policy is off (then the page
+            // says so explicitly instead of looking like a silent failure).
+            var (statusText, statusColor) = DescribeUpdate(updateService, ctx.Localizer, settings);
             if (!string.IsNullOrWhiteSpace(statusText))
             {
                 pane.Children.Add(new TextBlock
@@ -1507,8 +1540,13 @@ public static class SettingsSectionBuilder
             $"{ctx.Localizer.Get(LocKeys.Settings.Advanced.FrameStats)} · p50 {stats.P50Ms:0.00} ms · p99 {stats.P99Ms:0.00} ms · {stats.Frames} frames");
     }
 
-    /// <summary>Maps the live update state onto the localized About status line and its tone.</summary>
-    private static (string Text, Color Color) DescribeUpdate(IUpdateUiService service, ILocalizer localizer)
+    /// <summary>
+    /// Maps the live update state onto the localized About status line and its tone. Failure states
+    /// are split by stage (check vs download vs installer verification) instead of all reading
+    /// "update failed", and a running download shows its real percentage.
+    /// </summary>
+    private static (string Text, Color Color) DescribeUpdate(IUpdateUiService service, ILocalizer localizer,
+        AppSettings settings)
     {
         var snapshot = service.Current;
         var version = snapshot.AvailableRelease?.Version.ToString() ?? service.CurrentVersion.ToString();
@@ -1519,17 +1557,44 @@ public static class SettingsSectionBuilder
             UpdateState.UpToDate => (localizer.Get(LocKeys.Settings.About.UpToDate), Accents.Success),
             UpdateState.Available => (localizer.Format(LocKeys.Settings.About.Update.Available,
                 ("version", version), ("size", size)), Accents.Warning),
-            UpdateState.Downloading => (localizer.Format(LocKeys.Settings.About.Update.Downloading,
-                ("version", version)), Accents.Info),
+            UpdateState.Downloading => DescribeDownloading(service, localizer, version),
             UpdateState.ReadyToInstall => (localizer.Format(LocKeys.Settings.About.Update.Ready,
                 ("version", version)), Accents.Success),
             UpdateState.RestartRequired => (localizer.Get(LocKeys.Settings.About.Update.RestartRequired),
                 Accents.Success),
-            UpdateState.Failed => (localizer.Format(LocKeys.Settings.About.Update.Failed,
-                ("reason", snapshot.Message ?? "unknown")), Accents.Danger),
-            _ => (string.Empty, Accents.Info),
+            UpdateState.Failed => DescribeFailure(snapshot, localizer),
+            _ => string.Equals(settings.AutoUpdate, "off", StringComparison.OrdinalIgnoreCase)
+                ? (localizer.Get(LocKeys.Settings.About.Update.Off), Accents.Info)
+                : (string.Empty, Accents.Info),
         };
     }
+
+    /// <summary>Status line for a running download (percentage when the transport reports it).</summary>
+    private static (string Text, Color Color) DescribeDownloading(IUpdateUiService service, ILocalizer localizer,
+        string version)
+    {
+        var progress = service.DownloadProgress;
+        if (progress >= 0)
+        {
+            var percent = Math.Clamp((int)Math.Round(progress * 100), 0, 100);
+            return (localizer.Format(LocKeys.Settings.About.Update.DownloadingProgress,
+                ("version", version), ("percent", percent)), Accents.Info);
+        }
+
+        return (localizer.Format(LocKeys.Settings.About.Update.Downloading, ("version", version)), Accents.Info);
+    }
+
+    /// <summary>Status line for a failed update, split by the stage that failed.</summary>
+    private static (string Text, Color Color) DescribeFailure(UpdateStatusSnapshot snapshot, ILocalizer localizer)
+        => snapshot.FailureKind switch
+        {
+            UpdateFailureKind.Verification => (localizer.Get(LocKeys.Settings.About.Update.VerificationFailed),
+                Accents.Danger),
+            UpdateFailureKind.Download => (localizer.Format(LocKeys.Settings.About.Update.DownloadFailed,
+                ("reason", snapshot.Message ?? "unknown")), Accents.Danger),
+            _ => (localizer.Format(LocKeys.Settings.About.Update.Failed,
+                ("reason", snapshot.Message ?? "unknown")), Accents.Danger),
+        };
 
     /// <summary>Formats an installer size without inventing units (bytes → MB/KB).</summary>
     private static string FormatUpdateSize(long bytes)
