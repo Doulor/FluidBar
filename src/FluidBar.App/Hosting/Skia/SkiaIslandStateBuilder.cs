@@ -175,6 +175,7 @@ public static class SkiaIslandStateBuilder
             LyricHighlight = media?.LyricHighlight ?? -1,
             VolumePercent = content.VolumePercent,
             HasVolume = content.VolumePercent is not null,
+            IsMuted = content.IsMuted,
             NextLyricLabel = localizer.Get(LocKeys.Common.Next),
             PositionText = media?.PositionText,
             DurationText = media?.DurationText,

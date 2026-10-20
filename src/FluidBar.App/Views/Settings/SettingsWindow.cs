@@ -186,14 +186,21 @@ public sealed class SettingsWindow : Window, ILocalizable
         // the square corners), so the only shape it honours is DWM's own window rounding. Ask for it and,
         // when granted, let the window be the rounded shape: the shell fills it edge to edge (no painted
         // curve fighting DWM's) and the surface colour matches the panel, so no grey wedge can appear.
-        var dwmRounding = TryGetPlatformHandle()?.Handle is { } roundingHandle && roundingHandle != IntPtr.Zero
+        var roundingHandle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        var dwmRounding = roundingHandle != IntPtr.Zero
             && WindowCornerRegion.TryEnableDwmRounding(roundingHandle, out _);
         DwmRoundingActive = dwmRounding;
         if (dwmRounding)
         {
-            // Fill the area DWM leaves between its own corner cut and the painted 22 DIP radius with the
-            // panel colour, so no grey platform surface can show through the wedge.
+            // One single surface: the window background is the panel colour, so whatever DWM leaves between
+            // its corner cut and the painted radius is the panel itself - no second background layer.
+            // The painted radius follows the DWM radius so both edges coincide (no double rim), and DWM's
+            // own 1 px border is switched off so the only transition is edge -> panel.
             Background = new SolidColorBrush(_palette.Window);
+            _ = WindowCornerRegion.TryRemoveDwmBorder(roundingHandle, out _);
+            _shell.CornerRadius = new CornerRadius(DwmCornerRadiusDip);
+            // No painted rim: the panel edge IS the window edge, so there is exactly one transition.
+            _shell.BorderThickness = new Thickness(0);
         }
         else if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
         {
@@ -218,6 +225,9 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     /// <summary>True once the window was prepared before its first composited frame.</summary>
     public bool FirstFramePrepared { get; private set; }
+
+    /// <summary>Content radius used when DWM rounds the window itself (Windows 11 cuts at about 8 DIP).</summary>
+    public const double DwmCornerRadiusDip = 8;
 
     /// <summary>True when the window corners are rendered by DWM (Windows 11).</summary>
     public bool DwmRoundingActive { get; private set; }

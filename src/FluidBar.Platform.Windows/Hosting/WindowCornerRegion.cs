@@ -18,6 +18,7 @@ public static class WindowCornerRegion
 {
     private const int DwmWindowCornerPreference = 33;
     private const int DwmTransitionsForceDisabled = 3;
+    private const int DwmBorderColor = 34;
     private const int DwmCornerDoNotRound = 1;
 
     /// <summary>Converts a DIP corner radius to the pixel radius used by <c>CreateRoundRectRgn</c>.</summary>
@@ -116,6 +117,33 @@ public static class WindowCornerRegion
         if (hr < 0)
         {
             error = $"DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE) failed: 0x{hr:X8}";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the 1 px border DWM draws around a rounded window (<c>DWMWA_BORDER_COLOR</c> =
+    /// <c>DWMWA_COLOR_NONE</c>). On a dark panel that border reads as a second rim just inside the corner.
+    /// </summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false.</param>
+    /// <returns>True when DWM accepted the attribute.</returns>
+    public static bool TryRemoveDwmBorder(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var none = unchecked((int)0xFFFFFFFE); // DWMWA_COLOR_NONE
+        var hr = NativeMethods.DwmApi.DwmSetWindowAttribute(hwnd, DwmBorderColor, ref none, Marshal.SizeOf<int>());
+        if (hr < 0)
+        {
+            error = $"DwmSetWindowAttribute(DWMWA_BORDER_COLOR) failed: 0x{hr:X8}";
             return false;
         }
 
