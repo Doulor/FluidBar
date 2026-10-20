@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -340,8 +341,14 @@ public sealed class SettingsSlider : Control
     }
 }
 
-/// <summary>Circular accent swatch with the prototype's active ring (<c>inset: -4px</c>).</summary>
-public sealed class AccentSwatch : Control
+/// <summary>
+/// Circular accent swatch. It is a <see cref="ToggleButton"/> so the selection is exposed to UI Automation
+/// (TogglePattern.ToggleState) and can be changed from the keyboard (Space/Enter) without a custom peer.
+/// The visual state is drawn directly in <see cref="Render"/>:
+/// a 2 px ring in the foreground colour plus a 2 px gap marks the selected swatch, a softer ring marks
+/// hover, and a dashed ring marks keyboard focus so the three states are unmistakable in both themes.
+/// </summary>
+public sealed class AccentSwatch : ToggleButton
 {
     /// <summary>Creates the swatch (24 px circle + 4 px ring gutter).</summary>
     public AccentSwatch()
@@ -349,44 +356,89 @@ public sealed class AccentSwatch : Control
         Width = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
         Height = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
         Cursor = new Cursor(StandardCursorType.Hand);
+        Focusable = true;
+        Background = Brushes.Transparent;
+        BorderThickness = new Thickness(0);
+        Padding = new Thickness(0);
+        HorizontalAlignment = HorizontalAlignment.Left;
+        VerticalAlignment = VerticalAlignment.Center;
     }
 
     /// <summary>Swatch color.</summary>
     public Color SwatchColor { get; set; }
 
-    /// <summary>Whether the ring is drawn.</summary>
-    public bool IsActive { get; set; }
+    /// <summary>Whether the swatch is the active accent (mirrors <see cref="ToggleButton.IsChecked"/>).</summary>
+    public bool IsActive
+    {
+        get => IsChecked == true;
+        set => IsChecked = value;
+    }
 
-    /// <summary>Ring brush (<c>--ui-fg-2</c>).</summary>
-    public IBrush Ring { get; set; } = Brushes.Gray;
+    /// <summary>Ring brush used for the selected state (<c>--ui-fg</c>).</summary>
+    public IBrush Ring { get; set; } = Brushes.White;
 
-    /// <summary>Raised on click.</summary>
+    /// <summary>Brush used for the hover ring (<c>--ui-fg-2</c>).</summary>
+    public IBrush HoverRing { get; set; } = Brushes.Gray;
+
+    /// <summary>Raised when the user activates the swatch.</summary>
     public event Action? Clicked;
+
+    /// <summary>Activates the swatch (same path as a click or Space/Enter).</summary>
+    public void Activate() => Clicked?.Invoke();
+
+    /// <inheritdoc />
+    protected override void OnClick()
+    {
+        base.OnClick();
+        Activate();
+    }
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
+        var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
+        var center = new Point(bounds.Width / 2, bounds.Height / 2);
         var radius = SettingsMetrics.SwatchSize / 2;
-        if (IsActive)
+        var selected = IsActive;
+        var hover = IsPointerOver;
+        var focused = IsFocused || IsKeyboardFocusWithin;
+
+        // Selected: a 2 px foreground ring with a 2 px gap from the colour disc (the prototype's
+        // inset: -4px ring, thickened so it reads at a glance at 150 % DPI).
+        if (selected)
         {
-            context.DrawEllipse(null, new Pen(Ring, 1), center, radius + SettingsMetrics.SwatchRingInset - 0.5, radius + SettingsMetrics.SwatchRingInset - 0.5);
+            var ringRadius = radius + SettingsMetrics.SwatchRingInset;
+            context.DrawEllipse(null, new Pen(Ring, 2), center, ringRadius, ringRadius);
+        }
+        else if (hover)
+        {
+            var ringRadius = radius + (SettingsMetrics.SwatchRingInset / 2);
+            context.DrawEllipse(null, new Pen(HoverRing, 1), center, ringRadius, ringRadius);
+        }
+
+        // Keyboard focus: dashed outer ring, independent of the selected state.
+        if (focused)
+        {
+            var focusRadius = radius + SettingsMetrics.SwatchRingInset + 2;
+            var pen = new Pen(Ring, 1, new DashStyle([2, 2], 0));
+            context.DrawEllipse(null, pen, center, focusRadius, focusRadius);
         }
 
         context.DrawEllipse(
             new SolidColorBrush(SwatchColor),
-            new Pen(new SolidColorBrush(Color.FromArgb(41, 255, 255, 255)), 1),
+            new Pen(new SolidColorBrush(Color.FromArgb(selected ? (byte)140 : (byte)41, 255, 255, 255)),
+                selected ? 1.5 : 1),
             center,
             radius,
             radius);
-    }
 
-    /// <inheritdoc />
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        Clicked?.Invoke();
-        e.Handled = true;
+        // Selected also carries a check mark: colour alone is not enough for colour-vision deficiencies.
+        if (selected)
+        {
+            var pen = new Pen(Brushes.Black, 2, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+            context.DrawLine(pen, new Point(center.X - 4.5, center.Y + 0.5), new Point(center.X - 1.2, center.Y + 3.8));
+            context.DrawLine(pen, new Point(center.X - 1.2, center.Y + 3.8), new Point(center.X + 4.8, center.Y - 3.6));
+        }
     }
 }
 

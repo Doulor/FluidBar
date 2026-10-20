@@ -62,7 +62,9 @@ internal sealed class CompactRenderer : IDisposable
         var activity = state.Compact;
         var kind = activity?.Kind ?? ActivityKind.Idle;
         var model = activity?.Model ?? EmptyModel;
-        var width = (float)state.ShellWidth;
+        // The +N chip owns a reserved column at the right edge; every compact layout is measured
+        // against the remaining content width so no text can run under (or be clipped by) the chip.
+        var width = IslandMetrics.CompactContentWidth(state);
         var height = (float)state.ShellHeight;
 
         switch (kind)

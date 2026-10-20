@@ -52,8 +52,10 @@ public sealed class SettingsControlLayerTests
                 var pane = window.GetVisualDescendants().OfType<ScrollViewer>()
                     .First(scroll => Math.Abs(scroll.Padding.Top - 24) < 0.1);
                 // Scrollbars are RepeatButtons (Button subclasses) and are Fluent-owned chrome.
+                // Accent swatches are ToggleButtons (so UI Automation can report their selection and
+                // the keyboard can toggle them); they are not part of the shared button implementation.
                 var buttons = pane.GetVisualDescendants().OfType<Button>()
-                    .Where(button => button is not RepeatButton)
+                    .Where(button => button is not RepeatButton and not AccentSwatch)
                     .ToList();
                 return new PaneSnapshot(
                     buttons.Count,

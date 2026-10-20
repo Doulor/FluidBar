@@ -47,6 +47,7 @@ internal static class IslandTestFixtures
         "30-compact-notification-fs08",
         "31-compact-notification-fs12",
         "32-compact-notification-fs16",
+        "33-compact-overflow",
         "40-expanded-home-fs08",
         "41-expanded-home-fs12",
         "42-expanded-home-fs16",
@@ -144,6 +145,17 @@ internal static class IslandTestFixtures
             StatusText = "运行中",
             Status = CompactStatus.Info,
         }));
+
+    /// <summary>Compact pill with a "+N" overflow chip (N background activities beyond the visible stack).</summary>
+    public static IslandRenderState Overflow(int count)
+    {
+        var state = Notification();
+        return state with
+        {
+            OverflowCount = count,
+            ShellWidth = state.ShellWidth + LayoutTokens.OverflowBadgeReserve,
+        };
+    }
 
     public static IslandRenderState Timer() => Compact(new CompactActivity(
         ActivityKind.Timer,
@@ -415,6 +427,7 @@ internal static class IslandTestFixtures
         "30-compact-notification-fs08" => WithFontScale(Notification(), 0.8),
         "31-compact-notification-fs12" => WithFontScale(Notification(), 1.2),
         "32-compact-notification-fs16" => WithFontScale(Notification(), 1.6),
+        "33-compact-overflow" => Overflow(3),
         "40-expanded-home-fs08" => WithFontScale(Expanded(0), 0.8),
         "41-expanded-home-fs12" => WithFontScale(Expanded(0), 1.2),
         "42-expanded-home-fs16" => WithFontScale(Expanded(0), 1.6),

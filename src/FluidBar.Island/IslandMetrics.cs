@@ -169,6 +169,26 @@ public static class IslandMetrics
         (float)(state.ShellOrigin.X + state.ShellWidth),
         (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.ShellHeight));
 
+    /// <summary>Content width available to the compact renderer (right edge reserved for the +N chip).</summary>
+    public static float CompactContentWidth(in IslandRenderState state)
+        => Math.Max(0f, (float)state.ShellWidth
+            - (state.OverflowCount > 0 ? (float)LayoutTokens.OverflowBadgeReserve : 0f));
+
+    /// <summary>Painted "+N" chip rectangle in host-local DIP (empty when no background activities).</summary>
+    public static SKRect OverflowBadgeRect(in IslandRenderState state)
+    {
+        if (state.OverflowCount <= 0 || state.Form == ShellForm.Expanded)
+        {
+            return SKRect.Empty;
+        }
+
+        var shell = ShellRect(state);
+        var width = (float)LayoutTokens.OverflowBadgeWidth;
+        var height = (float)LayoutTokens.OverflowBadgeHeight;
+        var right = shell.Right - ((float)LayoutTokens.OverflowBadgeReserve - width) / 2f;
+        return new SKRect(right - width, shell.Top + 2, right, shell.Top + 2 + height);
+    }
+
     /// <summary>Expanded content rectangle (host-local DIP) for a shell rectangle.</summary>
     public static SKRect ContentRect(SKRect shell) => new(
         shell.Left + (float)ContentLeft,
@@ -330,6 +350,9 @@ public static class IslandType
 
     /// <summary>Row meta line, semibold (status label).</summary>
     public static readonly TextStyle RowMetaStrong = new(FontRole.UiSemiBold, 8f);
+
+    /// <summary>Tabular "+N" overflow-chip digits (8.5 DIP mono).</summary>
+    public static readonly TextStyle OverflowBadge = new(FontRole.Mono, 8.5f);
 
     /// <summary>Tabular agent-row duration (8 DIP).</summary>
     public static readonly TextStyle RowMetaMono = new(FontRole.Mono, 8f);

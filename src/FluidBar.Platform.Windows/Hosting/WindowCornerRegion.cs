@@ -94,6 +94,35 @@ public static class WindowCornerRegion
     }
 
     /// <summary>
+    /// Asks DWM to round the window's own corners (Windows 11). This is the only shape a
+    /// DComp-composited window actually honours: <c>SetWindowRgn</c> reports success but the compositor
+    /// ignores it, so the corners of the window surface stay visible unless DWM cuts them.
+    /// </summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false (e.g. Windows 10).</param>
+    /// <returns>True when DWM will round the window corners.</returns>
+    public static bool TryEnableDwmRounding(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var round = 2; // DWMWCP_ROUND
+        var hr = NativeMethods.DwmApi.DwmSetWindowAttribute(hwnd, DwmWindowCornerPreference, ref round,
+            Marshal.SizeOf<int>());
+        if (hr < 0)
+        {
+            error = $"DwmSetWindowAttribute(DWMWA_WINDOW_CORNER_PREFERENCE) failed: 0x{hr:X8}";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Disables the DWM window-open/close transition for this window. Windows animates a new window by
     /// drawing its (system) background brush over the client area, which is the grey square that flashes
     /// before Avalonia's first frame.

@@ -28,7 +28,7 @@ public sealed class SettingsWindowChromeTests
             window.Show();
             try
             {
-                var shell = Assert.IsType<Border>(window.Content);
+                var shell = FindShell(window);
                 return (
                     window.WindowDecorations,
                     window.Background is ISolidColorBrush { Color.A: 0 },
@@ -159,9 +159,21 @@ public sealed class SettingsWindowChromeTests
         Assert.NotEqual(en, zh);
     }
 
+    /// <summary>The rounded shell inside the window root (the root is a Grid holding the full-bleed layer).</summary>
+    private static Border FindShell(SettingsWindow window)
+    {
+        if (window.Content is Border direct)
+        {
+            return direct;
+        }
+
+        var root = Assert.IsType<Grid>(window.Content);
+        return root.Children.OfType<Border>().First(border => border.Child is Grid);
+    }
+
     private static Grid FindTitleBar(SettingsWindow window)
     {
-        var shell = Assert.IsType<Border>(window.Content);
+        var shell = FindShell(window);
         var layout = Assert.IsType<Grid>(shell.Child);
         var titleBar = Assert.IsType<Border>(layout.Children[0]);
         return Assert.IsType<Grid>(titleBar.Child);

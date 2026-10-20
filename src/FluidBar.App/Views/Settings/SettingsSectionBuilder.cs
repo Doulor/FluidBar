@@ -1,5 +1,6 @@
 using System.Reflection;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -54,6 +55,8 @@ public sealed record SettingsWindowContext
     /// <summary>Launches the verified installer and exits (About "restart and install").</summary>
     public Action? RestartToInstall { get; init; }
 
+    /// <summary>Pins a control to the bottom of the pane (sticky footer, outside the scrolling list).</summary>
+    public Action<Control>? SetFooter { get; init; }
 }
 
 /// <summary>Builds the seven settings sections from the strongly typed settings model.</summary>
@@ -334,6 +337,16 @@ public static class SettingsSectionBuilder
         var acrylic = settings.Material == IslandMaterial.Acrylic && !settings.Advanced.SafeMode;
         var preview = new IslandPreview();
 
+        var swatchList = new List<(AccentSwatch Swatch, string Hex)>();
+        var swatchNote = new TextBlock
+        {
+            FontSize = SettingsMetrics.ApMetaSize,
+            LineHeight = SettingsMetrics.ApMetaSize * 1.5,
+            Foreground = palette.TertiaryBrush,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 6, 0, 0),
+            IsVisible = false,
+        };
         var swatches = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -345,14 +358,51 @@ public static class SettingsSectionBuilder
             var swatch = new AccentSwatch
             {
                 SwatchColor = color,
-                Ring = palette.SecondaryBrush,
-                // The ring marks the accent actually in use: with mode "artwork" it is the fallback
-                // colour the island uses whenever artwork sampling has no answer, so it is always shown.
-                IsActive = string.Equals(settings.AccentFallback, hex, StringComparison.OrdinalIgnoreCase),
+                Ring = palette.ForegroundBrush,
+                HoverRing = palette.SecondaryBrush,
             };
-            swatch.Clicked += () => ctx.Settings.Update(s => s with { AccentFallback = hex, AccentMode = "custom" });
+            swatch.Clicked += () =>
+            {
+                ctx.Settings.Update(s => s with { AccentFallback = hex, AccentMode = "custom" });
+                SyncSwatches();
+            };
+            swatchList.Add((swatch, hex));
             swatches.Children.Add(swatch);
         }
+
+        var swatchColumn = new StackPanel { Spacing = 0 };
+        swatchColumn.Children.Add(swatches);
+        swatchColumn.Children.Add(swatchNote);
+
+        // The swatch state has to follow the settings live: the appearance page is not rebuilt on every
+        // change (only a theme switch rebuilds it), so the row updates itself.
+        void SyncSwatches()
+        {
+            var current = ctx.Settings.Current;
+            var artwork = string.Equals(current.AccentMode, "artwork", StringComparison.OrdinalIgnoreCase);
+            foreach (var (swatch, hex) in swatchList)
+            {
+                // The store normalises the hex (e.g. "#ff4cc9f0"), so compare parsed colours, not text.
+                var active = !artwork
+                    && Accents.ParseOrDefault(current.AccentFallback, Accents.Fallback)
+                        == Color.Parse(hex);
+                swatch.IsActive = active;
+                swatch.InvalidateVisual();
+                var name = hex;
+                AutomationProperties.SetName(swatch,
+                    active
+                        ? $"{name} {ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Selected)}"
+                        : name);
+                AutomationProperties.SetHelpText(swatch, hex is null ? null : "Accent " + hex);
+            }
+
+            // With artwork sampling on, no swatch is the current accent: say so instead of letting a
+            // stale ring imply a selection.
+            swatchNote.Text = ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkSwatchHint);
+            swatchNote.IsVisible = artwork;
+        }
+
+        SyncSwatches();
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Title),
             ctx.Localizer.Get(LocKeys.Settings.Appearance.Subtitle),
@@ -392,7 +442,7 @@ public static class SettingsSectionBuilder
                     settings.Palette,
                     value => ctx.Settings.Update(s => s with { Palette = value })),
                 SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Desc), swatches, palette),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Desc), swatchColumn, palette),
                 // Artwork accent moved here as well; its hint states that the preview always paints the
                 // fallback colour (it is static, so there is no artwork to sample).
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
@@ -478,6 +528,7 @@ public static class SettingsSectionBuilder
             Child = new StackPanel { Children = { previewHead, canvas } },
         });
         panel.Children.Add(previewBlock);
+
         panel.Children.Add(SettingsControls.FooterNote(ctx.Localizer.Get(LocKeys.Settings.Appearance.LiveHint), palette));
         return panel;
     }
@@ -709,6 +760,10 @@ public static class SettingsSectionBuilder
             panel.Children.Add(list);
             panel.Children.Add(toolbar);
             panel.Children.Add(footer);
+            // Agent support is no longer a top-level page: it lives at the bottom of the plugins page.
+            panel.Children.Add(SettingsWidgets.Caption(
+                ctx.Localizer.Get(LocKeys.Settings.Support.Title), palette));
+            panel.Children.Add(AgentSupportSectionView.Build(AgentSupportCatalog.CreateDefault(), ctx));
             _ = LoadAsync();
         }
 

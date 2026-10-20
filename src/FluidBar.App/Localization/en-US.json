@@ -72,6 +72,8 @@
     "Island.Accessibility.UnsupportedQueue": "No media queue service is available in this build.",
     "Island.Accessibility.Unpin": "Unpin",
     "Island.Accessibility.PageNavigation": "Page navigation",
+    "Island.Accessibility.MoreActivities": "{0} more activities",
+    "Island.Accessibility.MoreActivitiesHelp": "Press Enter to open the page of the oldest background activity.",
 
     "Rail.Home": "Home",
     "Rail.Media": "Media",
@@ -350,6 +352,8 @@
     "Settings.Appearance.Material.Desc": "Acrylic samples the desktop behind it live and may cost a little extra GPU.",
     "Settings.Appearance.Accent.Desc": "Drives switches, progress and selection; the media page always samples the artwork.",
     "Settings.Appearance.Accent.ArtworkHint": "Samples the artwork while playing; this static preview always shows the fallback colour.",
+    "Settings.Appearance.Accent.Selected": "Selected",
+    "Settings.Appearance.Accent.ArtworkSwatchHint": "Artwork accent is on: the accent comes from the current cover, so no swatch is selected. These are fallback colours.",
     "Settings.Appearance.PreviewHint": "Changes update the island live.",
     "Settings.Appearance.PanelRadius": "Panel corner radius",
     "Settings.Appearance.PanelRadiusHint": "Compact pills keep a stadium radius at all times.",

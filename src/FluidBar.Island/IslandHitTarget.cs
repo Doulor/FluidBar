@@ -12,6 +12,9 @@ public enum IslandHitKind
     /// <summary>Compact pill (the whole pill expands; <see cref="IslandHitTarget.Control"/> refines it).</summary>
     Compact,
 
+    /// <summary>Compact "+N" overflow chip (opens the page of the oldest background activity).</summary>
+    OverflowBadge,
+
     /// <summary>Expanded page content (not a control).</summary>
     Page,
 
@@ -111,7 +114,7 @@ public readonly record struct IslandHitTarget(
     /// <summary>Whether the hit is inside the shell (shell/page/compact/collapse/settings/title).</summary>
     public bool IsShell => Kind is IslandHitKind.Shell or IslandHitKind.Compact or IslandHitKind.Page
         or IslandHitKind.PageControl or IslandHitKind.Title or IslandHitKind.Collapse
-        or IslandHitKind.Settings;
+        or IslandHitKind.Settings or IslandHitKind.OverflowBadge;
 
     /// <summary>Whether the hit is on the detached strip (mini-island or dot).</summary>
     public bool IsDetached => Kind is IslandHitKind.RailSlot or IslandHitKind.DotLeft or IslandHitKind.DotRight;

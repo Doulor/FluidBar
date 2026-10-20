@@ -27,7 +27,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         (SettingsWindowSection.Appearance, LocKeys.Settings.Appearance.Title, SettingsIconKind.Palette),
         (SettingsWindowSection.Island, LocKeys.Settings.Island.Title, SettingsIconKind.Island),
         (SettingsWindowSection.Plugins, LocKeys.Settings.Plugins.Title, SettingsIconKind.Puzzle),
-        (SettingsWindowSection.AgentSupport, LocKeys.Settings.Support.Title, SettingsIconKind.Chat),
+        // Agent support moved into the plugins page: the navigation is seven items again (prototype).
         (SettingsWindowSection.Marketplace, LocKeys.Settings.Marketplace.Title, SettingsIconKind.Storefront),
         (SettingsWindowSection.Advanced, LocKeys.Settings.Advanced.Title, SettingsIconKind.Sliders),
         (SettingsWindowSection.About, LocKeys.Settings.About.NavLabel, SettingsIconKind.Info),
@@ -55,7 +55,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private SettingsWindowSection _section;
     private IslandPreview? _preview;
     private bool _closed;
-    private (int Width, int Height, int Radius)? _cornerRegion;
+    private readonly WindowRegionTracker _regionTracker = new();
     private IReadOnlyList<string> _firstFrameSteps = Array.Empty<string>();
     private bool _firstFramePreparing;
     private string? _status;
@@ -182,10 +182,22 @@ public sealed class SettingsWindow : Window, ILocalizable
             _ = WindowCornerRegion.TryDisableTransitions(openedHandle, out _);
         }
 
-        // Rounded corners need a transparent window; when the platform refuses it, fall back to a
-        // square opaque window instead of leaving black corner triangles.
-        if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        // The compositor of this stack ignores SetWindowRgn (it reports success, the surface still shows
+        // the square corners), so the only shape it honours is DWM's own window rounding. Ask for it and,
+        // when granted, let the window be the rounded shape: the shell fills it edge to edge (no painted
+        // curve fighting DWM's) and the surface colour matches the panel, so no grey wedge can appear.
+        var dwmRounding = TryGetPlatformHandle()?.Handle is { } roundingHandle && roundingHandle != IntPtr.Zero
+            && WindowCornerRegion.TryEnableDwmRounding(roundingHandle, out _);
+        DwmRoundingActive = dwmRounding;
+        if (dwmRounding)
         {
+            // Fill the area DWM leaves between its own corner cut and the painted 22 DIP radius with the
+            // panel colour, so no grey platform surface can show through the wedge.
+            Background = new SolidColorBrush(_palette.Window);
+        }
+        else if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
+        {
+            // Fallback: square opaque window instead of black corner triangles.
             _shell.CornerRadius = new CornerRadius(0);
             Background = new SolidColorBrush(_palette.Window);
         }
@@ -194,9 +206,11 @@ public sealed class SettingsWindow : Window, ILocalizable
         // window surface shows square wedges outside the rounded content as soon as alpha is
         // unavailable. Applied once per size/DPI change, never per frame. The first application happens
         // synchronously here so it lands on the earliest possible frame the platform lets us touch.
-        LayoutUpdated += (_, _) => ApplyCornerRegion();
-        ApplyCornerRegion();
-        Avalonia.Threading.Dispatcher.UIThread.Post(ApplyCornerRegion, Avalonia.Threading.DispatcherPriority.Loaded);
+        LayoutUpdated += (_, _) => ApplyCornerRegion("layout");
+        SizeChanged += (_, _) => ApplyCornerRegion("size-changed");
+        ApplyCornerRegion("opened");
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
+            Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
     /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
@@ -204,6 +218,15 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     /// <summary>True once the window was prepared before its first composited frame.</summary>
     public bool FirstFramePrepared { get; private set; }
+
+    /// <summary>True when the window corners are rendered by DWM (Windows 11).</summary>
+    public bool DwmRoundingActive { get; private set; }
+
+    /// <summary>Diagnostics: every window-region application (size, radius, <c>SetWindowRgn</c> result).</summary>
+    public IReadOnlyList<string> RegionTrace => _regionTracker.Trace;
+
+    /// <summary>The geometry the window region currently clips to (physical pixels), or null.</summary>
+    public (int Width, int Height, int Radius)? AppliedRegion => _regionTracker.Applied;
 
     /// <summary>
     /// Native message hook that prepares the window for its first frame. <c>WM_SHOWWINDOW</c> is raised
@@ -214,6 +237,8 @@ public sealed class SettingsWindow : Window, ILocalizable
     private IntPtr OnNativeMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const uint WmEraseBackground = 0x0014;
+        const uint WmSize = 0x0005;
+        const uint WmWindowPosChanged = 0x0047;
         const uint WmShowWindow = 0x0018;
         const uint WmDpiChanged = 0x02E0;
         if (msg == WmEraseBackground)
@@ -221,6 +246,13 @@ public sealed class SettingsWindow : Window, ILocalizable
             // Never let the system fill the surface with the class brush: Avalonia paints the panel.
             handled = true;
             return new IntPtr(1);
+        }
+
+        if ((msg == WmSize || msg == WmWindowPosChanged) && !_firstFramePreparing && hwnd != IntPtr.Zero)
+        {
+            // Avalonia applies its own size after creation and again on DPI change; the region must
+            // follow every resize or it keeps clipping the old rectangle.
+            ApplyCornerRegion("native-" + msg.ToString("X4"));
         }
 
         if ((msg == WmShowWindow || msg == WmDpiChanged) && !_firstFramePreparing && hwnd != IntPtr.Zero)
@@ -239,7 +271,7 @@ public sealed class SettingsWindow : Window, ILocalizable
                     System.Diagnostics.Debug.WriteLine($"settings first-frame: {preparation.Error}");
                 }
 
-                _cornerRegion = null;
+                ApplyCornerRegion("first-frame");
             }
             finally
             {
@@ -251,7 +283,8 @@ public sealed class SettingsWindow : Window, ILocalizable
     }
 
     /// <summary>Clips the native window to the rounded content shape (no-op until the handle exists).</summary>
-    private void ApplyCornerRegion()
+    /// <param name="reason">Why the region is being re-applied (kept in <see cref="RegionTrace"/>).</param>
+    private void ApplyCornerRegion(string reason)
     {
         if (_closed || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
         {
@@ -261,12 +294,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         if (WindowState == WindowState.Maximized)
         {
             // A maximized window is its own rectangle; rounding it would cut the screen edge.
-            if (_cornerRegion is not null)
-            {
-                _ = WindowCornerRegion.Clear(handle, out _);
-                _cornerRegion = null;
-            }
-
+            _regionTracker.Clear(handle);
             return;
         }
 
@@ -274,21 +302,10 @@ public sealed class SettingsWindow : Window, ILocalizable
         var width = (int)Math.Ceiling(Bounds.Width * scaling);
         var height = (int)Math.Ceiling(Bounds.Height * scaling);
         var radius = WindowCornerRegion.RadiusPx(SettingsMetrics.WindowRadius, scaling);
-        var signature = (width, height, radius);
-        if (_cornerRegion == signature)
+        var applied = _regionTracker.TryUpdate(handle, width, height, radius, out var error);
+        if (!applied)
         {
-            return;
-        }
-
-        if (WindowCornerRegion.TryApply(handle, width, height, radius, out var error))
-        {
-            _cornerRegion = signature;
-        }
-        else
-        {
-            // Never fatal: without the region the window just keeps square corners.
-            _cornerRegion = null;
-            System.Diagnostics.Debug.WriteLine($"settings corner region skipped: {error}");
+            System.Diagnostics.Debug.WriteLine($"settings corner region skipped ({reason}): {error}");
         }
     }
 
@@ -552,6 +569,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         _content.Padding = new Thickness(SettingsMetrics.PanePadX, SettingsMetrics.PanePadY,
             SettingsMetrics.PanePadX, SettingsMetrics.PanePadY);
         ApplyPaneScrollBarStyle();
+
         Grid.SetColumn(_content, 1);
         return _content;
     }

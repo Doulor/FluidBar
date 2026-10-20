@@ -309,6 +309,16 @@ public static class LayoutTokens
     /// <summary>Second ghost opacity (0.35).</summary>
     public const double GhostOpacity2 = 0.35;
 
+    // Overflow (+N) badge tokens (spec 2.5: the +N chip on the primary pill).
+    /// <summary>Width reserved at the right edge of the compact pill when the +N badge is visible.</summary>
+    public const double OverflowBadgeReserve = 26;
+
+    /// <summary>Painted width of the +N chip (fits inside <see cref="OverflowBadgeReserve"/>).</summary>
+    public const double OverflowBadgeWidth = 22;
+
+    /// <summary>Painted height of the +N chip.</summary>
+    public const double OverflowBadgeHeight = 16;
+
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);

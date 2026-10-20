@@ -833,6 +833,42 @@ public sealed class SkiaIslandController : IDisposable
         _pager.SelectPage((int)page);
     }
 
+    /// <summary>
+    /// Activates the compact "+N" overflow chip: expands the island and opens the page of the oldest
+    /// activity that did not fit in the visible stack (UI Automation Invoke shares this path).
+    /// </summary>
+    /// <returns>Whether an overflow badge exists to activate.</returns>
+    public bool ActivateOverflowBadge()
+    {
+        if (_schedulerState.BadgeCount <= 0)
+        {
+            return false;
+        }
+
+        var page = OverflowPage();
+        if (State.Kind != IslandStateKind.Expanded)
+        {
+            ApplyInput(IslandInput.PrimaryClick());
+            ApplyInput(IslandInput.PageRequested(page));
+        }
+
+        HandlePageRequest(page);
+        InvalidateFull();
+        StateChanged?.Invoke();
+        return true;
+    }
+
+    /// <summary>Page of the oldest background activity (the +N chip's navigation target).</summary>
+    private CoreIslandPage OverflowPage()
+    {
+        foreach (var record in _schedulerState.Background)
+        {
+            return record.Payload.PreferredPage ?? record.Kind.ToPage();
+        }
+
+        return _schedulerState.PrimaryPage;
+    }
+
     /// <summary>Moves one page left/right (keyboard arrows).</summary>
     /// <param name="delta">Signed page delta.</param>
     public void HandlePageMove(int delta) => _pager.MoveBy(delta);
@@ -1102,6 +1138,10 @@ public sealed class SkiaIslandController : IDisposable
 
         switch (hit.Kind)
         {
+            case IslandHitKind.OverflowBadge:
+                // The +N chip opens the page of the oldest background activity instead of the primary's.
+                return ActivateOverflowBadge();
+
             case IslandHitKind.Compact:
                 if (hit.Control == IslandPageControl.PlayPause)
                 {
@@ -1768,6 +1808,17 @@ public sealed class SkiaIslandController : IDisposable
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
             : 0;
+
+        // With more activities than the visible stack can hold, the compact pill reserves a column for
+        // the "+N" chip. Keeping the reservation here (not only in the renderer) means the shell, its
+        // hit region and the chip always agree on the same width.
+        if (viewModel.OverflowCount > 0)
+        {
+            compactSize = new VisualSize(
+                compactSize.Width + LayoutTokens.OverflowBadgeReserve,
+                compactSize.Height);
+        }
+
         var form = State.Kind switch
         {
             IslandStateKind.Compact => ShellForm.Compact,
@@ -2361,6 +2412,7 @@ public sealed class SkiaIslandController : IDisposable
             PointerX = _pointerInside ? _pointerX : double.NaN,
             PointerY = _pointerInside ? _pointerY : double.NaN,
             GhostCount = expanded ? 0 : _motion.Target.GhostCount,
+            OverflowCount = expanded ? 0 : _schedulerState.BadgeCount,
             FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(_pager.PagePosition, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,

@@ -164,6 +164,10 @@ public static partial class LocKeys
             public const string Unpin = "Island.Accessibility.Unpin";
             /// <summary><c>Island.Accessibility.PageNavigation</c></summary>
             public const string PageNavigation = "Island.Accessibility.PageNavigation";
+            /// <summary><c>Island.Accessibility.MoreActivities</c></summary>
+            public const string MoreActivities = "Island.Accessibility.MoreActivities";
+            /// <summary><c>Island.Accessibility.MoreActivitiesHelp</c></summary>
+            public const string MoreActivitiesHelp = "Island.Accessibility.MoreActivitiesHelp";
         }
     }
     /// <summary>Keys in the 'Rail' area.</summary>
@@ -811,6 +815,10 @@ public static partial class LocKeys
                 public const string Desc = "Settings.Appearance.Accent.Desc";
                 /// <summary><c>Settings.Appearance.Accent.ArtworkHint</c></summary>
                 public const string ArtworkHint = "Settings.Appearance.Accent.ArtworkHint";
+        /// <summary><c>Settings.Appearance.Accent.ArtworkSwatchHint</c></summary>
+        public const string ArtworkSwatchHint = "Settings.Appearance.Accent.ArtworkSwatchHint";
+        /// <summary><c>Settings.Appearance.Accent.Selected</c></summary>
+        public const string Selected = "Settings.Appearance.Accent.Selected";
             }
             /// <summary>Keys in the 'ReducedMotion' area.</summary>
             public static class ReducedMotion

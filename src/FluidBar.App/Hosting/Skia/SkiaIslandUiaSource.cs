@@ -18,6 +18,9 @@ public static class SkiaIslandUiaElementIds
     /// <summary>Compact activity summary (informational group).</summary>
     public const string Compact = "island.compact";
 
+    /// <summary>Compact "+N" overflow chip (button; opens the oldest background activity's page).</summary>
+    public const string Overflow = "island.compact.overflow";
+
     /// <summary>Expanded page tab list.</summary>
     public const string Pages = "island.pages";
 
@@ -284,8 +287,21 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 state: new UiaElementState { IsOffscreen = false }),
         };
 
+        if (state.OverflowCount > 0)
+        {
+            children.Add(Node(
+                SkiaIslandUiaElementIds.Overflow,
+                UiaElementRole.Button,
+                F(LocKeys.Island.Accessibility.MoreActivities, "{0} more activities", state.OverflowCount),
+                ToRect(IslandMetrics.OverflowBadgeRect(state)),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true },
+                help: L(LocKeys.Island.Accessibility.MoreActivitiesHelp,
+                    "Press Enter to open the page of the oldest background activity.")));
+        }
+
         // The compact media pill has no play/pause button (removed on request), so the tree exposes the
-        // pill as one expand group and nothing else: no stale control rectangle in the compact bounds.
+        // pill as one expand group plus the overflow chip.
         return children;
     }
 
@@ -942,6 +958,12 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         if (string.Equals(id, SkiaIslandUiaElementIds.Settings, StringComparison.Ordinal))
         {
             _controller.RequestSettings();
+            return;
+        }
+
+        if (string.Equals(id, SkiaIslandUiaElementIds.Overflow, StringComparison.Ordinal))
+        {
+            _controller.ActivateOverflowBadge();
             return;
         }
 

@@ -254,7 +254,7 @@ public sealed class FontScaleTests
             compared++;
         }
 
-        Assert.Equal(31, compared);
+        Assert.Equal(32, compared);
     }
 
     [Theory]

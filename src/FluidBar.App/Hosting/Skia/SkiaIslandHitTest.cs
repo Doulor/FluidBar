@@ -61,6 +61,13 @@ public static class SkiaIslandHitTest
         var shell = IslandMetrics.ShellRect(state);
         var content = IslandMetrics.ContentRect(shell);
 
+        if (state.Form != ShellForm.Expanded
+            && IslandMetrics.OverflowBadgeRect(state) is { Width: > 0 } badge
+            && badge.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.OverflowBadge, state.PageIndex);
+        }
+
         if (state.Form == ShellForm.Expanded)
         {
             if (PageLayout.CollapseRect(content).Contains(x, y))

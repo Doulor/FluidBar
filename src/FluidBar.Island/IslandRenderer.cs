@@ -290,6 +290,10 @@ public sealed class IslandRenderer : IDisposable
                     : new IslandHitTarget(IslandHitKind.Shell, page);
             }
         }
+        else if (IslandMetrics.OverflowBadgeRect(state) is { Width: > 0 } badge && badge.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.OverflowBadge, state.PageIndex);
+        }
         else if (ContainsShell(state, shell, x, y))
         {
             // The compact media pill has no play/pause button (removed on request): the whole pill is a
@@ -349,14 +353,20 @@ public sealed class IslandRenderer : IDisposable
 
         var path = _paths.Get(state.ShellWidth, state.ShellHeight, state.ShellRadii);
 
+        // Multi-island stacking: with the "stacked" strategy the scheduler keeps up to two preempted
+        // activities alive as ghost layers; they are painted as smaller copies of the compact pill above
+        // the primary shell (LayoutTokens.Ghost* tokens). The "latest only" strategy reports
+        // GhostCount = 0, so the renderer draws nothing extra.
+        DrawGhostStack(canvas, state, shell, opacity);
+
         canvas.Save();
         canvas.Translate(shell.Left, shell.Top);
 
         DrawShellBody(canvas, state, path, opacity);
 
         // Prototype2 layers the compact surface and the expanded panel as siblings, each with its own
-        // CSS transition; both are painted while a transition is in flight. There is no ghost stack:
-        // prototype2's stacking strategy has no visual counterpart, so nothing behind the shell is drawn.
+        // CSS transition; both are painted while a transition is in flight. The ghost stack is painted
+        // above, before the shell body, so the primary pill always sits on top of it.
         canvas.Save();
         canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
         var compactOpacity = (float)Math.Clamp(opacity * state.ResolvedCompactLayerOpacity, 0, 1);
@@ -373,6 +383,14 @@ public sealed class IslandRenderer : IDisposable
         }
 
         canvas.Restore();
+
+        // The +N chip overlaps the shell's rounded top-right corner, so it is painted after the clip
+        // (still in shell-local code space) instead of being cut by the squircle.
+        if (state.Form != ShellForm.Expanded && state.OverflowCount > 0)
+        {
+            DrawOverflowBadge(canvas, state, opacity);
+        }
+
         canvas.Restore();
 
         if (Math.Abs(press - 1) > 0.0001f)
@@ -407,6 +425,88 @@ public sealed class IslandRenderer : IDisposable
         _stroke.Shader = null;
         _stroke.Color = _theme.Info.WithAlpha((byte)Math.Clamp(230 * state.Opacity, 0, 255));
         canvas.DrawRoundRect(rect, 6f, 6f, _stroke);
+    }
+
+    /// <summary>
+    /// Paints the ghost layers of the compact stack (behind/above the primary pill). Each layer is the
+    /// shell silhouette scaled down, offset by the Core tokens and faded by its layer opacity.
+    /// </summary>
+    private void DrawGhostStack(SKCanvas canvas, in IslandRenderState state, SKRect shell, float opacity)
+    {
+        if (state.GhostCount <= 0 || state.Form == ShellForm.Expanded)
+        {
+            return;
+        }
+
+        var compactOpacity = (float)Math.Clamp(opacity * state.ResolvedCompactLayerOpacity, 0, 1);
+        if (compactOpacity <= 0.01f)
+        {
+            return;
+        }
+
+        var materialGlass = _theme.Material == IslandMaterial.SimulatedGlass;
+        var fillOpacity = materialGlass
+            ? 0.72f
+            : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+        var offsets = new[] { LayoutTokens.GhostOffsetY1, LayoutTokens.GhostOffsetY2 };
+        var scales = new[] { LayoutTokens.GhostScale1, LayoutTokens.GhostScale2 };
+        var opacities = new[] { LayoutTokens.GhostOpacity1, LayoutTokens.GhostOpacity2 };
+        var count = Math.Min(state.GhostCount, LayoutTokens.MaxGhosts);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        for (var i = 0; i < count; i++)
+        {
+            var scale = (float)scales[i];
+            var ghostWidth = shell.Width * scale;
+            var ghostHeight = shell.Height * scale;
+            var ghost = new SKRect(
+                shell.Left + (shell.Width - ghostWidth) / 2,
+                shell.Top + (float)offsets[i],
+                shell.Left + (shell.Width + ghostWidth) / 2,
+                shell.Top + (float)offsets[i] + ghostHeight);
+            _fill.Color = Alpha(_theme.Background,
+                fillOpacity * (float)opacities[i] * compactOpacity);
+            canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _fill);
+            // Key line: without it the ghost silhouette disappears into the dark shell/desktop
+            // (prototype README: "softened fills and key lines"). Legacy Avalonia shell used the same
+            // LineStrong hairline for its ghost pills.
+            _stroke.Style = SKPaintStyle.Stroke;
+            _stroke.StrokeWidth = (float)LayoutTokens.HairlineWidth;
+            _stroke.Shader = null;
+            _stroke.Color = Alpha(_theme.LineStrong, (float)opacities[i] * compactOpacity);
+            canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _stroke);
+        }
+    }
+
+    /// <summary>Paints the compact "+N" overflow chip (small rounded pill, 1 DIP key line, tabular digits).</summary>
+    private void DrawOverflowBadge(SKCanvas canvas, in IslandRenderState state, float opacity)
+    {
+        var absolute = IslandMetrics.OverflowBadgeRect(state);
+        if (absolute.Width <= 0 || absolute.Height <= 0)
+        {
+            return;
+        }
+
+        var shell = IslandMetrics.ShellRect(state);
+        var rect = new SKRect(
+            absolute.Left - shell.Left,
+            absolute.Top - shell.Top,
+            absolute.Right - shell.Left,
+            absolute.Bottom - shell.Top);
+
+        var alpha = Math.Clamp(opacity, 0, 1);
+        var radius = rect.Height / 2;
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.Color = Alpha(_theme.BackgroundRaised, 0.92f * alpha);
+        canvas.DrawRoundRect(rect, radius, radius, _fill);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = 1f;
+        _stroke.Shader = null;
+        _stroke.Color = Alpha(_theme.LineStrong, alpha);
+        canvas.DrawRoundRect(rect, radius, radius, _stroke);
+        _text.Draw(canvas, "+" + state.OverflowCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            IslandType.OverflowBadge, rect, _theme.ForegroundSecondary, TextAlign.Center, alpha);
     }
 
     private void DrawShellBody(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity)

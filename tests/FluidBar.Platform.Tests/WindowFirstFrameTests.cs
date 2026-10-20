@@ -106,6 +106,41 @@ public sealed class WindowFirstFrameTests
         }
     }
 
+    [Fact]
+    public async Task RegionTracker_RebuildsWhenTheWindowIsResized()
+    {
+        await using var host = new PlatformMessageHost(new CapturingLogger(), new PlatformCounters());
+        await host.StartAsync();
+        var window = await host.CreateWindowAsync("region-resize-test", PlatformWindowKind.HiddenTopLevel,
+            static (_, _, _, _) => null);
+        try
+        {
+            var tracker = new WindowRegionTracker();
+            Assert.True(tracker.TryUpdate(window.Handle, 400, 300, 16, out var firstError), firstError);
+            Assert.Equal((400, 300, 16), tracker.Applied);
+            var before = NativeMethods.User32.GetWindowRgnBox(window.Handle, out var beforeBox);
+            Assert.Equal(3, before);
+            Assert.Equal(400, beforeBox.Right);
+            Assert.Equal(300, beforeBox.Bottom);
+
+            // Resize: the region must be rebuilt for the new rectangle (the reported bug was a region
+            // applied once at the old/default size and never refreshed).
+            _ = NativeMethods.User32.SetWindowPos(window.Handle, IntPtr.Zero, 0, 0, 800, 600,
+                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            Assert.True(tracker.TryUpdate(window.Handle, 800, 600, 24, out var secondError), secondError);
+            Assert.Equal((800, 600, 24), tracker.Applied);
+            var after = NativeMethods.User32.GetWindowRgnBox(window.Handle, out var afterBox);
+            Assert.Equal(3, after);
+            Assert.Equal(800, afterBox.Right);
+            Assert.Equal(600, afterBox.Bottom);
+        }
+        finally
+        {
+            await window.DisposeAsync();
+            await host.DisposeAsync();
+        }
+    }
+
     private sealed class RecordingOps : IWindowFirstFrameOps
     {
         public List<string> Calls { get; } = [];
