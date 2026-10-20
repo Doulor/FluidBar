@@ -22,6 +22,8 @@ internal sealed partial class PageRenderer : IDisposable
 
     private IslandTheme _theme = IslandTheme.Dark;
     private float _opacity = 1;
+    private double _agentAnimationSeconds;
+    private bool _reduced;
     private FontScaleMetrics _metrics = FontScaleMetrics.One;
     private IslandPageControl _pressedControl;
     private int _pressedPage = -1;
@@ -78,6 +80,8 @@ internal sealed partial class PageRenderer : IDisposable
         _opacity = opacity;
         _text.SetScale(state.FontScale);
         _metrics = _text.Metrics;
+        _agentAnimationSeconds = state.AgentAnimationSeconds;
+        _reduced = state.ReducedMotion;
         _pressedControl = state.PressedControl;
         _pressedPage = state.PressedPage;
         _hoverControl = state.HoverControl;
@@ -309,11 +313,15 @@ internal sealed partial class PageRenderer : IDisposable
                 baseColor, accent, TextAlign.Left, _opacity);
             var nextTop = lyricBottom + 3;
             var nextBottom = nextTop + 12 + m.LineGrow(IslandType.LyricNext);
+            // The tag is measured instead of parked in a fixed 30 DIP column: at a 1.6 font scale the old
+            // column clipped it to "NE…" (prototype2 keeps it whole and spaces the text 6 DIP after it).
+            var tagLeft = lyricCard.Left + 10;
+            var tagWidth = Math.Max(0, _text.Measure(media.NextLyricLabel, IslandType.MediaEyebrow));
             _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
-                new SKRect(lyricCard.Left + 10, nextTop, lyricCard.Left + 40, nextBottom),
+                new SKRect(tagLeft, nextTop, Math.Min(lyricCard.Right - 10, tagLeft + tagWidth + 1), nextBottom),
                 _theme.ForegroundTertiary, TextAlign.Left, _opacity);
             _text.Draw(canvas, media.NextLyricLine, IslandType.LyricNext,
-                new SKRect(lyricCard.Left + 42, nextTop, lyricCard.Right - 10, nextBottom),
+                new SKRect(tagLeft + tagWidth + 6, nextTop, lyricCard.Right - 10, nextBottom),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
         else if (!string.IsNullOrWhiteSpace(media.NoLyricsText))

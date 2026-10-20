@@ -141,19 +141,79 @@ public static class PageMetricsLayout
 
     /// <summary>Media lyric card rectangle (inner padding absorbs part of the line growth).</summary>
     public static SKRect MediaLyricCard(SKRect page, in FontScaleMetrics metrics)
+        => MediaLyricCard(page, metrics, MediaSqueeze(page, metrics));
+
+    /// <summary>Media seek row rectangle.</summary>
+    public static SKRect MediaSeekRow(SKRect page, in FontScaleMetrics metrics)
+        => MediaSeekRow(page, metrics, MediaSqueeze(page, metrics));
+
+    /// <summary>
+    /// Extra vertical space the media page needs at this font scale (0 when it fits).
+    /// </summary>
+    /// <remarks>
+    /// A 1.6 font scale makes the six media text lines ~20 DIP taller than the page body, which pushed the
+    /// transport row out of the shell. The page keeps every line at its user-chosen size and reclaims the
+    /// deficit from the three flexible gaps instead (card, seek row, transport), so nothing overflows.
+    /// </remarks>
+    public static float MediaSqueeze(SKRect page, in FontScaleMetrics metrics)
     {
-        var top = MediaTopBottom(page, metrics) + 8;
+        var need = MediaNaturalOverflow(page, metrics, squeeze: 0);
+        if (need <= 0)
+        {
+            return 0;
+        }
+
+        // The gaps only absorb part of the deficit, so measure again with them already shrunk and add
+        // whatever is left: the second pass converges because every gap has a floor.
+        for (var pass = 0; pass < 4; pass++)
+        {
+            var residual = MediaNaturalOverflow(page, metrics, need);
+            if (residual <= 0.01f)
+            {
+                break;
+            }
+
+            need += residual;
+        }
+
+        return need;
+    }
+
+    /// <summary>How far the media stack runs past the page bottom at a given squeeze.</summary>
+    private static float MediaNaturalOverflow(SKRect page, in FontScaleMetrics metrics, float squeeze)
+    {
+        var seek = MediaSeekRow(page, metrics, squeeze);
+        var playBottom = seek.Bottom + MediaTransportGap(squeeze) + MediaTransportSize;
+        return playBottom - page.Bottom;
+    }
+
+    /// <summary>Fixed transport button size on the media page (30 DIP).</summary>
+    private const float MediaTransportSize = 30f;
+
+    /// <summary>Gap between the seek row and the transport row, shrunk first when the page overflows.</summary>
+    private static float MediaTransportGap(float squeeze) => Math.Max(8, 16 - (squeeze * 0.4f));
+
+    /// <summary>Gap above the lyric card, shrunk when the page overflows.</summary>
+    private static float MediaCardGap(float squeeze) => Math.Max(3, 8 - (squeeze * 0.15f));
+
+    /// <summary>Gap above the seek row, shrunk when the page overflows.</summary>
+    private static float MediaSeekGap(float squeeze) => Math.Max(4, 10 - (squeeze * 0.25f));
+
+    private static SKRect MediaLyricCard(SKRect page, in FontScaleMetrics metrics, float squeeze)
+    {
+        var top = MediaTopBottom(page, metrics) + MediaCardGap(squeeze);
         var content = 7 + 14 + 3 + 12 + 4
             + metrics.LineGrow(IslandType.Lyric) + metrics.LineGrow(IslandType.LyricNext);
         var height = Math.Max(46, content);
         return new SKRect(page.Left, top, page.Left + 400, top + height);
     }
 
-    /// <summary>Media seek row rectangle.</summary>
-    public static SKRect MediaSeekRow(SKRect page, in FontScaleMetrics metrics)
+    private static SKRect MediaSeekRow(SKRect page, in FontScaleMetrics metrics, float squeeze)
     {
-        var top = MediaLyricCard(page, metrics).Bottom + 10;
-        return new SKRect(page.Left, top, page.Left + 400, top + 22 + metrics.LineGrow(IslandType.SeekTime));
+        var top = MediaLyricCard(page, metrics, squeeze).Bottom + MediaSeekGap(squeeze);
+        // The seek row also gives up height when the page is squeezed: its labels sit well inside the row.
+        var height = Math.Max(18, 22 - (squeeze * 0.2f)) + metrics.LineGrow(IslandType.SeekTime);
+        return new SKRect(page.Left, top, page.Left + 400, top + height);
     }
 
     /// <summary>Media seek track (centred between the two time labels).</summary>
@@ -166,7 +226,11 @@ public static class PageMetricsLayout
 
     /// <summary>Vertical offset applied to the transport row (0 at the approved scale).</summary>
     public static float TransportOffset(SKRect page, in FontScaleMetrics metrics)
-        => (MediaSeekRow(page, metrics).Bottom + 16) - (page.Top + 222);
+    {
+        var squeeze = MediaSqueeze(page, metrics);
+        var seek = MediaSeekRow(page, metrics, squeeze);
+        return (seek.Bottom + MediaTransportGap(squeeze)) - (page.Top + 222);
+    }
 
     /// <summary>Media previous-track hit rectangle.</summary>
     public static SKRect MediaPrevious(SKRect page, in FontScaleMetrics metrics)

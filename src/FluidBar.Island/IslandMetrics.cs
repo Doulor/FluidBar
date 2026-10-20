@@ -261,8 +261,8 @@ public static class IslandType
     /// <summary>Media eyebrow label.</summary>
     public static readonly TextStyle MediaEyebrow = new(FontRole.UiSemiBold, 8f);
 
-    /// <summary>Media lyric line.</summary>
-    public static readonly TextStyle Lyric = new(FontRole.Ui, 11f);
+    /// <summary>Media lyric line (prototype2 `.lyric-now`: 11 DIP, weight 500, 90 % foreground).</summary>
+    public static readonly TextStyle Lyric = new(FontRole.UiMedium, 11f);
 
     /// <summary>Media next lyric.</summary>
     public static readonly TextStyle LyricNext = new(FontRole.Ui, 9f);
