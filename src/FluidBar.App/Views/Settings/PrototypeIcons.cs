@@ -16,6 +16,7 @@ internal enum SettingsIconKind
     Sliders,
     Info,
     Close,
+    Minimize,
     Check,
     Search,
     Folder,
@@ -107,6 +108,7 @@ internal static class PrototypeIcons
             [Circle(12, 12, 8.8), "M12 10.8v5.4"],
             [Circle(12, 7.9, 1)]),
         [SettingsIconKind.Close] = new(["M6 6l12 12M18 6 6 18"], []),
+        [SettingsIconKind.Minimize] = new(["M6 12.4h12"], []),
         [SettingsIconKind.Check] = new(["m4.5 12.5 5 5L19.5 7"], []),
         [SettingsIconKind.Search] = new([Circle(10.8, 10.8, 6.3), "m15.5 15.5 4.5 4.5"], []),
         [SettingsIconKind.Folder] = new(

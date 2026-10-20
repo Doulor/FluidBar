@@ -17,6 +17,7 @@ namespace FluidBar.Platform.Windows.Hosting;
 public static class WindowCornerRegion
 {
     private const int DwmWindowCornerPreference = 33;
+    private const int DwmTransitionsForceDisabled = 3;
     private const int DwmCornerDoNotRound = 1;
 
     /// <summary>Converts a DIP corner radius to the pixel radius used by <c>CreateRoundRectRgn</c>.</summary>
@@ -86,6 +87,35 @@ public static class WindowCornerRegion
         {
             NativeMethods.Gdi32.DeleteObject(region);
             error = "SetWindowRgn failed. " + Win32Error.Format(Win32Error.LastError);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Disables the DWM window-open/close transition for this window. Windows animates a new window by
+    /// drawing its (system) background brush over the client area, which is the grey square that flashes
+    /// before Avalonia's first frame.
+    /// </summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false.</param>
+    /// <returns>True when DWM accepted the attribute.</returns>
+    public static bool TryDisableTransitions(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var enabled = 1; // TRUE
+        var hr = NativeMethods.DwmApi.DwmSetWindowAttribute(hwnd, DwmTransitionsForceDisabled, ref enabled,
+            Marshal.SizeOf<int>());
+        if (hr < 0)
+        {
+            error = $"DwmSetWindowAttribute(DWMWA_TRANSITIONS_FORCEDISABLED) failed: 0x{hr:X8}";
             return false;
         }
 

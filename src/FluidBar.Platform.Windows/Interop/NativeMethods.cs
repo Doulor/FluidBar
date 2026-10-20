@@ -769,6 +769,17 @@ internal static partial class NativeMethods
         [DllImport(Lib, SetLastError = true)]
         internal static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
 
+        /// <summary>Window class background brush index (<c>GCLP_HBRBACKGROUND</c>).</summary>
+        internal const int GCLP_HBRBACKGROUND = -10;
+
+        /// <summary>Sets a window class long value (used for <c>hbrBackground</c> before the first paint).</summary>
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr SetClassLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        /// <summary>Reads a window class long value (tests assert the class background was replaced).</summary>
+        [DllImport(Lib, SetLastError = true)]
+        internal static extern IntPtr GetClassLongPtr(IntPtr hWnd, int nIndex);
+
         /// <summary>Reads the bounding box of a window's region (0 = no region set, 1 = error).</summary>
         [DllImport(Lib, SetLastError = true)]
         internal static extern int GetWindowRgnBox(IntPtr hWnd, out RECT lprc);

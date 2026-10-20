@@ -1,17 +1,19 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Settings;
 
 namespace FluidBar.Ui.Tests;
 
 /// <summary>
-/// Guards the settings window chrome: borderless rounded shell and a title bar that can actually start a
-/// move drag. The title bar used to be a background-less Grid, which is not hit-testable, so clicks on
-/// its empty area fell through to the shell and <c>BeginMoveDrag</c> never ran.
+/// Guards the settings window chrome: borderless rounded shell, a title bar that can start a move drag and
+/// the window buttons (minimize next to close, same hit box, localized tooltips).
 /// </summary>
 public sealed class SettingsWindowChromeTests
 {
@@ -58,26 +60,18 @@ public sealed class SettingsWindowChromeTests
             window.Show();
             try
             {
-                var shell = Assert.IsType<Border>(window.Content);
-                var layout = Assert.IsType<Grid>(shell.Child);
-                var titleBar = Assert.IsType<Border>(layout.Children[0]);
-                var bar = Assert.IsType<Grid>(titleBar.Child);
-
+                var bar = FindTitleBar(window);
                 // Press in the empty part of the title bar and see whether the event routes through it.
                 // Avalonia 12 has no public InputHitTest, so the tunnel route is the honest probe: a press
                 // that lands on the shell (the pre-fix behaviour) never passes the title bar grid.
                 var received = 0;
-                bar.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, _) => received++,
-                    Avalonia.Interactivity.RoutingStrategies.Tunnel);
+                bar.AddHandler(InputElement.PointerPressedEvent, (_, _) => received++,
+                    RoutingStrategies.Tunnel);
                 var point = new Point(window.Bounds.Width / 2, 24);
-                window.MouseDown(point, Avalonia.Input.MouseButton.Left, Avalonia.Input.RawInputModifiers.None);
-                window.MouseUp(point, Avalonia.Input.MouseButton.Left, Avalonia.Input.RawInputModifiers.None);
+                window.MouseDown(point, MouseButton.Left, RawInputModifiers.None);
+                window.MouseUp(point, MouseButton.Left, RawInputModifiers.None);
 
-                return (
-                    titleBar.Background is not null,
-                    bar.Background is not null,
-                    received > 0,
-                    received.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                return (bar.Background is not null, received > 0, received);
             }
             finally
             {
@@ -85,8 +79,91 @@ public sealed class SettingsWindowChromeTests
             }
         });
 
-        Assert.True(result.Item1, "the title bar border must be hit-testable");
-        Assert.True(result.Item2, "the title bar grid must be hit-testable (drag target)");
-        Assert.True(result.Item3, $"a click in the empty title bar must route through the drag target (presses seen: {result.Item4})");
+        Assert.True(result.Item1, "the title bar grid must be hit-testable (drag target)");
+        Assert.True(result.Item2, $"a click in the empty title bar must route through the drag target (presses seen: {result.Item3})");
+    }
+
+    [Theory]
+    [InlineData("en-US", "Minimize")]
+    [InlineData("zh-Hans", "最小化")]
+    public async Task TitleBar_HasLocalizedMinimizeButton_ThatMinimizesTheWindow(string culture, string expectedTip)
+    {
+        var result = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer(culture);
+            var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
+            var window = new SettingsWindow(controller, localizer, SettingsWindowSection.General);
+            window.Show();
+            try
+            {
+                var bar = FindTitleBar(window);
+                var tipped = bar.Children.OfType<Border>()
+                    .Where(border => ToolTip.GetTip(border) is string)
+                    .ToArray();
+                Assert.Equal(2, tipped.Length);
+                var minimize = tipped.Single(border =>
+                    string.Equals(ToolTip.GetTip(border) as string, expectedTip, StringComparison.Ordinal));
+                var close = tipped.Single(border => !ReferenceEquals(border, minimize));
+                var tip = ToolTip.GetTip(minimize) as string;
+                var closeTip = ToolTip.GetTip(close) as string;
+                // Same hit box as the close button (32x32 DIP from the prototype).
+                Assert.Equal(32, minimize.Width);
+                Assert.Equal(32, minimize.Height);
+                Assert.Equal(minimize.Width, close.Width);
+                Assert.Equal(minimize.Height, close.Height);
+
+                var before = window.WindowState;
+                minimize.RaiseEvent(new PointerPressedEventArgs(
+                    minimize,
+                    new Pointer(0, PointerType.Mouse, true),
+                    window,
+                    default,
+                    0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None));
+                var after = window.WindowState;
+                return (tip, closeTip, before, after);
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.Equal(expectedTip, result.tip);
+        Assert.False(string.IsNullOrWhiteSpace(result.closeTip));
+        Assert.Equal(WindowState.Normal, result.before);
+        Assert.Equal(WindowState.Minimized, result.after);
+    }
+
+    [Fact]
+    public async Task MinimizeAndClose_AreLocalizedInBothCatalogs()
+    {
+        var (en, zh) = await AvaloniaTest.Run(() =>
+        {
+            foreach (var culture in new[] { "en-US", "zh-Hans" })
+            {
+                var localizer = TestFixtures.CreateLocalizer(culture);
+                foreach (var key in new[] { LocKeys.Common.Minimize, LocKeys.Common.Close })
+                {
+                    var value = localizer.Get(key);
+                    Assert.False(string.IsNullOrWhiteSpace(value), $"{culture}: {key} must be localized");
+                    Assert.DoesNotContain(key, value, StringComparison.Ordinal);
+                }
+            }
+
+            return (TestFixtures.CreateLocalizer("en-US").Get(LocKeys.Common.Minimize),
+                TestFixtures.CreateLocalizer("zh-Hans").Get(LocKeys.Common.Minimize));
+        });
+
+        Assert.NotEqual(en, zh);
+    }
+
+    private static Grid FindTitleBar(SettingsWindow window)
+    {
+        var shell = Assert.IsType<Border>(window.Content);
+        var layout = Assert.IsType<Grid>(shell.Child);
+        var titleBar = Assert.IsType<Border>(layout.Children[0]);
+        return Assert.IsType<Grid>(titleBar.Child);
     }
 }

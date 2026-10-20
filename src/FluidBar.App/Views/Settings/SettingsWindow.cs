@@ -56,6 +56,8 @@ public sealed class SettingsWindow : Window, ILocalizable
     private IslandPreview? _preview;
     private bool _closed;
     private (int Width, int Height, int Radius)? _cornerRegion;
+    private IReadOnlyList<string> _firstFrameSteps = Array.Empty<string>();
+    private bool _firstFramePreparing;
     private string? _status;
     private SettingsPalette _palette;
 
@@ -97,6 +99,15 @@ public sealed class SettingsWindow : Window, ILocalizable
         Title = localizer.Get(LocKeys.Settings.Title);
         Background = Brushes.Transparent;
         TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+        // Until the first frame is painted the platform fills the window with this fallback; Avalonia's
+        // default is a light system colour, which is exactly the grey plate users see before the panel.
+        TransparencyBackgroundFallback = new SolidColorBrush(_palette.Window);
+
+
+        // The platform composites the window before Avalonia's first frame: this hook replaces the grey
+        // default window-class background with the panel colour and clips the rounded region, both while
+        // the window is still hidden inside ShowWindow (WM_SHOWWINDOW), i.e. before the first frame.
+        Avalonia.Controls.Win32Properties.AddWndProcHookCallback(this, OnNativeMessage);
 
         _shell = new Border
         {
@@ -164,6 +175,13 @@ public sealed class SettingsWindow : Window, ILocalizable
     {
         base.OnOpened(e);
 
+        // Windows animates a new window by painting its system background brush first, which is the grey
+        // square users see before the rounded panel appears. The animation is pure decoration here.
+        if (TryGetPlatformHandle()?.Handle is { } openedHandle && openedHandle != IntPtr.Zero)
+        {
+            _ = WindowCornerRegion.TryDisableTransitions(openedHandle, out _);
+        }
+
         // Rounded corners need a transparent window; when the platform refuses it, fall back to a
         // square opaque window instead of leaving black corner triangles.
         if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent)
@@ -173,13 +191,63 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
 
         // Whatever the compositor did, clip the native window to the painted radius: a rectangular
-        // window surface shows square black wedges outside the rounded content (the reported "black
-        // right angles") as soon as alpha is unavailable. Applied once per size/DPI change, never per
-        // frame; a transparent surface is clipped to the same shape it already paints, so nothing moves.
-        // Layout passes are the honest signal for "the native size or DPI changed"; the region call is
-        // cached on its inputs so this never becomes per-frame work.
+        // window surface shows square wedges outside the rounded content as soon as alpha is
+        // unavailable. Applied once per size/DPI change, never per frame. The first application happens
+        // synchronously here so it lands on the earliest possible frame the platform lets us touch.
         LayoutUpdated += (_, _) => ApplyCornerRegion();
+        ApplyCornerRegion();
         Avalonia.Threading.Dispatcher.UIThread.Post(ApplyCornerRegion, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
+    public IReadOnlyList<string> FirstFrameSteps => _firstFrameSteps;
+
+    /// <summary>True once the window was prepared before its first composited frame.</summary>
+    public bool FirstFramePrepared { get; private set; }
+
+    /// <summary>
+    /// Native message hook that prepares the window for its first frame. <c>WM_SHOWWINDOW</c> is raised
+    /// inside <c>ShowWindow</c> while the window is still hidden, which is the last managed-code moment
+    /// before the compositor sees it; <c>WM_ERASEBKGND</c> is swallowed so the default grey erase never
+    /// paints the rectangle.
+    /// </summary>
+    private IntPtr OnNativeMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const uint WmEraseBackground = 0x0014;
+        const uint WmShowWindow = 0x0018;
+        const uint WmDpiChanged = 0x02E0;
+        if (msg == WmEraseBackground)
+        {
+            // Never let the system fill the surface with the class brush: Avalonia paints the panel.
+            handled = true;
+            return new IntPtr(1);
+        }
+
+        if ((msg == WmShowWindow || msg == WmDpiChanged) && !_firstFramePreparing && hwnd != IntPtr.Zero)
+        {
+            _firstFramePreparing = true;
+            try
+            {
+                var radius = WindowCornerRegion.RadiusPx(SettingsMetrics.WindowRadius, RenderScaling);
+                var argb = ((uint)_palette.Window.A << 24) | ((uint)_palette.Window.R << 16) |
+                    ((uint)_palette.Window.G << 8) | _palette.Window.B;
+                var preparation = WindowFirstFrame.Prepare(hwnd, radius, argb);
+                _firstFrameSteps = preparation.Steps;
+                FirstFramePrepared = preparation.Succeeded;
+                if (!preparation.Succeeded)
+                {
+                    System.Diagnostics.Debug.WriteLine($"settings first-frame: {preparation.Error}");
+                }
+
+                _cornerRegion = null;
+            }
+            finally
+            {
+                _firstFramePreparing = false;
+            }
+        }
+
+        return IntPtr.Zero;
     }
 
     /// <summary>Clips the native window to the rounded content shape (no-op until the handle exists).</summary>
@@ -224,25 +292,6 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
     }
 
-    /// <inheritdoc />
-    protected override void OnClosed(EventArgs e)
-    {
-        _closed = true;
-        if (TryGetPlatformHandle()?.Handle is { } closingHandle && closingHandle != IntPtr.Zero)
-        {
-            _ = WindowCornerRegion.Clear(closingHandle, out _);
-        }
-
-        _settings.Changed -= OnSettingsChanged;
-        _localizer.Changed -= OnLocalizerChanged;
-        if (_updates is not null)
-        {
-            _updates.Changed -= OnUpdateChanged;
-        }
-
-        base.OnClosed(e);
-    }
-
     private static AppTheme ResolvePaletteTheme(AppTheme theme)
         => SystemSettingResolution.ResolveTheme(theme, SystemAppearanceSnapshot.FromWindows().LightTheme);
 
@@ -278,7 +327,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     {
         var bar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto"),
             Height = SettingsMetrics.TitleBarHeight,
             Margin = new Thickness(SettingsMetrics.TitleBarPadLeft, 0, SettingsMetrics.TitleBarPadRight, 0),
             // A Grid without a background is not hit-testable, so clicks on the empty part of the title
@@ -375,8 +424,50 @@ public sealed class SettingsWindow : Window, ILocalizable
             e.Handled = true;
             Close();
         };
-        Grid.SetColumn(close, 4);
+        ToolTip.SetTip(close, _localizer.Get(LocKeys.Common.Close));
+        Grid.SetColumn(close, 5);
         bar.Children.Add(close);
+
+        // .sw-minimize: same 32×32 hit box as close, neutral hover instead of the danger red.
+        var minimizeIcon = new SettingsIcon
+        {
+            Kind = SettingsIconKind.Minimize,
+            Brush = _palette.SecondaryBrush,
+            Width = SettingsMetrics.CloseIcon,
+            Height = SettingsMetrics.CloseIcon,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var minimize = new Border
+        {
+            Width = SettingsMetrics.CloseSize,
+            Height = SettingsMetrics.CloseSize,
+            CornerRadius = new CornerRadius(SettingsMetrics.CloseRadius),
+            Background = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Child = minimizeIcon,
+        };
+        minimize.PointerEntered += (_, _) =>
+        {
+            minimize.Background = _palette.RaisedHoverBrush;
+            minimizeIcon.Brush = _palette.ForegroundBrush;
+            minimizeIcon.InvalidateVisual();
+        };
+        minimize.PointerExited += (_, _) =>
+        {
+            minimize.Background = Brushes.Transparent;
+            minimizeIcon.Brush = _palette.SecondaryBrush;
+            minimizeIcon.InvalidateVisual();
+        };
+        minimize.PointerPressed += (_, e) =>
+        {
+            e.Handled = true;
+            WindowState = WindowState.Minimized;
+        };
+        ToolTip.SetTip(minimize, _localizer.Get(LocKeys.Common.Minimize));
+        Grid.SetColumn(minimize, 4);
+        bar.Children.Add(minimize);
 
         return new Border
         {
