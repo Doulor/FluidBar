@@ -6,6 +6,26 @@ using SkiaSharp;
 namespace FluidBar.Island;
 
 /// <summary>
+/// Which preview-rail slot an interaction applies to. The prototype makes the two neighbour glasses
+/// real buttons (`:hover`/`:active`/`:focus-visible`) while the current capsule stays a plain
+/// span, so the states are resolved per slot and never bleed across pills.
+/// </summary>
+public enum MiniRailSlot
+{
+    /// <summary>No slot (pointer outside, no press, no focus).</summary>
+    None,
+
+    /// <summary>Previous-page glass (26 × 26, interactive).</summary>
+    Previous,
+
+    /// <summary>Current-page capsule (not interactive in the prototype).</summary>
+    Current,
+
+    /// <summary>Next-page glass (26 × 26, interactive).</summary>
+    Next,
+}
+
+/// <summary>
 /// One measured prototype2 <c>.mini-rail</c> frame in host-local DIP. The rail is centred on the
 /// expanded shell, sits <see cref="IslandMetrics.StripGap"/> below it and is
 /// <see cref="IslandMetrics.StripHeight"/> tall; the island row is the 26 / dynamic-capsule / 26
@@ -27,6 +47,9 @@ namespace FluidBar.Island;
 /// <param name="PulsePrev">Previous content pulse (1 = settled).</param>
 /// <param name="PulseCurrent">Current content pulse (1 = settled).</param>
 /// <param name="PulseNext">Next content pulse (1 = settled).</param>
+/// <param name="Hover">Slot the pointer is over (prototype `.mini-bg:hover`).</param>
+/// <param name="Pressed">Slot held down (prototype `.mini-bg:active`).</param>
+/// <param name="Focus">Slot holding keyboard/UIA focus (prototype `:focus-visible`).</param>
 public readonly record struct MiniRailFrame(
     int Page,
     float CapsuleWidth,
@@ -43,7 +66,10 @@ public readonly record struct MiniRailFrame(
     float LabelProgress,
     float PulsePrev,
     float PulseCurrent,
-    float PulseNext);
+    float PulseNext,
+    MiniRailSlot Hover,
+    MiniRailSlot Pressed,
+    MiniRailSlot Focus);
 
 /// <summary>
 /// Pure geometry + text metrics for the prototype2 transient preview rail.
@@ -64,6 +90,15 @@ public static class MiniRailLayout
 
     /// <summary>Rail top below the expanded shell bottom in DIP (8; `top: calc(100% + 8px)`).</summary>
     public const float RailGap = (float)IslandMetrics.StripGap;
+
+    /// <summary>Base glass fill: prototype `rgba(26, 26, 31, .72)`.</summary>
+    public static SKColor Glass { get; } = new(26, 26, 31, 184);
+
+    /// <summary>Hovered neighbour glass: prototype `.mini-bg:hover` `rgba(40, 40, 48, .88)`.</summary>
+    public static SKColor HoverGlass { get; } = new(40, 40, 48, 224);
+
+    /// <summary>Pressed neighbour glass: prototype `.mini-bg:active` `rgba(52, 52, 62, .94)`.</summary>
+    public static SKColor PressedGlass { get; } = new(52, 52, 62, 240);
 
     /// <summary>Height of the dot hit target (15 DIP; `.far-dot::after` insets −6 px).</summary>
     public const float DotHitHeight = (float)IslandMetrics.DotHitHeight;
@@ -183,6 +218,12 @@ public static class MiniRailLayout
         var pulseCurrent = rail.Active ? rail.PulseCurrent : 1f;
         var pulseNext = rail.Active ? rail.PulseNext : 1f;
 
+        // Interaction states are resolved per slot by the host (pointer, press, keyboard focus); the
+        // layout only forwards them so drawing and hit-testing read one frame.
+        var hover = ResolveSlot(arch.RailHover, page);
+        var pressed = ResolveSlot(arch.RailPressed, page);
+        var focus = ResolveSlot(arch.RailFocus, page);
+
         const float neighbour = (float)IslandMetrics.MiniNeighbourWidth;
         const float capsuleHeight = (float)IslandMetrics.MiniCurrentHeight;
         const float islandGap = (float)IslandMetrics.MiniGap;
@@ -267,11 +308,48 @@ public static class MiniRailLayout
             labelProgress,
             pulsePrev,
             pulseCurrent,
-            pulseNext);
+            pulseNext,
+            hover,
+            pressed,
+            focus);
     }
+
+    /// <summary>
+    /// Keeps a resolved slot inside the pages that actually paint it: the previous glass only exists
+    /// from page 1 and the next glass only up to the second-to-last page, so a stale state left over
+    /// from before a page turn can never tint a pill that is no longer drawn.
+    /// </summary>
+    /// <param name="slot">Slot reported by the host.</param>
+    /// <param name="page">Rail page the frame represents.</param>
+    internal static MiniRailSlot ResolveSlot(MiniRailSlot slot, int page) => slot switch
+    {
+        MiniRailSlot.Previous when page <= 0 => MiniRailSlot.None,
+        MiniRailSlot.Next when page >= PagerConstants.PageCount - 1 => MiniRailSlot.None,
+        _ => slot,
+    };
 
     /// <summary>Centre X of the rail: the expanded shell midpoint.</summary>
     public static float CentreX(SKRect shell) => shell.MidX;
+
+    /// <summary>
+    /// Glass fill of one rail slot. Only the two neighbour glasses are buttons in the prototype, and
+    /// its `:active` rule is declared after `:hover`, so pressed wins; the current capsule is a
+    /// plain span and always keeps the base glass.
+    /// </summary>
+    /// <param name="slot">Slot being painted.</param>
+    /// <param name="hover">Slot under the pointer.</param>
+    /// <param name="pressed">Slot held down.</param>
+    public static SKColor GlassFor(MiniRailSlot slot, MiniRailSlot hover, MiniRailSlot pressed)
+    {
+        if (slot == MiniRailSlot.Current)
+        {
+            return Glass;
+        }
+
+        return pressed == slot
+            ? PressedGlass
+            : hover == slot ? HoverGlass : Glass;
+    }
 
     /// <summary>Prototype cluster width: n dots, 4 DIP gaps and +4 DIP when the last dot is wide.</summary>
     public static float ClusterWidth(int count, bool wide)

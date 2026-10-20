@@ -1,6 +1,7 @@
 using FluidBar.App.Hosting.Skia;
 using FluidBar.Core.Interaction;
 using FluidBar.Island;
+using FluidBar.Platform.Windows.Accessibility;
 
 namespace FluidBar.Ui.Tests;
 
@@ -88,6 +89,136 @@ public sealed class SkiaRailNavigationTests
         Assert.Equal(expected, state.Archipelago.Rail.CapsuleWidth, 0.5f);
         Assert.Equal(expected, SkiaIslandHitTest.MeasureStrip(state).Current.Width, 0.5f);
     }
+
+    [Fact]
+    public void HoverProjectsThePrototypeHoverSlot()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.Settle();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        AdvanceFrame(fixture);
+        fixture.Controller.HandlePointerMoved(strip.Next.MidX, strip.Next.MidY);
+        AdvanceFrame(fixture);
+        Assert.Equal(MiniRailSlot.Next, fixture.Controller.RenderState.Archipelago.RailHover);
+
+        fixture.Controller.HandlePointerMoved(strip.Previous.MidX, strip.Previous.MidY);
+        AdvanceFrame(fixture);
+        Assert.Equal(MiniRailSlot.Previous, fixture.Controller.RenderState.Archipelago.RailHover);
+
+        // The current capsule is a span in the prototype: hovering it never lightens it.
+        fixture.Controller.HandlePointerMoved(strip.Current.MidX, strip.Current.MidY);
+        AdvanceFrame(fixture);
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailHover);
+
+        // Leaving the strip clears the hover state.
+        fixture.Controller.HandlePointerMoved(strip.Strip.MidX, strip.Strip.Top - 40);
+        AdvanceFrame(fixture);
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailHover);
+    }
+
+    [Fact]
+    public void PressingAGlass_PaintsActiveAndNavigatesOnRelease()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.Settle();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        fixture.Controller.HandlePointerPressed(strip.Next.MidX, strip.Next.MidY);
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+
+        // Prototype buttons navigate on click (release); the press only paints ':active'.
+        Assert.Equal(2, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(MiniRailSlot.Next, fixture.Controller.RenderState.Archipelago.RailPressed);
+
+        fixture.Controller.HandlePointerReleased(strip.Next.MidX, strip.Next.MidY);
+        fixture.RunToRest();
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailPressed);
+        Assert.Equal(3, fixture.Controller.Pager.SelectedIndex);
+    }
+
+    [Fact]
+    public void DraggingOffTheGlass_CancelsTheClick()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.Settle();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        fixture.Controller.HandlePointerPressed(strip.Next.MidX, strip.Next.MidY);
+        fixture.Controller.HandlePointerReleased(strip.Next.MidX + 40, strip.Next.MidY);
+        fixture.RunToRest();
+
+        Assert.Equal(2, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailPressed);
+    }
+
+    [Fact]
+    public void LeavingTheWindow_ClearsTheRailInteraction()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.Settle();
+
+        var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
+        fixture.Controller.HandlePointerMoved(strip.Next.MidX, strip.Next.MidY);
+        fixture.Controller.HandlePointerPressed(strip.Next.MidX, strip.Next.MidY);
+        fixture.Controller.HandlePointerLeft();
+        fixture.Controller.HandlePointerReleased(strip.Next.MidX, strip.Next.MidY);
+        AdvanceFrame(fixture);
+
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailHover);
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailPressed);
+        Assert.Equal(2, fixture.Controller.Pager.SelectedIndex);
+    }
+
+    [Fact]
+    public void KeyboardFocusOnAGlass_PaintsTheAccentOutlineInsteadOfTheGenericRing()
+    {
+        var actions = new RecordingIslandPlatformActions();
+        using var fixture = ControllerFixture.Create(actions: actions);
+        using var source = new SkiaIslandUiaSource(fixture.Controller, new FakeLocalizer(), new SkiaHostDispatcher());
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.Settle();
+        source.NotifyWindowFocus(true);
+
+        // Tab order already exposes the rail glasses as focusable buttons.
+        var strip = source.BuildSnapshot().Find(SkiaIslandUiaElementIds.Strip);
+        Assert.NotNull(strip);
+        Assert.Contains(strip!.Children, child => child.Id == "island.strip.next.3");
+
+        source.Perform(new UiaElementActionRequest(UiaElementAction.SetFocus, "island.strip.next.3"));
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.Equal(MiniRailSlot.Next, fixture.Controller.RenderState.Archipelago.RailFocus);
+        // The strip paints the prototype 'focus-visible' outline itself, so the generic ring stays off.
+        Assert.Null(fixture.Controller.RenderState.FocusRing);
+
+        // Moving focus to a chrome control hands the ring back to the generic renderer.
+        source.Perform(new UiaElementActionRequest(UiaElementAction.SetFocus, SkiaIslandUiaElementIds.Collapse));
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailFocus);
+        Assert.NotNull(fixture.Controller.RenderState.FocusRing);
+
+        source.NotifyWindowFocus(false);
+        source.BuildSnapshot();
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.Equal(MiniRailSlot.None, fixture.Controller.RenderState.Archipelago.RailFocus);
+    }
+
+    /// <summary>Rebuilds the render state for the current interaction fields.</summary>
+    private static void AdvanceFrame(ControllerFixture fixture) => fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
 
     private static void Press(ControllerFixture fixture, float x, float y)
     {

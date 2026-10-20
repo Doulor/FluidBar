@@ -97,9 +97,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         var ring = _windowFocused && focused is { State.IsOffscreen: false }
             ? focused.BoundsDip
             : (UiaRect?)null;
-        _controller.SetAccessibilityFocus(ring is { } bounds
-            ? new VisualRect(bounds.X, bounds.Y, bounds.Width, bounds.Height)
-            : null);
+        _controller.SetAccessibilityFocus(
+            ring is { } bounds ? new VisualRect(bounds.X, bounds.Y, bounds.Width, bounds.Height) : null,
+            ring is null ? MiniRailSlot.None : RailSlotFor(_focusedId));
         return root;
     }
 
@@ -877,6 +877,34 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             ToRect(bounds),
             UiaPatternKind.Invoke,
             new UiaElementState { IsFocusable = true, ItemStatus = pageTitle });
+
+    /// <summary>
+    /// Maps a focused strip button id to the rail slot that paints its focus outline. Only the two
+    /// neighbour glasses are buttons in the prototype; the current capsule still reports a slot so a
+    /// keyboard user gets the same outline around the focused element.
+    /// </summary>
+    /// <param name="elementId">Focused UI Automation element id, or null.</param>
+    private static MiniRailSlot RailSlotFor(string? elementId)
+    {
+        if (elementId is null)
+        {
+            return MiniRailSlot.None;
+        }
+
+        if (elementId.StartsWith("island.strip.prev.", StringComparison.Ordinal))
+        {
+            return MiniRailSlot.Previous;
+        }
+
+        if (elementId.StartsWith("island.strip.current.", StringComparison.Ordinal))
+        {
+            return MiniRailSlot.Current;
+        }
+
+        return elementId.StartsWith("island.strip.next.", StringComparison.Ordinal)
+            ? MiniRailSlot.Next
+            : MiniRailSlot.None;
+    }
 
     // ------------------------------------------------------------------ actions
 

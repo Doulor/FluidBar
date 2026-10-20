@@ -41,6 +41,9 @@ internal static class IslandTestFixtures
         "24-rail-page3-clipboard",
         "25-rail-page4-agent",
         "26-rail-page5-widgets",
+        "27-rail-hover-next",
+        "28-rail-pressed-next",
+        "29-rail-focus-next",
         "30-compact-notification-fs08",
         "31-compact-notification-fs12",
         "32-compact-notification-fs16",
@@ -402,6 +405,9 @@ internal static class IslandTestFixtures
         "24-rail-page3-clipboard" => RailState(3),
         "25-rail-page4-agent" => RailState(4),
         "26-rail-page5-widgets" => RailState(5),
+        "27-rail-hover-next" => RailInteractionState(2, MiniRailSlot.Next),
+        "28-rail-pressed-next" => RailInteractionState(2, MiniRailSlot.None, MiniRailSlot.Next),
+        "29-rail-focus-next" => RailInteractionState(2, MiniRailSlot.None, MiniRailSlot.None, MiniRailSlot.Next),
         "30-compact-notification-fs08" => WithFontScale(Notification(), 0.8),
         "31-compact-notification-fs12" => WithFontScale(Notification(), 1.2),
         "32-compact-notification-fs16" => WithFontScale(Notification(), 1.6),
@@ -489,6 +495,33 @@ internal static class IslandTestFixtures
         }
 
         return days;
+    }
+
+    /// <summary>
+    /// Rail state with one prototype interaction state applied: hover fills the neighbour glass with
+    /// 'rgba(40,40,48,.88)', a press with 'rgba(52,52,62,.94)' and focus paints the 2 DIP accent
+    /// outline. Kept next to the resting rail states so the golden suite covers all three visuals.
+    /// </summary>
+    /// <param name="page">Committed page index.</param>
+    /// <param name="hover">Hovered rail slot.</param>
+    /// <param name="pressed">Pressed rail slot.</param>
+    /// <param name="focus">Focused rail slot.</param>
+    public static IslandRenderState RailInteractionState(
+        int page,
+        MiniRailSlot hover = MiniRailSlot.None,
+        MiniRailSlot pressed = MiniRailSlot.None,
+        MiniRailSlot focus = MiniRailSlot.None)
+    {
+        var state = RailState(page);
+        return state with
+        {
+            Archipelago = state.Archipelago with
+            {
+                RailHover = hover,
+                RailPressed = pressed,
+                RailFocus = focus,
+            },
+        };
     }
 
     /// <summary>

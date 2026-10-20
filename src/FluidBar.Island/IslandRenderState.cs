@@ -316,6 +316,18 @@ public readonly record struct ArchipelagoState
     /// </summary>
     public MiniRailMotionValues Rail { get; init; }
 
+    /// <summary>
+    /// Slot under the pointer (prototype `.mini-bg:hover`). Only the two neighbour glasses are
+    /// interactive; the current capsule resolves to <see cref="MiniRailSlot.None"/>.
+    /// </summary>
+    public MiniRailSlot RailHover { get; init; }
+
+    /// <summary>Slot held down (prototype `.mini-bg:active`).</summary>
+    public MiniRailSlot RailPressed { get; init; }
+
+    /// <summary>Slot with keyboard/UI Automation focus (prototype `:focus-visible` accent ring).</summary>
+    public MiniRailSlot RailFocus { get; init; }
+
     /// <summary>Far-page dots on the left; -1 derives them from the page position.</summary>
     public int FarLeftDotCount { get; init; } = -1;
 

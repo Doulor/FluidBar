@@ -22,13 +22,14 @@ internal sealed class TransientStripRenderer : IDisposable
     private const int MaxDots = IslandMetrics.MaxDotsPerSide;
     private const int LastPage = PagerConstants.PageCount - 1;
 
-    /// <summary>Glass fill of the mini islands: prototype `rgba(26, 26, 31, .72)`.</summary>
-    private static readonly SKColor Glass = new(26, 26, 31, 184);
+    /// <summary>Glass fill of the mini islands (prototype contract in <see cref="MiniRailLayout"/>).</summary>
+    private static SKColor Glass => MiniRailLayout.Glass;
 
     private readonly ScaledText _text;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _icon = new() { IsAntialias = true };
     private readonly SKPaint _shadow = new() { IsAntialias = true };
+    private readonly SKPaint _stroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2f };
     private readonly SKMaskFilter _shadowFar = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 12f);
     private readonly SKMaskFilter _shadowNear = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3.5f);
     private readonly SKRect[] _dotsLeft = new SKRect[MaxDots];
@@ -125,16 +126,20 @@ internal sealed class TransientStripRenderer : IDisposable
         var prevAlpha = reveal * _frame.PrevAlpha;
         if (_frame.Page > 0 && prevAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _frame.Previous, _frame.Page - 1, prevAlpha, _frame.PulsePrev);
+            DrawNeighbour(canvas, _frame.Previous, _frame.Page - 1, prevAlpha, _frame.PulsePrev, MiniRailSlot.Previous);
         }
 
         var nextAlpha = reveal * _frame.NextAlpha;
         if (_frame.Page < LastPage && nextAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _frame.Next, _frame.Page + 1, nextAlpha, _frame.PulseNext);
+            DrawNeighbour(canvas, _frame.Next, _frame.Page + 1, nextAlpha, _frame.PulseNext, MiniRailSlot.Next);
         }
 
         DrawCurrent(canvas, reveal);
+
+        // Prototype focus-visible: a 2 px accent outline with a 2 px offset around the focused glass,
+        // painted last (like an outline) so the pill and its shadows can never cover it.
+        DrawFocusRing(canvas, state, reveal);
         canvas.Restore();
     }
 
@@ -277,9 +282,9 @@ internal sealed class TransientStripRenderer : IDisposable
         canvas.DrawCircle(dot.MidX, dot.MidY, dot.Height / 2f, _fill);
     }
 
-    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha, float pulse)
+    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha, float pulse, MiniRailSlot slot)
     {
-        DrawGlass(canvas, rect, alpha);
+        DrawGlass(canvas, rect, alpha, MiniRailLayout.GlassFor(slot, _frame.Hover, _frame.Pressed));
         var size = (float)IslandMetrics.MiniNeighbourIconSize;
         var icon = new SKRect(rect.MidX - (size / 2f), rect.MidY - (size / 2f),
             rect.MidX + (size / 2f), rect.MidY + (size / 2f));
@@ -336,12 +341,45 @@ internal sealed class TransientStripRenderer : IDisposable
         return p * p * (3f - (2f * p));
     }
 
-    private void DrawGlass(SKCanvas canvas, SKRect rect, float alpha)
+    private void DrawGlass(SKCanvas canvas, SKRect rect, float alpha, SKColor? fill = null)
     {
         var radius = Math.Min(rect.Width, rect.Height) / 2f;
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(Glass, alpha);
+        _fill.Color = Alpha(fill ?? Glass, alpha);
         canvas.DrawRoundRect(rect, radius, radius, _fill);
+    }
+
+    /// <summary>
+    /// Draws the rail keyboard/UI Automation focus ring. The prototype styles it as
+    /// 'outline: 2px solid var(--accent); outline-offset: 2px', so the ring is the pill rectangle
+    /// inflated by the 2 DIP offset, stroked with the theme accent and the pill's own radius.
+    /// </summary>
+    private void DrawFocusRing(SKCanvas canvas, in IslandRenderState state, float alpha)
+    {
+        var slot = _frame.Focus;
+        if (slot == MiniRailSlot.None
+            || (slot == MiniRailSlot.Previous && _frame.Page <= 0)
+            || (slot == MiniRailSlot.Next && _frame.Page >= LastPage))
+        {
+            return;
+        }
+
+        var rect = slot switch
+        {
+            MiniRailSlot.Previous => _frame.Previous,
+            MiniRailSlot.Next => _frame.Next,
+            _ => _frame.Current,
+        };
+
+        rect.Inflate(2f, 2f);
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var radius = Math.Min(rect.Width, rect.Height) / 2f;
+        _stroke.Color = Alpha(state.Theme.Accent, alpha);
+        canvas.DrawRoundRect(rect, radius, radius, _stroke);
     }
 
     private static IconKind IconFor(int page) => page switch
@@ -363,6 +401,7 @@ internal sealed class TransientStripRenderer : IDisposable
     {
         _fill.Dispose();
         _icon.Dispose();
+        _stroke.Dispose();
         _shadow.Dispose();
         _shadowFar.Dispose();
         _shadowNear.Dispose();

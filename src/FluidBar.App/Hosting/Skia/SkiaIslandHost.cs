@@ -88,6 +88,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
     private RegionSignature _regionSignature;
+
+    // Reused buffer for the global-hook rectangles: they are rebuilt every frame while the preview
+    // rail springs, so the animated pills stay inside the click-consuming envelope without allocating.
+    private readonly List<IslandMouseHook.Rect> _hookRects = [];
     private string? _primaryMonitorId;
     private string? _cursorMonitorId;
     private ITimer? _followMouseTimer;
@@ -1099,7 +1103,17 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _controller.PumpTimers();
             _controller.Advance(delta);
             RenderAllLocked(forceFull: false);
-            if (!_controller.IsAnimating)
+            if (_controller.IsAnimating)
+            {
+                // The preview rail springs move the pills a few DIP during a page turn; keep the
+                // hook envelope on the painted geometry instead of the start-of-animation one.
+                var state = _controller.RenderState;
+                if (state.Archipelago.Visible)
+                {
+                    RebuildHookRects(state);
+                }
+            }
+            else
             {
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
@@ -1489,37 +1503,56 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _regionSignature = signature;
-        var hookRects = new List<IslandMouseHook.Rect>(_windows.Count);
         foreach (var entry in _windows)
         {
             ApplyHitRegion(entry.Host, state);
-            if (!state.IsVisible)
-            {
-                continue;
-            }
+        }
 
-            // Consume clicks only over the island shell (never the whole host surface): the
-            // transparent bleed must stay click-through. A 2 DIP slack absorbs edge rounding so the
-            // pill stays easy to hit at any DPI.
-            var shell = IslandMetrics.ShellRect(state);
-            var placement = entry.Host.Placement.WindowPixel;
-            var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+        RebuildHookRects(state);
+    }
+
+    /// <summary>
+    /// Rebuilds the screen-space rectangles that make the global mouse hook consume clicks for this
+    /// island. Called from the hit-region update and, while the preview rail springs, once per frame:
+    /// the pills travel up to a few DIP during a page turn, and the stale envelope would otherwise let
+    /// a click on a moving neighbour glass through to the desktop.
+    /// </summary>
+    /// <param name="state">Current render state.</param>
+    private void RebuildHookRects(in IslandRenderState state)
+    {
+        _hookRects.Clear();
+        if (state.IsVisible)
+        {
             const double slackDip = 2;
-            hookRects.Add(new IslandMouseHook.Rect(
-                placement.X + (shell.Left - slackDip) * scale,
-                placement.Y + (shell.Top - slackDip) * scale,
-                placement.X + (shell.Right + slackDip) * scale,
-                placement.Y + (shell.Bottom + slackDip) * scale));
-
-            // The preview rail sits below the shell, so without its own region the hook treats the
-            // clicks as desktop and the pills/dots never receive input.
-            if (state.Archipelago.Visible && state.Archipelago.Opacity > 0.01)
+            var shell = IslandMetrics.ShellRect(state);
+            var stripVisible = state.Archipelago.Visible && state.Archipelago.Opacity > 0.01;
+            var strip = stripVisible ? SkiaIslandHitTest.MeasureStrip(state) : default;
+            foreach (var entry in _windows)
             {
-                var strip = SkiaIslandHitTest.MeasureStrip(state);
+                var placement = entry.Host.Placement.WindowPixel;
+                var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+
+                // Consume clicks only over the island shell (never the whole host surface): the
+                // transparent bleed must stay click-through. A 2 DIP slack absorbs edge rounding so
+                // the pill stays easy to hit at any DPI.
+                _hookRects.Add(new IslandMouseHook.Rect(
+                    placement.X + (shell.Left - slackDip) * scale,
+                    placement.Y + (shell.Top - slackDip) * scale,
+                    placement.X + (shell.Right + slackDip) * scale,
+                    placement.Y + (shell.Bottom + slackDip) * scale));
+
+                // The preview rail sits below the shell, so without its own region the hook treats the
+                // clicks as desktop and the pills/dots never receive input.
+                if (!stripVisible)
+                {
+                    continue;
+                }
+
                 var minX = float.MaxValue;
                 var minY = float.MaxValue;
                 var maxX = float.MinValue;
                 var maxY = float.MinValue;
+
                 void Include(SKRect rect)
                 {
                     if (rect.Width <= 0 || rect.Height <= 0)
@@ -1548,7 +1581,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
                 if (maxX > minX && maxY > minY)
                 {
-                    hookRects.Add(new IslandMouseHook.Rect(
+                    _hookRects.Add(new IslandMouseHook.Rect(
                         placement.X + (minX - slackDip) * scale,
                         placement.Y + (minY - slackDip) * scale,
                         placement.X + (maxX + slackDip) * scale,
@@ -1557,7 +1590,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
         }
 
-        _mouseHook?.SetRegions(hookRects);
+        _mouseHook?.SetRegions(_hookRects);
     }
 
     private static void ApplyHitRegion(LayeredWindowHost host, in IslandRenderState state)

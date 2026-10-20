@@ -53,6 +53,15 @@ public sealed class SkiaIslandController : IDisposable
     // same animated width/positions from the render state.
     private readonly MiniRailMotion _railMotion = new();
     private bool _railWasVisible;
+
+    // Prototype2 rail interaction states (hover / pressed / keyboard focus). Resolved per slot and
+    // projected into the strip state, so the painted glass and its click target never diverge.
+    private MiniRailSlot _railHover;
+    private MiniRailSlot _railPressed;
+    private MiniRailSlot _railFocus;
+    private int _railPendingPage = -1;
+    private double _railPressXDip;
+    private double _railPressYDip;
     private readonly IIslandPlatformActions? _platformActions;
 
     private ActivitySchedulerState _schedulerState = ActivitySchedulerState.Empty;
@@ -589,14 +598,19 @@ public sealed class SkiaIslandController : IDisposable
     /// not raise <see cref="StateChanged"/> (the accessibility source owns its snapshot refresh).
     /// </summary>
     /// <param name="bounds">Focused element bounds in host-local DIP, or null.</param>
-    public void SetAccessibilityFocus(VisualRect? bounds)
+    /// <param name="railSlot">
+    /// Preview-rail slot when the focused element is one of the rail glasses: the strip then paints the
+    /// prototype `:focus-visible` accent outline itself, so the generic ring is suppressed.
+    /// </param>
+    public void SetAccessibilityFocus(VisualRect? bounds, MiniRailSlot railSlot = MiniRailSlot.None)
     {
-        if (!_hasRenderState || Nullable.Equals(_accessibilityFocus, bounds))
+        if (!_hasRenderState || (Nullable.Equals(_accessibilityFocus, bounds) && _railFocus == railSlot))
         {
             return;
         }
 
         _accessibilityFocus = bounds;
+        _railFocus = railSlot;
         BuildRenderState();
         InvalidateFull();
         FrameRequested?.Invoke();
@@ -701,6 +715,7 @@ public sealed class SkiaIslandController : IDisposable
     {
         var hover = IslandPageControl.None;
         var page = -1;
+        var rail = MiniRailSlot.None;
         if (_hasRenderState && _pointerInside)
         {
             var hit = SkiaIslandHitTest.Hit(_renderState, _pointerX, _pointerY);
@@ -709,15 +724,27 @@ public sealed class SkiaIslandController : IDisposable
                 hover = hit.Control;
                 page = hit.PageIndex;
             }
+            else if (hit.Kind == IslandHitKind.RailSlot)
+            {
+                // The prototype only gives the two neighbour glasses a hover state; the current
+                // capsule is a span, so hovering it keeps the base glass.
+                var railPage = _renderState.Archipelago.Rail.Active
+                    ? _renderState.Archipelago.Rail.Page
+                    : SkiaIslandHitTest.MeasureStrip(_renderState).Page;
+                rail = hit.PageIndex < railPage
+                    ? MiniRailSlot.Previous
+                    : hit.PageIndex > railPage ? MiniRailSlot.Next : MiniRailSlot.None;
+            }
         }
 
-        if (hover == _hoverControl && page == _hoverPage)
+        if (hover == _hoverControl && page == _hoverPage && rail == _railHover)
         {
             return;
         }
 
         _hoverControl = hover;
         _hoverPage = page;
+        _railHover = rail;
         InvalidateFull();
     }
 
@@ -730,6 +757,9 @@ public sealed class SkiaIslandController : IDisposable
         _pointerInHotZone = false;
         _pointerOnStrip = false;
         _hotZoneEnteredAt = null;
+        _railHover = MiniRailSlot.None;
+        _railPressed = MiniRailSlot.None;
+        _railPendingPage = -1;
         CancelPendingClick();
         var now = _time.GetLocalNow();
 
@@ -823,12 +853,18 @@ public sealed class SkiaIslandController : IDisposable
             case IslandHitKind.RailSlot:
             case IslandHitKind.DotLeft:
             case IslandHitKind.DotRight:
+                // Prototype rail glasses are buttons: the page is requested on release (a press that
+                // drags off the pill does not navigate, exactly like a browser click). The press itself
+                // paints the accent-free 'active' glass so the affordance is visible while held.
                 _archipelago.NoteActivity(_time.GetLocalNow());
-                if (hit.PageIndex >= 0)
-                {
-                    HandlePageRequest((CoreIslandPage)hit.PageIndex);
-                }
-
+                _railPendingPage = hit.PageIndex;
+                _railPressXDip = xDip;
+                _railPressYDip = yDip;
+                _railPressed = hit.Kind == IslandHitKind.RailSlot
+                    ? SlotForPage(hit.PageIndex)
+                    : MiniRailSlot.None;
+                InvalidateDirty(StripDamage());
+                FrameRequested?.Invoke();
                 return true;
 
             default:
@@ -843,6 +879,27 @@ public sealed class SkiaIslandController : IDisposable
     {
         _pointerX = xDip;
         _pointerY = yDip;
+        if (_railPendingPage >= 0)
+        {
+            var pending = _railPendingPage;
+            _railPendingPage = -1;
+            var hadPress = _railPressed != MiniRailSlot.None;
+            _railPressed = MiniRailSlot.None;
+            var isClick = !SkiaDragThreshold.Exceeds(_railPressXDip, _railPressYDip, xDip, yDip);
+            if (isClick && pending >= 0)
+            {
+                _archipelago.NoteActivity(_time.GetLocalNow());
+                HandlePageRequest((CoreIslandPage)pending);
+            }
+
+            if (hadPress)
+            {
+                InvalidateDirty(StripDamage());
+            }
+
+            FrameRequested?.Invoke();
+        }
+
         if (_pressedControl != IslandPageControl.None)
         {
             _pressedControl = IslandPageControl.None;
@@ -1704,11 +1761,19 @@ public sealed class SkiaIslandController : IDisposable
             Pages = _pages,
             Theme = _theme,
             Archipelago = _options.EnableArchipelago
-                ? _archipelago.ToState(_pager.PagePosition) with { Rail = _railMotion.Values }
+                ? _archipelago.ToState(_pager.PagePosition) with
+                {
+                    Rail = _railMotion.Values,
+                    RailHover = _railHover,
+                    RailPressed = _railPressed,
+                    RailFocus = _railFocus,
+                }
                 : ArchipelagoState.HiddenState,
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
-            FocusRing = _accessibilityFocus,
+            // A focused rail glass paints its own prototype accent outline in the strip renderer, so
+            // the generic page-control ring stays off for those slots.
+            FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,
         };
         _hasRenderState = true;
     }
@@ -1870,7 +1935,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <returns>Whether the rail is still animating.</returns>
     private bool SyncRailMotion(double deltaSeconds)
     {
-        var page = _pager.IsDragging ? MiniRailLayout.PageAt(_pager.PagePosition) : _pager.SelectedIndex;
+        var page = RailPage();
         var targets = MiniRailTargetsFactory.Create(page, _pages, _settings.Current.FontScale);
         var visible = _archipelago.IsVisible;
         var reduced = _motion.ReducedMotion;
@@ -1884,6 +1949,19 @@ public sealed class SkiaIslandController : IDisposable
         _railMotion.Retarget(targets);
         _railWasVisible = visible;
         return deltaSeconds > 0 && _railMotion.Step(deltaSeconds);
+    }
+
+    /// <summary>Page the preview rail currently represents (the drag position wins while dragging).</summary>
+    private int RailPage() => _pager.IsDragging ? MiniRailLayout.PageAt(_pager.PagePosition) : _pager.SelectedIndex;
+
+    /// <summary>Rail slot that would navigate to a page from the current rail page.</summary>
+    /// <param name="page">Page index of the hit rail slot.</param>
+    private MiniRailSlot SlotForPage(int page)
+    {
+        var current = RailPage();
+        return page < current
+            ? MiniRailSlot.Previous
+            : page > current ? MiniRailSlot.Next : MiniRailSlot.None;
     }
 
     private void UpdateArchipelago(DateTimeOffset now)
