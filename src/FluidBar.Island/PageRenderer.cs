@@ -221,10 +221,18 @@ internal sealed partial class PageRenderer : IDisposable
         var rect = PageMetricsLayout.HomeSliders(page, m);
         DrawCard(canvas, rect, 11);
         var iconTop = rect.MidY - 6.5f;
+        var volumePressed = _pressedControl == IslandPageControl.VolumeMute && _pressedPage == 0;
+        var volumeHovered = _hoverControl == IslandPageControl.VolumeMute && _hoverPage == 0;
+        if (home.HasVolume && (volumePressed || volumeHovered))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, (volumePressed ? 0.12f : 0.07f) * _opacity);
+            canvas.DrawRoundRect(PageMetricsLayout.HomeVolumeIcon(page, m), 6, 6, _fill);
+        }
 
         IconSet.Draw(canvas, home.IsMuted ? IconKind.VolumeMute : IconKind.Volume,
-            new SKRect(rect.Left + 10, iconTop, rect.Left + 23, iconTop + 13),
-            Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+            new SKRect(rect.Left + (volumePressed ? 11f : 10f), iconTop, rect.Left + (volumePressed ? 22f : 23f), iconTop + 13),
+            Alpha(home.IsMuted ? _theme.Accent : _theme.ForegroundTertiary, _opacity), _icon);
         DrawTrack(canvas, PageMetricsLayout.HomeVolumeTrack(page, m), home.HasVolume ? home.Volume / 100.0 : 0,
             home.IsMuted || !home.HasVolume ? _theme.ForegroundTertiary : _theme.Foreground, _theme.LineStrong);
         _text.Draw(canvas, home.HasVolume ? _numbers.Number(home.Volume) : "—", IslandType.SliderValue,
@@ -383,13 +391,26 @@ internal sealed partial class PageRenderer : IDisposable
         // queue on the right. Unsupported slots are greyed with an honest placeholder; their hit
         // targets are refused by SkiaIslandHitTest (OutputAvailable/QueueAvailable stay false).
         var volume = PageMetricsLayout.MediaVolume(page, m);
-        var volumeAlpha = (media.HasVolume ? 1f : 0.55f) * _opacity;
-        IconSet.Draw(canvas, IconKind.Speaker,
-            new SKRect(volume.Left, volume.MidY - 7, volume.Left + 14, volume.MidY + 7),
-            Alpha(_theme.ForegroundSecondary, volumeAlpha), _icon);
+        var volumeAlpha = (media.HasVolume ? 1f : 0.45f) * _opacity;
+        // The speaker is a real mute button, not a decorative glyph: paint the same hover/press
+        // affordance as the transport buttons so the hit target is discoverable.
+        var volumeHovered = media.HasVolume && IsHovered(IslandPageControl.VolumeMute);
+        var volumePressed = media.HasVolume && IsPressed(IslandPageControl.VolumeMute);
+        if (volumeHovered || volumePressed)
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, (volumePressed ? 0.12f : 0.07f) * _opacity);
+            canvas.DrawRoundRect(volume, 7, 7, _fill);
+        }
+
+        var volumeColor = media.IsMuted ? _theme.Accent : _theme.ForegroundSecondary;
+        IconSet.Draw(canvas, media.IsMuted ? IconKind.VolumeMute : IconKind.Speaker,
+            new SKRect(volume.Left + (volumePressed ? 4.5f : 4f), volume.MidY - 7,
+                volume.Left + (volumePressed ? 15.5f : 15f), volume.MidY + 7),
+            Alpha(volumeColor, volumeAlpha), _icon);
         _text.Draw(canvas, media.HasVolume ? _numbers.Number(media.VolumePercent ?? 0) + "%" : "—",
             IslandType.Output,
-            new SKRect(volume.Left + 18, volume.Top, volume.Right, volume.Bottom),
+            new SKRect(volume.Left + 19, volume.Top, volume.Right, volume.Bottom),
             _theme.ForegroundSecondary, TextAlign.Left, volumeAlpha);
 
         var output = PageMetricsLayout.MediaOutput(page, m);

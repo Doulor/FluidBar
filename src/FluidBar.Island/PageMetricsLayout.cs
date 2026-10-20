@@ -75,6 +75,13 @@ public static class PageMetricsLayout
         return new SKRect(page.Left, top, page.Left + 400, top + 38 + metrics.LineGrow(IslandType.SliderValue));
     }
 
+    /// <summary>Home volume speaker icon (mute button) at the left of the volume track.</summary>
+    public static SKRect HomeVolumeIcon(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = HomeSliders(page, metrics);
+        return new SKRect(card.Left + 6, card.MidY - 10, card.Left + 27, card.MidY + 10);
+    }
+
     /// <summary>Home volume track (centred in the sliders card).</summary>
     public static SKRect HomeVolumeTrack(SKRect page, in FontScaleMetrics metrics)
     {
@@ -486,6 +493,11 @@ public static class PageMetricsLayout
                     }
                 }
 
+                if (HomeVolumeIcon(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.VolumeMute;
+                }
+
                 if (HomeVolumeTrack(scrolled, metrics).InflateY(8).Contains(x, y))
                 {
                     return IslandPageControl.VolumeSlider;
@@ -511,6 +523,11 @@ public static class PageMetricsLayout
                 if (MediaNext(scrolled, metrics).Contains(x, y))
                 {
                     return IslandPageControl.Next;
+                }
+
+                if (MediaVolume(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.VolumeMute;
                 }
 
                 if (MediaSeekRow(scrolled, metrics).Contains(x, y))

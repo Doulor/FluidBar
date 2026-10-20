@@ -23,6 +23,7 @@ public sealed class SkiaPlatformActionsTests
         await using var actions = new SkiaPlatformActions(settings);
 
         AssertUnsupported(actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.VolumeSet, Value: 0.5)), "VolumeMonitor");
+        AssertUnsupported(actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.VolumeMute)), "VolumeMonitor");
         AssertUnsupported(actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.BrightnessSet, Value: 0.5)), "BrightnessMonitor");
         AssertUnsupported(actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.MediaTogglePlay)), "GsmtcMediaSessionService");
         AssertUnsupported(actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.MediaSeek, Value: 0.5)), "GsmtcMediaSessionService");

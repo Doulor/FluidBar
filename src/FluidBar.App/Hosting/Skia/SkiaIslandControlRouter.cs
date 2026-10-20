@@ -39,6 +39,8 @@ public static class SkiaIslandControlRouter
                 return new IslandPlatformAction(
                     IslandPlatformActionKind.VolumeSet,
                     Value: Fraction(PageLayout.HomeVolumeTrack(page), pointerXDip));
+            case IslandPageControl.VolumeMute:
+                return new IslandPlatformAction(IslandPlatformActionKind.VolumeMute);
             case IslandPageControl.BrightnessSlider:
                 return new IslandPlatformAction(
                     IslandPlatformActionKind.BrightnessSet,

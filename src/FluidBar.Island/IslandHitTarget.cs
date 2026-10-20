@@ -67,6 +67,9 @@ public enum IslandPageControl
     /// <summary>Volume slider (home).</summary>
     VolumeSlider,
 
+    /// <summary>Mute toggle for the system output (media footer volume button).</summary>
+    VolumeMute,
+
     /// <summary>Brightness slider (home).</summary>
     BrightnessSlider,
 

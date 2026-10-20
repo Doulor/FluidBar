@@ -403,7 +403,8 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private List<UiaElementSnapshot> BuildHomeControls(in IslandRenderState state, SKRect page)
     {
         var home = state.Pages.Home;
-        var children = new List<UiaElementSnapshot>(10);
+        var homeMetrics = FontScaleMetrics.From(state.FontScale);
+        var children = new List<UiaElementSnapshot>(11);
 
         var clock = string.Join(" ", new[] { home.ClockText, home.DateText }
             .Where(static value => !string.IsNullOrWhiteSpace(value)));
@@ -480,6 +481,21 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             InflateVertical(PageLayout.HomeVolumeTrack(page), 8),
             home.Volume,
             home.IsMuted ? L("Hud.Muted", "Muted") : null));
+        children.Add(Node(
+            "island.page.0.mute",
+            UiaElementRole.Button,
+            home.IsMuted ? L("Hud.Muted", "Muted") : L("Hud.Volume", "Volume"),
+            ToRect(PageMetricsLayout.HomeVolumeIcon(page, homeMetrics)),
+            home.HasVolume ? UiaPatternKind.Invoke : UiaPatternKind.None,
+            new UiaElementState
+            {
+                IsEnabled = home.HasVolume,
+                IsFocusable = home.HasVolume,
+                ItemStatus = home.HasVolume ? $"{home.Volume}%" : L("Page.Media.OutputNone", "No output"),
+            },
+            help: home.HasVolume
+                ? L("Island.Accessibility.ToggleHelp", "Press Enter to toggle.")
+                : L("Page.Media.OutputNone", "No output")));
         children.Add(RangeNode(
             "island.page.0.brightness",
             L("Hud.Brightness", "Brightness"),
@@ -505,7 +521,8 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private List<UiaElementSnapshot> BuildMediaControls(in IslandRenderState state, SKRect page)
     {
         var media = state.Pages.Media;
-        var children = new List<UiaElementSnapshot>(7);
+        var mediaMetrics = FontScaleMetrics.From(state.FontScale);
+        var children = new List<UiaElementSnapshot>(8);
 
         if (!media.HasSession)
         {
@@ -562,6 +579,23 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             PageLayout.MediaSeekRow(page),
             media.ProgressPercent,
             media.PositionText));
+        children.Add(Node(
+            "island.page.1.mute",
+            UiaElementRole.Button,
+            media.IsMuted ? L("Hud.Muted", "Muted") : L("Hud.Volume", "Volume"),
+            ToRect(PageMetricsLayout.MediaVolume(page, mediaMetrics)),
+            media.HasVolume ? UiaPatternKind.Invoke : UiaPatternKind.None,
+            new UiaElementState
+            {
+                IsEnabled = media.HasVolume,
+                IsFocusable = media.HasVolume,
+                ItemStatus = media.HasVolume
+                    ? $"{media.VolumePercent ?? 0}%"
+                    : L("Island.Accessibility.UnsupportedVolume", "No audio endpoint is available."),
+            },
+            help: media.HasVolume
+                ? L("Island.Accessibility.ToggleHelp", "Press Enter to toggle.")
+                : L("Island.Accessibility.UnsupportedVolume", "No audio endpoint is available.")));
         children.Add(Node(
             "island.page.1.output",
             UiaElementRole.Button,
@@ -1090,6 +1124,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 return;
             case "seek":
                 _controller.SetAccessibleSlider(IslandPageControl.Seek, page, request.Value / 100.0);
+                return;
+            case "mute":
+                _controller.ActivateAccessibleControl(IslandPageControl.VolumeMute, page);
                 return;
             case "output":
                 // Output/queue are inert (no platform capability): the tree marks them disabled and the

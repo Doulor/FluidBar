@@ -173,7 +173,17 @@ public static class SkiaIslandHitTest
         // and then do nothing. The renderer greys them and prints the localized reason instead.
         if (page == 1
             && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable)
-                || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)))
+                || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)
+                || (control == IslandPageControl.VolumeMute && !pages.Media.HasVolume)))
+        {
+            index = -1;
+            return IslandPageControl.None;
+        }
+
+        // A volume mute button with no audio endpoint is greyed and must not swallow a click.
+        if (page is 0 or 1
+            && control == IslandPageControl.VolumeMute
+            && (page == 0 ? !pages.Home.HasVolume : !pages.Media.HasVolume))
         {
             index = -1;
             return IslandPageControl.None;

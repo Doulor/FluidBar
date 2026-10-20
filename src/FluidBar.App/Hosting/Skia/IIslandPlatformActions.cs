@@ -22,6 +22,9 @@ public enum IslandPlatformActionKind
     /// <summary>Set the system volume; <see cref="IslandPlatformAction.Value"/> is 0..1.</summary>
     VolumeSet,
 
+    /// <summary>Toggle the system output mute (media footer volume button).</summary>
+    VolumeMute,
+
     /// <summary>Set the display brightness; <see cref="IslandPlatformAction.Value"/> is 0..1.</summary>
     BrightnessSet,
 

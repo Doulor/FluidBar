@@ -743,6 +743,9 @@ public sealed record MediaPageModel
     /// <summary>Whether a real output volume is known (false renders an em dash).</summary>
     public bool HasVolume { get; init; }
 
+    /// <summary>Whether the system output is muted (the media volume button toggles this).</summary>
+    public bool IsMuted { get; init; }
+
     /// <summary>Output device label.</summary>
     public string? OutputName { get; init; }
 
