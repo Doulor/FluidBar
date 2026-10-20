@@ -222,12 +222,30 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
         else
         {
-            // Plan B: square panel-coloured window. DWM rounding is NOT requested, so DWM draws neither a
-            // corner nor its edge band; the 1 px border stays inside the panel to mark the boundary.
+            var roundHandle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            var roundHandleIsUsable = roundHandle != IntPtr.Zero;
+
+            // Plan B default: square panel-coloured window, no DWM rounding requested.
             DwmRoundingActive = false;
             Background = new SolidColorBrush(_palette.Window);
             _shell.CornerRadius = new CornerRadius(0);
             _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
+
+            // Default: let DWM round the window itself (8 DIP, the radius the system supports). The shell
+            // stays square and fills the whole window rect, so DWM cuts the corner out of the panel and no
+            // unpainted wedge (grey band) can appear between the corner and the content.
+            if (roundHandleIsUsable)
+            {
+                DwmRoundingActive = WindowCornerRegion.TryEnableDwmRounding(roundHandle, out _);
+                if (DwmRoundingActive)
+                {
+                    // The shell stays square and fills the whole window rect: DWM cuts the rounded corner
+                    // out of the panel itself, so no unpainted wedge (and no grey band) can appear.
+                    _ = WindowCornerRegion.TryRemoveDwmBorder(roundHandle, out _);
+                    _shell.CornerRadius = new CornerRadius(0);
+                    _shell.BorderThickness = new Thickness(0);
+                }
+            }
         }
 
         // Whatever the compositor did, clip the native window to the painted radius: a rectangular

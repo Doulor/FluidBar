@@ -18,10 +18,10 @@ namespace FluidBar.Ui.Tests;
 public sealed class SettingsWindowChromeTests
 {
     [Fact]
-    public async Task Window_IsBorderlessSquarePanel_ByDefault()
+    public async Task Window_UsesSquareFullBleedShell_SoDwmCanRoundTheWindow()
     {
-        // Plan B contract: no window decorations, no DWM rounding requested, square shell (radius 0),
-        // and the window surface painted with the same colour as the panel.
+        // Chrome contract: no window decorations; the shell is a square, full-bleed panel (radius 0) so DWM
+        // can cut the rounded corner out of the panel itself; window surface and panel share one colour.
         var state = await AvaloniaTest.Run(() =>
         {
             var localizer = TestFixtures.CreateLocalizer("en-US");
@@ -44,7 +44,7 @@ public sealed class SettingsWindowChromeTests
         });
 
         Assert.Equal(WindowDecorations.None, state.WindowDecorations);
-        Assert.False(state.DwmRoundingActive, "plan B must not ask DWM for a rounded corner");
+        Assert.False(state.DwmRoundingActive, "without a platform handle there is no DWM corner request");
         Assert.Equal(0, state.ShellCornerRadiusDip);
         Assert.Equal(0, state.TopLeft);
         Assert.Equal(SettingsWindowChrome.Opaque, state.ChromeMode);
