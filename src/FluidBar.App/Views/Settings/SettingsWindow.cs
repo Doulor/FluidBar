@@ -194,8 +194,15 @@ public sealed class SettingsWindow : Window, ILocalizable
         var roundingHandle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         // A remote session can claim Transparent while the composited surface is opaque, so alpha is only
         // trusted on a local session; everywhere else the DWM-rounded opaque fallback takes over.
-        var alphaUsable = ActualTransparencyLevel == WindowTransparencyLevel.Transparent
-            && !WindowCornerRegion.IsRemoteSession();
+        // Experiment switch (FLUIDBAR_WINDOW_ALPHA=1): force the per-pixel-alpha path without the
+        // self-check, and tell DWM not to draw its own corner/shadow band, so only the client alpha
+        // shapes the window. Default behaviour is unchanged when the variable is absent.
+        var forcedAlpha = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_WINDOW_ALPHA"), "1",
+            StringComparison.Ordinal);
+        // Plan B is the default: this platform does not deliver client alpha and DWM's own rounded corner
+        // drags a composited edge band around the window, so the default is a clean square panel (no
+        // rounding, no edge band). The alpha path stays available through FLUIDBAR_WINDOW_ALPHA=1.
+        var alphaUsable = forcedAlpha;
         ChromeMode = alphaUsable ? SettingsWindowChrome.Transparent : SettingsWindowChrome.Opaque;
 
         if (ChromeMode == SettingsWindowChrome.Transparent)
@@ -205,33 +212,19 @@ public sealed class SettingsWindow : Window, ILocalizable
             Background = Brushes.Transparent;
             _shell.CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius);
             _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
+            if (forcedAlpha && roundingHandle != IntPtr.Zero)
+            {
+                _ = WindowDwmPolicy.TryDisableRounding(roundingHandle, out _);
+            }
         }
         else
         {
-            // Runtime fallback (e.g. a remote session without alpha): let DWM round the window itself and
-            // fill the surface with the panel colour, so no grey square corner can ever appear.
-            var dwmRounding = roundingHandle != IntPtr.Zero
-                && WindowCornerRegion.TryEnableDwmRounding(roundingHandle, out _);
-            DwmRoundingActive = dwmRounding;
-            // Known Win11 platform behaviour (documented in build/reports/ui-audit/SETTINGS-CORNERS-FINAL.md):
-            // DWM composites a 2-4 px edge band around a rounded window. Verified on this machine that the
-            // band is NOT painted by us: it survives DwmExtendFrameIntoClientArea, WS_EX_LAYERED,
-            // DWMWA_BORDER_COLOR=DONOTDRAW, DWMWA_NCRENDERING_POLICY=DISABLED, a red hbrBackground and an
-            // Avalonia-painted full-bleed layer. SetWindowRgn reports success but DWM ignores it, and the
-            // composited surface is opaque even though ActualTransparencyLevel says Transparent. The native
-            // Windows Calculator shows the same edge with the same sampling, so it is the normal
-            // Win11 rounded-window look, not an app defect.
+            // Plan B: square panel-coloured window. DWM rounding is NOT requested, so DWM draws neither a
+            // corner nor its edge band; the 1 px border stays inside the panel to mark the boundary.
+            DwmRoundingActive = false;
             Background = new SolidColorBrush(_palette.Window);
-            if (dwmRounding)
-            {
-                _ = WindowCornerRegion.TryRemoveDwmBorder(roundingHandle, out _);
-                _shell.CornerRadius = new CornerRadius(DwmCornerRadiusDip);
-                _shell.BorderThickness = new Thickness(0);
-            }
-            else
-            {
-                _shell.CornerRadius = new CornerRadius(0);
-            }
+            _shell.CornerRadius = new CornerRadius(0);
+            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
         }
 
         // Whatever the compositor did, clip the native window to the painted radius: a rectangular
@@ -243,8 +236,11 @@ public sealed class SettingsWindow : Window, ILocalizable
         ApplyCornerRegion("opened");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
             Avalonia.Threading.DispatcherPriority.Loaded);
-        Avalonia.Threading.Dispatcher.UIThread.Post(VerifyAlphaOrFallBack,
-            Avalonia.Threading.DispatcherPriority.Background);
+        if (!forcedAlpha)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(VerifyAlphaOrFallBack,
+                Avalonia.Threading.DispatcherPriority.Background);
+        }
     }
 
     /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
@@ -344,7 +340,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         var scaling = RenderScaling <= 0 ? 1.0 : RenderScaling;
         var width = (int)Math.Ceiling(Bounds.Width * scaling);
         var height = (int)Math.Ceiling(Bounds.Height * scaling);
-        var radius = WindowCornerRegion.RadiusPx(SettingsMetrics.WindowRadius, scaling);
+        var radius = WindowCornerRegion.RadiusPx(_shell.CornerRadius.TopLeft, scaling);
         var applied = _regionTracker.TryUpdate(handle, width, height, radius, out var error);
         if (!applied)
         {
