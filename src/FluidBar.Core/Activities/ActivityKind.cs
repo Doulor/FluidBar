@@ -55,7 +55,7 @@ public enum ActivityKind
 /// <summary>
 /// The compact surfaces that participate in the stack. Activities map to the closest page.
 /// </summary>
-public enum IslandPage
+public enum PageRef
 {
     /// <summary>Dashboard / idle home page.</summary>
     Home,
@@ -162,13 +162,13 @@ public static class ActivityKindExtensions
     }
 
     /// <summary>The expanded page this activity opens when the user clicks the compact pill.</summary>
-    public static IslandPage ToPage(this ActivityKind kind) => kind switch
+    public static PageRef ToPage(this ActivityKind kind) => kind switch
     {
-        ActivityKind.Media => IslandPage.Media,
-        ActivityKind.Notification => IslandPage.Notifications,
-        ActivityKind.Clipboard => IslandPage.Clipboard,
-        ActivityKind.Agent => IslandPage.Agent,
-        _ => IslandPage.Home,
+        ActivityKind.Media => PageRef.Media,
+        ActivityKind.Notification => PageRef.Notifications,
+        ActivityKind.Clipboard => PageRef.Clipboard,
+        ActivityKind.Agent => PageRef.Agent,
+        _ => PageRef.Home,
     };
 
     /// <summary>Whether the activity is a transient (TTL-driven) notification-style surface.</summary>
@@ -179,3 +179,4 @@ public static class ActivityKindExtensions
         _ => false,
     };
 }
+

@@ -25,7 +25,7 @@ public class SdkToCorePipelineTests
         Assert.Equal("M83", view.Primary.Subtitle);
         Assert.Equal(13, view.Primary.ProgressPercent); // 12.5 % rounds away from zero
         Assert.True(view.Primary.ShowsWave);
-        Assert.Equal(IslandPage.Media, view.Primary.Page);
+        Assert.Equal(PageRef.Media, view.Primary.Page);
         Assert.Equal(ActivityIconKind.Media, view.Primary.Icon);
         Assert.Empty(view.Ghosts);
     }
@@ -131,7 +131,7 @@ public class SdkToCorePipelineTests
         Assert.Equal(ActivityIconKind.Agent, primary.Icon);
         Assert.Equal("claude", primary.Subtitle);
         Assert.Equal("completed", primary.Badge);
-        Assert.Equal(IslandPage.Agent, primary.Page);
+        Assert.Equal(PageRef.Agent, primary.Page);
     }
 
     [Fact]
@@ -226,3 +226,4 @@ public class SdkToCorePipelineTests
         Assert.True(pipeline.Updates.Count >= 4);
     }
 }
+

@@ -616,7 +616,7 @@ public sealed class SkiaIslandUiaTests
         fixture.Settle();
 
         Assert.Equal(IslandStateKind.Expanded, controller.State.Kind);
-        Assert.Equal((int)IslandPage.Media, controller.Pager.SelectedIndex);
+        Assert.Equal((int)PageRef.Media, controller.Pager.SelectedIndex);
         Assert.Equal(UiaExpandCollapseState.Expanded, source.BuildSnapshot().State.ExpandCollapse);
     }
 
@@ -666,3 +666,4 @@ public sealed class SkiaIslandUiaTests
             ? UiaRect.Empty
             : new UiaRect(rect.Left, rect.Top, rect.Width, rect.Height);
 }
+

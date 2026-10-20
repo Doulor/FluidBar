@@ -9,7 +9,7 @@ using FluidBar.App.State;
 using FluidBar.App.Theme;
 using FluidBar.Core.Activities;
 using AppTheme = FluidBar.App.Theme;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.App.Island.Expanded;
 
@@ -713,3 +713,4 @@ public sealed class ExpandedPanel : Panel, ILocalizable
         private static Rect CollapseRect() => new(PanelWidth - ViewportInset - 20, ViewportInsetY - 2, 20, 20);
     }
 }
+

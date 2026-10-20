@@ -6,7 +6,7 @@ using FluidBar.App.State;
 using FluidBar.App.Theme;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Presentation;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.Ui.Tests;
 
@@ -337,5 +337,6 @@ public sealed class StabilityTests
         Assert.Contains("2026-10-18T19:45:00", entry);
     }
 }
+
 
 

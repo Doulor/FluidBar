@@ -12,7 +12,8 @@ using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 using FluidBar.Core.Presentation;
 using FluidBar.Island;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using FluidBar.Sdk.Pages;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.App.Hosting.Skia;
 
@@ -206,7 +207,7 @@ public sealed class SkiaIslandController : IDisposable
         _appearance = options.AppearanceSnapshot ?? SystemAppearanceSnapshot.FromWindows;
         _pageRegistry = options.PageRegistry;
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
-        _pages = _pages with { PluginPages = _pluginPages };
+        _pages = _pages with { PluginPages = _pluginPages, PageSlots = BuildPageSlots() };
 
         _hub = new EventHub(logger: _logger, dispatcher: _dispatcher);
         _controller = CreateController(_settings.Current);
@@ -216,7 +217,7 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
-        _pager = new SkiaPager((int)State.Page, PagerConstants.PageCount + _pluginPages.Count);
+        _pager = new SkiaPager((int)State.Page, _pages.PageCount);
         _pager.PageChanged += OnPagerPageChanged;
         _archipelago = new SkiaArchipelago(profile);
 
@@ -239,6 +240,9 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Raised when a plugin page row/button is activated by pointer or UIA.</summary>
     public event Action<PluginPageCommandRequest>? PluginPageCommandRequested;
+
+    /// <summary>Raised when the rail overflow ellipsis asks the App to show the page selector.</summary>
+    public event Action? PageChooserRequested;
 
     /// <summary>Raised after a state/content change so the host can refresh placement and the hit region.</summary>
     public event Action? StateChanged;
@@ -848,6 +852,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Raises <see cref="SettingsRequested"/> (tray/hotkey seam).</summary>
     public void RequestSettings() => SettingsRequested?.Invoke();
 
+    /// <summary>Raises <see cref="PageChooserRequested"/> (rail overflow / UIA).</summary>
+    public void RequestPageChooser() => PageChooserRequested?.Invoke();
+
     /// <summary>Raises <see cref="MarketRequested"/> (tray/hotkey seam).</summary>
     public void RequestMarket() => MarketRequested?.Invoke();
 
@@ -1274,6 +1281,10 @@ public sealed class SkiaIslandController : IDisposable
                 HandlePageControl(hit);
                 return true;
 
+            case IslandHitKind.RailOverflow:
+                PageChooserRequested?.Invoke();
+                return true;
+
             case IslandHitKind.RailSlot:
             case IslandHitKind.DotLeft:
             case IslandHitKind.DotRight:
@@ -1517,7 +1528,7 @@ public sealed class SkiaIslandController : IDisposable
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
             var page = (int)State.Page;
-            var max = page < PagerConstants.PageCount ? MaxScrollForPage(page) : 0;
+            var max = MaxScrollForPage(page);
             var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
             var direction = deltaDip < 0 ? PagerScrollDirection.Up : PagerScrollDirection.Down;
             var boundary = max <= 0.5
@@ -1845,6 +1856,7 @@ public sealed class SkiaIslandController : IDisposable
             _time.GetLocalNow())) with
         {
             PluginPages = _pluginPages,
+            PageSlots = BuildPageSlots(),
         };
         _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
         UpdateSplitPreviews(viewModel, settings);
@@ -2186,6 +2198,81 @@ public sealed class SkiaIslandController : IDisposable
         });
     }
 
+    private IReadOnlyList<PageSlot> BuildPageSlots()
+    {
+        var plugins = _pluginPages;
+        var descriptors = _pageRegistry?.BuildPageDescriptors();
+        if (descriptors is null || descriptors.Count == 0)
+        {
+            var fallback = ExpandedPageContent.DefaultPageSlots
+                .Concat(plugins.Select(static page => new PageSlot
+                {
+                    PageId = page.PageId,
+                    Kind = PageSlotKind.Plugin,
+                    TemplateId = "list",
+                    Title = page.Title,
+                    ShortTitle = page.ShortTitle,
+                    IconToken = page.IconToken,
+                    PluginPage = page,
+                }))
+                .ToArray();
+            return fallback;
+        }
+
+        var byPageId = plugins.ToDictionary(static page => page.PageId, StringComparer.OrdinalIgnoreCase);
+        var slots = new PageSlot[descriptors.Count];
+        for (var i = 0; i < descriptors.Count; i++)
+        {
+            var descriptor = descriptors[i];
+            byPageId.TryGetValue(descriptor.PageId, out var plugin);
+            slots[i] = new PageSlot
+            {
+                PageId = descriptor.PageId,
+                Kind = plugin is not null ? PageSlotKind.Plugin : KindForPageId(descriptor.PageId),
+                TemplateId = descriptor.TemplateId,
+                Title = plugin?.Title ?? ResolveDescriptorTitle(descriptor),
+                ShortTitle = plugin?.ShortTitle ?? ResolveDescriptorShortTitle(descriptor),
+                IconToken = descriptor.IconToken,
+                PluginPage = plugin,
+            };
+        }
+
+        return slots;
+    }
+
+    private static PageSlotKind KindForPageId(string pageId) => pageId switch
+    {
+        "builtin.home" => PageSlotKind.Home,
+        "builtin.media" => PageSlotKind.Media,
+        "builtin.notifications" => PageSlotKind.Notifications,
+        "builtin.clipboard" => PageSlotKind.Clipboard,
+        "builtin.agent" => PageSlotKind.Agent,
+        "builtin.widgets" => PageSlotKind.Widgets,
+        _ => PageSlotKind.Plugin,
+    };
+
+    private string ResolveDescriptorTitle(PageDescriptor descriptor)
+    {
+        var key = descriptor.PageId switch
+        {
+            "builtin.home" => "Page.Home.Title",
+            "builtin.media" => "Page.Media.Title",
+            "builtin.notifications" => "Page.Notifications.Title",
+            "builtin.clipboard" => "Page.Clipboard.Title",
+            "builtin.agent" => "Page.Agent.Title",
+            "builtin.widgets" => "Page.Widgets.Title",
+            _ => null,
+        };
+        return key is not null
+            ? _localizer.Get(key)
+            : descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId;
+    }
+
+    private string ResolveDescriptorShortTitle(PageDescriptor descriptor)
+        => descriptor.ShortTitle?.Value
+           ?? descriptor.ShortTitle?.Translations.Values.FirstOrDefault()
+           ?? ResolveDescriptorTitle(descriptor);
+
     private void OnPageRegistryChanged(object? sender, EventArgs e)
     {
         if (_disposed)
@@ -2210,11 +2297,11 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var pages = _pageRegistry?.BuildPluginPages() ?? [];
-        var previousCount = _pages.PageCount;
-        var pageCount = PagerConstants.PageCount + pages.Count;
-        var clamped = _pager.SetPageCount(pageCount);
         _pluginPages = pages;
-        _pages = _pages with { PluginPages = pages };
+        _pages = _pages with { PluginPages = pages, PageSlots = BuildPageSlots() };
+        var previousCount = _pages.PageCount;
+        var pageCount = _pages.PageCount;
+        var clamped = _pager.SetPageCount(pageCount);
 
         if (clamped && previousCount > pageCount)
         {
@@ -2521,14 +2608,15 @@ public sealed class SkiaIslandController : IDisposable
     private double MaxScrollForPage(int page)
     {
         var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
-        return page switch
+        var kind = _pages.PageSlotAt(page)?.Kind;
+        return kind switch
         {
-            0 => PageMetricsLayout.MaxScroll(MetricPageRect(), 0, metrics),
-            1 => PageMetricsLayout.MaxScroll(MetricPageRect(), 1, metrics),
-            2 => ListMaxScroll(_pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
-            3 => ListMaxScroll(_pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
-            4 => ListMaxScroll(_pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
-            5 => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics, _pages.Widgets.Tasks?.Count ?? 0),
+            PageSlotKind.Home => PageMetricsLayout.MaxScroll(MetricPageRect(), 0, metrics),
+            PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), 1, metrics),
+            PageSlotKind.Notifications => ListMaxScroll(_pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
+            PageSlotKind.Clipboard => ListMaxScroll(_pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
+            PageSlotKind.Agent => ListMaxScroll(_pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
+            PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics, _pages.Widgets.Tasks?.Count ?? 0),
             _ => 0,
         };
     }
@@ -3108,3 +3196,4 @@ public sealed class SkiaIslandController : IDisposable
         return new VisualRect(left, top, right - left, bottom - top);
     }
 }
+

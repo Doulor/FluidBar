@@ -12,7 +12,7 @@ public sealed class KaraokePlumbingTests
     private static IslandViewModel MediaIsland() => new()
     {
         StateKind = IslandStateKind.Compact,
-        Page = IslandPage.Media,
+        Page = PageRef.Media,
         Primary = new ActivityViewModel
         {
             Key = new ActivityKey(ActivityKind.Media, "test:media"),
@@ -20,7 +20,7 @@ public sealed class KaraokePlumbingTests
             Icon = ActivityIconKind.Media,
             Accent = AccentRule.Artwork,
             KindLabelKey = "activity.media",
-            Page = IslandPage.Media,
+            Page = PageRef.Media,
             PriorityRank = 1,
             Title = "寡",
             Subtitle = "一颗狼星",
@@ -71,3 +71,4 @@ public sealed class KaraokePlumbingTests
         });
     }
 }
+

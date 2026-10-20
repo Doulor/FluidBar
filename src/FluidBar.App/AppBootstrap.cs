@@ -10,6 +10,7 @@ using FluidBar.App.Localization;
 using FluidBar.App.Plugins;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
+using FluidBar.App.Views;
 using FluidBar.App.Views.Settings;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
@@ -47,6 +48,7 @@ internal sealed class AppBootstrap
     private PluginRuntime? _pluginRuntime;
     private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
     private readonly PageRegistry _pageRegistry = new();
+    private PageChooserWindow? _pageChooser;
     private StartupRegistrationSync? _startupRegistration;
     private AppUpdateCoordinator? _updates;
     private CrashGuard? _crashGuard;
@@ -66,6 +68,8 @@ internal sealed class AppBootstrap
             _settingsStore = new JsonUiSettingsStore(JsonUiSettingsStore.DefaultPath, _logger);
             var initial = await _settingsStore.LoadAsync().ConfigureAwait(true);
             _settings = new SettingsController(initial, _settingsStore, _logger);
+            _pageRegistry.SetOrder(initial.Plugins.PageOrder);
+            _settings.Changed += (_, current) => _pageRegistry.SetOrder(current.Plugins.PageOrder);
 
             var pseudo = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PSEUDO"), "1", StringComparison.Ordinal);
             _localizer = LocalizationService.CreateDefault(
@@ -396,6 +400,7 @@ internal sealed class AppBootstrap
                 await host.StartAsync().ConfigureAwait(true);
                 _skiaHost = host;
                 host.PluginPageCommandRequested += request => _ = ExecutePluginPageCommandAsync(request);
+                host.PageChooserRequested += () => _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ShowPageChooser);
                 _logger.Information(LogCategories.Lifecycle, "app.host-selected", "Island host: skia (layered Win32).");
                 return;
             }
@@ -435,9 +440,9 @@ internal sealed class AppBootstrap
             await Task.Delay(1800).ConfigureAwait(true);
             await CaptureAsync("fluidbar-02-expanded-home.png", log).ConfigureAwait(true);
 
-            var pages = new[] { FluidBar.Core.Activities.IslandPage.Media, FluidBar.Core.Activities.IslandPage.Notifications,
-                FluidBar.Core.Activities.IslandPage.Clipboard, FluidBar.Core.Activities.IslandPage.Agent,
-                FluidBar.Core.Activities.IslandPage.Widgets };
+            var pages = new[] { FluidBar.Core.Activities.PageRef.Media, FluidBar.Core.Activities.PageRef.Notifications,
+                FluidBar.Core.Activities.PageRef.Clipboard, FluidBar.Core.Activities.PageRef.Agent,
+                FluidBar.Core.Activities.PageRef.Widgets };
             var index = 3;
             foreach (var page in pages)
             {
@@ -447,7 +452,7 @@ internal sealed class AppBootstrap
                 index++;
             }
 
-            SimulatePageRequested(FluidBar.Core.Activities.IslandPage.Home);
+            SimulatePageRequested(FluidBar.Core.Activities.PageRef.Home);
             _settings?.Update(s => s with { Language = "zh-Hans" });
             await Task.Delay(900).ConfigureAwait(true);
             await CaptureAsync("fluidbar-08-zh-home.png", log).ConfigureAwait(true);
@@ -669,14 +674,14 @@ internal sealed class AppBootstrap
 
             SimulatePrimaryClick();
             await ShotAsync("expanded-home");
-            var pages = new[] { IslandPage.Media, IslandPage.Notifications, IslandPage.Clipboard, IslandPage.Agent, IslandPage.Widgets };
+            var pages = new[] { PageRef.Media, PageRef.Notifications, PageRef.Clipboard, PageRef.Agent, PageRef.Widgets };
             foreach (var page in pages)
             {
                 SimulatePageRequested(page);
                 await ShotAsync("expanded-" + page.ToString().ToLowerInvariant());
             }
 
-            SimulatePageRequested(IslandPage.Home);
+            SimulatePageRequested(PageRef.Home);
             await Task.Delay(300).ConfigureAwait(true);
             _skiaHost?.SimulateWheel(-140);
             await Task.Delay(200).ConfigureAwait(true);
@@ -701,7 +706,7 @@ internal sealed class AppBootstrap
         _host?.SimulatePrimaryClick();
     }
 
-    private void SimulatePageRequested(FluidBar.Core.Activities.IslandPage page)
+    private void SimulatePageRequested(FluidBar.Core.Activities.PageRef page)
     {
         _skiaHost?.SimulatePageRequested(page);
         _host?.SimulatePageRequested(page);
@@ -847,6 +852,39 @@ internal sealed class AppBootstrap
                 "The edited hotkey bindings could not be applied; restart FluidBar to retry.", ex);
         }
     }
+    private void ShowPageChooser()
+    {
+        if (_pageChooser is not null)
+        {
+            _pageChooser.Activate();
+            return;
+        }
+
+        var descriptors = _pageRegistry.BuildPageDescriptors();
+        var items = descriptors.Select(static descriptor => new PageChooserWindow.Item(
+            descriptor.PageId,
+            descriptor.IconToken switch
+            {
+                "home" => "⌂",
+                "media" => "▶",
+                "bell" => "◉",
+                "clipboard" => "▤",
+                "agent" => "✦",
+                "calendar" => "▦",
+                _ => "•",
+            },
+            descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId)).ToArray();
+        var current = _skiaHost?.Pager.SelectedIndex ?? 0;
+        var chooser = new PageChooserWindow(items, current, index =>
+        {
+            _pageChooser = null;
+            _skiaHost?.SimulatePageRequested((FluidBar.Core.Activities.PageRef)index);
+        });
+        chooser.Closed += (_, _) => _pageChooser = null;
+        _pageChooser = chooser;
+        chooser.Show();
+    }
+
     private async Task ExecutePluginPageCommandAsync(PluginPageCommandRequest request)
     {
         var runtime = _pluginRuntime;
@@ -1044,7 +1082,8 @@ internal sealed class AppBootstrap
             openPath: null,
             updates: _updates,
             frameStats: _skiaHost,
-            restartToInstall: RestartToInstall);
+            restartToInstall: RestartToInstall,
+            pages: _pageRegistry);
         window.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow = window;
         window.Show();
@@ -1157,6 +1196,7 @@ internal sealed class AppBootstrap
         _lifetime.Shutdown();
     }
 }
+
 
 
 

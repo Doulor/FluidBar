@@ -107,11 +107,42 @@ public sealed class PageRegistryTests
         var registry = new PageRegistry();
         for (var i = 0; i < PageRegistry.MaxPages - PageRegistry.BuiltinPageCount; i++)
         {
-            Assert.True(registry.RegisterPage(Owner, Descriptor($"sample-page.page{i}"), out var error), error);
+            var owner = $"sample-page-{i}";
+            Assert.True(registry.RegisterPage(owner, Descriptor($"{owner}.page"), out var error), error);
         }
 
-        Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.overflow"), out var limit));
+        Assert.False(registry.RegisterPage("overflow", Descriptor("overflow.page"), out var limit));
         Assert.Contains("limit", limit, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RegisterPage_AllowsAtMostFourPagesPerPlugin()
+    {
+        var registry = new PageRegistry();
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.True(registry.RegisterPage(Owner, Descriptor($"sample-page.page{i}"), out var registerError), registerError);
+        }
+
+        Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.fifth"), out var pageError));
+        Assert.Contains("4 pages", pageError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuiltinsUseTemplatesAndUserOrderIsApplied()
+    {
+        var registry = new PageRegistry();
+        Assert.Equal(6, PageRegistry.BuiltinDescriptors.Count);
+        Assert.Equal("builtin.home", PageRegistry.BuiltinDescriptors[0].TemplateId);
+        Assert.Equal("calendar", PageRegistry.BuiltinDescriptors[5].TemplateId);
+
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out _));
+        registry.SetOrder(["sample-page.metrics", "builtin.media", "builtin.home"]);
+
+        var ordered = registry.BuildPageDescriptors();
+        Assert.Equal("sample-page.metrics", ordered[0].PageId);
+        Assert.Equal("builtin.media", ordered[1].PageId);
+        Assert.Equal("builtin.home", ordered[2].PageId);
     }
 
     private static PageDescriptor Descriptor(string pageId) => new()

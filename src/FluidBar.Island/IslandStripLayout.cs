@@ -31,6 +31,12 @@ public sealed record IslandStripLayout
     /// <summary>Total page count represented by the rail.</summary>
     public int PageCount { get; init; } = FluidBar.Core.Interaction.PagerConstants.PageCount;
 
+    /// <summary>Left overflow ellipsis (empty when every page fits).</summary>
+    public SKRect OverflowLeft { get; init; } = SKRect.Empty;
+
+    /// <summary>Right overflow ellipsis (empty when every page fits).</summary>
+    public SKRect OverflowRight { get; init; } = SKRect.Empty;
+
     /// <summary>Far-page dots on the left (nearest first).</summary>
     public required SKRect[] DotsLeft { get; init; }
 
@@ -53,6 +59,16 @@ public sealed record IslandStripLayout
     /// <summary>Hit-tests the rail layout (tests/host hit-region building).</summary>
     public IslandHitTarget HitTest(float x, float y)
     {
+        if (!OverflowLeft.IsEmpty && OverflowLeft.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.RailOverflow, Index: 0);
+        }
+
+        if (!OverflowRight.IsEmpty && OverflowRight.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.RailOverflow, Index: 1);
+        }
+
         if (Page > 0 && Previous.Contains(x, y))
         {
             return new IslandHitTarget(IslandHitKind.RailSlot, Page - 1);

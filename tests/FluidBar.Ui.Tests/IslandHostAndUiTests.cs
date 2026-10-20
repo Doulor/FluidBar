@@ -15,7 +15,7 @@ using FluidBar.Core.Events;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 using FluidBar.Core.Presentation;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.Ui.Tests;
 
@@ -412,3 +412,4 @@ internal sealed class HostFixture : IDisposable
 
     public void Dispose() => Host.Dispose();
 }
+

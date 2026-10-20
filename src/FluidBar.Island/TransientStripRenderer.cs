@@ -72,6 +72,8 @@ internal sealed class TransientStripRenderer : IDisposable
             Next = _frame.Page < _frame.PageCount - 1 ? _frame.Next : SKRect.Empty,
             Page = _frame.Page,
             PageCount = _frame.PageCount,
+            OverflowLeft = _frame.OverflowLeft,
+            OverflowRight = _frame.OverflowRight,
             CapsuleWidth = _frame.CapsuleWidth,
             DotsLeft = left,
             DotsRight = right,
@@ -270,6 +272,27 @@ internal sealed class TransientStripRenderer : IDisposable
             {
                 DrawDot(canvas, _dotsRight[i]);
             }
+        }
+
+        DrawOverflow(canvas, _frame.OverflowLeft, alpha);
+        DrawOverflow(canvas, _frame.OverflowRight, alpha);
+    }
+
+    private void DrawOverflow(SKCanvas canvas, SKRect rect, float alpha)
+    {
+        if (rect.IsEmpty || alpha <= 0.01f)
+        {
+            return;
+        }
+
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * alpha);
+        var size = Math.Min(3.0f, rect.Width / 4f);
+        var gap = size * 1.6f;
+        var start = rect.MidX - (gap * 2f);
+        for (var i = 0; i < 3; i++)
+        {
+            canvas.DrawCircle(start + (i * gap), rect.MidY, size, _fill);
         }
     }
 

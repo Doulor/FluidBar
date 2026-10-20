@@ -19,9 +19,9 @@ public sealed class SplitCapsuleStyleTests
             SplitIsletHeight = 40,
             SplitIslets =
             [
-                new IslandSplitIslet(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", IslandPage.Agent,
+                new IslandSplitIslet(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent,
                     0xFF4CC9F0, "6", ShowAction: true),
-                new IslandSplitIslet(ActivityKind.Timer, IconKind.Clock, "计时器", "Pomodoro", IslandPage.Home,
+                new IslandSplitIslet(ActivityKind.Timer, IconKind.Clock, "计时器", "Pomodoro", PageRef.Home,
                     0xFF4CC9F0),
             ],
         };
@@ -167,3 +167,4 @@ public sealed class SplitCapsuleStyleTests
             renderer.HitTest(state, balls[0].MidX, balls[0].Top - 6).Kind);
     }
 }
+

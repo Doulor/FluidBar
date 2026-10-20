@@ -1,0 +1,68 @@
+{
+  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "schemaVersion": 2,
+  "id": "fluidbar-sample-overflow-pages",
+  "version": "1.0.0",
+  "apiVersion": "2.0.0",
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar-samples",
+    "displayName": "FluidBar Samples",
+    "url": "https://fluidbar.app"
+  },
+  "author": {
+    "name": "FluidBar contributors",
+    "url": "https://fluidbar.app"
+  },
+  "name": {
+    "en-US": "Overflow Pages Sample"
+  },
+  "summary": {
+    "en-US": "Adds two pages for the 12-page rail overflow fixture."
+  },
+  "description": {
+    "en-US": "M1 overflow/page chooser fixture."
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "homepage": "https://fluidbar.app",
+  "categories": [
+    "developer"
+  ],
+  "tags": [
+    "sample",
+    "overflow"
+  ],
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Sample.OverflowPages.dll",
+    "type": "FluidBar.Sample.OverflowPages.OverflowPagesPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": [
+    "win-x64"
+  ],
+  "locales": {
+    "default": "en-US",
+    "available": [
+      "en-US"
+    ],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "pages": true,
+      "pageTemplates": [
+        "list"
+      ],
+      "commands": false,
+      "xaml": false
+    }
+  },
+  "activation": [
+    "startup"
+  ],
+  "contributes": {}
+}

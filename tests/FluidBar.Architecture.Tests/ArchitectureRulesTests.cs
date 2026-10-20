@@ -110,6 +110,49 @@ public sealed class ArchitectureRulesTests
             + string.Join("\n", violations.Select(v => $"{v.File}:{v.Line}: {v.Text}")));
     }
 
+    [Fact]
+    public void Legacy_island_page_enum_is_gone()
+    {
+        var violations = ScanSourceFiles(new Regex(@"\benum\s+IslandPage\b", RegexOptions.CultureInvariant), static _ => false);
+        Assert.True(violations.Count == 0,
+            "The legacy IslandPage enum must stay deleted; use PageRef/string page ids:\n"
+            + string.Join("\n", violations.Select(v => $"{v.File}:{v.Line}: {v.Text}")));
+    }
+
+    [Fact]
+    public void Page_renderer_dispatches_by_template_not_page_index()
+    {
+        var path = Path.Combine(RepoRoot, "src/FluidBar.Island/PageRenderer.cs");
+        Assert.True(File.Exists(path), path);
+        var source = File.ReadAllText(path);
+        Assert.DoesNotContain("switch (page)", source, StringComparison.Ordinal);
+        Assert.DoesNotMatch(new Regex(@"case\s+[0-5]\s*:", RegexOptions.CultureInvariant), source);
+        Assert.Contains("builtin.home", source, StringComparison.Ordinal);
+        Assert.Contains("builtin.media", source, StringComparison.Ordinal);
+        Assert.Contains("list", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Page_registry_uses_descriptor_limit_and_native_templates()
+    {
+        var path = Path.Combine(RepoRoot, "src/FluidBar.App/Hosting/Pages/PageRegistry.cs");
+        Assert.True(File.Exists(path), path);
+        var source = File.ReadAllText(path);
+        Assert.Contains("MaxPages = 12", source, StringComparison.Ordinal);
+        Assert.Contains("at most 4 pages", source, StringComparison.Ordinal);
+        Assert.Contains("builtin.home", source, StringComparison.Ordinal);
+        Assert.Contains("builtin.widgets", source, StringComparison.Ordinal);
+        Assert.Contains("TemplateId = PageTemplates.Calendar", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rendering_does_not_read_the_legacy_page_count_constant()
+    {
+        var path = Path.Combine(RepoRoot, "src/FluidBar.Island/PageRenderer.cs");
+        Assert.True(File.Exists(path), path);
+        Assert.DoesNotContain("PagerConstants.PageCount", File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
     private static List<(string File, int Line, string Text)> ScanSourceFiles(Regex pattern, Func<string, bool> skip)
     {
         var results = new List<(string, int, string)>();

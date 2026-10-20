@@ -181,7 +181,7 @@ public sealed class SkiaIslandHostMappingTests
         fixture.Controller.HandleDragEnded(-100, 90, timestampMs: 32);
 
         Assert.Equal(1, fixture.Controller.Pager.SelectedIndex);
-        Assert.Equal(IslandPage.Media, fixture.Controller.State.Page);
+        Assert.Equal(PageRef.Media, fixture.Controller.State.Page);
 
         fixture.RunToRest();
         Assert.Equal(1, fixture.Controller.RenderState.Pager.PageIndex);
@@ -199,7 +199,7 @@ public sealed class SkiaIslandHostMappingTests
         fixture.Controller.HandleDragEnded(190, 200, timestampMs: 32);
 
         Assert.Equal(0, fixture.Controller.Pager.SelectedIndex);
-        Assert.Equal(IslandPage.Home, fixture.Controller.State.Page);
+        Assert.Equal(PageRef.Home, fixture.Controller.State.Page);
     }
 
     [Fact]
@@ -433,3 +433,4 @@ public sealed class SkiaIslandHostMappingTests
     /// <summary>One physical wheel notch (70 DIP; two notches make the 140 DIP page step).</summary>
     private const double PerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
 }
+

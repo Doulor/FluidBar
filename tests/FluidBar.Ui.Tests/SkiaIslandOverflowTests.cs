@@ -23,7 +23,7 @@ public sealed class SkiaIslandOverflowTests
         var state = fixture.Controller.RenderState;
         Assert.Equal(1, state.OverflowCount);
         Assert.Equal(1, fixture.Controller.SchedulerState.BadgeCount);
-        Assert.Equal(IslandPage.Media, fixture.Controller.SchedulerState.Background[0].Kind.ToPage());
+        Assert.Equal(PageRef.Media, fixture.Controller.SchedulerState.Background[0].Kind.ToPage());
         var expectedWidth = LayoutTokens.CompactSizeFor(state.Compact?.Kind, state.Mode, state.FontScale).Width
             + LayoutTokens.OverflowBadgeReserve;
         Assert.Equal(expectedWidth, state.ShellWidth, 0.001);
@@ -48,7 +48,7 @@ public sealed class SkiaIslandOverflowTests
         fixture.Settle();
 
         Assert.Equal(IslandStateKind.Expanded, fixture.Controller.State.Kind);
-        Assert.Equal((int)IslandPage.Media, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal((int)PageRef.Media, fixture.Controller.Pager.SelectedIndex);
         Assert.Equal(0, fixture.Controller.RenderState.OverflowCount);
     }
 
@@ -65,3 +65,4 @@ public sealed class SkiaIslandOverflowTests
             new ActivityPayload { Title = "Export", ProgressPercent = 40 }, 4, "test");
     }
 }
+

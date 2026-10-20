@@ -95,35 +95,47 @@ internal sealed partial class PageRenderer : IDisposable
             return;
         }
 
-        if (state.Pages.PluginPageAt(page) is { } pluginPage)
+        var slot = state.Pages.PageSlotAt(page);
+        var template = slot?.TemplateId ?? "list";
+        if (slot is { Kind: PageSlotKind.Plugin } && slot.PluginPage is { } pluginPage)
         {
             DrawPluginPage(canvas, pluginPage, pageRect);
             return;
         }
 
-        switch (page)
+        switch (template)
         {
-            case 0:
+            case "builtin.home":
                 DrawHome(canvas, state.Pages.Home, pageRect);
-                break;
-            case 1:
+                return;
+            case "builtin.media":
                 DrawMedia(canvas, state.Pages.Media, pageRect);
-                break;
-            case 2:
-                DrawNotifications(canvas, state.Pages.Notifications, pageRect);
-                break;
-            case 3:
-                DrawClipboard(canvas, state.Pages.Clipboard, pageRect);
-                break;
-            case 4:
-                DrawAgent(canvas, state.Pages.Agent, pageRect);
-                break;
-            case 5:
+                return;
+            case "list":
+                switch (slot?.Kind)
+                {
+                    case PageSlotKind.Notifications:
+                        DrawNotifications(canvas, state.Pages.Notifications, pageRect);
+                        return;
+                    case PageSlotKind.Clipboard:
+                        DrawClipboard(canvas, state.Pages.Clipboard, pageRect);
+                        return;
+                    case PageSlotKind.Agent:
+                        DrawAgent(canvas, state.Pages.Agent, pageRect);
+                        return;
+                    default:
+                        DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
+                        return;
+                }
+            case "calendar":
                 DrawWidgets(canvas, state.Pages.Widgets, pageRect);
-                break;
+                return;
+            case "stat-grid":
+                DrawWidgets(canvas, state.Pages.Widgets, pageRect);
+                return;
             default:
                 DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
-                break;
+                return;
         }
     }
 

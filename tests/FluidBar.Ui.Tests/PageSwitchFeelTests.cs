@@ -19,7 +19,7 @@ public sealed class PageSwitchFeelTests
     {
         var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
-        fixture.Controller.HandlePageRequest(FluidBar.Core.Activities.IslandPage.Home);
+        fixture.Controller.HandlePageRequest(FluidBar.Core.Activities.PageRef.Home);
         fixture.RunToRest();
         return (fixture, fixture.Controller);
     }
@@ -246,3 +246,4 @@ public sealed class PageSwitchFeelTests
         Assert.Equal(0.0, Position(controller), 3);
     }
 }
+

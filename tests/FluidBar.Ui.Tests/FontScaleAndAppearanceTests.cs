@@ -66,7 +66,7 @@ public sealed class FontScaleAndAppearanceTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(0);
 
-        for (var i = 0; i < 3 && fixture.Controller.State.Page == FluidBar.Core.Activities.IslandPage.Home; i++)
+        for (var i = 0; i < 3 && fixture.Controller.State.Page == FluidBar.Core.Activities.PageRef.Home; i++)
         {
             fixture.Controller.HandleWheel(PagerConstants.WheelNotchDip, horizontal: false, shift: false);
             Assert.Equal(0, fixture.Controller.RenderState.Pages.Home.ScrollOffset, 3);
@@ -74,7 +74,7 @@ public sealed class FontScaleAndAppearanceTests
             fixture.RunToRest();
         }
 
-        Assert.Equal(FluidBar.Core.Activities.IslandPage.Media, fixture.Controller.State.Page);
+        Assert.Equal(FluidBar.Core.Activities.PageRef.Media, fixture.Controller.State.Page);
     }
 
     [Fact]
@@ -140,3 +140,4 @@ public sealed class FontScaleAndAppearanceTests
             $"accent expected #{red:X2}{green:X2}{blue:X2} but was #{accent.Red:X2}{accent.Green:X2}{accent.Blue:X2} (a={accent.Alpha:X2}, mode={fixture.Settings.Current.AccentMode})");
     }
 }
+

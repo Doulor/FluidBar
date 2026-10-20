@@ -664,7 +664,7 @@ public class LayoutTests
     public void Expanded_IsUniformly440x284()
     {
         var monitor = Monitor(96);
-        foreach (var page in Enum.GetValues<IslandPage>())
+        foreach (var page in Enum.GetValues<PageRef>())
         {
             _ = page;
             var result = IslandLayout.Calculate(Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter), monitor);
@@ -1047,3 +1047,4 @@ public class LayoutTests
         Assert.Equal(0, LayoutTokens.ConcentricRadius(12, 16), Eps);
     }
 }
+

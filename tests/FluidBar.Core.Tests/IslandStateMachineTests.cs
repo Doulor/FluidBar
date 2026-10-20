@@ -386,7 +386,7 @@ public class IslandStateMachineTests
         var expanded = IslandState.Hidden with
         {
             Kind = IslandStateKind.Expanded,
-            Page = IslandPage.Home,
+            Page = PageRef.Home,
             ActivityCount = 1,
             ContentKind = ActivityKind.Notification,
         };
@@ -503,11 +503,11 @@ public class IslandStateMachineTests
     public void PageRequested_OnlyInExpandedAndContentOnly()
     {
         var compact = IslandState.Hidden with { Kind = IslandStateKind.Compact };
-        Assert.Equal(IslandTransitionReason.NoChange, Reduce(compact, IslandInput.PageRequested(IslandPage.Media)).Reason);
+        Assert.Equal(IslandTransitionReason.NoChange, Reduce(compact, IslandInput.PageRequested(PageRef.Media)).Reason);
 
         var expanded = compact with { Kind = IslandStateKind.Expanded };
-        var transition = Reduce(expanded, IslandInput.PageRequested(IslandPage.Media));
-        Assert.Equal(IslandPage.Media, transition.State.Page);
+        var transition = Reduce(expanded, IslandInput.PageRequested(PageRef.Media));
+        Assert.Equal(PageRef.Media, transition.State.Page);
         Assert.Equal(IslandTransitionReason.PageRequested, transition.Reason);
         Assert.Contains(transition.Effects, e => e.Kind == IslandEffectKind.UpdateContent);
         Assert.DoesNotContain(transition.Effects, e => e.Kind == IslandEffectKind.Relayout);
@@ -643,3 +643,4 @@ public class IslandStateMachineTests
         Assert.Null(ActivityPriorityPolicy.DefaultTtl(ActivityKind.Lookup));
     }
 }
+

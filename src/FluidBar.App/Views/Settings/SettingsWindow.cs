@@ -41,6 +41,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly IUpdateUiService? _updates;
     private readonly IFrameStatsSource? _frameStats;
     private readonly Action? _restartToInstall;
+    private readonly FluidBar.App.Hosting.Pages.PageRegistry? _pages;
     private readonly StackPanel _nav = new() { Spacing = SettingsMetrics.NavGap };
     private readonly ScrollViewer _content = new();
     private readonly TextBlock _titleText = new();
@@ -72,13 +73,15 @@ public sealed class SettingsWindow : Window, ILocalizable
         Action<string?>? openPath = null,
         IUpdateUiService? updates = null,
         IFrameStatsSource? frameStats = null,
-        Action? restartToInstall = null)
+        Action? restartToInstall = null,
+        FluidBar.App.Hosting.Pages.PageRegistry? pages = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
         _updates = updates;
         _frameStats = frameStats;
         _restartToInstall = restartToInstall;
+        _pages = pages;
         _marketplace = marketplace ?? CreateDefaultMarketplace(localizer);
         _plugins = plugins ?? new FluidBar.App.Views.Plugins.BuiltinPluginContributionUiService(settings, localizer);
         _openPath = openPath ?? (static path =>
@@ -941,6 +944,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             Updates = _updates,
             FrameStats = _frameStats,
             RestartToInstall = _restartToInstall,
+            Pages = _pages,
         };
         var content = SettingsSectionBuilder.Build(_section, context);
         if (_section == SettingsWindowSection.Appearance)

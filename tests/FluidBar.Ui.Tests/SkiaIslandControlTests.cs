@@ -135,7 +135,7 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerPressed(card.Left + 80, card.MidY);
         fixture.RunToRest();
 
-        Assert.Equal(IslandPage.Media, fixture.Controller.State.Page);
+        Assert.Equal(PageRef.Media, fixture.Controller.State.Page);
         Assert.Empty(actions.Calls);
     }
 
@@ -346,5 +346,6 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerReleased(rect.MidX, rect.MidY);
     }
 }
+
 
 

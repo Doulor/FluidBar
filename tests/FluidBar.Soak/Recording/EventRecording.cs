@@ -125,7 +125,7 @@ public sealed record RecordedPayload
     public bool IsPinned { get; init; }
 
     /// <summary>Preferred expanded page.</summary>
-    public IslandPage? PreferredPage { get; init; }
+    public PageRef? PreferredPage { get; init; }
 
     /// <summary>Playback position in ticks.</summary>
     public long PositionTicks { get; init; }
@@ -167,7 +167,7 @@ public sealed record ExpectedSnapshot
     public IslandStateKind StateKind { get; init; } = IslandStateKind.Compact;
 
     /// <summary>Expected selected page.</summary>
-    public IslandPage Page { get; init; } = IslandPage.Home;
+    public PageRef Page { get; init; } = PageRef.Home;
 
     /// <summary>Expected primary activity kind (<see langword="null"/> = idle surface).</summary>
     public ActivityKind? PrimaryKind { get; init; }
@@ -400,3 +400,4 @@ public static class EventRecordingCatalog
         return options;
     }
 }
+

@@ -86,6 +86,12 @@ public sealed record PluginSettings
     /// <summary>Enabled plugin ids (built-in + community).</summary>
     public IReadOnlyList<string> Enabled { get; init; } = ["fluidbar-media", "fluidbar-clipboard", "fluidbar-notifications", "fluidbar-agent"];
 
+    /// <summary>User page order (PageIds); unknown ids are kept at the end.</summary>
+    public IReadOnlyList<string> PageOrder { get; init; } =
+    [
+        "builtin.home", "builtin.media", "builtin.notifications", "builtin.clipboard", "builtin.agent", "builtin.widgets",
+    ];
+
     /// <summary>Marketplace update channel.</summary>
     public string Channel { get; init; } = "stable";
 
@@ -478,6 +484,7 @@ public sealed record AppSettings
             Plugins = new PluginsJson
             {
                 Enabled = [.. Plugins.Enabled],
+                PageOrder = [.. Plugins.PageOrder],
                 Channel = Plugins.Channel,
                 CheckIntervalHours = Plugins.CheckIntervalHours,
             },
@@ -554,6 +561,7 @@ public sealed record AppSettings
                 Plugins = new PluginSettings
                 {
                     Enabled = document.Plugins?.Enabled ?? defaults.Plugins.Enabled,
+                    PageOrder = document.Plugins?.PageOrder ?? defaults.Plugins.PageOrder,
                     Channel = document.Plugins?.Channel ?? "stable",
                     CheckIntervalHours = document.Plugins?.CheckIntervalHours ?? 24,
                 },
@@ -767,6 +775,7 @@ internal sealed class DockJson
 internal sealed class PluginsJson
 {
     public string[]? Enabled { get; set; }
+    public string[]? PageOrder { get; set; }
     public string? Channel { get; set; }
     public int? CheckIntervalHours { get; set; }
 }

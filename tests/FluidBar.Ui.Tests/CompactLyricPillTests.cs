@@ -12,7 +12,7 @@ public sealed class CompactLyricPillTests
     private static IslandViewModel MediaIsland() => new()
     {
         StateKind = IslandStateKind.Compact,
-        Page = IslandPage.Media,
+        Page = PageRef.Media,
         Primary = new ActivityViewModel
         {
             Key = new ActivityKey(ActivityKind.Media, "test:media"),
@@ -20,7 +20,7 @@ public sealed class CompactLyricPillTests
             Icon = ActivityIconKind.Media,
             Accent = AccentRule.Artwork,
             KindLabelKey = "activity.media",
-            Page = IslandPage.Media,
+            Page = PageRef.Media,
             PriorityRank = 1,
             Title = "Miss You a Little (feat. lovelytheband)",
             Subtitle = "Bryce Vine",
@@ -108,7 +108,7 @@ public sealed class CompactLyricPillTests
                     Icon = ActivityIconKind.Clipboard,
                     Accent = AccentRule.ThemeAccent,
                     KindLabelKey = "activity.clipboard",
-                    Page = IslandPage.Clipboard,
+                    Page = PageRef.Clipboard,
                     PriorityRank = 2,
                     Title = "copied text",
                 },

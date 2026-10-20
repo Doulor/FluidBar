@@ -28,7 +28,7 @@ public sealed record ExpandedPageContext
     public required ILocalizer Localizer { get; init; }
 
     /// <summary>Selected rail page.</summary>
-    public required IslandPage SelectedPage { get; init; }
+    public required PageRef SelectedPage { get; init; }
 }
 
 /// <summary>
@@ -154,7 +154,7 @@ public static class IslandPresenter
     }
 
     /// <summary>Derives the expanded page from the state.</summary>
-    public static IslandPage PageFor(IslandViewModel island)
+    public static PageRef PageFor(IslandViewModel island)
     {
         ArgumentNullException.ThrowIfNull(island);
         return island.Page;

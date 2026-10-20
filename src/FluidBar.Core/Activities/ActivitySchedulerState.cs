@@ -41,8 +41,8 @@ public sealed record ActivitySchedulerState
     /// <summary>Kind of the primary activity, or <see langword="null"/> for the idle surface.</summary>
     public ActivityKind? PrimaryKind => Primary?.Kind;
 
-    /// <summary>Page the primary activity naturally opens on, or <see cref="IslandPage.Home"/>.</summary>
-    public IslandPage PrimaryPage => Primary?.Payload.PreferredPage ?? Primary?.Kind.ToPage() ?? IslandPage.Home;
+    /// <summary>Page the primary activity naturally opens on, or <see cref="PageRef.Home"/>.</summary>
+    public PageRef PrimaryPage => Primary?.Payload.PreferredPage ?? Primary?.Kind.ToPage() ?? PageRef.Home;
 
     /// <summary>Whether any activity is live.</summary>
     public bool HasActivities => Visible.Length + Background.Length > 0;
@@ -103,3 +103,4 @@ public sealed record ActivitySchedulerState
         }
     }
 }
+

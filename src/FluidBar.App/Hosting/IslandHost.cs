@@ -18,7 +18,7 @@ using FluidBar.Core.Events;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 using FluidBar.Core.Presentation;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.App.Hosting;
 
@@ -877,3 +877,4 @@ public enum MediaTransportCommand
     /// <summary>Next track.</summary>
     Next,
 }
+

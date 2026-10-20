@@ -6,7 +6,7 @@ using FluidBar.App.Localization;
 using FluidBar.App.State;
 using FluidBar.App.Theme;
 using FluidBar.Core.Activities;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.App.Island.Expanded;
 
@@ -701,3 +701,4 @@ public sealed class WidgetsPage : IslandPageView
     public static Rect TaskRect(int index)
         => new(TaskX, BodyTop + 34 + (index * 44), TaskWidth, 40);
 }
+

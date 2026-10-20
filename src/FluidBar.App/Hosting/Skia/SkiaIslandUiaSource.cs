@@ -184,7 +184,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             case UiaKeyCommand.Home:
                 if (_controller.RenderState.IsExpanded)
                 {
-                    _controller.HandlePageRequest(IslandPage.Home);
+                    _controller.HandlePageRequest(PageRef.Home);
                     return true;
                 }
 
@@ -199,7 +199,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             case UiaKeyCommand.End:
                 if (_controller.RenderState.IsExpanded)
                 {
-                    _controller.HandlePageRequest((IslandPage)(PagerConstants.PageCount - 1));
+                    _controller.HandlePageRequest((PageRef)(PagerConstants.PageCount - 1));
                     return true;
                 }
 
@@ -403,16 +403,17 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private UiaElementSnapshot BuildPageControls(in IslandRenderState state, int pageIndex)
     {
         var page = IslandMetrics.PageRect(state, pageIndex);
-        var children = state.Pages.PluginPageAt(pageIndex) is { } pluginPage
+        var slot = state.Pages.PageSlotAt(pageIndex);
+        var children = slot?.PluginPage is { } pluginPage
             ? BuildPluginControls(state, pluginPage, pageIndex, page)
-            : pageIndex switch
+            : slot?.Kind switch
             {
-                0 => BuildHomeControls(state, page),
-                1 => BuildMediaControls(state, page),
-                2 => BuildNotificationControls(state, page),
-                3 => BuildClipboardControls(state, page),
-                4 => BuildAgentControls(state, page),
-                5 => BuildWidgetControls(state, page),
+                PageSlotKind.Home => BuildHomeControls(state, page),
+                PageSlotKind.Media => BuildMediaControls(state, page),
+                PageSlotKind.Notifications => BuildNotificationControls(state, page),
+                PageSlotKind.Clipboard => BuildClipboardControls(state, page),
+                PageSlotKind.Agent => BuildAgentControls(state, page),
+                PageSlotKind.Widgets => BuildWidgetControls(state, page),
                 _ => [],
             };
 
@@ -955,6 +956,18 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 strip.Next, F("Island.Accessibility.NextPage", "Next page: {0}", state.Pages.Title(page + 1))));
         }
 
+        if (!strip.OverflowLeft.IsEmpty)
+        {
+            children.Add(StripButton("island.strip.overflow.left", L("Island.Accessibility.MorePages", "More pages"),
+                strip.OverflowLeft, L("Island.Accessibility.MorePagesHelp", "Open the page selector.")));
+        }
+
+        if (!strip.OverflowRight.IsEmpty)
+        {
+            children.Add(StripButton("island.strip.overflow.right", L("Island.Accessibility.MorePages", "More pages"),
+                strip.OverflowRight, L("Island.Accessibility.MorePagesHelp", "Open the page selector.")));
+        }
+
         // Every dot of a cluster targets the same (farthest) page, so the ids are de-duplicated by
         // ordinal and the bounds are the exact dot hit rectangle the pointer path uses.
         for (var i = 0; i < strip.DotsLeft.Length; i++)
@@ -1125,6 +1138,12 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
         }
 
+        if (parts[2] == "overflow")
+        {
+            _controller.RequestPageChooser();
+            return;
+        }
+
         if (parts[2] is "prev" or "current" or "next")
         {
             if (parts.Length >= 4 && int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var page))
@@ -1214,7 +1233,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 }
                 else
                 {
-                    _controller.HandlePageRequest(IslandPage.Media);
+                    _controller.HandlePageRequest(PageRef.Media);
                 }
 
                 return;
@@ -1264,7 +1283,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
         }
 
-        _controller.HandlePageRequest((IslandPage)page);
+        _controller.HandlePageRequest((PageRef)page);
     }
 
     private void Activate(in UiaElementSnapshot node)
@@ -1462,6 +1481,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private string F(string key, string fallback, params object?[] arguments)
         => string.Format(_localizer.CurrentCulture, L(key, fallback), arguments);
 }
+
 
 
 

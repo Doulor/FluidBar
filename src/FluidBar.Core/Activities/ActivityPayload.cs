@@ -79,7 +79,7 @@ public sealed record ActivityPayload
     public bool IsPinned { get; init; }
 
     /// <summary>Preferred page to open on click, when the kind default is not wanted.</summary>
-    public IslandPage? PreferredPage { get; init; }
+    public PageRef? PreferredPage { get; init; }
 
     /// <summary>
     /// Merges an incremental patch over this payload: non-null fields from
@@ -225,3 +225,4 @@ public static class StableHash
         return unchecked((int)hash);
     }
 }
+

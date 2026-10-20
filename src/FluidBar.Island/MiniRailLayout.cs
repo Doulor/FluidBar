@@ -70,7 +70,9 @@ public readonly record struct MiniRailFrame(
     MiniRailSlot Hover,
     MiniRailSlot Pressed,
     MiniRailSlot Focus,
-    int PageCount = PagerConstants.PageCount);
+    int PageCount = PagerConstants.PageCount,
+    SKRect OverflowLeft = default,
+    SKRect OverflowRight = default);
 
 /// <summary>
 /// Pure geometry + text metrics for the prototype2 transient preview rail.
@@ -293,6 +295,19 @@ public static class MiniRailLayout
             halfWidth = Math.Max(halfWidth, (rightClusterCentre + (rightWidth / 2f)) - centreX);
         }
 
+        var showOverflow = pageCount > 7;
+        var overflowLeft = showOverflow
+            ? new SKRect(leftClusterCentre - (leftWidth / 2f) - 24f, dotTop - 3f, leftClusterCentre - (leftWidth / 2f) - 4f, dotTop + dotSize + 3f)
+            : SKRect.Empty;
+        var overflowRight = showOverflow
+            ? new SKRect(rightClusterCentre + (rightWidth / 2f) + 4f, dotTop - 3f, rightClusterCentre + (rightWidth / 2f) + 24f, dotTop + dotSize + 3f)
+            : SKRect.Empty;
+        if (showOverflow)
+        {
+            halfWidth = Math.Max(halfWidth, centreX - overflowLeft.Left);
+            halfWidth = Math.Max(halfWidth, overflowRight.Right - centreX);
+        }
+
         var strip = new SKRect(centreX - halfWidth, railTop, centreX + halfWidth, railTop + RailHeight);
         return new MiniRailFrame(
             page,
@@ -314,7 +329,9 @@ public static class MiniRailLayout
             hover,
             pressed,
             focus,
-            pageCount);
+            pageCount,
+            overflowLeft,
+            overflowRight);
     }
 
     /// <summary>

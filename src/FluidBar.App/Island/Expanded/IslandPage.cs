@@ -5,7 +5,7 @@ using FluidBar.App.Localization;
 using FluidBar.App.State;
 using FluidBar.Core.Activities;
 using AppControls = FluidBar.App.Controls;
-using CoreIslandPage = FluidBar.Core.Activities.IslandPage;
+using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
 namespace FluidBar.App.Island.Expanded;
 
@@ -176,3 +176,4 @@ public abstract class IslandPageView : Control, ILocalizable
             TextAlignment.Center);
     }
 }
+

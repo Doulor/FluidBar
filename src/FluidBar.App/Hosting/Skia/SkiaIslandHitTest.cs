@@ -23,7 +23,9 @@ public readonly record struct SkiaStripGeometry(
     float CapsuleWidth,
     SKRect[] DotsLeft,
     SKRect[] DotsRight,
-    int PageCount = PagerConstants.PageCount)
+    int PageCount = PagerConstants.PageCount,
+    SKRect OverflowLeft = default,
+    SKRect OverflowRight = default)
 {
     /// <summary>Target page for a left dot index (every dot in the cluster jumps to page 01).</summary>
     public int LeftDotPage(int index) => index >= 0 && index < DotsLeft.Length ? 0 : -1;
@@ -144,7 +146,9 @@ public static class SkiaIslandHitTest
             frame.CapsuleWidth,
             frame.LeftDots > 0 ? dotsLeft[..frame.LeftDots].ToArray() : [],
             frame.RightDots > 0 ? dotsRight[..frame.RightDots].ToArray() : [],
-            frame.PageCount);
+            frame.PageCount,
+            frame.OverflowLeft,
+            frame.OverflowRight);
     }
 
     /// <summary>
@@ -186,31 +190,33 @@ public static class SkiaIslandHitTest
             return IslandPageControl.None;
         }
 
-        var count = page switch
+        var kind = pages.PageSlotAt(page)?.Kind ?? PageSlotKind.Home;
+        var layoutPage = LegacyPageIndex(kind);
+        var count = kind switch
         {
-            0 => 4,
-            1 => 1,
-            2 => pages.Notifications.Items?.Count ?? 0,
-            3 => pages.Clipboard.Items?.Count ?? 0,
-            4 => pages.Agent.Items?.Count ?? 0,
-            5 => pages.Widgets.Tasks?.Count ?? 0,
+            PageSlotKind.Home => 4,
+            PageSlotKind.Media => 1,
+            PageSlotKind.Notifications => pages.Notifications.Items?.Count ?? 0,
+            PageSlotKind.Clipboard => pages.Clipboard.Items?.Count ?? 0,
+            PageSlotKind.Agent => pages.Agent.Items?.Count ?? 0,
+            PageSlotKind.Widgets => pages.Widgets.Tasks?.Count ?? 0,
             _ => 0,
         };
-        var scroll = page switch
+        var scroll = kind switch
         {
-            0 => (float)pages.Home.ScrollOffset,
-            1 => (float)pages.Media.ScrollOffset,
-            2 => (float)pages.Notifications.ScrollOffset,
-            3 => (float)pages.Clipboard.ScrollOffset,
-            4 => (float)pages.Agent.ScrollOffset,
-            5 => (float)pages.Widgets.ScrollOffset,
+            PageSlotKind.Home => (float)pages.Home.ScrollOffset,
+            PageSlotKind.Media => (float)pages.Media.ScrollOffset,
+            PageSlotKind.Notifications => (float)pages.Notifications.ScrollOffset,
+            PageSlotKind.Clipboard => (float)pages.Clipboard.ScrollOffset,
+            PageSlotKind.Agent => (float)pages.Agent.ScrollOffset,
+            PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
-        var control = PageMetricsLayout.HitTest(page, pageRect, x, y, metrics, scroll, count, out index);
+        var control = PageMetricsLayout.HitTest(layoutPage, pageRect, x, y, metrics, scroll, count, out index);
 
         // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable
         // and then do nothing. The renderer greys them and prints the localized reason instead.
-        if (page == 1
+        if (kind == PageSlotKind.Media
             && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable)
                 || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)
                 || (control == IslandPageControl.VolumeMute && !pages.Media.HasVolume)))
@@ -220,9 +226,9 @@ public static class SkiaIslandHitTest
         }
 
         // A volume mute button with no audio endpoint is greyed and must not swallow a click.
-        if (page is 0 or 1
+        if (kind is PageSlotKind.Home or PageSlotKind.Media
             && control == IslandPageControl.VolumeMute
-            && (page == 0 ? !pages.Home.HasVolume : !pages.Media.HasVolume))
+            && (kind == PageSlotKind.Home ? !pages.Home.HasVolume : !pages.Media.HasVolume))
         {
             index = -1;
             return IslandPageControl.None;
@@ -230,7 +236,7 @@ public static class SkiaIslandHitTest
 
         // An unavailable quick toggle is painted greyed; refusing its hit target keeps that visual
         // honest (no dead button that swallows the click).
-        if (page == 0
+        if (kind == PageSlotKind.Home
             && control == IslandPageControl.QuickToggle
             && (index < 0 || index >= pages.Home.Toggles.Count || !pages.Home.Toggles[index].IsEnabled))
         {
@@ -262,7 +268,17 @@ public static class SkiaIslandHitTest
             return new IslandHitTarget(IslandHitKind.RailSlot, geometry.Page);
         }
 
-        if (geometry.Page < PagerConstants.PageCount - 1 && geometry.Next.Contains(x, y))
+        if (!geometry.OverflowLeft.IsEmpty && geometry.OverflowLeft.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.RailOverflow, Index: 0);
+        }
+
+        if (!geometry.OverflowRight.IsEmpty && geometry.OverflowRight.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.RailOverflow, Index: 1);
+        }
+
+        if (geometry.Page < geometry.PageCount - 1 && geometry.Next.Contains(x, y))
         {
             return new IslandHitTarget(IslandHitKind.RailSlot, geometry.Page + 1);
         }
@@ -285,6 +301,17 @@ public static class SkiaIslandHitTest
 
         return default;
     }
+
+    private static int LegacyPageIndex(PageSlotKind kind) => kind switch
+    {
+        PageSlotKind.Home => 0,
+        PageSlotKind.Media => 1,
+        PageSlotKind.Notifications => 2,
+        PageSlotKind.Clipboard => 3,
+        PageSlotKind.Agent => 4,
+        PageSlotKind.Widgets => 5,
+        _ => -1,
+    };
 
     private static bool ContainsShell(in IslandRenderState state, SKRect shell, float x, float y)
     {

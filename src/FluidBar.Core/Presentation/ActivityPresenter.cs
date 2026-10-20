@@ -142,7 +142,7 @@ public sealed record ActivityViewModel
     public string? SourceName { get; init; }
 
     /// <summary>Expanded page this activity belongs to.</summary>
-    public required IslandPage Page { get; init; }
+    public required PageRef Page { get; init; }
 
     /// <summary>Determinate progress 0..100, or <see langword="null"/> when absent.</summary>
     public int? ProgressPercent { get; init; }
@@ -209,7 +209,7 @@ public sealed record IslandViewModel
     public required IslandStateKind StateKind { get; init; }
 
     /// <summary>Rail page (expanded state).</summary>
-    public required IslandPage Page { get; init; }
+    public required PageRef Page { get; init; }
 
     /// <summary>Primary activity view model, or <see langword="null"/> for the idle surface.</summary>
     public ActivityViewModel? Primary { get; init; }
@@ -415,3 +415,4 @@ public static class ActivityPresenter
         };
     }
 }
+

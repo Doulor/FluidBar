@@ -16,7 +16,7 @@ public sealed record IslandSplitIslet(
     IconKind Icon,
     string Label,
     string? Title,
-    IslandPage Page,
+    PageRef Page,
     uint AccentArgb,
     string? Badge = null,
     bool ShowAction = false);
@@ -588,17 +588,55 @@ public sealed record ExpandedPageContent
     /// <summary>Widgets page model (page 5).</summary>
     public WidgetsPageModel Widgets { get; init; } = new();
 
-    /// <summary>Extra host-rendered plugin pages appended after the six built-in pages (M0).</summary>
+    /// <summary>Extra host-rendered plugin pages appended after the six built-in pages (M0 compatibility).</summary>
     public IReadOnlyList<PluginPageModel> PluginPages { get; init; } = [];
 
-    /// <summary>Total page count: six built-in pages plus registered plugin pages.</summary>
-    public int PageCount => PagerConstants.PageCount + PluginPages.Count;
+    /// <summary>Ordered page slots; the controller fills this from the registry (built-ins + plugins).</summary>
+    public IReadOnlyList<PageSlot> PageSlots { get; init; } = DefaultPageSlots;
+
+    /// <summary>True when a controller/registry supplied an ordered slot list.</summary>
+    public bool HasCustomPageSlots => !ReferenceEquals(PageSlots, DefaultPageSlots);
+
+    /// <summary>Total page count: six built-in pages plus registered plugin pages when slots are default.</summary>
+    public int PageCount
+    {
+        get
+        {
+            var slots = PageSlots ?? DefaultPageSlots;
+            var plugins = PluginPages?.Count ?? 0;
+            return !HasCustomPageSlots && plugins > 0 ? slots.Count + plugins : slots.Count;
+        }
+    }
+
+    /// <summary>Returns the slot at a page index (or null).</summary>
+    public PageSlot? PageSlotAt(int page)
+        => page >= 0 && page < PageSlots.Count ? PageSlots[page] : null;
 
     /// <summary>Returns the plugin page at a total page index, or null for a built-in page.</summary>
     public PluginPageModel? PluginPageAt(int page)
-        => page >= PagerConstants.PageCount && page - PagerConstants.PageCount < PluginPages.Count
+    {
+        if (PageSlotAt(page)?.PluginPage is { } slotPage)
+        {
+            return slotPage;
+        }
+
+        return page >= PagerConstants.PageCount && page - PagerConstants.PageCount < PluginPages.Count
             ? PluginPages[page - PagerConstants.PageCount]
             : null;
+    }
+
+    /// <summary>Default ordered built-in slots (used by tests/headless fixtures before the registry fills them).</summary>
+    private static IReadOnlyList<PageSlot>? _defaultPageSlots;
+
+    public static IReadOnlyList<PageSlot> DefaultPageSlots => _defaultPageSlots ??=
+    [
+        new PageSlot { PageId = "builtin.home", Kind = PageSlotKind.Home, TemplateId = "builtin.home", Title = "Control center", ShortTitle = "Home", IconToken = "home" },
+        new PageSlot { PageId = "builtin.media", Kind = PageSlotKind.Media, TemplateId = "builtin.media", Title = "Now playing", ShortTitle = "Media", IconToken = "media" },
+        new PageSlot { PageId = "builtin.notifications", Kind = PageSlotKind.Notifications, TemplateId = "list", Title = "Notifications", ShortTitle = "Notifications", IconToken = "bell" },
+        new PageSlot { PageId = "builtin.clipboard", Kind = PageSlotKind.Clipboard, TemplateId = "list", Title = "Clipboard", ShortTitle = "Clipboard", IconToken = "clipboard" },
+        new PageSlot { PageId = "builtin.agent", Kind = PageSlotKind.Agent, TemplateId = "list", Title = "Agent activity", ShortTitle = "Agent", IconToken = "agent" },
+        new PageSlot { PageId = "builtin.widgets", Kind = PageSlotKind.Widgets, TemplateId = "calendar", Title = "Widgets", ShortTitle = "Widgets", IconToken = "calendar" },
+    ];
 
     /// <summary>Localized page titles (six); missing entries fall back to the defaults.</summary>
     public IReadOnlyList<string> PageTitles { get; init; } = DefaultPageTitles;
@@ -612,9 +650,17 @@ public sealed record ExpandedPageContent
         "Control center", "Now playing", "Notifications", "Clipboard", "Agent activity", "Widgets",
     ];
 
+    private string PageSlotTitleFallback(int page)
+        => DefaultPageTitles[Math.Clamp(page, 0, DefaultPageTitles.Length - 1)];
+
     /// <summary>Returns the title for a page index (clamped, never null).</summary>
     public string Title(int page)
     {
+        if (HasCustomPageSlots && PageSlotAt(page) is { } slot)
+        {
+            return string.IsNullOrWhiteSpace(slot.Title) ? PageSlotTitleFallback(page) : slot.Title;
+        }
+
         if (PluginPageAt(page) is { } plugin)
         {
             return plugin.Title;
@@ -630,6 +676,11 @@ public sealed record ExpandedPageContent
     /// <summary>Returns the short strip label for a page index (clamped, never null).</summary>
     public string ShortTitle(int page)
     {
+        if (HasCustomPageSlots && PageSlotAt(page) is { } customSlot)
+        {
+            return string.IsNullOrWhiteSpace(customSlot.ShortTitle) ? customSlot.Title : customSlot.ShortTitle;
+        }
+
         if (PluginPageAt(page) is { } plugin)
         {
             return string.IsNullOrWhiteSpace(plugin.ShortTitle) ? plugin.Title : plugin.ShortTitle;

@@ -41,6 +41,9 @@ public enum IslandHitKind
 
     /// <summary>A far-page dot on the right of the strip.</summary>
     DotRight,
+
+    /// <summary>A rail overflow ellipsis; <see cref="IslandHitTarget.Index"/> 0 = left, 1 = right.</summary>
+    RailOverflow,
 }
 
 /// <summary>Expanded/compact control identities.</summary>
@@ -129,7 +132,7 @@ public readonly record struct IslandHitTarget(
         or IslandHitKind.Settings or IslandHitKind.OverflowBadge;
 
     /// <summary>Whether the hit is on the detached strip (mini-island or dot).</summary>
-    public bool IsDetached => Kind is IslandHitKind.RailSlot or IslandHitKind.DotLeft or IslandHitKind.DotRight;
+    public bool IsDetached => Kind is IslandHitKind.RailSlot or IslandHitKind.DotLeft or IslandHitKind.DotRight or IslandHitKind.RailOverflow;
 
     /// <inheritdoc />
     public override string ToString() => Kind switch

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>FluidBar.Sample.OverflowPages</AssemblyName>
+    <RootNamespace>FluidBar.Sample.OverflowPages</RootNamespace>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluidBar.Sdk\FluidBar.Sdk.csproj" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="locales\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -50,6 +50,9 @@ public sealed record SettingsWindowContext
     /// <summary>Update service for the About pane (null in previews/headless builds).</summary>
     public IUpdateUiService? Updates { get; init; }
 
+    /// <summary>Page registry for the page-order editor (null in previews).</summary>
+    public FluidBar.App.Hosting.Pages.PageRegistry? Pages { get; init; }
+
     /// <summary>Frame-timing source for the advanced diagnostics line (null when no island host).</summary>
     public IFrameStatsSource? FrameStats { get; init; }
 
@@ -659,7 +662,99 @@ public static class SettingsSectionBuilder
                             _ => DisplayTarget.Primary,
                         },
                     }))));
+        panel.Children.Add(BuildPageOrder(ctx));
         panel.Children.Add(SettingsControls.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
+        return panel;
+    }
+
+    // ---- page order ---------------------------------------------------------------------------
+
+    private static Control BuildPageOrder(SettingsWindowContext ctx)
+    {
+        var palette = ctx.Palette;
+        var descriptors = ctx.Pages?.BuildPageDescriptors() ?? [];
+        var titles = descriptors.ToDictionary(static descriptor => descriptor.PageId, static descriptor =>
+            descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId,
+            StringComparer.OrdinalIgnoreCase);
+        var order = ctx.Settings.Current.Plugins.PageOrder.ToList();
+        var list = new StackPanel { Spacing = 4 };
+        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        panel.Children.Add(SettingsWidgets.Caption("Page order", palette));
+        panel.Children.Add(SettingsControls.StatusLine(
+            "Drag a page to reorder the island and rail. Unknown pages stay at the end.",
+            palette, SettingsTone.Neutral, SettingsMetrics.RowDescSize));
+        panel.Children.Add(list);
+        var dragIndex = -1;
+        var rows = new List<Border>();
+
+        void Save()
+        {
+            ctx.Settings.Update(s => s with
+            {
+                Plugins = s.Plugins with { PageOrder = order.ToArray() },
+            });
+        }
+
+        void BuildRows()
+        {
+            list.Children.Clear();
+            rows.Clear();
+            var all = order.Concat(descriptors.Select(static descriptor => descriptor.PageId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            order = all;
+            for (var i = 0; i < all.Count; i++)
+            {
+                var pageId = all[i];
+                var title = titles.TryGetValue(pageId, out var resolved) ? resolved : pageId;
+                var row = new Border
+                {
+                    Padding = new Thickness(10, 7),
+                    CornerRadius = new CornerRadius(8),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    Child = new TextBlock { Text = $"≡  {title}", Foreground = new SolidColorBrush(palette.Foreground) },
+                };
+                var index = i;
+                row.PointerPressed += (_, args) =>
+                {
+                    dragIndex = index;
+                    args.Pointer.Capture(row);
+                };
+                row.PointerReleased += (_, args) =>
+                {
+                    if (dragIndex < 0)
+                    {
+                        return;
+                    }
+
+                    var point = args.GetPosition(list);
+                    var target = -1;
+                    for (var candidate = 0; candidate < rows.Count; candidate++)
+                    {
+                        if (point.Y >= rows[candidate].Bounds.Top && point.Y <= rows[candidate].Bounds.Bottom)
+                        {
+                            target = candidate;
+                            break;
+                        }
+                    }
+
+                    if (target >= 0 && target != dragIndex)
+                    {
+                        var moved = order[dragIndex];
+                        order.RemoveAt(dragIndex);
+                        order.Insert(target, moved);
+                        Save();
+                        BuildRows();
+                    }
+
+                    dragIndex = -1;
+                };
+                rows.Add(row);
+                list.Children.Add(row);
+            }
+        }
+
+        BuildRows();
         return panel;
     }
 

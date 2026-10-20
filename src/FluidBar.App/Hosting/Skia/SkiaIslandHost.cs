@@ -207,6 +207,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.MarketRequested += () => MarketRequested?.Invoke();
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
         _controller.PluginPageCommandRequested += request => PluginPageCommandRequested?.Invoke(request);
+        _controller.PageChooserRequested += () => PageChooserRequested?.Invoke();
         _controller.StateChanged += OnStateChanged;
         _controller.PlacementRequested += OnPlacementRequested;
         _controller.PlacementPersistRequested += OnPlacementPersistRequested;
@@ -228,6 +229,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     /// <summary>Raised when a plugin page row/button is activated.</summary>
     public event Action<PluginPageCommandRequest>? PluginPageCommandRequested;
+
+    /// <summary>Raised when the rail overflow ellipsis requests the App page selector.</summary>
+    public event Action? PageChooserRequested;
+
+    /// <summary>Horizontal page pager (diagnostics/page chooser).</summary>
+    public SkiaPager Pager => _controller.Pager;
 
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.State;
@@ -348,7 +355,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     /// <summary>Simulates a page request (keyboard/gutter).</summary>
     /// <param name="page">Target page.</param>
-    public void SimulatePageRequested(IslandPage page) => _controller.HandlePageRequest(page);
+    public void SimulatePageRequested(PageRef page) => _controller.HandlePageRequest(page);
 
     /// <summary>Simulates the pointer entering the compact pill.</summary>
     public void SimulatePointerEntered()
@@ -2257,3 +2264,4 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
     }
 }
+

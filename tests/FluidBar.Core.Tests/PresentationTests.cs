@@ -65,7 +65,7 @@ public class PresentationTests
         Assert.Equal(42, view.ProgressPercent);
         Assert.True(view.ShowsWave);
         Assert.True(view.IsActive);
-        Assert.Equal(IslandPage.Media, view.Page);
+        Assert.Equal(PageRef.Media, view.Page);
         Assert.Equal(ActivityIconKind.Media, view.Icon);
         Assert.Equal("Activity.Media", view.KindLabelKey);
         Assert.False(view.IsGhost);
@@ -129,7 +129,7 @@ public class PresentationTests
             new ActivityKey(ActivityKind.Notification, "notif"), new ActivityPayload { Title = "n" }, 1), TestSupport.TestData.Now).State;
         state = scheduler.Update(state, Events.IslandEvent.New(
             new ActivityKey(ActivityKind.Media, "media"), new ActivityPayload { Title = "m" }, 1), TestSupport.TestData.Now).State;
-        var island = IslandState.Hidden with { Kind = IslandStateKind.Compact, Page = IslandPage.Media };
+        var island = IslandState.Hidden with { Kind = IslandStateKind.Compact, Page = PageRef.Media };
 
         var view = ActivityPresenter.PresentIsland(state, island);
 
@@ -141,7 +141,7 @@ public class PresentationTests
         Assert.Equal(0, view.OverflowCount);
         Assert.Equal(2, view.ActivityCount);
         Assert.Equal(IslandStateKind.Compact, view.StateKind);
-        Assert.Equal(IslandPage.Media, view.Page);
+        Assert.Equal(PageRef.Media, view.Page);
     }
 
     [Fact]
@@ -180,3 +180,4 @@ public class PresentationTests
             Record(ActivityKind.Volume, new ActivityPayload()))!.LabelKey);
     }
 }
+

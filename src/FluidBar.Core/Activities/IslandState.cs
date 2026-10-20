@@ -312,7 +312,7 @@ public readonly record struct IslandInput
     public ActivityKind? ActivityKind { get; init; }
 
     /// <summary>Requested rail page, when applicable.</summary>
-    public IslandPage? Page { get; init; }
+    public PageRef? Page { get; init; }
 
     /// <summary>Scheduler outcome class (for activity updates).</summary>
     public ActivityUpdateKind UpdateKind { get; init; }
@@ -409,7 +409,7 @@ public readonly record struct IslandInput
     public static IslandInput SettingsChanged() => new() { Kind = IslandInputKind.SettingsChanged };
 
     /// <summary>Rail page request.</summary>
-    public static IslandInput PageRequested(IslandPage page) => new() { Kind = IslandInputKind.PageRequested, Page = page };
+    public static IslandInput PageRequested(PageRef page) => new() { Kind = IslandInputKind.PageRequested, Page = page };
 
     /// <summary>Pin changed.</summary>
     public static IslandInput PinnedChanged(bool pinned) => new() { Kind = IslandInputKind.PinnedChanged, IsPinned = pinned };
@@ -471,7 +471,7 @@ public sealed record IslandState
     public IslandStateKind Kind { get; init; } = IslandStateKind.Hidden;
 
     /// <summary>Selected rail page (persists across collapse/expand).</summary>
-    public IslandPage Page { get; init; } = IslandPage.Home;
+    public PageRef Page { get; init; } = PageRef.Home;
 
     /// <summary>Primary activity identity, <see langword="null"/> for the idle surface.</summary>
     public ActivityKey? PrimaryKey { get; init; }
@@ -555,3 +555,4 @@ public sealed record IslandTransition
     /// <summary>Whether the effect list contains <paramref name="kind"/>.</summary>
     public bool HasEffect(IslandEffectKind kind) => Effects.Any(e => e.Kind == kind);
 }
+

@@ -17,6 +17,7 @@ public sealed class PageRegistry
 
     private readonly object _gate = new();
     private readonly List<Entry> _pages = [];
+    private IReadOnlyList<string> _order = [];
 
     /// <summary>Raised after a page is registered, updated or removed (safe from any thread).</summary>
     public event EventHandler? Changed;
@@ -43,9 +44,9 @@ public sealed class PageRegistry
             return false;
         }
 
-        if (!string.Equals(descriptor.TemplateId, PageTemplates.List, StringComparison.Ordinal))
+        if (!PageTemplateRegistry.IsPluginTemplateAllowed(descriptor.TemplateId))
         {
-            error = $"template '{descriptor.TemplateId}' is not available in this build (M0: list only)";
+            error = $"template '{descriptor.TemplateId}' is not available for plugins (supported: list)";
             return false;
         }
 
@@ -60,6 +61,12 @@ public sealed class PageRegistry
             if (_pages.Count + BuiltinPageCount >= MaxPages)
             {
                 error = $"page limit {MaxPages} reached";
+                return false;
+            }
+
+            if (_pages.Count(page => string.Equals(page.OwnerId, ownerId, StringComparison.Ordinal)) >= 4)
+            {
+                error = "a plugin may register at most 4 pages";
                 return false;
             }
 
@@ -153,6 +160,47 @@ public sealed class PageRegistry
         }
 
         return removed;
+    }
+
+    /// <summary>Built-in page descriptors; the same descriptor path as plugin pages, with native templates.</summary>
+    public static IReadOnlyList<PageDescriptor> BuiltinDescriptors { get; } =
+    [
+        new() { PageId = "builtin.home", Order = 0, Title = new LocalizedString("Control center"), ShortTitle = new LocalizedString("Home"), IconToken = "home", TemplateId = "builtin.home" },
+        new() { PageId = "builtin.media", Order = 10, Title = new LocalizedString("Now playing"), ShortTitle = new LocalizedString("Media"), IconToken = "media", TemplateId = "builtin.media" },
+        new() { PageId = "builtin.notifications", Order = 20, Title = new LocalizedString("Notifications"), ShortTitle = new LocalizedString("Notifications"), IconToken = "bell", TemplateId = PageTemplates.List },
+        new() { PageId = "builtin.clipboard", Order = 30, Title = new LocalizedString("Clipboard"), ShortTitle = new LocalizedString("Clipboard"), IconToken = "clipboard", TemplateId = PageTemplates.List },
+        new() { PageId = "builtin.agent", Order = 40, Title = new LocalizedString("Agent activity"), ShortTitle = new LocalizedString("Agent"), IconToken = "agent", TemplateId = PageTemplates.List },
+        new() { PageId = "builtin.widgets", Order = 50, Title = new LocalizedString("Widgets"), ShortTitle = new LocalizedString("Widgets"), IconToken = "calendar", TemplateId = PageTemplates.Calendar },
+    ];
+
+    /// <summary>Sets the user's persisted PageId order; unknown ids stay at the end.</summary>
+    public void SetOrder(IReadOnlyList<string>? pageIds)
+    {
+        lock (_gate)
+        {
+            _order = pageIds?.Where(static id => !string.IsNullOrWhiteSpace(id)).ToArray() ?? [];
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Returns built-ins + registered plugins in user order (unknown ids kept after known ones).</summary>
+    public IReadOnlyList<PageDescriptor> BuildPageDescriptors()
+    {
+        lock (_gate)
+        {
+            var all = BuiltinDescriptors.Concat(_pages.Select(static entry => entry.Descriptor)).ToArray();
+            var ranks = _order.Select((id, index) => (id, index))
+                .GroupBy(static pair => pair.id, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(static group => group.Key, static group => group.First().index, StringComparer.OrdinalIgnoreCase);
+            return all
+                .Select(descriptor => (descriptor, rank: ranks.TryGetValue(descriptor.PageId, out var rank) ? rank : int.MaxValue))
+                .OrderBy(static pair => pair.rank)
+                .ThenBy(static pair => pair.descriptor.Order)
+                .ThenBy(static pair => pair.descriptor.PageId, StringComparer.OrdinalIgnoreCase)
+                .Select(static pair => pair.descriptor)
+                .ToArray();
+        }
     }
 
     /// <summary>Immutable host model snapshot for the island; M0 list templates only.</summary>

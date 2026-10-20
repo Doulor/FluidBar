@@ -5,13 +5,19 @@ using FluidBar.Sdk.Pages;
 namespace FluidBar.Sample.LocalPages;
 
 /// <summary>
-/// M0 local-channel sample: registers one host-rendered list page after the six built-in pages and
-/// exposes a manifest-declared command from its row's trailing button.
+/// M1 local-channel sample: registers four host-rendered list pages (the per-plugin cap) after the six
+/// built-in pages, so the rail exercises overflow and the page chooser.
 /// </summary>
 public sealed class SamplePagesPlugin : IFluidBarPlugin
 {
-    private const string PageId = "fluidbar-sample-local-pages.metrics";
     private const string RefreshCommand = "fluidbar-sample-local-pages.refresh";
+    private static readonly string[] PageIds =
+    [
+        "fluidbar-sample-local-pages.metrics",
+        "fluidbar-sample-local-pages.second",
+        "fluidbar-sample-local-pages.third",
+        "fluidbar-sample-local-pages.fourth",
+    ];
 
     private IPluginContext? _context;
     private IDisposable? _command;
@@ -34,19 +40,22 @@ public sealed class SamplePagesPlugin : IFluidBarPlugin
             return ValueTask.CompletedTask;
         });
 
-        var registered = context.Islands.RegisterPage(new PageDescriptor
+        for (var i = 0; i < PageIds.Length; i++)
         {
-            PageId = PageId,
-            Order = 55,
-            Title = new LocalizedString("Sample pages"),
-            ShortTitle = new LocalizedString("Sample"),
-            IconToken = "list",
-            TemplateId = PageTemplates.List,
-        });
+            var registered = context.Islands.RegisterPage(new PageDescriptor
+            {
+                PageId = PageIds[i],
+                Order = 55 + i,
+                Title = new LocalizedString(i == 0 ? "Sample pages" : $"Sample page {i + 1}"),
+                ShortTitle = new LocalizedString(i == 0 ? "Sample" : $"Sample{i + 1}"),
+                IconToken = "list",
+                TemplateId = PageTemplates.List,
+            });
 
-        if (!registered)
-        {
-            context.Log.Warning("SamplePages page registration was rejected.");
+            if (!registered)
+            {
+                context.Log.Warning($"SamplePages page {PageIds[i]} registration was rejected.");
+            }
         }
 
         Publish(context);
@@ -57,7 +66,11 @@ public sealed class SamplePagesPlugin : IFluidBarPlugin
     {
         _command?.Dispose();
         _command = null;
-        _context?.Islands.UnregisterPage(PageId);
+        foreach (var pageId in PageIds)
+        {
+            _context?.Islands.UnregisterPage(pageId);
+        }
+
         return ValueTask.CompletedTask;
     }
 
@@ -65,41 +78,43 @@ public sealed class SamplePagesPlugin : IFluidBarPlugin
 
     private void Publish(IPluginContext context)
     {
-        var data = new PageData
+        for (var i = 0; i < PageIds.Length; i++)
         {
-            PageId = PageId,
-            Revision = _counter + 1,
-            TemplateId = PageTemplates.List,
-            BadgeCount = _counter > 0 ? _counter : null,
-            List = new PageListData
+            var data = new PageData
             {
-                EmptyTitle = "No sample rows",
-                EmptyHint = "The local sample page has no data",
-                Rows =
-                [
-                    new PageListRow
-                    {
-                        RowId = "counter",
-                        Title = $"Local plugin page #{_counter}",
-                        Subtitle = $"Registered through the same SDK page API · refresh #{_counter}",
-                        Value = $"refresh #{_counter}",
-                        RowCommandId = RefreshCommand,
-                        TrailingCommandId = RefreshCommand,
-                        TrailingLabel = "Refresh",
-                    },
-                    new PageListRow
-                    {
-                        RowId = "static",
-                        Title = "Island body / rail / UIA",
-                        Subtitle = "Seven pages: six built-ins plus this local plugin page",
-                    },
-                ],
-            },
-        };
+                PageId = PageIds[i],
+                Revision = _counter + 1,
+                TemplateId = PageTemplates.List,
+                BadgeCount = i == 0 && _counter > 0 ? _counter : null,
+                List = new PageListData
+                {
+                    EmptyTitle = "No sample rows",
+                    EmptyHint = "The local sample page has no data",
+                    Rows =
+                    [
+                        new PageListRow
+                        {
+                            RowId = "counter",
+                            Title = i == 0 ? $"Local plugin page #{_counter}" : $"Sample page #{i + 1}",
+                            Subtitle = $"Registered through the same SDK page API · refresh #{_counter}",
+                            RowCommandId = RefreshCommand,
+                            TrailingCommandId = RefreshCommand,
+                            TrailingLabel = "Refresh",
+                        },
+                        new PageListRow
+                        {
+                            RowId = "static",
+                            Title = "Island body / rail / UIA",
+                            Subtitle = "Twelve pages: six built-ins plus six local plugin pages",
+                        },
+                    ],
+                },
+            };
 
-        if (!context.Islands.PublishPage(data))
-        {
-            context.Log.Warning("SamplePages page data was rejected.");
+            if (!context.Islands.PublishPage(data))
+            {
+                context.Log.Warning($"SamplePages page data {PageIds[i]} was rejected.");
+            }
         }
     }
 }
