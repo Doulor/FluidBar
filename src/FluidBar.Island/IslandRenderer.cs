@@ -587,12 +587,20 @@ public sealed class IslandRenderer : IDisposable
                 var cover = _artwork.Get(islet.ArtworkKey, islet.Artwork);
                 if (cover is not null)
                 {
+                    var thumbnail = IslandMetrics.SplitIsletThumbnailRect(rect);
+                    var thumbRadius = IslandMetrics.SplitIsletThumbnailRadius(thumbnail);
                     canvas.Save();
-                    using var circle = new SKPath();
-                    circle.AddCircle(rect.MidX, rect.MidY, radius);
-                    canvas.ClipPath(circle, SKClipOperation.Intersect, antialias: true);
+                    using var ballClip = new SKPath();
+                    ballClip.AddCircle(rect.MidX, rect.MidY, radius);
+                    canvas.ClipPath(ballClip, SKClipOperation.Intersect, antialias: true);
+                    using var squircle = new SKPath();
+                    squircle.AddRoundRect(new SKRoundRect(thumbnail, thumbRadius, thumbRadius));
+                    canvas.ClipPath(squircle, SKClipOperation.Intersect, antialias: true);
                     _icon.Color = Alpha(SKColors.White, alpha);
-                    canvas.DrawImage(cover, rect, _icon);
+                    // Contain: the whole cover is visible; spare space stays the black ball fill.
+                    var imageRect = IslandMetrics.SplitIsletContainRect(
+                        thumbnail, cover.Width, cover.Height);
+                    canvas.DrawImage(cover, imageRect, _icon);
                     canvas.Restore();
                     continue;
                 }

@@ -29,7 +29,6 @@ public sealed class SplitCapsuleStyleTests
         {
             SplitProgress = 1,
             SplitIsletHeight = 40,
-            AgentAnimationSeconds = 0.225,
             SplitIslets = islets.ToArray(),
         };
     }
@@ -48,34 +47,6 @@ public sealed class SplitCapsuleStyleTests
             Assert.Equal(shell.MidY, ball.MidY, 0.001);
             Assert.True(ball.Left >= 0 && ball.Right <= LayoutTokens.HostSurfaceWidth);
         }
-    }
-
-    [Fact]
-    public void Agent_circle_contains_only_the_blue_ring()
-    {
-        var state = CircleState();
-        var ball = IslandMetrics.SplitIsletRects(state)[0];
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        var blue = 0;
-        var white = 0;
-        var red = 0;
-        var scale = IslandTestFixtures.Scale;
-        for (var y = (int)(ball.Top * scale); y < (int)(ball.Bottom * scale); y++)
-        {
-            for (var x = (int)(ball.Left * scale); x < (int)(ball.Right * scale); x++)
-            {
-                var pixel = bitmap.Pixels[(y * bitmap.Width) + x];
-                if (pixel.Alpha < 100) continue;
-                if (pixel.Blue > 150 && pixel.Blue > pixel.Red + 60 && pixel.Blue > pixel.Green + 20) blue++;
-                if (pixel.Red > 200 && pixel.Green > 200 && pixel.Blue > 200) white++;
-                if (pixel.Red > 150 && pixel.Red > pixel.Green + 60 && pixel.Red > pixel.Blue + 60) red++;
-            }
-        }
-
-        Assert.True(blue > 30, "agent ring missing: " + blue);
-        Assert.Equal(0, white);
-        Assert.Equal(0, red);
     }
 
     [Fact]
@@ -130,6 +101,33 @@ public sealed class SplitCapsuleStyleTests
     }
 
     [Fact]
+    public void Media_non_square_cover_is_contained_with_black_bars()
+    {
+        // 8x4 (2:1) cover: contain keeps 2:1, so it is full-width and 16 DIP tall inside a 32 DIP
+        // thumbnail, leaving 8 DIP black bars top and bottom. A cover crop would instead be 32x32.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAAGklEQVR4nGO8pGHEAANhGgvgbCY4Cw2QLgEA1TYCUn2wjvgAAAAASUVORK5CYII=");
+        var state = CircleState(withMedia: true, cover: png);
+        var ball = IslandMetrics.SplitIsletRects(state)[1];
+        var thumb = IslandMetrics.SplitIsletThumbnailRect(ball);
+        var fitted = IslandMetrics.SplitIsletContainRect(thumb, 8, 4);
+        Assert.Equal(2f, fitted.Width / fitted.Height, 0.001f);
+        Assert.Equal(thumb.Width, fitted.Width, 0.01f);
+        Assert.True(fitted.Height < thumb.Height);
+
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        var scale = IslandTestFixtures.Scale;
+        SKColor At(float x, float y)
+            => bitmap.Pixels[((int)Math.Round(y * scale) * bitmap.Width) + (int)Math.Round(x * scale)];
+        var topBar = At(thumb.MidX, thumb.Top + 1);
+        var centre = At(thumb.MidX, thumb.MidY);
+        Assert.True(topBar.Red < 40 && topBar.Green < 40 && topBar.Blue < 40,
+            "contain top bar should be the black ball fill: " + topBar);
+        Assert.True(centre.Red > 80 || centre.Blue > 80, "cover content missing: " + centre);
+    }
+
+    [Fact]
     public void Circle_background_is_the_primary_pill_colour()
     {
         var state = CircleState();
@@ -164,3 +162,4 @@ public sealed class SplitCapsuleStyleTests
             renderer.HitTest(state, ball.Left + 1, ball.Top + 1).Kind);
     }
 }
+

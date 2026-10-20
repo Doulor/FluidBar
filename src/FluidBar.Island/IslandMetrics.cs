@@ -238,6 +238,33 @@ public static class IslandMetrics
             centre.X + (size / 2), centre.Y + (size / 2));
     }
 
+    /// <summary>Inner rounded-square artwork rectangle (4 DIP padding inside the circle).</summary>
+    public static SKRect SplitIsletThumbnailRect(SKRect circle)
+    {
+        var side = Math.Max(0f, circle.Width - 8f);
+        return new SKRect(circle.MidX - (side / 2), circle.MidY - (side / 2),
+            circle.MidX + (side / 2), circle.MidY + (side / 2));
+    }
+
+    /// <summary>Corner radius of the inner thumbnail: 22.5% of its side.</summary>
+    public static float SplitIsletThumbnailRadius(SKRect thumbnail)
+        => thumbnail.Width * 0.225f;
+
+    /// <summary>Contain-fit rectangle: the whole image is visible, spare space stays black.</summary>
+    public static SKRect SplitIsletContainRect(SKRect square, int imageWidth, int imageHeight)
+    {
+        if (imageWidth <= 0 || imageHeight <= 0 || square.Width <= 0 || square.Height <= 0)
+        {
+            return SKRect.Empty;
+        }
+
+        var scale = Math.Min(square.Width / imageWidth, square.Height / imageHeight);
+        var width = imageWidth * scale;
+        var height = imageHeight * scale;
+        return new SKRect(square.MidX - (width / 2), square.MidY - (height / 2),
+            square.MidX + (width / 2), square.MidY + (height / 2));
+    }
+
     /// <summary>Staggered 0..1 progress for one islet (later previews separate slightly later).</summary>
     public static double SplitIsletProgress(in IslandRenderState state, int index)
     {
