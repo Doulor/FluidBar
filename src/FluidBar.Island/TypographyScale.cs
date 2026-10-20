@@ -128,10 +128,19 @@ public static class TypographyScale
     public static TypographyToken ExpandedClock { get; } = new(
         "island.expanded.clock", FontRole.DisplayBold, 32f, 38f);
 
-    /// <summary>Expanded hero: 22/28 (media title / metric highlight).</summary>
+    /// <summary>Expanded hero: 22/28 (metric highlight).</summary>
     public static TypographyToken ExpandedHero { get; } = new(
         "island.expanded.hero", FontRole.DisplaySemiBold,
         IosTextScale.Title2Size, IosTextScale.Title2Line);
+
+    /// <summary>
+    /// Expanded media title: 20/21. prototype2 draws <c>.media-info .media-title</c> at 20 px with
+    /// <c>line-height: 1.05</c>; the legacy bridge used to snap its 20 DIP style to <see cref="ExpandedHero"/>
+    /// and silently painted 22 DIP (+10 %), which the audit measured on the real media page.
+    /// </summary>
+    public static TypographyToken ExpandedMediaTitle { get; } = new(
+        "island.expanded.media-title", FontRole.DisplaySemiBold,
+        20f, 21f);
 
     /// <summary>Expanded title: 15/20 semibold (page / card section title).</summary>
     public static TypographyToken ExpandedTitle { get; } = new(
@@ -223,7 +232,7 @@ public static class TypographyScale
         (FontRole.UiSemiBold, 14f, CompactPrimary),
         (FontRole.DisplaySemiBold, 13.5f, CompactTime),
         (FontRole.DisplaySemiBold, 17f, ExpandedWidgetTitle),
-        (FontRole.DisplaySemiBold, 20f, ExpandedHero),
+        (FontRole.DisplaySemiBold, 20f, ExpandedMediaTitle),
         (FontRole.DisplayBold, 30f, ExpandedClock),
         (FontRole.Mono, 8f, ExpandedMono),
         (FontRole.Mono, 8.5f, ExpandedMono),
