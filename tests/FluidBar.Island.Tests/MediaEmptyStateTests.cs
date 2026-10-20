@@ -93,6 +93,23 @@ public sealed class MediaEmptyStateTests
     }
 
     [Fact]
+    public void No_lyrics_caption_is_centred_in_the_lyric_band()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var state = With(Variant(output: true, queue: true, lyrics: false, artwork: true));
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+
+        var page = IslandMetrics.PageRect(state, 1);
+        var lyric = PageMetricsLayout.MediaLyricCard(page, FontScaleMetrics.One);
+        var (minX, maxX) = InkBoundsX(bitmap, lyric);
+        Assert.True(maxX > minX, "the no-lyrics caption did not paint");
+        var inkCenter = (minX + maxX) / 2f;
+        var cardCenter = (lyric.Left + lyric.Right) / 2f * IslandTestFixtures.Scale;
+        // Centred caption: the glyph band's midpoint sits within 6 physical pixels of the card midpoint.
+        Assert.InRange(inkCenter, cardCenter - 6, cardCenter + 6);
+    }
+
+    [Fact]
     public void Output_and_queue_values_replace_the_placeholders()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
@@ -110,6 +127,33 @@ public sealed class MediaEmptyStateTests
         // Real values ("Speakers", queue count) paint different ink than the placeholder captions.
         Assert.NotEqual(CountInk(dataBitmap, output), CountInk(emptyBitmap, output));
         Assert.NotEqual(CountInk(dataBitmap, queue), CountInk(emptyBitmap, queue));
+    }
+
+    private static (int MinX, int MaxX) InkBoundsX(SKBitmap bitmap, SKRect dipRect)
+    {
+        var left = Math.Max(0, (int)Math.Floor(dipRect.Left * IslandTestFixtures.Scale));
+        var right = Math.Min(bitmap.Width, (int)Math.Ceiling(dipRect.Right * IslandTestFixtures.Scale));
+        var top = Math.Max(0, (int)Math.Floor(dipRect.Top * IslandTestFixtures.Scale));
+        var bottom = Math.Min(bitmap.Height, (int)Math.Ceiling(dipRect.Bottom * IslandTestFixtures.Scale));
+        var pixels = bitmap.Pixels;
+        var minX = int.MaxValue;
+        var maxX = -1;
+        for (var y = top; y < bottom; y++)
+        {
+            var row = y * bitmap.Width;
+            for (var x = left; x < right; x++)
+            {
+                var pixel = pixels[row + x];
+                if (pixel.Alpha > 200
+                    && (Math.Abs(pixel.Red - 8) + Math.Abs(pixel.Green - 8) + Math.Abs(pixel.Blue - 10)) > 24)
+                {
+                    if (x < minX) { minX = x; }
+                    if (x > maxX) { maxX = x; }
+                }
+            }
+        }
+
+        return maxX < minX ? (0, 0) : (minX, maxX);
     }
 
     private static int CountInk(SKBitmap bitmap, SKRect dipRect)

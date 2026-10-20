@@ -10,6 +10,7 @@ using FluidBar.App.Plugins;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.App.Views.Settings;
+using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Settings;
 using FluidBar.Marketplace.Signing;
@@ -88,6 +89,11 @@ internal sealed class AppBootstrap
             if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE"), "1", StringComparison.Ordinal))
             {
                 _ = SmokeAsync();
+            }
+
+            if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT"), "1", StringComparison.Ordinal))
+            {
+                _ = AuditAsync();
             }
 
             _logger.Information(LogCategories.Lifecycle, "app.avalonia-rendering",
@@ -455,6 +461,129 @@ internal sealed class AppBootstrap
         {
             var path = Path.Combine(Path.GetTempPath(), "fluidbar-smoke.log");
             await File.WriteAllTextAsync(path, log.ToString()).ConfigureAwait(true);
+            Shutdown();
+        }
+    }
+
+    /// <summary>
+    /// Deterministic visual-audit run (developer evidence): renders every compact state, all six expanded
+    /// pages and the revealed preview rail from the production Skia renderer and writes PNGs. Demo
+    /// activities are published through the host's public publisher; no real input, no user app touched.
+    /// </summary>
+    private async Task AuditAsync()
+    {
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            _settings?.Update(settings => settings with
+            {
+                AutoCollapseMs = 0,
+                Language = "zh-Hans",
+                Plugins = settings.Plugins with { Enabled = [] },
+            });
+            await Task.Delay(1400).ConfigureAwait(true);
+            var directory = Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_DIR")
+                ?? Path.Combine(Path.GetTempPath(), "fluidbar-evidence", "audit");
+            Directory.CreateDirectory(directory);
+
+            async Task ShotAsync(string name)
+            {
+                await Task.Delay(450).ConfigureAwait(true);
+                _skiaHost?.RenderNow(forceFull: true);
+                log.AppendLine("=== " + name + " ===");
+                log.AppendLine(_skiaHost?.DescribeWindows() ?? "no skia host");
+                if (_skiaHost?.SavePrimaryFramePng(Path.Combine(directory, name + ".png")) != true)
+                {
+                    log.AppendLine("capture-failed");
+                }
+            }
+
+            var expandedOnly = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_MODE"),
+                "expanded", StringComparison.OrdinalIgnoreCase);
+            if (expandedOnly)
+            {
+                // Expanded-page evidence runs against the normal plugin/data set so every page shows
+                // real content (media, notifications, agent rows, widgets).
+                _settings?.Update(settings => settings with
+                {
+                    AutoCollapseMs = 0,
+                    Language = "zh-Hans",
+                    Plugins = settings.Plugins with
+                    {
+                        Enabled = ["fluidbar-media", "fluidbar-clipboard", "fluidbar-notifications", "fluidbar-agent"],
+                    },
+                });
+                await Task.Delay(1500).ConfigureAwait(true);
+            }
+            else
+            {
+                await ShotAsync("compact-idle");
+            }
+
+            var demos = new (string Name, ActivityKind Kind, ActivityPayload Payload)[]
+            {
+                ("compact-media", ActivityKind.Media, new ActivityPayload
+                {
+                    Title = "Midnight Drive", Subtitle = "Lumen Fields", Body = "Nocturne", Badge = "Lumen Fields",
+                    SourceName = "Spotify", IsActive = true, ShowsAudioWave = true, ProgressPercent = 42,
+                    PositionTicks = TimeSpan.FromSeconds(75).Ticks, EndTicks = TimeSpan.FromSeconds(214).Ticks,
+                }),
+                ("compact-notifications", ActivityKind.Notification, new ActivityPayload
+                {
+                    Title = "GitHub", Subtitle = "Doulor/bybit-ai-trading", Body = "Run failed: Export Live Data",
+                    Badge = "2", SourceName = "GitHub",
+                }),
+                ("compact-clipboard", ActivityKind.Clipboard, new ActivityPayload
+                {
+                    Title = "已复制", Body = "https://example.com/fluidbar", SourceName = "Edge",
+                }),
+                ("compact-agent", ActivityKind.Agent, new ActivityPayload
+                {
+                    Title = "运行命令", Subtitle = "deepseek", Body = "工具执行中", Badge = "running",
+                    SourceName = "deepseek", IsActive = true,
+                }),
+                ("compact-hud", ActivityKind.Volume, new ActivityPayload
+                {
+                    Title = "音量", Level = 62, IsActive = true,
+                }),
+            };
+
+            var sequence = 1L;
+            if (!expandedOnly)
+            {
+                foreach (var demo in demos)
+                {
+                    _skiaHost?.PublishActivity(demo.Kind, demo.Payload, sequence++, "audit");
+                    await ShotAsync(demo.Name);
+                    _skiaHost?.RetractActivity(demo.Kind, sequence++, "audit");
+                    await Task.Delay(250).ConfigureAwait(true);
+                }
+            }
+
+            SimulatePrimaryClick();
+            await ShotAsync("expanded-home");
+            var pages = new[] { IslandPage.Media, IslandPage.Notifications, IslandPage.Clipboard, IslandPage.Agent, IslandPage.Widgets };
+            foreach (var page in pages)
+            {
+                SimulatePageRequested(page);
+                await ShotAsync("expanded-" + page.ToString().ToLowerInvariant());
+            }
+
+            SimulatePageRequested(IslandPage.Home);
+            await Task.Delay(300).ConfigureAwait(true);
+            _skiaHost?.SimulateWheel(-140);
+            await Task.Delay(200).ConfigureAwait(true);
+            _skiaHost?.SimulateWheel(-140);
+            await ShotAsync("rail-expanded");
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine("audit-failed: " + ex);
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(Path.Combine(Path.GetTempPath(), "fluidbar-audit.log"), log.ToString())
+                .ConfigureAwait(true);
             Shutdown();
         }
     }

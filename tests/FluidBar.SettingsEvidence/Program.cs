@@ -53,6 +53,8 @@ internal static class Program
                 await CaptureAgentsAsync(output, culture);
             }
 
+            await CaptureSectionsAsync(output);
+
             status = 0;
         }
         catch (Exception exception)
@@ -132,6 +134,36 @@ internal static class Program
             window.Close();
             await Task.Delay(300);
             Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>Renders every settings section at the prototype modal size (visual-audit evidence).</summary>
+    private static async Task CaptureSectionsAsync(string output)
+    {
+        var directory = Path.Combine(output, "settings-pages");
+        Directory.CreateDirectory(directory);
+        foreach (var section in Enum.GetValues<SettingsWindowSection>())
+        {
+            var localizer = LocalizationService.CreateDefault("zh-Hans", showMissingKeys: false, enablePseudoLocale: false);
+            LocalizationRuntime.Current = localizer;
+            var store = new InMemoryUiSettingsStore(AppSettings.Default);
+            var controller = new SettingsController(store.LastSaved, store, NullAppLogger.Instance);
+            var window = new SettingsWindow(controller, localizer, section);
+            window.Show();
+            try
+            {
+                await Task.Delay(700);
+                Dispatcher.UIThread.RunJobs();
+                var content = window.Content as Control
+                    ?? throw new InvalidOperationException("The settings window has no content.");
+                Save(content, Path.Combine(directory, "settings-" + section + "-zh-Hans.png"));
+            }
+            finally
+            {
+                window.Close();
+                await Task.Delay(200);
+                Dispatcher.UIThread.RunJobs();
+            }
         }
     }
 

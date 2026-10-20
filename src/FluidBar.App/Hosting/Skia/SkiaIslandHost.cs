@@ -270,6 +270,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         EnsureDeadlineTicker();
     }
 
+    /// <summary>Simulates one wheel step (smoke/visual-audit runs; no real input).</summary>
+    /// <param name="deltaDip">Wheel delta in DIP (negative = down/forward).</param>
+    public void SimulateWheel(double deltaDip)
+    {
+        _controller.HandleWheel(deltaDip, horizontal: false, shift: false);
+        RenderNow();
+        EnsureDeadlineTicker();
+    }
+
     /// <summary>Opens the settings window (tray/hotkey seam; raises <see cref="SettingsRequested"/>).</summary>
     public void RequestSettings() => _controller.RequestSettings();
 

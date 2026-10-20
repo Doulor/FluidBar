@@ -329,9 +329,11 @@ internal sealed partial class PageRenderer : IDisposable
             DrawCard(canvas, lyricCard, 10);
             var captionHeight = 12 + m.LineGrow(IslandType.MediaEyebrow);
             var captionTop = lyricCard.MidY - (captionHeight / 2);
+            // No lyric to follow: centring the caption inside the full-width band reads as a deliberate
+            // empty state; a left-hugging caption looked like a clipped lyric line (visual audit, task-38).
             _text.Draw(canvas, media.NoLyricsText, IslandType.MediaEyebrow,
                 new SKRect(lyricCard.Left + 10, captionTop, lyricCard.Right - 10, captionTop + captionHeight),
-                _theme.ForegroundTertiary, TextAlign.Left, 0.8f * _opacity);
+                _theme.ForegroundTertiary, TextAlign.Center, 0.8f * _opacity);
         }
 
         // Window-title fallback sources have no track length; the player still reports the position,
