@@ -118,6 +118,20 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
 
     internal void PublishSnapshot(AgentEventSnapshot? snapshot)
     {
+        if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AGENT_AUDIT_EMPTY"), "1", StringComparison.Ordinal))
+        {
+            Context.Islands.TryRetract(PluginId);
+            PublishPageRows([]);
+            return;
+        }
+
+        if (IsAuditMode)
+        {
+            // Keep the visual audit deterministic even when a developer machine has a live inbox.
+            PublishPageRows(AuditRows());
+            return;
+        }
+
         var latest = snapshot?.Latest;
         if (latest is null)
         {
@@ -127,7 +141,9 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             }
 
             Context.Islands.TryRetract(PluginId);
-            PublishPageRows([]);
+            // Audit/demo runs have no real inbox: publish representative rows so the Agent page is
+            // exercised instead of falling through to the renderer's development placeholder.
+            PublishPageRows(IsAuditMode ? AuditRows() : []);
             return;
         }
 
@@ -195,12 +211,65 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             TemplateId = PageTemplates.List,
             List = new PageListData
             {
-                EmptyTitle = "No agent sessions",
-                EmptyHint = "Running agents will show up here",
+                EmptyTitle = Localize("Agent.Empty", "No agent activity", "暂无 Agent 活动"),
+                EmptyHint = Localize("Agent.EmptyHint",
+                    "Connect DeepSeek Harness, Claude Code, or Codex to see sessions here.",
+                    "接入 DeepSeek Harness、Claude Code 或 Codex 后，会话会显示在这里。"),
                 Rows = rows,
             },
         });
     }
+
+    private static bool IsAuditMode =>
+        string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT"), "1", StringComparison.Ordinal);
+
+    private string Localize(string key, string fallback, string? chineseFallback = null)
+    {
+        if (Context.Localization.TryGet(key, out var value))
+        {
+            return value;
+        }
+
+        return Context.Localization.CurrentLocale.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
+            && chineseFallback is not null
+            ? chineseFallback
+            : fallback;
+    }
+
+    /// <summary>Deterministic three-row sample used only by the developer visual audit.</summary>
+    internal static IReadOnlyList<PageListRow> AuditRows() =>
+    [
+        new PageListRow
+        {
+            RowId = "audit-agent-1",
+            IconToken = "agent",
+            Title = "重构岛内字体排印",
+            Subtitle = "FluidBar · src/FluidBar.Island",
+            Value = "运行 02:14",
+            Badge = "运行中",
+            Tone = "info",
+        },
+        new PageListRow
+        {
+            RowId = "audit-agent-2",
+            IconToken = "check",
+            Title = "检查插件页面空态",
+            Subtitle = "FluidBar · src/FluidBar.App",
+            Value = "完成 01:08",
+            Badge = "已完成",
+            Tone = "success",
+        },
+        new PageListRow
+        {
+            RowId = "audit-agent-3",
+            IconToken = "pause",
+            Title = "等待确认发布说明",
+            Subtitle = "FluidBar · docs",
+            Value = "等待 00:42",
+            Badge = "等待输入",
+            Tone = "warning",
+        },
+    ];
 
     /// <summary>
     /// True when a legacy inbox row's Title is just the agent's brand (or "Brand · project"): the compact

@@ -489,7 +489,12 @@ internal sealed class AppBootstrap
             {
                 AutoCollapseMs = 0,
                 Language = "zh-Hans",
-                Plugins = settings.Plugins with { Enabled = [] },
+                // Default audit runs must exercise the real plugin pages, including the three-row
+                // Agent sample that AgentStatusPlugin publishes when the inbox is empty.
+                Plugins = settings.Plugins with
+                {
+                    Enabled = ["fluidbar-media", "fluidbar-clipboard", "fluidbar-notifications", "fluidbar-agent"],
+                },
             });
             await Task.Delay(1400).ConfigureAwait(true);
             var directory = Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_DIR")
