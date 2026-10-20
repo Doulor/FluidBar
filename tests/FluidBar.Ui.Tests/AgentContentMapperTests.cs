@@ -1,0 +1,139 @@
+using System.Collections.Immutable;
+using FluidBar.App.Island;
+using FluidBar.App.Localization;
+using FluidBar.App.State;
+using FluidBar.Platform.Windows.Agent;
+
+namespace FluidBar.Ui.Tests;
+
+/// <summary>
+/// Agent page mapping: localized status labels, elapsed duration ("已运行 X 分 Y 秒"), failure details and
+/// the display name per agent kind. The inbox parsing/merging itself is covered by Platform tests.
+/// </summary>
+public sealed class AgentContentMapperTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 10, 20, 10, 5, 0, TimeSpan.Zero);
+
+    private static AgentEventSnapshot Snapshot(params AgentEventEntry[] entries)
+        => new(entries.ToImmutableArray());
+
+    private static AgentEventEntry Entry(
+        AgentKind agent = AgentKind.DeepSeek,
+        AgentEventKind kind = AgentEventKind.Running,
+        string title = "DeepSeek Harness",
+        string message = "",
+        DateTimeOffset? startedAt = null,
+        DateTimeOffset? timestamp = null,
+        string? sessionId = "session-x")
+        => new($"session:{sessionId}", agent, kind, title, message,
+            timestamp ?? Now, "inbox.json", sessionId, startedAt);
+
+    [Fact]
+    public async Task Map_Running_UsesTheLocalizedStatusAndElapsedDuration()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(startedAt: Now.AddMinutes(-3).AddSeconds(-12))), Now, localizer);
+        });
+
+        Assert.Single(rows);
+        Assert.Equal("运行中", rows[0].StatusText);
+        Assert.Equal("已运行 3 分 12 秒", rows[0].TimeText);
+        Assert.Equal(StatusTone.Info, rows[0].Tone);
+        Assert.Equal(AgentKind.DeepSeek, rows[0].Kind);
+        Assert.Equal("session-x", rows[0].SessionId);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_Completed_UsesTheFinishedDuration()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(Entry(kind: AgentEventKind.Completed,
+                    startedAt: Now.AddMinutes(-2).AddSeconds(-5), timestamp: Now)), Now, localizer);
+        });
+
+        Assert.Equal("已完成", rows[0].StatusText);
+        Assert.Equal("耗时 2 分 5 秒", rows[0].TimeText);
+        Assert.Equal(StatusTone.Success, rows[0].Tone);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_Failed_WaitingAndUnknownStatesMapToTheRightTone()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(
+                Snapshot(
+                    Entry(kind: AgentEventKind.Failed, message: "MISSING_CREDENTIAL: no API key", startedAt: Now.AddMinutes(-1)),
+                    Entry(kind: AgentEventKind.WaitingForInput, sessionId: "session-y"),
+                    Entry(kind: AgentEventKind.Other, sessionId: "session-z")),
+                Now, localizer);
+        });
+
+        Assert.Equal(3, rows.Length);
+        Assert.Equal("失败", rows[0].StatusText);
+        Assert.Equal(StatusTone.Danger, rows[0].Tone);
+        Assert.Contains("MISSING_CREDENTIAL", rows[0].Detail, StringComparison.Ordinal);
+        Assert.Equal("等待中", rows[1].StatusText);
+        Assert.Equal(StatusTone.Warning, rows[1].Tone);
+        Assert.Equal("运行中", rows[2].StatusText);
+        Assert.Equal(StatusTone.Info, rows[2].Tone);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Fact]
+    public async Task Map_WithoutAStartTime_FallsBackToTheClockTime()
+    {
+        var rows = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("zh-Hans");
+            return AgentContentMapper.Map(Snapshot(Entry(startedAt: null)), Now, localizer);
+        });
+
+        Assert.Equal(Now.ToLocalTime().ToString("HH:mm"), rows[0].TimeText);
+        await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
+    }
+
+    [Theory]
+    [InlineData(AgentKind.Claude, "Claude Code")]
+    [InlineData(AgentKind.Codex, "Codex")]
+    [InlineData(AgentKind.DeepSeek, "DeepSeek Harness")]
+    [InlineData(AgentKind.Cursor, "Cursor")]
+    [InlineData(AgentKind.Windsurf, "Windsurf")]
+    [InlineData(AgentKind.Aider, "Aider")]
+    [InlineData(AgentKind.Copilot, "GitHub Copilot")]
+    [InlineData(AgentKind.Zcode, "zcode")]
+    [InlineData(AgentKind.Qoder, "Qoder")]
+    [InlineData(AgentKind.WorkBuddy, "WorkBuddy")]
+    [InlineData(AgentKind.Generic, "Agent")]
+    public void AgentDisplayName_CoversEveryKind(AgentKind kind, string expected)
+    {
+        Assert.Equal(expected, AgentContentMapper.AgentDisplayName(kind));
+    }
+
+    [Fact]
+    public void Map_UsesTheDisplayNameWhenTheTitleIsEmpty()
+    {
+        var rows = AgentContentMapper.Map(Snapshot(Entry(agent: AgentKind.Cursor, title: "")), Now);
+
+        Assert.Equal("Cursor", rows[0].Name);
+    }
+
+    [Fact]
+    public void Map_EmptySnapshotAndRowLimit()
+    {
+        Assert.Empty(AgentContentMapper.Map(null, Now));
+        var entries = Enumerable.Range(1, 12)
+            .Select(i => Entry(sessionId: "session-" + i))
+            .ToArray();
+        Assert.Equal(AgentContentMapper.MaxRows, AgentContentMapper.Map(Snapshot(entries), Now).Length);
+    }
+}

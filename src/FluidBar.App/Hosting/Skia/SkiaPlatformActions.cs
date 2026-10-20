@@ -1045,53 +1045,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Maps the bounded agent inbox snapshot into island page rows (newest first).</summary>
     private ImmutableArray<AgentItemData> MapAgents(AgentEventSnapshot? snapshot)
-    {
-        if (snapshot is null || snapshot.Recent.IsEmpty)
-        {
-            return ImmutableArray<AgentItemData>.Empty;
-        }
-
-        var builder = ImmutableArray.CreateBuilder<AgentItemData>(Math.Min(8, snapshot.Recent.Length));
-        foreach (var entry in snapshot.Recent)
-        {
-            if (builder.Count >= 8)
-            {
-                break;
-            }
-
-            builder.Add(new AgentItemData
-            {
-                Name = string.IsNullOrWhiteSpace(entry.Title) ? AgentDisplayName(entry.Agent) : entry.Title,
-                StatusText = entry.Kind switch
-                {
-                    AgentEventKind.Completed => Localized(LocKeys.Agent.Completed, "Completed"),
-                    AgentEventKind.Failed => Localized(LocKeys.Agent.Failed, "Failed"),
-                    AgentEventKind.WaitingForInput => Localized(LocKeys.Agent.Waiting, "Waiting"),
-                    _ => Localized(LocKeys.Agent.Running, "Running"),
-                },
-                Tone = entry.Kind switch
-                {
-                    AgentEventKind.Completed => StatusTone.Success,
-                    AgentEventKind.Failed => StatusTone.Danger,
-                    AgentEventKind.WaitingForInput => StatusTone.Warning,
-                    _ => StatusTone.Info,
-                },
-                // Rows previously had no timestamp at all; a local HH:mm is locale neutral and cheap.
-                TimeText = entry.Timestamp.ToLocalTime().ToString("HH:mm"),
-                Detail = entry.Message,
-            });
-        }
-
-        return builder.ToImmutable();
-    }
-
-    private static string AgentDisplayName(AgentKind agent) => agent switch
-    {
-        AgentKind.Claude => "Claude Code",
-        AgentKind.Codex => "Codex",
-        AgentKind.DeepSeek => "DeepSeek Harness",
-        _ => "Agent",
-    };
+        => AgentContentMapper.Map(snapshot, _time.GetLocalNow(), _localizer);
 
     private string Localized(string key, string fallback) => _localizer?.Get(key) ?? fallback;
 

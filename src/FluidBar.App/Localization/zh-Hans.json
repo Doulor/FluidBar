@@ -139,8 +139,10 @@
     "Agent.Failed": "失败",
     "Agent.Waiting": "等待中",
     "Agent.Empty": "暂无代理会话",
-    "Agent.EmptyHint": "Claude 与 Codex 的运行会显示在这里。",
+    "Agent.EmptyHint": "DeepSeek Harness、Claude、Codex 等代理的运行会显示在这里。",
     "Agent.Session": "会话 {id}",
+    "Agent.DurationRunning": "已运行 {minutes} 分 {seconds} 秒",
+    "Agent.DurationDone": "耗时 {minutes} 分 {seconds} 秒",
 
     "Timer.Title": "计时器",
     "Timer.Pomodoro": "番茄钟",

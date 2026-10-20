@@ -113,20 +113,18 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             return;
         }
 
-        lock (_stateGate)
-        {
-            if (string.Equals(latest.Id, _lastEntryId, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            _lastEntryId = latest.Id;
-        }
-
         var agentToken = latest.Agent switch
         {
             AgentKind.Claude => "claude",
             AgentKind.Codex => "codex",
+            AgentKind.DeepSeek => "deepseek",
+            AgentKind.Cursor => "cursor",
+            AgentKind.Windsurf => "windsurf",
+            AgentKind.Aider => "aider",
+            AgentKind.Copilot => "copilot",
+            AgentKind.Zcode => "zcode",
+            AgentKind.Qoder => "qoder",
+            AgentKind.WorkBuddy => "workbuddy",
             _ => "generic",
         };
         var kindToken = latest.Kind switch
@@ -134,8 +132,22 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
             AgentEventKind.Completed => "completed",
             AgentEventKind.Failed => "failed",
             AgentEventKind.WaitingForInput => "waiting",
+            AgentEventKind.Running => "running",
             _ => "event",
         };
+
+        lock (_stateGate)
+        {
+            // The session id is stable across running → completed, so the dedupe key includes the
+            // status token: a finished session must still replace the live "running" activity.
+            var stateKey = latest.Id + "|" + kindToken;
+            if (string.Equals(stateKey, _lastEntryId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastEntryId = stateKey;
+        }
         var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["icon"] = "agent",
@@ -159,7 +171,7 @@ public sealed class AgentStatusPlugin : BuiltinPluginBase
                 Subtitle = agentToken,
                 Badge = kindToken,
                 SourceName = agentToken,
-                IsActive = latest.Kind == AgentEventKind.WaitingForInput,
+                IsActive = latest.Kind is AgentEventKind.WaitingForInput or AgentEventKind.Running,
                 DetailLines = [$"{agentToken}:{kindToken}"],
                 Fields = fields,
             },

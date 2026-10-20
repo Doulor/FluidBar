@@ -317,6 +317,10 @@ public static partial class LocKeys
         public const string EmptyHint = "Agent.EmptyHint";
         /// <summary><c>Agent.Session</c></summary>
         public const string Session = "Agent.Session";
+        /// <summary><c>Agent.DurationRunning</c></summary>
+        public const string DurationRunning = "Agent.DurationRunning";
+        /// <summary><c>Agent.DurationDone</c></summary>
+        public const string DurationDone = "Agent.DurationDone";
     }
     /// <summary>Keys in the 'Timer' area.</summary>
     public static class Timer

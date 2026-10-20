@@ -1,0 +1,28 @@
+{
+  "name": "dsh-plugin-fluidbar-agent",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness -> FluidBar agent status bridge (Cordis plugin half). Writes schema-v2 agent events for the FluidBar island.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis-plugin",
+    "fluidbar",
+    "agent-status"
+  ]
+}

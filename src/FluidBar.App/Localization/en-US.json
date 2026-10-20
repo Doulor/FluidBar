@@ -139,8 +139,10 @@
     "Agent.Failed": "Failed",
     "Agent.Waiting": "Waiting",
     "Agent.Empty": "No agent sessions",
-    "Agent.EmptyHint": "Claude and Codex runs appear here.",
+    "Agent.EmptyHint": "DeepSeek Harness, Claude, Codex and other agents appear here.",
     "Agent.Session": "Session {id}",
+    "Agent.DurationRunning": "Running {minutes}m {seconds}s",
+    "Agent.DurationDone": "Took {minutes}m {seconds}s",
 
     "Timer.Title": "Timer",
     "Timer.Pomodoro": "Pomodoro",

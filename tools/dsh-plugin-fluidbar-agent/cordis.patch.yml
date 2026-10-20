@@ -1,0 +1,12 @@
+# FluidBar agent-status plugin for DeepSeek Harness.
+#
+# The loader entry inserts this package into the profile tree; the package itself has no bundle
+# dependencies. Install with:
+#   dsh plugin --profile desktop add file:<repo>/tools/dsh-plugin-fluidbar-agent
+#
+# Then make sure "dsh-plugin-fluidbar-agent" is listed in
+#   $DSH_HOME/profiles/<profile>/package.json  ->  dsh.profile.bundles
+# and restart the DeepSeek Harness app.
+- insert:
+    - id: fluidbar-agent-hook
+      name: dsh-plugin-fluidbar-agent

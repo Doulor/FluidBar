@@ -117,8 +117,14 @@ public sealed record AgentItemData
     /// <summary>Localized elapsed/relative time.</summary>
     public string TimeText { get; init; } = string.Empty;
 
-    /// <summary>Detail line (task/result summary).</summary>
+    /// <summary>Detail line (task/result summary; failures carry the error text).</summary>
     public string Detail { get; init; } = string.Empty;
+
+    /// <summary>Agent kind (display-name and icon semantics).</summary>
+    public Platform.Windows.Agent.AgentKind Kind { get; init; }
+
+    /// <summary>Agent session id when the emitter supplied one (merged row identity).</summary>
+    public string? SessionId { get; init; }
 }
 
 /// <summary>One widget task row.</summary>

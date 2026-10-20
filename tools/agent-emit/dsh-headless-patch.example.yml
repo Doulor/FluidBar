@@ -1,0 +1,27 @@
+# Example model/provider overlay for 'dsh --profile headless' (copy and fill in your provider).
+#
+# Why: the headless profile ships without a configured provider, so the first run fails with
+# MISSING_CREDENTIAL until a model route is supplied. Pass this file with:
+#   dsh-bridge.ps1 -Run "..." -PatchPath .\my-model-patch.yml
+#
+# The apiKeyEnv name is resolved through DSH's credentials service (the same store the desktop
+# Models page writes), so no secret belongs in this file.
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      local:
+        displayName: Local proxy
+        apiKeyEnv: LOCAL_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:7863/v1
+        models:
+          - id: cn:deepseek-v4.1-flash
+            name: cn:deepseek-v4.1-flash
+            contextWindow: 1000000
+            maxTokens: 393216
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: local
+    model: cn:deepseek-v4.1-flash
