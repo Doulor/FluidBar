@@ -253,9 +253,34 @@ internal sealed class CompactRenderer : IDisposable
         // number inset 10 DIP from the right edge.
         var hasChip = !string.IsNullOrEmpty(model.VerificationCode);
         var chipWidth = hasChip ? 46f : 0f;
-        // Badge only while the title still keeps a readable run; otherwise the text wins.
-        var hasBadge = !hasChip && model.UnreadCount > 0 && (width - 10 - 24 - 36) >= TitleReadableMinimumDip;
-        var trailing = hasChip ? chipWidth + 8 : hasBadge ? 24 : 0;
+        var titleText = model.Title ?? model.Body ?? string.Empty;
+        var app = model.AppName;
+        var hasApp = !string.IsNullOrEmpty(app);
+        var titleStrong = _text.Measure(titleText, IslandType.CompactNoticeStrong);
+        var titleNotice = _text.Measure(titleText, IslandType.CompactNotice);
+
+        // Title-first priority, in this order: "App · title" > title only > title without the badge >
+        // ellipsised title. The prefix is only kept when the *whole* title fits beside it, and the
+        // badge only when the whole title fits without it.
+        var trailingChip = hasChip ? chipWidth + 8 : 0f;
+        var prefixWidth = 0f;
+        if (hasApp)
+        {
+            var appLayout = _text.GetLayout(app!, IslandType.CompactNoticeStrong, width);
+            prefixWidth = appLayout.Width + 13f;   // app + 5 gap + "·" + 8 gap
+        }
+
+        const float textLeft = 36f;
+        var keepPrefix = hasApp
+            && (width - 10 - trailingChip - textLeft - prefixWidth) >= titleNotice;
+        var hasBadge = !hasChip && model.UnreadCount > 0;
+        var trailing = trailingChip;
+        if (hasBadge && (width - 10 - trailing - textLeft - (keepPrefix ? prefixWidth : 0)) < (keepPrefix ? titleNotice : titleStrong))
+        {
+            hasBadge = false;
+        }
+
+        trailing = hasChip ? trailingChip : hasBadge ? 24f : 0f;
         var right = width - 10 - trailing;
 
         var accent = _accents.Get(model.AccentHex, _theme.Accent);
@@ -265,44 +290,27 @@ internal sealed class CompactRenderer : IDisposable
         canvas.DrawRoundRect(glyph, 6, 6, _fill);
         DrawIcon(canvas, model.Icon ?? IconKind.Bell, glyph.Deflate(4), SKColors.White);
 
-        var area = new SKRect(36, 0, right, height);
-        var app = model.AppName;
-        if (!string.IsNullOrEmpty(app))
+        var area = new SKRect(textLeft, 0, right, height);
+        if (hasApp && keepPrefix)
         {
-            var appLayout = _text.GetLayout(app, IslandType.CompactNoticeStrong, area.Width);
+            var appLayout = _text.GetLayout(app!, IslandType.CompactNoticeStrong, area.Width);
             var separator = area.Left + appLayout.Width + 5;
-            // Title-first: the "App · " prefix stays only while the title still gets a readable run.
-            // The pill is now 180 DIP wide, so "Teams · Design review in 5 minutes" would leave the
-            // title four characters; the app name is secondary and is dropped instead.
-            var titleText = model.Title ?? model.Body ?? string.Empty;
-            var titleNatural = _text.Measure(titleText, IslandType.CompactNotice);
-            var titleRoomWithPrefix = area.Right - (separator + 8);
-            var keepPrefix = separator < area.Right - 12
-                && titleRoomWithPrefix >= Math.Min(titleNatural, TitleReadableMinimumDip);
-            if (keepPrefix)
-            {
-                _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
-                    _theme.Foreground, TextAlign.Left, _opacity);
-                separator = area.Left + appLayout.Width + 5;
-                _text.Draw(canvas, "·", IslandType.CompactNotice,
-                    new SKRect(separator, area.Top, separator + 8, area.Bottom), _theme.ForegroundSecondary,
-                    TextAlign.Left, _opacity);
-                _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNotice,
-                    new SKRect(separator + 8, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
-                    TextAlign.Left, _opacity);
-            }
-            else
-            {
-                // Prefix dropped: the title owns the whole text column and stays the primary element.
-                _text.Draw(canvas, titleText, IslandType.CompactNoticeStrong, area,
-                    _theme.Foreground, TextAlign.Left, _opacity);
-            }
+            _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
+                _theme.Foreground, TextAlign.Left, _opacity);
+            _text.Draw(canvas, "·", IslandType.CompactNotice,
+                new SKRect(separator, area.Top, separator + 8, area.Bottom), _theme.ForegroundSecondary,
+                TextAlign.Left, _opacity);
+            _text.Draw(canvas, titleText, IslandType.CompactNotice,
+                new SKRect(separator + 8, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
+                TextAlign.Left, _opacity);
         }
         else
         {
-            _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNoticeStrong, area,
+            // Prefix dropped: the title owns the whole text column and stays the primary element.
+            _text.Draw(canvas, titleText, IslandType.CompactNoticeStrong, area,
                 _theme.Foreground, TextAlign.Left, _opacity);
         }
+
 
         if (hasChip)
         {

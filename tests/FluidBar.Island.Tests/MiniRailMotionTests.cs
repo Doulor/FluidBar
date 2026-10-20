@@ -4,8 +4,17 @@ using FluidBar.Island;
 namespace FluidBar.Island.Tests;
 
 /// <summary>
-/// Frame-by-frame contract for the prototype2 rail transition. The reference samples were captured
-/// live from <c>docs/rewrite/prototype2</c> (Edge 1440×900, <c>?state=expanded&amp;tab=notifications&amp;arch=1</c>):
+/// Frame-by-frame contract for the prototype2 rail transition.
+/// <para>
+/// <b>Baseline note (deliberate deviation, 2026-10-21).</b> The reference samples below were
+/// captured from prototype2 with a <b>9 DIP</b> rail label; the shipped rail uses <b>11 DIP</b>
+/// (readability floor, see docs/ios-design-study.md row 13), so the frame values were re-sampled
+/// from the current spring implementation and the prototype 9 pt values are kept in comments
+/// (capsule 73 -> 79, neighbour centres +/-57.5 -> +/-60.5, dot clusters -82.5/79 -> -85.5/82).
+/// Tolerances are unchanged (prototype-level +/-1.0 per curve sample).
+/// </para>
+/// <para>
+/// The reference samples were captured live from
 /// clicking the right neighbour pill on page 02 (通知, 64 DIP capsule) turns to page 03 (剪贴板,
 /// 73 DIP capsule) and the rail springs follow <c>RAIL_SPRING {T: 0.32, Z: 0.85}</c>.
 /// </summary>
@@ -14,14 +23,15 @@ public sealed class MiniRailMotionTests
     /// <summary>Reference curve fitted through the prototype rAF samples (page 02 → 03).</summary>
     public static TheoryData<int, float, float, float> PrototypeCurve => new()
     {
-        { 16, 64.28f, 666.86f, 773.14f },
-        { 33, 65.02f, 666.49f, 773.51f },
-        { 50, 66.42f, 665.80f, 774.20f },
-        { 100, 69.59f, 664.21f, 775.79f },
-        { 150, 71.66f, 663.17f, 776.83f },
-        { 200, 72.61f, 662.69f, 777.31f },
-        { 250, 72.95f, 662.53f, 777.47f },
-        { 300, 73.02f, 662.49f, 777.51f },
+        // 11 pt re-sampled from the current springs; prototype 9 pt in the trailing comment.
+        { 16, 67.66f, 665.17f, 774.83f },   // prototype 64.28 / 666.86 / 773.14
+        { 33, 68.99f, 664.51f, 775.49f },   // prototype 65.02 / 666.49 / 773.51
+        { 50, 70.58f, 663.71f, 776.29f },   // prototype 66.42 / 665.80 / 774.20
+        { 100, 74.91f, 661.55f, 778.45f },  // prototype 69.59 / 664.21 / 775.79
+        { 150, 77.45f, 660.27f, 779.73f },  // prototype 71.66 / 663.17 / 776.83
+        { 200, 78.57f, 659.72f, 780.29f },  // prototype 72.61 / 662.69 / 777.31
+        { 250, 78.95f, 659.52f, 780.48f },  // prototype 72.95 / 662.53 / 777.47
+        { 300, 79.04f, 659.48f, 780.52f },  // prototype 73.02 / 662.49 / 777.51
     };
 
     [Theory]
@@ -71,9 +81,9 @@ public sealed class MiniRailMotionTests
         // The prototype is visually settled by ~300 ms and the spring snaps by ~0.5 s.
         Assert.False(motion.IsAnimating);
         Assert.InRange(frames, 20, 40);
-        Assert.Equal(73f, motion.Values.CapsuleWidth, 0.01f);
-        Assert.Equal(-82.5f, motion.Values.LeftX, 0.05f);
-        Assert.Equal(79f, motion.Values.RightX, 0.05f);
+        Assert.Equal(79f, motion.Values.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
+        Assert.Equal(-85.5f, motion.Values.LeftX, 0.05f);       // prototype -82.5f
+        Assert.Equal(82f, motion.Values.RightX, 0.05f);         // prototype 79f
     }
 
     [Fact]
@@ -115,11 +125,11 @@ public sealed class MiniRailMotionTests
         Span<SkiaSharp.SKRect> right = stackalloc SkiaSharp.SKRect[IslandMetrics.MaxDotsPerSide];
         var frame = MiniRailLayout.Measure(state, shell, left, right);
 
-        Assert.Equal(73f, frame.CapsuleWidth, 0.01f);
+        Assert.Equal(79f, frame.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
         Assert.Equal(2, frame.LeftDots);
         Assert.Equal(1, frame.RightDots);
-        Assert.Equal(shell.MidX - 57.5f, frame.Previous.MidX, 0.01f);
-        Assert.Equal(shell.MidX + 57.5f, frame.Next.MidX, 0.01f);
+        Assert.Equal(shell.MidX - 60.5f, frame.Previous.MidX, 0.01f);   // prototype 57.5
+        Assert.Equal(shell.MidX + 60.5f, frame.Next.MidX, 0.01f);
         Assert.Equal(1f, frame.PrevAlpha, 0.001f);
         Assert.Equal(1f, frame.NextAlpha, 0.001f);
 
@@ -128,7 +138,7 @@ public sealed class MiniRailMotionTests
         motion.Step(0.1);
         var midState = State(3, motion.Values);
         var mid = MiniRailLayout.Measure(midState, shell, left, right);
-        Assert.InRange(mid.CapsuleWidth, 64f, 73f);
+        Assert.InRange(mid.CapsuleWidth, 67f, 79f);
         Assert.NotEqual(frame.Previous.MidX, mid.Previous.MidX);
         Assert.Equal(3, mid.LeftDots); // the cluster count follows the new page immediately
         Assert.Equal(0, mid.RightDots);
@@ -154,13 +164,13 @@ public sealed class MiniRailMotionTests
     public void NeighbourTargets_MatchTheSettledRailGeometry()
     {
         var targets = MiniRailTargetsFactory.Create(3, Pages(), 1.0);
-        Assert.Equal(73f, targets.CapsuleWidth, 0.01f);
-        Assert.Equal(-57.5f, targets.PrevX, 0.01f);
-        Assert.Equal(57.5f, targets.NextX, 0.01f);
+        Assert.Equal(79f, targets.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
+        Assert.Equal(-60.5f, targets.PrevX, 0.01f);       // prototype -57.5
+        Assert.Equal(60.5f, targets.NextX, 0.01f);
         Assert.Equal(1f, targets.PrevAlpha, 0.001f);
         Assert.Equal(1f, targets.NextAlpha, 0.001f);
-        Assert.Equal(-82.5f, targets.LeftX, 0.01f);   // 2-dot cluster, centre 637.5 → 720 − 82.5
-        Assert.Equal(79f, targets.RightX, 0.01f);     // 1-dot cluster, centre 799 → 720 + 79
+        Assert.Equal(-85.5f, targets.LeftX, 0.01f);   // 2-dot cluster, centre 634.5 → 720 − 85.5 (prototype 637.5 / -82.5)
+        Assert.Equal(82f, targets.RightX, 0.01f);     // 1-dot cluster, centre 802 → 720 + 82 (prototype 799 / 79)
 
         var first = MiniRailTargetsFactory.Create(0, Pages(), 1.0);
         Assert.Equal(0f, first.PrevAlpha, 0.001f);

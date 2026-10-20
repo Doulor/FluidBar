@@ -326,15 +326,15 @@ public static class LayoutTokens
 
     private static readonly VisualSize IdleSize = new(132, 36);
     // iOS-proportion pass (audit 2026-10-21): the compact pill had drifted to 226-264 DIP, which reads
-    // as a wide banner rather than an island. Titles now ellipsise in the text column instead of
-    // stretching the pill; the widths sit at the top of the audited band so the longest real titles
-    // stay readable (media 192 of 168-192, the text pills 180 of 144-180).
-    private static readonly VisualSize MediaSize = new(192, 40);
+    // as a wide banner rather than an island. Widths now keep 14 DIP more text room than the first
+    // pass so a truncated title still shows >= 12 characters (CJK counted as 2):
+    // media 200, the text pills 194; still far narrower than the old 226-264.
+    private static readonly VisualSize MediaSize = new(200, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    private static readonly VisualSize NotificationSize = new(180, 36);
-    private static readonly VisualSize ClipboardSize = new(180, 36);
+    private static readonly VisualSize NotificationSize = new(194, 36);
+    private static readonly VisualSize ClipboardSize = new(194, 36);
     // Prototype2 .island[data-view="agent"]: action/session title, not the brand name.
-    private static readonly VisualSize AgentSize = new(180, 36);
+    private static readonly VisualSize AgentSize = new(194, 36);
     private static readonly VisualSize TimerSize = new(190, 36);
     private static readonly VisualSize BatterySize = new(208, 36);
     private static readonly VisualSize LookupSize = new(480, 44);
