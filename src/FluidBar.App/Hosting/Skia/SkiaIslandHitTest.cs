@@ -168,6 +168,33 @@ public static class SkiaIslandHitTest
         if (pages.PluginPageAt(page) is { } pluginPage)
         {
             var body = PageLayout.ListBody(pageRect);
+            if (pluginPage.Canvas is { HitAreas.Count: > 0 } canvas)
+            {
+                for (var i = canvas.HitAreas.Count - 1; i >= 0; i--)
+                {
+                    var area = canvas.HitAreas[i];
+                    if (string.IsNullOrWhiteSpace(area.AccessibleName))
+                    {
+                        continue; // Decorative: never an interactive target.
+                    }
+
+                    var rect = new SKRect(body.Left + (float)area.X, body.Top + (float)area.Y,
+                        body.Left + (float)(area.X + area.Width), body.Top + (float)(area.Y + area.Height));
+                    if (!rect.Contains(x, y))
+                    {
+                        continue;
+                    }
+
+                    index = i;
+                    return area.Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Slider
+                        ? IslandPageControl.PluginSlider
+                        : IslandPageControl.PluginArea;
+                }
+
+                index = -1;
+                return IslandPageControl.None;
+            }
+
             for (var i = 0; i < pluginPage.Rows.Count; i++)
             {
                 var row = PageMetricsLayout.NotificationRow(pageRect, i, 0, metrics);

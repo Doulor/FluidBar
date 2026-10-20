@@ -1,4 +1,5 @@
 using FluidBar.App.Hosting.Pages;
+using FluidBar.Sdk.Canvas;
 using FluidBar.Sdk.Manifest;
 using FluidBar.Sdk.Pages;
 
@@ -60,9 +61,56 @@ public sealed class PageRegistryTests
         Assert.Contains("already", duplicate, StringComparison.OrdinalIgnoreCase);
         Assert.False(registry.RegisterPage(Owner, Descriptor("sample-page.other") with
         {
-            TemplateId = "custom",
+            TemplateId = "unsupported",
         }, out var template));
         Assert.Contains("template", template, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CustomCanvas_IsValidatedAndMappedToHostModel()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.canvas") with
+        {
+            TemplateId = PageTemplates.Custom,
+        }, out var registerError), registerError);
+
+        var recorder = new CanvasRecorder();
+        recorder.FillRoundRect(0, 0, 400, 232, 16, "#101018");
+        recorder.DrawText("72%", 0, 0, 400, 60, "accent", CanvasTextStyle.Title, CanvasTextAlign.Center);
+        Assert.True(registry.PublishPage(Owner, new PageData
+        {
+            PageId = "sample-page.canvas",
+            TemplateId = PageTemplates.Custom,
+            Canvas = new PageCanvasData
+            {
+                Commands = recorder.Build(),
+                HitAreas = [new PageHitArea { Id = "hit", Kind = PageHitAreaKind.Button, X = 0, Y = 0, Width = 40, Height = 20, CommandId = "sample-page.hit", AccessibleName = "Hit" }],
+            },
+        }, out var publishError), publishError);
+
+        var page = Assert.Single(registry.BuildPluginPages());
+        Assert.NotNull(page.Canvas);
+        Assert.Single(page.Canvas!.HitAreas);
+    }
+
+    [Fact]
+    public void CustomCanvas_RejectsOutOfBoundsCommands()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage(Owner, Descriptor("sample-page.canvas") with
+        {
+            TemplateId = PageTemplates.Custom,
+        }, out _));
+        var recorder = new CanvasRecorder();
+        recorder.FillRect(390, 0, 40, 20, "#FFFFFF");
+        Assert.False(registry.PublishPage(Owner, new PageData
+        {
+            PageId = "sample-page.canvas",
+            TemplateId = PageTemplates.Custom,
+            Canvas = new PageCanvasData { Commands = recorder.Build() },
+        }, out var error));
+        Assert.Contains("outside", error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

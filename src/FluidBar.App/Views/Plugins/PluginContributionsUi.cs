@@ -255,6 +255,19 @@ public static class PluginSettingsPageRenderer
             panel.Children.Add(hint);
         }
 
+        if (page.PreviewCanvas is { } preview
+            && FluidBar.Sdk.Canvas.IslandCanvasValidator.Validate(preview.Commands, preview.Width, preview.Height, out _))
+        {
+            var previewControl = new PreviewCanvas();
+            previewControl.SetData(preview);
+            if (!string.IsNullOrWhiteSpace(preview.AccessibleName))
+            {
+                Avalonia.Automation.AutomationProperties.SetName(previewControl, preview.AccessibleName);
+            }
+
+            panel.Children.Add(previewControl);
+        }
+
         var rows = (page.Controls ?? [])
             .Select(control => BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl, theme, themeAccent))
             .ToList();

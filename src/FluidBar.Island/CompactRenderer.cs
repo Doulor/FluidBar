@@ -1,4 +1,5 @@
 using FluidBar.Core.Activities;
+using FluidBar.Core.Motion;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -64,6 +65,12 @@ internal sealed class CompactRenderer : IDisposable
         // against the remaining content width so no text can run under (or be clipped by) the chip.
         var width = IslandMetrics.CompactContentWidth(state);
         var height = (float)state.ShellHeight;
+
+        if (model.Canvas is { } customCanvas)
+        {
+            CanvasPainter.DrawCompact(canvas, customCanvas, new SKRect(0, 0, width, height), _theme, _text, _opacity);
+            return;
+        }
 
         switch (kind)
         {
@@ -467,7 +474,7 @@ internal sealed class CompactRenderer : IDisposable
                 ? WaveMinHeight
                 : _reduced
                     ? 5f
-                    : WaveHeightAt(_phase, i);
+                    : WaveHeightAt(_phase, i) * Breath();
             var x = startX + (i * (barWidth + gap));
             var y = area.MidY - (height / 2);
             canvas.DrawRoundRect(new SKRect(x, y, x + barWidth, y + height), barWidth / 2, barWidth / 2, _fill);
@@ -508,10 +515,18 @@ internal sealed class CompactRenderer : IDisposable
         if (clamped > 0)
         {
             var width = Math.Max(track.Height, (float)(track.Width * clamped));
-            _fill.Color = Alpha(accent, _opacity);
+            // Sub-2 % breathing on brightness; the waveform uses the same factor for amplitude.
+            _fill.Color = Alpha(accent, Math.Clamp(_opacity * Breath(), 0f, 1f));
             canvas.DrawRoundRect(new SKRect(track.Left, track.Top, track.Left + width, track.Bottom), radius, radius, _fill);
         }
     }
+
+    /// <summary>Idle breathing factor (1 ± 1.8 %, 4 s period); 1 under reduced motion.</summary>
+    private float Breath()
+        => _reduced
+            ? 1f
+            : 1f + (float)(MotionTokens.IdleBreathAmplitude
+                * Math.Sin((2.0 * Math.PI * _phase) / MotionTokens.IdleBreathPeriodSeconds));
 
     private void DrawChip(SKCanvas canvas, string? text, SKRect rect, SKColor accent, SKColor foreground)
     {

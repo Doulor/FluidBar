@@ -123,6 +123,9 @@ public sealed record ActivityViewModel
     /// <summary>Optional plugin icon token; the UI maps it before falling back to <see cref="Icon"/>.</summary>
     public string? IconToken { get; init; }
 
+    /// <summary>Optional validated custom compact canvas from a plugin.</summary>
+    public IslandCompactCanvas? CompactView { get; init; }
+
     /// <summary>Accent rule.</summary>
     public required AccentRule Accent { get; init; }
 
@@ -336,6 +339,7 @@ public static class ActivityPresenter
             Kind = record.Kind,
             Icon = IconFor(record.Kind),
             IconToken = payload.IconToken,
+            CompactView = payload.CompactView,
             Accent = AccentFor(record.Kind, payload),
             KindLabelKey = KindLabelKeyFor(record.Kind),
             Title = payload.Title,

@@ -126,6 +126,17 @@ internal sealed partial class PageRenderer : IDisposable
                         DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
                         return;
                 }
+            case "custom":
+                if (slot?.PluginPage is { } customPage)
+                {
+                    DrawPluginPage(canvas, customPage, pageRect);
+                }
+                else
+                {
+                    DrawPlaceholder(canvas, state.Pages.Title(page), pageRect);
+                }
+
+                return;
             case "calendar":
                 DrawWidgets(canvas, state.Pages.Widgets, pageRect);
                 return;

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FluidBar.Core.Presentation;
 
 namespace FluidBar.Core.Activities;
 
@@ -68,6 +69,9 @@ public sealed record ActivityPayload
 
     /// <summary>Notification verification code, if one was detected.</summary>
     public string? VerificationCode { get; init; }
+
+    /// <summary>Optional validated custom compact canvas from a plugin.</summary>
+    public IslandCompactCanvas? CompactView { get; init; }
 
     /// <summary>Numerical level 0..100 for HUD surfaces (volume, brightness, battery).</summary>
     public int? Level { get; init; }

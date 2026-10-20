@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FluidBar.Sdk.Canvas;
 
 namespace FluidBar.Sdk;
 
@@ -69,6 +70,9 @@ public sealed record IslandEventPayload
     public long? PlaybackTicks { get; init; }
 
     public string? VerificationCode { get; init; }
+
+    /// <summary>Optional validated custom compact canvas.</summary>
+    public CompactViewDescriptor? CompactView { get; init; }
 
     /// <summary>Additional named slot values for declarative layouts. Bounded by <see cref="IslandEventLimits"/>.</summary>
     public IReadOnlyDictionary<string, string?>? Fields { get; init; }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FluidBar.Sdk.Canvas;
 using FluidBar.Sdk.Json;
 using FluidBar.Sdk.Manifest;
 
@@ -109,6 +110,9 @@ public sealed record SettingsPageContribution
 
     /// <summary>Optional titled groups of controls (recommended for pages with more than a few rows).</summary>
     public IReadOnlyList<SettingsGroupContribution>? Groups { get; init; }
+
+    /// <summary>Optional preview drawn with the same command canvas as plugin pages.</summary>
+    public PreviewCanvasData? PreviewCanvas { get; init; }
 }
 
 /// <summary>A titled group of host-rendered controls inside a settings page.</summary>

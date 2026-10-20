@@ -114,6 +114,12 @@ public enum IslandPageControl
 
     /// <summary>Plugin list row's trailing button; <see cref="IslandHitTarget.Index"/> is the row.</summary>
     PluginRowButton,
+
+    /// <summary>Custom canvas hit area (button/row); <see cref="IslandHitTarget.Index"/> is the hit-area index.</summary>
+    PluginArea,
+
+    /// <summary>Custom canvas slider; <see cref="IslandHitTarget.Index"/> is the hit-area index.</summary>
+    PluginSlider,
 }
 
 /// <summary>One hit-test result: region kind, page, control and row/toggle index.</summary>

@@ -125,7 +125,10 @@ public sealed class SkiaIslandMotion : IDisposable
     public double StackSpin => Math.Clamp(_stackSpin.Value, 0, 1);
 
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
-    public double PressScale => 1.0 - (Math.Clamp(_press.Value, 0, 1) * 0.03);
+    public double PressScale => 1.0 - (Math.Clamp(_press.Value, 0, 1) * (1.0 - MotionTokens.PressScale));
+
+    /// <summary>0..1 press-depth used for the highlight brightness and inner shadow.</summary>
+    public double PressDepth => Math.Clamp(_press.Value, 0, 1);
 
     /// <summary>Transient vertical nudge in DIP.</summary>
     public double NudgeOffsetY => _nudge.Value;
@@ -256,12 +259,14 @@ public sealed class SkiaIslandMotion : IDisposable
                 {
                     _compactOpacity.Retarget(
                         0, ShellTransition.CompactFadeOutSeconds, ShellTransition.EaseIn);
+                    // Telegram-style layered entrance: shell/container first, content 60 ms later,
+                    // chrome another 60 ms after that; collapse runs the reverse with no extra delay.
                     _expandedOpacity.Retarget(
                         1, ShellTransition.ExpandedFadeInSeconds, ShellTransition.EaseOut,
-                        ShellTransition.ExpandedFadeInDelaySeconds);
+                        MotionTokens.ContentStaggerSeconds);
                     _chromeOpacity.Retarget(
                         1, ShellTransition.ChromeFadeSeconds, ShellTransition.EaseOut,
-                        ShellTransition.ChromeFadeInDelaySeconds);
+                        MotionTokens.ChromeStaggerSeconds);
                 }
                 else
                 {
@@ -320,7 +325,7 @@ public sealed class SkiaIslandMotion : IDisposable
         }
     }
 
-    /// <summary>Sets the press feedback target (0.97 scale).</summary>
+    /// <summary>Sets the press feedback target (scale + brightness + inner shadow).</summary>
     /// <param name="pressed">Whether the pointer is down.</param>
     public void SetPressed(bool pressed)
     {

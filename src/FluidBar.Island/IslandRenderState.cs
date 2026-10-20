@@ -111,6 +111,9 @@ public readonly record struct IslandRenderState
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
     public double PressScale { get; init; } = 1;
 
+    /// <summary>0..1 press depth for the highlight brightness and top inner shadow.</summary>
+    public double PressDepth { get; init; }
+
     /// <summary>Control under the pointer (drives the per-button hover feedback).</summary>
     public IslandPageControl HoverControl { get; init; }
 
@@ -513,6 +516,9 @@ public sealed record CompactModel
 
     /// <summary>Progress percentage (0..100); negative = no progress bar.</summary>
     public double ProgressPercent { get; init; } = -1;
+
+    /// <summary>Optional custom compact canvas; rendered before the built-in style switch.</summary>
+    public FluidBar.Core.Presentation.IslandCompactCanvas? Canvas { get; init; }
 
     /// <summary>Optional accent colour hex for the activity icon/artwork.</summary>
     public string? AccentHex { get; init; }

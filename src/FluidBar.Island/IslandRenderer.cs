@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using FluidBar.Core.Layout;
+using FluidBar.Core.Motion;
 using SkiaSharp;
 using ActivityKind = FluidBar.Core.Activities.ActivityKind;
 
@@ -645,6 +646,37 @@ public sealed class IslandRenderer : IDisposable
         canvas.DrawPath(path, _fill);
         _fill.BlendMode = SKBlendMode.SrcOver;
 
+        // Telegram/MioIsland-style press feedback: a small brightness lift plus a top inset shadow.
+        // Both are proportional to the press spring so release rebounds instead of snapping.
+        var press = (float)Math.Clamp(state.PressDepth, 0, 1);
+        if (press > 0.001f)
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha(
+                (byte)Math.Clamp(MotionTokens.PressBrightness * press * opacity * 255f, 0, 255));
+            canvas.DrawPath(path, _fill);
+
+            canvas.Save();
+            canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+            var shadowHeight = Math.Min(10f, (float)state.ShellHeight * 0.35f);
+            using var inset = SKShader.CreateLinearGradient(
+                new SKPoint(0, 0),
+                new SKPoint(0, shadowHeight),
+                [
+                    SKColors.Black.WithAlpha(
+                        (byte)Math.Clamp(MotionTokens.PressInnerShadow * press * opacity * 255f, 0, 255)),
+                    SKColors.Transparent,
+                ],
+                [0f, 1f],
+                SKShaderTileMode.Clamp);
+            _fill.Color = SKColors.White;
+            _fill.Shader = inset;
+            canvas.DrawRect(new SKRect(0, 0, (float)state.ShellWidth, shadowHeight), _fill);
+            _fill.Shader = null;
+            canvas.Restore();
+        }
+
         if (materialGlass)
         {
             var shader = GetGlassShader((float)state.ShellHeight);
@@ -734,8 +766,10 @@ public sealed class IslandRenderer : IDisposable
         var pitch = FluidBar.Core.Interaction.PagerConstants.PagePitchDip;
         var offset = (float)(pagePosition * pitch);
 
-        // Prototype2 moves a single flex track with translate3d(-offset * 400px); the pages themselves
-        // are never scaled, faded or parallaxed. Keep the transition a pure horizontal translation.
+        // The flex track still moves horizontally, but each page gets a tiny directional depth:
+        // the incoming/outgoing page dips in scale and alpha at the halfway point and returns to
+        // identity when committed. PagePosition is continuous, so rapid switches resume from the
+        // current visual offset instead of snapping back to the old page.
         canvas.Save();
         canvas.ClipRect(content);
         for (var page = 0; page < state.Pages.PageCount; page++)
@@ -747,8 +781,19 @@ public sealed class IslandRenderer : IDisposable
                 continue;
             }
 
+            var distance = Math.Min(1.0, Math.Abs(page - pagePosition));
+            var meld = (float)Math.Sin(Math.PI * distance);
+            var pageScale = 1f - ((float)MotionTokens.PageScaleDrop * meld);
+            var pageOpacity = layerOpacity * (1f - ((float)MotionTokens.PageFadeDrop * meld));
             canvas.Save();
             canvas.ClipRect(pageRect);
+            if (meld > 0.001f)
+            {
+                canvas.Translate(pageRect.MidX, pageRect.Top);
+                canvas.Scale(pageScale, pageScale);
+                canvas.Translate(-pageRect.MidX, -pageRect.Top);
+            }
+
             var slot = state.Pages.PageSlotAt(page);
             if (slot is { Kind: PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets })
             {
@@ -767,12 +812,12 @@ public sealed class IslandRenderer : IDisposable
                 canvas.Save();
                 canvas.ClipRect(body);
                 canvas.Translate(0, -(float)clamped);
-                _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
+                _pages.DrawPage(canvas, state, page, pageRect, pageOpacity);
                 canvas.Restore();
             }
             else
             {
-                _pages.DrawPage(canvas, state, page, pageRect, layerOpacity);
+                _pages.DrawPage(canvas, state, page, pageRect, pageOpacity);
             }
 
             canvas.Restore();

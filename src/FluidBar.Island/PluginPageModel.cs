@@ -3,6 +3,9 @@ namespace FluidBar.Island;
 /// <summary>One host-rendered plugin page (M0: list template only).</summary>
 public sealed record PluginPageModel
 {
+    /// <summary>Custom canvas commands + semantic hit regions; null for list-template pages.</summary>
+    public FluidBar.Core.Presentation.IslandCanvasView? Canvas { get; init; }
+
     public required string PageId { get; init; }
 
     public required string OwnerPluginId { get; init; }

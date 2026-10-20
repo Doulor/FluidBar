@@ -16,6 +16,13 @@ internal sealed partial class PageRenderer
 
     private void DrawPluginPage(SKCanvas canvas, PluginPageModel model, SKRect page)
     {
+        if (model.Canvas is { } canvasView)
+        {
+            var canvasBody = PageLayout.ListBody(page);
+            CanvasPainter.DrawPage(canvas, canvasView, canvasBody, _theme, _text, _opacity);
+            return;
+        }
+
         if (model.Rows.Count == 0)
         {
             DrawEmpty(

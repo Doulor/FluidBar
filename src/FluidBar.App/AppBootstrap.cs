@@ -13,6 +13,7 @@ using FluidBar.App.State;
 using FluidBar.App.Views;
 using FluidBar.App.Views.Settings;
 using FluidBar.Core.Activities;
+using FluidBar.Island;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Settings;
 using FluidBar.Marketplace.Signing;
@@ -508,6 +509,81 @@ internal sealed class AppBootstrap
             }
 
             var auditMode = Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT_MODE");
+            var motionAudit = string.Equals(auditMode, "motion", StringComparison.OrdinalIgnoreCase);
+            if (motionAudit)
+            {
+                async Task MotionFramesAsync(string prefix, int count, int intervalMs)
+                {
+                    for (var i = 0; i < count; i++)
+                    {
+                        _skiaHost?.RenderNow(forceFull: true);
+                        _skiaHost?.SavePrimaryFramePng(Path.Combine(directory, $"{prefix}-{i + 1:00}.png"));
+                        await Task.Delay(intervalMs).ConfigureAwait(true);
+                    }
+                }
+
+                _settings?.Update(settings => settings with
+                {
+                    Stacking = StackingStrategySetting.Split,
+                    AutoCollapseMs = 0,
+                    Language = "zh-Hans",
+                    Plugins = settings.Plugins with { Enabled = [] },
+                });
+                await Task.Delay(700).ConfigureAwait(true);
+                // Notification first (actionable activity makes the surface visible), then media so
+                // the compact media pill owns the state after the notification is retracted.
+                _skiaHost?.PublishActivity(ActivityKind.Notification, new ActivityPayload
+                {
+                    Title = "动效审计", Body = "temporary", IsActive = true,
+                    Ttl = TimeSpan.FromSeconds(30),
+                }, 1, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.Media, new ActivityPayload
+                {
+                    Title = "Midnight Drive", Subtitle = "Lumen Fields", IsActive = true,
+                    ShowsAudioWave = true, ProgressPercent = 42,
+                }, 2, "audit");
+                _skiaHost?.PublishActivity(ActivityKind.Agent, new ActivityPayload
+                {
+                    Title = "运行中", Subtitle = "deepseek", IsActive = true,
+                }, 3, "audit");
+                _skiaHost?.SimulateShowHotkey();
+                await Task.Delay(900).ConfigureAwait(true);
+                await ShotAsync("motion-idle-before");
+
+                var shell = _skiaHost is null
+                    ? default
+                    : IslandMetrics.ShellRect(_skiaHost.RenderState);
+                var pressX = shell.MidX;
+                var pressY = shell.MidY;
+                _skiaHost?.SimulatePress(pressX, pressY);
+                await MotionFramesAsync("motion-press", 6, 30).ConfigureAwait(true);
+                await ShotAsync("motion-pressed");
+                _skiaHost?.SimulateRelease(pressX, pressY);
+                await MotionFramesAsync("motion-release", 6, 30).ConfigureAwait(true);
+                await ShotAsync("motion-released");
+
+                _skiaHost?.SimulatePrimaryClick();
+                await MotionFramesAsync("motion-expand", 10, 25).ConfigureAwait(true);
+                await ShotAsync("motion-expanded");
+                _skiaHost?.SimulateWheel(120);
+                await MotionFramesAsync("motion-page-1", 8, 25).ConfigureAwait(true);
+                _skiaHost?.SimulateWheel(120);
+                await MotionFramesAsync("motion-page-rapid", 8, 25).ConfigureAwait(true);
+                await ShotAsync("motion-page-after");
+                _skiaHost?.SimulateEscape();
+                await MotionFramesAsync("motion-collapse", 10, 25).ConfigureAwait(true);
+                await ShotAsync("motion-collapsed");
+
+                // Retract the temporary notification so the media pill owns the compact state;
+                // then capture the sub-2 % idle breathing frames.
+                _skiaHost?.RetractActivity(ActivityKind.Notification, 1, "audit");
+                await Task.Delay(700).ConfigureAwait(true);
+                await ShotAsync("motion-breath-before");
+                await MotionFramesAsync("motion-breath", 8, 120).ConfigureAwait(true);
+                await ShotAsync("motion-breath-after");
+                return;
+            }
+
             var splitAudit = string.Equals(auditMode, "split", StringComparison.OrdinalIgnoreCase);
             if (splitAudit)
             {
@@ -561,6 +637,34 @@ internal sealed class AppBootstrap
                 }, 3, "audit");
                 await FramesAsync("split-birth", 10, 30).ConfigureAwait(true);
                 await ShotAsync("split-settled");
+
+                // The notification was only needed for the split screenshot; retract it so the media
+                // pill is primary and can show the idle waveform breathing before the motion captures.
+                _skiaHost?.RetractActivity(ActivityKind.Notification, 1, "audit");
+                await Task.Delay(600).ConfigureAwait(true);
+                await ShotAsync("motion-breath-before");
+                await FramesAsync("motion-breath", 8, 120).ConfigureAwait(true);
+                await ShotAsync("motion-breath-after");
+
+                var motionShell = _skiaHost is null
+                    ? default
+                    : IslandMetrics.ShellRect(_skiaHost.RenderState);
+                _skiaHost?.SimulatePress(motionShell.MidX, motionShell.MidY);
+                await FramesAsync("motion-press", 6, 30).ConfigureAwait(true);
+                await ShotAsync("motion-pressed");
+                _skiaHost?.SimulateRelease(motionShell.MidX, motionShell.MidY);
+                await FramesAsync("motion-release", 6, 30).ConfigureAwait(true);
+                await ShotAsync("motion-released");
+                await FramesAsync("motion-expand", 10, 25).ConfigureAwait(true);
+                await ShotAsync("motion-expanded");
+                _skiaHost?.SimulateWheel(120);
+                await FramesAsync("motion-page-1", 8, 25).ConfigureAwait(true);
+                _skiaHost?.SimulateWheel(120);
+                await FramesAsync("motion-page-rapid", 8, 25).ConfigureAwait(true);
+                await ShotAsync("motion-page-after");
+                _skiaHost?.SimulateEscape();
+                await FramesAsync("motion-collapse", 10, 25).ConfigureAwait(true);
+                await ShotAsync("motion-collapsed");
 
                 // Activate the first preview (Agent) so the expanded page proves the kind → page mapping.
                 var splitClicked = _skiaHost?.SimulateSplitIsletClick(0) == true;

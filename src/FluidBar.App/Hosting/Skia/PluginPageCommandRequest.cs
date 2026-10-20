@@ -11,4 +11,7 @@ public sealed record PluginPageCommandRequest(
     string OwnerPluginId,
     string PageId,
     string RowId,
-    string CommandId);
+    string CommandId,
+    double? Value = null,
+    bool LongPress = false,
+    bool DoubleClick = false);

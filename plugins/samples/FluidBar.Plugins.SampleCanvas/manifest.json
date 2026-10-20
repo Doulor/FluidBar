@@ -1,0 +1,27 @@
+{
+  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "schemaVersion": 2,
+  "id": "sample-canvas",
+  "version": "1.0.0",
+  "apiVersion": "2.0.0",
+  "minAppVersion": "2.0.0",
+  "publisher": { "id": "fluidbar-samples", "displayName": "FluidBar Samples", "url": "https://fluidbar.app", "keyId": "fluidbar-samples-2026" },
+  "author": { "name": "FluidBar contributors", "url": "https://fluidbar.app" },
+  "name": { "en-US": "Sample Canvas", "zh-Hans": "画布示例" },
+  "summary": { "en-US": "Custom command canvas with a ring progress and semantic hit areas.", "zh-Hans": "带环形进度和语义命中区的自定义命令画布。" },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "categories": ["developer"],
+  "tags": ["sample", "canvas"],
+  "entry": { "runtime": "inproc", "assembly": "plugin/FluidBar.Plugins.SampleCanvas.dll", "type": "FluidBar.Plugins.SampleCanvas.CanvasPlugin", "targetFramework": "net10.0" },
+  "platforms": ["win-x64"],
+  "locales": { "default": "en-US", "available": ["en-US"], "path": "locales", "fallback": "en-US" },
+  "capabilities": { "ui": { "island": true, "pages": true, "pageTemplates": ["custom"], "settings": true, "commands": true, "xaml": false } },
+  "activation": ["startup"],
+  "contributes": {
+    "commands": [
+      { "id": "sample-canvas.hit", "title": { "en-US": "Hit canvas", "zh-Hans": "点击画布" }, "contexts": ["island", "global"] }
+    ]
+  }
+}
+

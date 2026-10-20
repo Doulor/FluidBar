@@ -1,5 +1,6 @@
 using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
+using FluidBar.Core.Motion;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -233,9 +234,14 @@ public static class IslandMetrics
         var centre = new SKPoint(
             (float)(edgeX + ((final.MidX - edgeX) * progress)),
             (float)(shell.MidY + ((final.MidY - shell.MidY) * progress)));
-        var size = final.Width * (float)(0.12 + (0.88 * progress));
-        return new SKRect(centre.X - (size / 2), centre.Y - (size / 2),
-            centre.X + (size / 2), centre.Y + (size / 2));
+        var baseSize = final.Width * (float)(0.12 + (0.88 * progress));
+        // Elastic morph: the travelling primitive stretches along its path and squashes across it
+        // at mid-flight, then returns to the exact final circle on the spring's settle.
+        var meld = (float)Math.Sin(Math.PI * Math.Clamp(progress, 0, 1));
+        var width = baseSize * (1f + ((float)MotionTokens.SplitStretch * meld));
+        var height = baseSize * (1f - ((float)MotionTokens.SplitSquash * meld));
+        return new SKRect(centre.X - (width / 2), centre.Y - (height / 2),
+            centre.X + (width / 2), centre.Y + (height / 2));
     }
 
     /// <summary>Inner rounded-square artwork rectangle (4 DIP padding inside the circle).</summary>

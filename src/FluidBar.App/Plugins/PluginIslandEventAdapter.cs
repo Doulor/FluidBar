@@ -177,6 +177,10 @@ public sealed class PluginIslandEventAdapter
             DetailLines = payload?.DetailLines is { } lines ? [.. lines] : ImmutableArray<string>.Empty,
             PositionTicks = payload?.PlaybackTicks ?? 0,
             VerificationCode = payload?.VerificationCode,
+            CompactView = payload?.CompactView is { } compact
+                && FluidBar.Sdk.Canvas.IslandCanvasValidator.ValidateCompact(compact, out _)
+                    ? IslandCanvasAdapter.ToHost(compact)
+                    : null,
         };
     }
 }

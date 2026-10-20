@@ -82,6 +82,7 @@ public static class SkiaIslandStateBuilder
             IsMuted = model.IsMuted,
             IsCharging = model.IsCharging,
             ProgressPercent = progress,
+            Canvas = island.Primary?.CompactView,
             // The cover's own accent drives the compact wave/highlight too; without a cover the accent
             // rule from the source/theme stays in charge.
             AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? model.AccentHex ?? media?.AccentHex,

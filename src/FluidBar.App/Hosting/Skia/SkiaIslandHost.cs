@@ -307,6 +307,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         EnsureDeadlineTicker();
     }
 
+    /// <summary>Current render state (audit helpers read geometry through this).</summary>
+    public IslandRenderState RenderState => _controller.RenderState;
+
+    /// <summary>Simulates pointer down at a host point (audit press frames).</summary>
+    public void SimulatePress(double x, double y) => _controller.HandlePointerPressed(x, y);
+
+    /// <summary>Simulates pointer up at a host point (audit release frames).</summary>
+    public void SimulateRelease(double x, double y) => _controller.HandlePointerReleased(x, y);
+
     /// <summary>Simulates a primary click on the compact pill (smoke/tests).</summary>
     public void SimulatePrimaryClick()
     {
@@ -356,6 +365,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     /// <summary>Simulates the toggle hotkey.</summary>
     public void SimulateToggleHotkey() => _controller.HandleToggleHotkey();
+
+    /// <summary>Simulates the show hotkey.</summary>
+    public void SimulateShowHotkey() => _controller.HandleShowHotkey();
 
     /// <summary>Simulates a page request (keyboard/gutter).</summary>
     /// <param name="page">Target page.</param>

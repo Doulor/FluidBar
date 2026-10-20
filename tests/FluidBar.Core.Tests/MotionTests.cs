@@ -32,6 +32,23 @@ public class MotionTests
         Assert.Equal(9, MotionTokensNamed.All.Count);
     }
 
+    [Fact]
+    public void ResearchChoreography_IsPinned()
+    {
+        Assert.Equal(0.96, MotionTokens.PressScale, 9);
+        Assert.Equal(0.06, MotionTokens.PressBrightness, 9);
+        Assert.Equal(0.18, MotionTokens.PressInnerShadow, 9);
+        Assert.InRange(MotionTokens.ContentStaggerSeconds, 0.040, 0.080);
+        Assert.Equal(0.060, MotionTokens.ContentStaggerSeconds, 9);
+        Assert.Equal(0.120, MotionTokens.ChromeStaggerSeconds, 9);
+        Assert.Equal(0.018, MotionTokens.PageScaleDrop, 9);
+        Assert.Equal(0.04, MotionTokens.PageFadeDrop, 9);
+        Assert.Equal(0.08, MotionTokens.SplitStretch, 9);
+        Assert.Equal(0.06, MotionTokens.SplitSquash, 9);
+        Assert.True(MotionTokens.IdleBreathAmplitude > 0 && MotionTokens.IdleBreathAmplitude < 0.02);
+        Assert.Equal(4.0, MotionTokens.IdleBreathPeriodSeconds, 9);
+    }
+
     private static void AssertSpring(MotionToken token, double period, double zeta)
     {
         Assert.Equal(period, token.Spring.PeriodSeconds, 1e-9);

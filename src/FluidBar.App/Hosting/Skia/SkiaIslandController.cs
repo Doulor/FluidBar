@@ -183,6 +183,14 @@ public sealed class SkiaIslandController : IDisposable
     private IslandPageControl _pressedControl;
     private int _pressedPage = -1;
     private int _pressedIndex = -1;
+    private int _customPressPage = -1;
+    private int _customPressArea = -1;
+    private DateTimeOffset _customPressAt;
+    private double _customPressX;
+    private bool _customLongDispatched;
+    private DateTimeOffset? _customLastClickAt;
+    private int _customLastClickPage = -1;
+    private int _customLastClickArea = -1;
     private IslandPageControl _hoverControl;
     private int _hoverPage = -1;
 
@@ -395,6 +403,7 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var now = _time.GetLocalNow();
+        PumpCustomLongPress(now);
         var state = State;
 
         if (state.HoverIntentDeadline is { } hover && now >= hover)
@@ -960,6 +969,11 @@ public sealed class SkiaIslandController : IDisposable
             return true;
         }
 
+        if (control is IslandPageControl.PluginArea or IslandPageControl.PluginSlider)
+        {
+            return RaisePluginCanvasCommand(page, index, value: null);
+        }
+
         if (control is IslandPageControl.PluginRow or IslandPageControl.PluginRowButton)
         {
             return RaisePluginPageCommand(page, index, control == IslandPageControl.PluginRowButton);
@@ -983,6 +997,25 @@ public sealed class SkiaIslandController : IDisposable
     /// <returns>Whether an action was dispatched.</returns>
     public bool SetAccessibleSlider(IslandPageControl control, int page, double fraction)
     {
+        if (control == IslandPageControl.PluginSlider)
+        {
+            var customValue = double.IsFinite(fraction) ? Math.Clamp(fraction, 0, 1) : 0;
+            var sliderIndex = -1;
+            if (_hasRenderState && _renderState.Pages.PluginPageAt(page) is { Canvas: { } canvas })
+            {
+                for (var i = 0; i < canvas.HitAreas.Count; i++)
+                {
+                    if (canvas.HitAreas[i].Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Slider)
+                    {
+                        sliderIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            return sliderIndex >= 0 && RaisePluginCanvasCommand(page, sliderIndex, customValue);
+        }
+
         var kind = control switch
         {
             IslandPageControl.VolumeSlider => IslandPlatformActionKind.VolumeSet,
@@ -1218,6 +1251,12 @@ public sealed class SkiaIslandController : IDisposable
                 return true;
 
             case IslandHitKind.PageControl:
+                if (hit.Control is IslandPageControl.PluginArea or IslandPageControl.PluginSlider)
+                {
+                    BeginCustomPress(hit, xDip, yDip);
+                    return true;
+                }
+
                 HandlePageControl(hit);
                 return true;
 
@@ -1254,6 +1293,21 @@ public sealed class SkiaIslandController : IDisposable
     {
         _pointerX = xDip;
         _pointerY = yDip;
+        if (_customPressPage >= 0)
+        {
+            CompleteCustomPress(xDip, yDip);
+            if (_pressedControl != IslandPageControl.None)
+            {
+                _pressedControl = IslandPageControl.None;
+                _pressedPage = -1;
+                _pressedIndex = -1;
+                InvalidateFull();
+            }
+
+            _motion.SetPressed(false);
+            return;
+        }
+
         if (_railPendingPage >= 0)
         {
             var pending = _railPendingPage;
@@ -1805,7 +1859,9 @@ public sealed class SkiaIslandController : IDisposable
         // (SkiaIslandStateBuilder.BuildCompact), so the shell width can never disagree with the
         // content: a stale Core ContentKind used to leave a wide pill showing the idle clock.
         var compactKind = viewModel.Primary?.Kind;
-        var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
+        var compactSize = viewModel.Primary?.CompactView is { } customCompact
+            ? new VisualSize(customCompact.Width, customCompact.Height)
+            : LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
 
         // Lyric form: widen the pill so the whole line fits instead of ellipsising it. The motion driver
         // tweens the width (380 ms shell transition), so a line change grows/shrinks the pill smoothly;
@@ -2291,8 +2347,136 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Drops a deferred compact click (drag, leave, escape, re-press).</summary>
     private void CancelPendingClick() => _clickPending = false;
 
+    private void BeginCustomPress(in IslandHitTarget hit, double x, double y)
+    {
+        _customPressPage = hit.PageIndex;
+        _customPressArea = hit.Index;
+        _customPressAt = _time.GetLocalNow();
+        _customPressX = x;
+        _customLongDispatched = false;
+    }
+
+    private void PumpCustomLongPress(DateTimeOffset now)
+    {
+        if (_customPressPage < 0 || _customLongDispatched)
+        {
+            return;
+        }
+
+        if (!TryGetCustomArea(_customPressPage, _customPressArea, out _, out var area, out _)
+            || !area.LongPress
+            || now - _customPressAt < TimeSpan.FromMilliseconds(500))
+        {
+            return;
+        }
+
+        _customLongDispatched = true;
+        RaisePluginCanvasCommand(_customPressPage, _customPressArea, value: null, longPress: true);
+    }
+
+    private void CompleteCustomPress(double x, double y)
+    {
+        var page = _customPressPage;
+        var index = _customPressArea;
+        var longDispatched = _customLongDispatched;
+        _customPressPage = -1;
+        _customPressArea = -1;
+        _customLongDispatched = false;
+        if (longDispatched || !TryGetCustomArea(page, index, out _, out var area, out var body))
+        {
+            return;
+        }
+
+        var rect = new SkiaSharp.SKRect(body.Left + (float)area.X, body.Top + (float)area.Y,
+            body.Left + (float)(area.X + area.Width), body.Top + (float)(area.Y + area.Height));
+        if (!rect.Contains((float)x, (float)y))
+        {
+            return;
+        }
+
+        var now = _time.GetLocalNow();
+        var isDouble = area.DoubleClick
+            && _customLastClickAt is { } last
+            && _customLastClickPage == page
+            && _customLastClickArea == index
+            && now - last <= TimeSpan.FromMilliseconds(400);
+        var customValue = area.Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Slider
+            ? Math.Clamp((x - rect.Left) / Math.Max(1, rect.Width), 0, 1)
+            : (double?)null;
+        RaisePluginCanvasCommand(page, index, customValue, longPress: false, doubleClick: isDouble);
+        if (!isDouble)
+        {
+            _customLastClickAt = now;
+            _customLastClickPage = page;
+            _customLastClickArea = index;
+        }
+        else
+        {
+            _customLastClickAt = null;
+        }
+
+        if (_pressedControl != IslandPageControl.None)
+        {
+            _pressedControl = IslandPageControl.None;
+            _pressedPage = -1;
+            _pressedIndex = -1;
+            InvalidateFull();
+        }
+
+        _motion.SetPressed(false);
+    }
+
+    private bool TryGetCustomArea(int page, int index, out PluginPageModel pageModel,
+        out FluidBar.Core.Presentation.IslandHitArea area, out SkiaSharp.SKRect body)
+    {
+        pageModel = null!;
+        area = null!;
+        body = SkiaSharp.SKRect.Empty;
+        if (!_hasRenderState || _renderState.Pages.PluginPageAt(page) is not { Canvas: { } canvas } model
+            || index < 0 || index >= canvas.HitAreas.Count)
+        {
+            return false;
+        }
+
+        pageModel = model;
+        area = canvas.HitAreas[index];
+        body = PageLayout.ListBody(IslandMetrics.PageRect(_renderState, page));
+        return true;
+    }
+
+    internal bool ActivateCustomArea(int page, int index, double? value)
+        => RaisePluginCanvasCommand(page, index, value);
+
+    private bool RaisePluginCanvasCommand(int page, int index, double? value, bool longPress = false,
+        bool doubleClick = false)
+    {
+        if (!TryGetCustomArea(page, index, out var pageModel, out var area, out _)
+            || string.IsNullOrWhiteSpace(area.AccessibleName)
+            || string.IsNullOrWhiteSpace(area.CommandId))
+        {
+            return false;
+        }
+
+        PluginPageCommandRequested?.Invoke(new PluginPageCommandRequest(
+            page,
+            pageModel.OwnerPluginId,
+            pageModel.PageId,
+            area.Id,
+            area.CommandId,
+            area.Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Slider ? value : null,
+            longPress,
+            doubleClick));
+        return true;
+    }
+
     private void HandlePageControl(in IslandHitTarget hit)
     {
+        if (hit.Control is IslandPageControl.PluginArea or IslandPageControl.PluginSlider)
+        {
+            RaisePluginCanvasCommand(hit.PageIndex, hit.Index, value: null);
+            return;
+        }
+
         if (hit.Control is IslandPageControl.PluginRow or IslandPageControl.PluginRowButton)
         {
             RaisePluginPageCommand(hit.PageIndex, hit.Index, hit.Control == IslandPageControl.PluginRowButton);
@@ -2770,6 +2954,7 @@ public sealed class SkiaIslandController : IDisposable
             ShellOrigin = _motion.ShellOrigin,
             Opacity = _motion.Opacity * _trackTransitionOpacity,
             PressScale = _motion.PressScale * _trackTransitionScale,
+            PressDepth = _motion.PressDepth,
             ContentOpacity = expanded ? _motion.ExpandedContentOpacity : _motion.CompactContentOpacity,
             // Prototype2 renders the compact layer and the expanded layer as two siblings with their own
             // CSS transitions; the chrome (title/collapse) fades independently. All three come from the
@@ -2840,7 +3025,10 @@ public sealed class SkiaIslandController : IDisposable
             return false;
         }
 
-        return _compact.Kind == ActivityKind.Media && _compact.Model.IsActive;
+        // Breathing applies to both the media waveform and any determinate progress bar; at 30 fps
+        // it is a sub-2 % ambient motion rather than a busy animation.
+        return (_compact.Kind == ActivityKind.Media && _compact.Model.IsActive)
+            || _compact.Model.ProgressPercent >= 0;
     }
 
     private void InvalidateDirty(VisualRect damage)
@@ -2952,6 +3140,13 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var shell = IslandMetrics.ShellRect(_renderState);
+        // Progress bars breathe across the compact content column; the media wave has its own box.
+        if (_compact.Model.ProgressPercent >= 0
+            && !(_compact.Kind == ActivityKind.Media && _compact.Model.IsActive))
+        {
+            return ContentDamage();
+        }
+
         // Same rectangle the compact media renderer paints the wave in (it tracks the adaptive width).
         var wave = CompactMediaLayout.WaveRect((float)shell.Width, (float)shell.Height);
         return new VisualRect(

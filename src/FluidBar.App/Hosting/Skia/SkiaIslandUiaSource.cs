@@ -865,6 +865,42 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         SKRect page)
     {
         var metrics = FontScaleMetrics.From(state.FontScale);
+        var body = PageLayout.ListBody(page);
+        if (pluginPage.Canvas is { HitAreas.Count: > 0 } canvas)
+        {
+            var nodes = new List<UiaElementSnapshot>(canvas.HitAreas.Count);
+            for (var i = 0; i < canvas.HitAreas.Count; i++)
+            {
+                var area = canvas.HitAreas[i];
+                if (string.IsNullOrWhiteSpace(area.AccessibleName))
+                {
+                    continue; // Decorative: no UIA node, no hit target.
+                }
+
+                var rect = new SKRect(body.Left + (float)area.X, body.Top + (float)area.Y,
+                    body.Left + (float)(area.X + area.Width), body.Top + (float)(area.Y + area.Height));
+                var isSlider = area.Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Slider;
+                nodes.Add(Node(
+                    $"island.page.{pageIndex}.area.{i}",
+                    isSlider ? UiaElementRole.Slider :
+                        area.Kind == FluidBar.Core.Presentation.IslandHitAreaKind.Row ? UiaElementRole.ListItem : UiaElementRole.Button,
+                    area.AccessibleName,
+                    ToRect(rect),
+                    isSlider ? UiaPatternKind.RangeValue : UiaPatternKind.Invoke,
+                    new UiaElementState
+                    {
+                        IsFocusable = !string.IsNullOrWhiteSpace(area.CommandId),
+                        RangeValue = isSlider ? Math.Clamp((area.Value - area.Min) / Math.Max(1, area.Max - area.Min), 0, 1) * 100 : null,
+                        RangeMinimum = 0,
+                        RangeMaximum = 100,
+                        RangeSmallChange = 1,
+                        RangeLargeChange = 10,
+                    }));
+            }
+
+            return nodes;
+        }
+
         var children = new List<UiaElementSnapshot>(pluginPage.Rows.Count * 2);
         for (var i = 0; i < pluginPage.Rows.Count; i++)
         {
@@ -1200,6 +1236,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 return;
             case "row":
                 ExecuteRow(page, index, parts.Length > 5 ? parts[5] : null);
+                return;
+            case "area":
+                _controller.ActivateCustomArea(page, index, request.Value / 100.0);
                 return;
             case "task":
                 _controller.ActivateAccessibleControl(IslandPageControl.TaskToggle, page, index);

@@ -114,6 +114,7 @@ public interface IIslandPublisher
                 Badge = activity.Badge,
                 Progress = activity.Progress,
                 IsActive = activity.IsActive,
+                CompactView = activity.CompactView,
                 DetailLines = activity.DetailLines,
                 Fields = new Dictionary<string, string?>(StringComparer.Ordinal)
                 {

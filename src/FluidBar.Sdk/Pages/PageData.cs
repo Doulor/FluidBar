@@ -1,3 +1,5 @@
+using FluidBar.Sdk.Canvas;
+
 namespace FluidBar.Sdk.Pages;
 
 /// <summary>One declarative list row. Actions are manifest-declared command ids.</summary>
@@ -48,6 +50,9 @@ public sealed record PageData
     public required string TemplateId { get; init; }
 
     public PageListData? List { get; init; }
+
+    /// <summary>Custom canvas page payload (when TemplateId is <see cref="PageTemplates.Custom"/>).</summary>
+    public PageCanvasData? Canvas { get; init; }
 
     public string? BadgeText { get; init; }
 

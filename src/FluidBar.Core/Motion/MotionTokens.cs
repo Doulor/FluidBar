@@ -49,6 +49,45 @@ public static class MotionTokens
 
     /// <summary>Fade/hide-out spring.</summary>
     public static MotionToken Hide { get; } = new("motion.hide", new SpringParameters(0.30, 0.95), "fade out / hide");
+
+    // ---------------------------------------------------------------------
+    // Research-backed choreography constants (Telegram-iOS Display + MioIsland).
+    // Sources and mappings are documented in docs/animation-research.md.
+    // ---------------------------------------------------------------------
+
+    /// <summary>Press scale target (Telegram/MioIsland press states use 0.94–0.97; 0.96 is visible
+    /// without making the 36 DIP pill look like it jumped).</summary>
+    public const double PressScale = 0.96;
+
+    /// <summary>Press brightness lift while held (6% white overlay; iOS highlight-style).</summary>
+    public const double PressBrightness = 0.06;
+
+    /// <summary>Press inner-shadow opacity at full press (subtle top-inset shadow).</summary>
+    public const double PressInnerShadow = 0.18;
+
+    /// <summary>Container → content stagger (Telegram layered transitions use 60–120 ms).</summary>
+    public const double ContentStaggerSeconds = 0.060;
+
+    /// <summary>Chrome (title/controls) follows content by another 60 ms on expand.</summary>
+    public const double ChromeStaggerSeconds = 0.120;
+
+    /// <summary>Page-switch directional depth: maximum scale drop at the halfway point (1.8%).</summary>
+    public const double PageScaleDrop = 0.018;
+
+    /// <summary>Page-switch directional fade at the halfway point (4%).</summary>
+    public const double PageFadeDrop = 0.04;
+
+    /// <summary>Split/fusion morph stretch along the travel axis (8% at mid-flight).</summary>
+    public const double SplitStretch = 0.08;
+
+    /// <summary>Split/fusion morph squash across the travel axis (6% at mid-flight).</summary>
+    public const double SplitSquash = 0.06;
+
+    /// <summary>Idle waveform/progress breathing amplitude (1.8%, below the requested 2%).</summary>
+    public const double IdleBreathAmplitude = 0.018;
+
+    /// <summary>Idle breathing period in seconds (very slow, 4 s).</summary>
+    public const double IdleBreathPeriodSeconds = 4.0;
 }
 
 /// <summary>Non-spring durations in milliseconds (spec 4.6).</summary>

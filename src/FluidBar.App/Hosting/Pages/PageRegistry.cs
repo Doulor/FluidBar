@@ -1,4 +1,5 @@
 using FluidBar.Island;
+using FluidBar.Sdk.Canvas;
 using FluidBar.Sdk.Manifest;
 using FluidBar.Sdk.Pages;
 
@@ -53,7 +54,7 @@ public sealed class PageRegistry
 
         if (!PageTemplateRegistry.IsPluginTemplateAllowed(descriptor.TemplateId))
         {
-            error = $"template '{descriptor.TemplateId}' is not available for plugins (supported: list)";
+            error = $"template '{descriptor.TemplateId}' is not available for plugins (supported: list, custom)";
             return false;
         }
 
@@ -104,15 +105,41 @@ public sealed class PageRegistry
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
         ArgumentNullException.ThrowIfNull(data);
-        if (!string.Equals(data.TemplateId, PageTemplates.List, StringComparison.Ordinal))
+        if (data.TemplateId == PageTemplates.Custom)
         {
-            error = "data template must be 'list' in M0";
-            return false;
-        }
+            if (data.Canvas is null)
+            {
+                error = "custom canvas payload is missing";
+                return false;
+            }
 
-        if (data.List is null || data.List.Rows.Count > 20)
+            if (data.Canvas.AccessibleName is { Length: > CanvasLimits.MaxTextCharacters })
+            {
+                error = "custom canvas accessible name is too long";
+                return false;
+            }
+
+            string? canvasError;
+            if (!IslandCanvasValidator.Validate(data.Canvas.Commands, PageCanvasBounds.Width,
+                    PageCanvasBounds.Height, out canvasError)
+                || !IslandCanvasValidator.ValidateHitAreas(data.Canvas.HitAreas, PageCanvasBounds.Width,
+                    PageCanvasBounds.Height, out canvasError))
+            {
+                error = canvasError;
+                return false;
+            }
+        }
+        else if (data.TemplateId == PageTemplates.List)
         {
-            error = "list data is missing or has too many rows (max 20)";
+            if (data.List is null || data.List.Rows.Count > 20)
+            {
+                error = "list data is missing or has too many rows (max 20)";
+                return false;
+            }
+        }
+        else
+        {
+            error = "data template must be 'list' or 'custom'";
             return false;
         }
 
@@ -236,6 +263,7 @@ public sealed class PageRegistry
                 }).ToArray() ?? [],
                 EmptyTitle = entry.Data?.List?.EmptyTitle,
                 EmptyHint = entry.Data?.List?.EmptyHint,
+                Canvas = entry.Data?.Canvas is { } canvas ? IslandCanvasAdapter.ToHost(canvas) : null,
             }).ToArray();
         }
     }
@@ -253,6 +281,13 @@ public sealed class PageRegistry
 
         public PageData? Data { get; set; }
     }
+}
+
+/// <summary>Logical page body size used to validate custom canvas coordinates.</summary>
+public static class PageCanvasBounds
+{
+    public const double Width = 400;
+    public const double Height = 232;
 }
 
 /// <summary>PageId validation shared by the provisional local page registry.</summary>

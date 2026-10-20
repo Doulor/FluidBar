@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FluidBar.Sdk.Canvas;
 
 namespace FluidBar.Sdk;
 
@@ -37,4 +38,7 @@ public sealed record IslandActivity
     public double? Progress { get; init; }
 
     public IReadOnlyList<string>? DetailLines { get; init; }
+
+    /// <summary>Optional validated custom compact canvas; invalid descriptors fall back to the generic template.</summary>
+    public CompactViewDescriptor? CompactView { get; init; }
 }
