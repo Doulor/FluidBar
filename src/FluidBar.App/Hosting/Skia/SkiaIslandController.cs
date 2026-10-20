@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -24,6 +25,18 @@ public readonly record struct SkiaIslandRenderChange(bool FullFrame, VisualRect 
 {
     /// <summary>Full-surface repaint.</summary>
     public static SkiaIslandRenderChange Full { get; } = new(true, VisualRect.Empty);
+
+    /// <summary>All independent damage regions for a dirty frame (union remains <see cref="DamageDip"/>).</summary>
+    public IReadOnlyList<VisualRect> DamageRects { get; init; } = [];
+
+    /// <summary>Reason label retained for a full frame (diagnostics).</summary>
+    public string? FullReason { get; init; }
+
+    /// <summary>Damage regions with a compatibility fallback for callers constructing the old record.</summary>
+    public IReadOnlyList<VisualRect> EffectiveDamageRects
+        => DamageRects.Count > 0
+            ? DamageRects
+            : DamageDip.IsEmpty ? [] : [DamageDip];
 }
 
 /// <summary>
@@ -129,15 +142,16 @@ public sealed class SkiaIslandController : IDisposable
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
+    private string _mediaStructuralSignature = string.Empty;
+    private string? _lastMediaTitle;
+    private string? _lastMediaArtworkKey;
     private string _dynamicSignature = string.Empty;
     private string _visibleStackSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
     private VisualRect? _accessibilityFocus;
 
-    private bool _pendingFull = true;
-    private bool _pendingDirty;
-    private VisualRect _pendingDamage;
+    private readonly FrameScheduler _frameScheduler = new();
 
     private double _motionPhase;
     private double _waveAccumulator;
@@ -660,6 +674,7 @@ public sealed class SkiaIslandController : IDisposable
         var trackTransitionWasRunning = IsTrackTransitionAnimating;
         StepTrackTransition();
         var motionWasRunning = !_motion.IsAtRest;
+        var previousShellDamage = _hasRenderState ? ShellDamage() : VisualRect.Empty;
         _motion.Step(dt);
 
         if (State.Kind == IslandStateKind.Closing && _motion.IsAtRest)
@@ -693,14 +708,30 @@ public sealed class SkiaIslandController : IDisposable
 
         if (trackTransitionWasRunning || IsTrackTransitionAnimating)
         {
-            // Scale/opacity affects the whole layered surface; a full frame is cheap for < 0.5 s.
-            InvalidateFull();
+            if (IsTrackTransitionAnimating)
+            {
+                // The scale/opacity applies to the shell, not the transparent host margin. Keep
+                // repainting the shell dirty rect while the transition runs; a single full frame at
+                // the end below repairs any edge pixels from the final 1.0 scale.
+                InvalidateDirty(ShellDamage());
+            }
+            else
+            {
+                InvalidateFull("track-transition-final");
+            }
         }
 
         if (motionWasRunning)
         {
-            // A shell morph damages the union of the old and new shell: full frame.
-            InvalidateFull();
+            // A shell morph damages the union of the old and new shell. Repaint that union instead
+            // of the transparent host margin; placement changes still escalate to a full frame.
+            var motionDamage = ShellDamage();
+            if (!previousShellDamage.IsEmpty)
+            {
+                motionDamage = Union(motionDamage, previousShellDamage);
+            }
+
+            InvalidateDirty(motionDamage);
         }
         else if (pagerWasRunning)
         {
@@ -727,34 +758,17 @@ public sealed class SkiaIslandController : IDisposable
     /// <param name="change">The pending change.</param>
     /// <returns>Whether a frame should be rendered.</returns>
     public bool TakeInvalidation(out SkiaIslandRenderChange change)
-    {
-        if (_pendingFull)
-        {
-            _pendingFull = false;
-            _pendingDirty = false;
-            _pendingDamage = VisualRect.Empty;
-            change = SkiaIslandRenderChange.Full;
-            return true;
-        }
-
-        if (_pendingDirty)
-        {
-            _pendingDirty = false;
-            change = new SkiaIslandRenderChange(false, _pendingDamage);
-            _pendingDamage = VisualRect.Empty;
-            return true;
-        }
-
-        change = default;
-        return false;
-    }
+        => _frameScheduler.TryTake(out change);
 
     /// <summary>Requests a full-surface repaint on the next frame.</summary>
-    public void InvalidateFull()
+    /// <param name="reason">Stable diagnostic label written to the frame probe.</param>
+    public void InvalidateFull([System.Runtime.CompilerServices.CallerMemberName] string reason = "unspecified")
     {
-        _pendingFull = true;
-        _pendingDirty = false;
-        _pendingDamage = VisualRect.Empty;
+        _frameScheduler.InvalidateFull(reason);
+        if (IslandFrameProbe.Enabled)
+        {
+            System.Diagnostics.Debug.WriteLine($"[FluidBar.frame] full={reason}");
+        }
     }
 
 
@@ -1605,7 +1619,7 @@ public sealed class SkiaIslandController : IDisposable
                 SkiaIslandThemeMapper.ReducedMotion(settings, appearance));
             _motion.UpdateProfile(profile);
             BuildRenderState();
-            InvalidateFull();
+            InvalidateFull("theme-token");
             StateChanged?.Invoke();
         }
         catch (Exception ex)
@@ -1622,7 +1636,7 @@ public sealed class SkiaIslandController : IDisposable
         _motion.SnapToTarget();
         _pager.JumpToPage(IndexOfPage(State.Page));
         BuildRenderState();
-        InvalidateFull();
+        InvalidateFull("display-change");
         PlacementRequested?.Invoke();
     }
 
@@ -1631,7 +1645,7 @@ public sealed class SkiaIslandController : IDisposable
     {
         _motion.SnapToTarget();
         BuildRenderState();
-        InvalidateFull();
+        InvalidateFull("snap-motion");
     }
     /// <summary>Human-readable diagnostics (smoke runs, bug reports).</summary>
     public string Describe()
@@ -1809,6 +1823,29 @@ public sealed class SkiaIslandController : IDisposable
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
         var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
+        var structuralReason = "structural-signature";
+        if (structuralChanged && CurrentPageIs(PageSlotKind.Media))
+        {
+            // StructuralSignature includes every background page (notifications/clipboard/widgets).
+            // On the media page those background heartbeats (e.g. CPU/RAM stats every 2 s) must not
+            // turn into full-surface repaints. Compare only the visible media-page scope here.
+            var previousTitle = _lastMediaTitle;
+            var previousArtwork = _lastMediaArtworkKey;
+            var mediaStructural = MediaStructuralSignature(content, viewModel, settings);
+            structuralChanged = !string.Equals(mediaStructural, _mediaStructuralSignature, StringComparison.Ordinal);
+            _mediaStructuralSignature = mediaStructural;
+            _lastMediaTitle = content.Media?.Title;
+            _lastMediaArtworkKey = content.Media?.ArtworkKey;
+            if (structuralChanged)
+            {
+                structuralReason = !string.Equals(previousArtwork, _lastMediaArtworkKey, StringComparison.Ordinal)
+                    ? "artwork-key"
+                    : !string.Equals(previousTitle, _lastMediaTitle, StringComparison.Ordinal)
+                        ? "media-identity"
+                        : "media-structure";
+            }
+        }
+
         var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
         _structuralSignature = structural;
         _dynamicSignature = dynamicSignature;
@@ -1841,7 +1878,7 @@ public sealed class SkiaIslandController : IDisposable
 
         if (full || !_hasRenderState || structuralChanged)
         {
-            InvalidateFull();
+            InvalidateFull(full ? "content-sync-force" : structuralReason);
         }
         else if (dynamicChanged)
         {
@@ -1849,6 +1886,31 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         return true;
+    }
+
+    private string MediaStructuralSignature(IslandContent content, IslandViewModel viewModel, AppSettings settings)
+    {
+        var primary = viewModel.Primary;
+        var media = content.Media;
+        var builder = new StringBuilder(240);
+        builder.Append(_localizer.Culture).Append('|')
+            .Append(settings.Mode).Append('|').Append(settings.Anchor).Append('|')
+            .Append(settings.Theme).Append('|').Append(settings.Material).Append('|')
+            .Append(settings.Palette).Append('|').Append(settings.AccentMode).Append('|')
+            .Append(settings.AccentFallback).Append('|')
+            .Append(settings.FillOpacity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)).Append('|')
+            .Append(settings.FontScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)).Append('|')
+            .Append(settings.Stacking).Append('|')
+            .Append(viewModel.StateKind).Append('|').Append(viewModel.Page).Append('|')
+            .Append(primary?.Kind.ToString() ?? "idle").Append('|')
+            .Append(primary?.Title).Append('|').Append(primary?.Subtitle).Append('|')
+            .Append(primary?.Badge).Append('|').Append(primary?.SourceName).Append('|')
+            .Append(primary?.VerificationCode).Append('|').Append(primary?.AccentColorHex).Append('|')
+            .Append(viewModel.OverflowCount).Append('|')
+            .Append(media?.Title).Append('|').Append(media?.Artist).Append('|').Append(media?.Album).Append('|')
+            .Append(media?.ArtworkKey).Append('|').Append(media?.AccentHex).Append('|')
+            .Append(media?.HasTimeline);
+        return builder.ToString();
     }
 
     private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
@@ -2134,6 +2196,22 @@ public sealed class SkiaIslandController : IDisposable
         => _renderState.Form == ShellForm.Expanded
            && _pages.PageSlotAt(_renderState.PageIndex)?.Kind == kind;
 
+    private static string SlotStructureSignature(IReadOnlyList<PageSlot> slots)
+    {
+        var builder = new StringBuilder(128);
+        foreach (var slot in slots)
+        {
+            builder.Append(slot.PageId).Append('|')
+                .Append((int)slot.Kind).Append('|')
+                .Append(slot.TemplateId).Append('|')
+                .Append(slot.Title).Append('|')
+                .Append(slot.ShortTitle).Append('|')
+                .Append(slot.IconToken).Append(';');
+        }
+
+        return builder.ToString();
+    }
+
     private IReadOnlyList<PageSlot> BuildPageSlots()
     {
         var plugins = _pluginPages;
@@ -2232,8 +2310,11 @@ public sealed class SkiaIslandController : IDisposable
 
         var pages = _pageRegistry?.BuildPluginPages() ?? [];
         var currentPageId = _pages.PageSlotAt(_pager.SelectedIndex)?.PageId;
+        var previousSlots = _pages.PageSlots;
         _pluginPages = pages;
         _pages = _pages with { PluginPages = pages, PageSlots = BuildPageSlots() };
+        var slotsChanged = !string.Equals(SlotStructureSignature(previousSlots),
+            SlotStructureSignature(_pages.PageSlots), StringComparison.Ordinal);
         var pageCount = _pages.PageCount;
         var currentPageAfterUpdate = currentPageId is null
             ? -1
@@ -2270,10 +2351,25 @@ public sealed class SkiaIslandController : IDisposable
             }
         }
 
-        SyncContent(full: true);
-        StateChanged?.Invoke();
-        InvalidateFull();
-        FrameRequested?.Invoke();
+        if (slotsChanged)
+        {
+            SyncContent(full: true);
+            StateChanged?.Invoke();
+            InvalidateFull("plugin-page-list");
+            FrameRequested?.Invoke();
+            return;
+        }
+
+        // A plugin page data heartbeat must not repaint a different visible page. The updated
+        // PluginPageModel stays in _pluginPages for the next navigation; only the visible plugin page
+        // needs a content repaint, and that stays on the dirty path.
+        if (currentPageId is not null
+            && _pages.PageSlotAt(_pager.SelectedIndex) is { Kind: PageSlotKind.Plugin })
+        {
+            SyncContent(full: false);
+            InvalidateDirty(ContentDamage());
+            FrameRequested?.Invoke();
+        }
     }
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
@@ -2809,6 +2905,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Progress percent of the last dynamic sync (drives the seek-row damage).</summary>
     private double _lastDynamicProgress = double.NaN;
 
+    /// <summary>Lyric text/sweep key of the last dynamic sync (avoids repainting an unchanged card).</summary>
+    private string _lastDynamicLyric = string.Empty;
+
     /// <summary>
     /// Anchors the local progress clock when a media sample arrives. Repeated samples with the same
     /// position (fallback sources whose time text occasionally stops updating) must not re-anchor:
@@ -2897,7 +2996,15 @@ public sealed class SkiaIslandController : IDisposable
             return new VisualRect(shell.Left, shell.Bottom - 4, shell.Width, 4);
         }
 
-        return ContentDamage();
+        if (_renderState.Form == ShellForm.Expanded && CurrentPageIs(PageSlotKind.Media))
+        {
+            var page = IslandMetrics.PageRect(_renderState, _renderState.PageIndex);
+            var seek = PageMetricsLayout.MediaSeekRow(page, FontScaleMetrics.From(_settings.Current.FontScale));
+            return new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height).Inflate(2);
+        }
+
+        // Media progress is not painted on other expanded pages; keep their surfaces untouched.
+        return VisualRect.Empty;
     }
 
     /// <summary>
@@ -3036,13 +3143,7 @@ public sealed class SkiaIslandController : IDisposable
 
     private void InvalidateDirty(VisualRect damage)
     {
-        if (_pendingFull || damage.IsEmpty)
-        {
-            return;
-        }
-
-        _pendingDamage = _pendingDirty ? Union(_pendingDamage, damage) : damage;
-        _pendingDirty = true;
+        _frameScheduler.InvalidateDirty(damage);
     }
 
     /// <summary>
@@ -3062,12 +3163,19 @@ public sealed class SkiaIslandController : IDisposable
         var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
         if (CurrentPageIs(PageSlotKind.Media))
         {
-            var page = IslandMetrics.PageRect(_renderState, 1);
-            var progress = _pages.Media.ProgressPercent;
+            var page = IslandMetrics.PageRect(_renderState, _renderState.PageIndex);
+            var media = _pages.Media;
+            var progress = media.ProgressPercent;
             var progressMoved = Math.Abs(progress - _lastDynamicProgress) > 0.05;
             _lastDynamicProgress = progress;
-            var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
-            InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
+            var lyricKey = $"{media.LyricLine}|{media.NextLyricLine}|{media.LyricHighlight:0.###}";
+            if (!string.Equals(lyricKey, _lastDynamicLyric, StringComparison.Ordinal))
+            {
+                _lastDynamicLyric = lyricKey;
+                var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
+                InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
+            }
+
             if (progressMoved)
             {
                 var seek = PageMetricsLayout.MediaSeekRow(page, metrics);
@@ -3114,6 +3222,17 @@ public sealed class SkiaIslandController : IDisposable
         {
             InvalidateDirty(CompactLyricDamage());
         }
+    }
+
+    private VisualRect ShellDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        var shell = IslandMetrics.ShellRect(_renderState);
+        return new VisualRect(shell.Left, shell.Top, shell.Width, shell.Height).Inflate(2);
     }
 
     private VisualRect ContentDamage()

@@ -84,7 +84,8 @@ internal static class IslandFrameProbe
     /// <param name="fullFrame">Whether the frame repainted the whole surface.</param>
     /// <param name="damageW">Damage width in DIP (0 for a full frame).</param>
     /// <param name="damageH">Damage height in DIP (0 for a full frame).</param>
-    public static void Record(double renderMs, long allocBytes, bool fullFrame, double damageW, double damageH)
+    public static void Record(double renderMs, long allocBytes, bool fullFrame, double damageW, double damageH,
+        int dirtyRects = 0, double dirtyArea = 0, string? fullReason = null)
     {
         if (!Enabled)
         {
@@ -109,6 +110,9 @@ internal static class IslandFrameProbe
                         fullFrame,
                         damageW = Math.Round(damageW, 1),
                         damageH = Math.Round(damageH, 1),
+                        dirtyRects,
+                        dirtyArea = Math.Round(dirtyArea, 1),
+                        fullReason = fullFrame ? fullReason ?? "unspecified" : null,
                     }) + "\n");
             }
         }
@@ -1716,7 +1720,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         RefreshAccessibility();
         EnsureDeadlineTicker();
         EnsureFrameLoop();
-        RenderNow(forceFull: true);
+        // StateChanged is also raised for content-only heartbeats; let the controller's invalidation
+        // decide whether this is a dirty or full frame instead of forcing a full surface every time.
+        RenderNow(forceFull: false);
     }
 
     /// <summary>
@@ -1758,7 +1764,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         if (forceFull)
         {
             _controller.TakeInvalidation(out _);
-            change = SkiaIslandRenderChange.Full;
+            change = SkiaIslandRenderChange.Full with { FullReason = "host-force-full" };
         }
         else if (!_controller.TakeInvalidation(out change))
         {
@@ -1811,22 +1817,32 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             else
             {
                 var surfaceDip = entry.Host.SurfaceSizeDip;
-                var damage = Intersect(
-                    change.DamageDip,
-                    new VisualRect(0, 0, surfaceDip.WidthDip, surfaceDip.HeightDip));
-                if (damage.IsEmpty)
+                var bounds = new VisualRect(0, 0, surfaceDip.WidthDip, surfaceDip.HeightDip);
+                var damageRects = change.EffectiveDamageRects
+                    .Select(rect => Intersect(rect, bounds))
+                    .Where(static rect => !rect.IsEmpty)
+                    .ToArray();
+                if (damageRects.Length == 0)
                 {
                     entry.Host.DiscardFrame();
                     return 0;
                 }
 
-                _renderer.Render(
-                    surface.Canvas,
-                    state,
-                    scale,
-                    new SKRect((float)damage.X, (float)damage.Y, (float)damage.Right, (float)damage.Bottom));
+                foreach (var damage in damageRects)
+                {
+                    // Each dirty region is clipped independently; nearby regions were already merged
+                    // by FrameScheduler, while distant regions remain separate draws and uploads.
+                    _renderer.Render(
+                        surface.Canvas,
+                        state,
+                        scale,
+                        new SKRect((float)damage.X, (float)damage.Y, (float)damage.Right, (float)damage.Bottom));
+                }
+
                 surface.Canvas.Flush();
-                var pixelDamage = LayeredRect.FromDip(damage, frame.Scale);
+                var pixelDamage = damageRects
+                    .Select(rect => LayeredRect.FromDip(rect, frame.Scale))
+                    .ToArray();
                 var result = entry.Host.CommitFrame(pixelDamage);
                 RecordCommit(entry, result, dirty: true);
             }
@@ -1844,11 +1860,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var elapsedMs = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
         if (IslandFrameProbe.Enabled)
         {
+            var probeDamage = change.FullFrame ? [] : change.EffectiveDamageRects;
             IslandFrameProbe.Record(elapsedMs,
                 GC.GetAllocatedBytesForCurrentThread() - probeAllocStart,
                 change.FullFrame,
                 change.FullFrame ? 0 : change.DamageDip.Width,
-                change.FullFrame ? 0 : change.DamageDip.Height);
+                change.FullFrame ? 0 : change.DamageDip.Height,
+                change.FullFrame ? 0 : probeDamage.Count,
+                change.FullFrame ? 0 : probeDamage.Sum(static rect => rect.Width * rect.Height),
+                change.FullReason);
         }
 
         _frameStats.Record(elapsedMs);
