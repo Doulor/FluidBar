@@ -779,10 +779,13 @@ internal static class Program
         }
 
         var origin = controller.Motion.ShellOrigin;
-        const double pad = 40;
-        var left = (int)Math.Round((origin.X - pad) * dpiScale);
+        const double pad = 56;
+
+        // Split islets sit outside the primary pill, so widen horizontally while they are visible.
+        var sidePad = state.SplitIslets.Length > 0 ? pad + 24 : pad;
+        var left = (int)Math.Round((origin.X - sidePad) * dpiScale);
         var top = (int)Math.Round((origin.Y - pad) * dpiScale);
-        var right = (int)Math.Round((origin.X + state.ShellWidth + pad) * dpiScale);
+        var right = (int)Math.Round((origin.X + state.ShellWidth + sidePad) * dpiScale);
         var bottom = (int)Math.Round((origin.Y + state.ShellHeight + pad) * dpiScale);
         left = Math.Clamp(left, 0, bitmapWidth - 1);
         top = Math.Clamp(top, 0, bitmapHeight - 1);
@@ -855,7 +858,7 @@ internal static class Program
         builder.AppendLine("- ui = advance + render (controller + Skia) and is what the 16.7 ms budget is judged on; encode (PNG at 1.5x) is harness overhead and is reported separately.");
         builder.AppendLine("- Per-frame bitmaps: expand/, collapse/, page/, satellite/ (frame-000.png ...). Raw timings: timing.csv (advance_ms / render_ms / encode_ms / wall_ms columns).");
         builder.AppendLine("- Key frames (2x): expand-frame-030-2x.png, page-frame-030-2x.png, satellite-frame-015-2x.png.");
-        builder.AppendLine("- Frame crop: island bounds + 40 DIP margin at 1.5x, composited on #08080A.");
+        builder.AppendLine("- Frame crop: island bounds + 56 DIP margin at 1.5x (+24 DIP extra left/right while split islets are visible), composited on neutral #1A1A1E so dark satellite balls stay readable.");
         File.WriteAllText(Path.Combine(outputDir, "motion-capture.md"), builder.ToString(), System.Text.Encoding.UTF8);
     }
 
@@ -928,7 +931,7 @@ internal static class Program
                 {
                     // Host surface is transparent; composite on the desktop-ish L0 shade so frames read as
                     // screenshots instead of black-on-checkerboard.
-                    canvas.Clear(new SKColor(8, 8, 10));
+                    canvas.Clear(new SKColor(0x1A, 0x1A, 0x1E));
                     canvas.DrawBitmap(bitmap, -region.Left, -region.Top);
                 }
 
