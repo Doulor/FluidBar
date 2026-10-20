@@ -83,6 +83,12 @@ public sealed record PluginHostOptions
     /// <summary>Create plugin/settings/data directories on demand.</summary>
     public bool CreateDirectories { get; init; } = true;
 
+    /// <summary>
+    /// Optional load-time package gate. The App sets this only for the market root so signed/reviewed
+    /// packages are re-verified on every process start; the local root deliberately leaves it null.
+    /// </summary>
+    public Func<PluginDiscoveryInfo, CancellationToken, Task<PluginPackageGateResult>>? PackageGate { get; init; }
+
     /// <summary>Optional assembly names that must be shared from the host (SDK is always shared).</summary>
     public IReadOnlyList<string> AdditionalSharedAssemblies { get; init; } = [];
 

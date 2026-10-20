@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Text.Json;
 using FluidBar.Marketplace.Consent;
 using FluidBar.Marketplace.Index;
 using FluidBar.Marketplace.Packaging;
@@ -430,6 +431,13 @@ public sealed class PluginInstallService : IDisposable
             {
                 if (existingHash is not null && string.Equals(existingHash, download.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Repair/retain the load-time trust marker when a signed package is re-installed idempotently.
+                    if (!TryWriteIntegrity(targetDirectory, stagedPackagePath, manifest, request.Signature, warnings))
+                    {
+                        return InstallResult.Fail(InstallFailureKind.IoError,
+                            "The signed package integrity marker could not be written.", pluginId, warnings);
+                    }
+
                     return new InstallResult
                     {
                         Success = true,
@@ -466,6 +474,13 @@ public sealed class PluginInstallService : IDisposable
                     $"Could not move the staged package into '{targetDirectory}': {exception.Message}",
                     pluginId,
                     warnings);
+            }
+
+            if (!TryWriteIntegrity(targetDirectory, stagedPackagePath, manifest, request.Signature, warnings))
+            {
+                TryDeleteDirectory(targetDirectory);
+                return InstallResult.Fail(InstallFailureKind.IoError,
+                    "The signed package integrity marker could not be written.", pluginId, warnings);
             }
 
             // 7. Atomically switch the pointer, then activate. On failure restore the previous version.
@@ -803,6 +818,28 @@ public sealed class PluginInstallService : IDisposable
         catch (UnauthorizedAccessException)
         {
             // Best-effort staging cleanup.
+        }
+    }
+
+    private static bool TryWriteIntegrity(string targetDirectory, string stagedPackagePath,
+        PluginManifest manifest, PackageSignatureDocument? signature, List<string> warnings)
+    {
+        if (signature is null || !signature.Signatures.Any(static entry => entry.Role == SignatureRole.Marketplace))
+        {
+            // Unsigned/local packages deliberately carry no market trust marker; the local channel bypasses
+            // the market load gate after the explicit local risk acknowledgement.
+            return true;
+        }
+
+        try
+        {
+            PluginIntegrity.Write(targetDirectory, stagedPackagePath, manifest, signature);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            warnings.Add($"Integrity marker could not be written: {exception.Message}");
+            return false;
         }
     }
 

@@ -20,6 +20,9 @@ public enum PluginLoadFailureKind
     Unloaded,
     Disabled,
     Unexpected,
+
+    /// <summary>A market package failed its load-time signature/integrity/review gate.</summary>
+    Untrusted,
 }
 
 /// <summary>Result of loading/activating one plugin. Failures are values, never exceptions thrown at the App.</summary>
@@ -111,6 +114,15 @@ public sealed record PluginCommandExecutionResult
     public static PluginCommandExecutionResult Ok() => new(executed: true, succeeded: true, error: null);
 
     public static PluginCommandExecutionResult Failed(string error) => new(executed: true, succeeded: false, error);
+}
+
+/// <summary>Result of an optional package trust gate evaluated again at load time.</summary>
+public sealed record PluginPackageGateResult(bool Allowed, string Error, PluginLoadFailureKind FailureKind = PluginLoadFailureKind.Untrusted)
+{
+    public static PluginPackageGateResult Allow { get; } = new(true, string.Empty, PluginLoadFailureKind.None);
+
+    public static PluginPackageGateResult Reject(string error, PluginLoadFailureKind kind = PluginLoadFailureKind.Untrusted)
+        => new(false, error, kind);
 }
 
 /// <summary>Discovery outcome for one plugin directory (valid manifest or a deterministic error).</summary>

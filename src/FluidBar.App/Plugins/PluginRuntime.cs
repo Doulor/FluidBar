@@ -79,6 +79,12 @@ public sealed record PluginRuntimeOptions
     /// <summary>Direct index provider (tests; no HTTP).</summary>
     public Func<CancellationToken, Task<MarketplaceIndexDocument>>? IndexProvider { get; init; }
 
+    /// <summary>Optional load-time trust gate for the market root (tests can inject a fake).</summary>
+    public Func<PluginDiscoveryInfo, CancellationToken, Task<PluginPackageGateResult>>? MarketPackageGate { get; init; }
+
+    /// <summary>Optional local risk acknowledgement store (tests can inject one).</summary>
+    public LocalPluginRiskStore? LocalRiskStore { get; init; }
+
     /// <summary>Injected marketplace trust keys (empty disables signature-verified catalog use).</summary>
     public MarketplaceTrustOptions Trust { get; init; } = MarketplaceTrustOptions.Empty;
 
@@ -144,6 +150,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     private readonly List<PluginLoadResult> _communityResults = [];
     private readonly List<string> _builtinErrors = [];
     private readonly IPluginSettingsValues _values;
+    private readonly LocalPluginRiskStore? _localRiskStore;
     private IReadOnlyList<PluginDiscoveryInfo> _discoveries = [];
     private IReadOnlyList<PluginDiscoveryInfo> _localDiscoveries = [];
     private bool _disposed;
@@ -158,7 +165,8 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         bool ownsHttp,
         MarketplaceCatalogClient? catalog,
         bool ownsCatalog,
-        PluginHostType? localHost = null)
+        PluginHostType? localHost = null,
+        LocalPluginRiskStore? localRiskStore = null)
     {
         _options = options;
         _hostOptions = hostOptions;
@@ -173,6 +181,10 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         _ownsCatalog = ownsCatalog;
         _localHost = localHost;
         _values = new RuntimePluginSettingsValues(this);
+        _localRiskStore = localRiskStore
+            ?? (string.IsNullOrWhiteSpace(options.LocalPluginRootDirectory)
+                ? null
+                : new LocalPluginRiskStore(options.LocalPluginRootDirectory));
         Host.StateChanged += OnHostStateChanged;
     }
 
@@ -231,9 +243,15 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             PluginStopped = options.PluginStopped,
             TimeProvider = options.TimeProvider,
             HostUiLocales = options.HostUiLocales,
+            PackageGate = options.MarketPackageGate
+                ?? new MarketPluginGate(options.PluginRootDirectory, options.Trust).EvaluateAsync,
         };
 
         var host = new PluginHostType(hostOptions);
+        var localRiskStore = options.LocalRiskStore
+            ?? (string.IsNullOrWhiteSpace(options.LocalPluginRootDirectory)
+                ? null
+                : new LocalPluginRiskStore(options.LocalPluginRootDirectory));
         PluginHostType? localHost = null;
         if (!string.IsNullOrWhiteSpace(options.LocalPluginRootDirectory)
             && !string.Equals(Path.GetFullPath(options.LocalPluginRootDirectory),
@@ -243,6 +261,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             localHost = new PluginHostType(hostOptions with
             {
                 PluginRootDirectory = Path.GetFullPath(options.LocalPluginRootDirectory),
+                PackageGate = localRiskStore is null ? null : new LocalPluginRiskGate(localRiskStore).EvaluateAsync,
             });
         }
         var installLogger = options.InstallLogger ?? NullPluginInstallLogger.Instance;
@@ -296,7 +315,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             new DesignMarketplaceUiService(),
             options.Localizer);
 
-        var runtime = new PluginRuntime(options, hostOptions, host, installs, marketplace, http, ownsHttp, catalog, ownsCatalog, localHost);
+        var runtime = new PluginRuntime(options, hostOptions, host, installs, marketplace, http, ownsHttp, catalog, ownsCatalog, localHost, localRiskStore);
         try
         {
             if (options.LoadBuiltins)
@@ -781,9 +800,59 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
                     discovery.PluginId,
                     discovery.Manifest?.Version ?? "?",
                     handle?.State == PluginLifecycleState.Active,
-                    handle?.LastError ?? (discovery.IsValid ? null : string.Join("; ", discovery.Errors)));
+                    handle?.LastError ?? (discovery.IsValid ? null : string.Join("; ", discovery.Errors)))
+                {
+                    Available = discovery.IsValid,
+                    Permissions = discovery.Manifest?.Capabilities.GetDeclaredCapabilityNames().ToArray() ?? [],
+                };
             })
             .ToArray();
+    }
+
+    async Task<LocalPluginListItem> ILocalPluginUiService.LoadLocalPluginAsync(
+        string pluginId,
+        CancellationToken cancellationToken)
+    {
+        if (_localHost is null)
+        {
+            return new LocalPluginListItem(pluginId, "?", false, "local channel is disabled") { Available = false };
+        }
+
+        var discovery = _localDiscoveries.FirstOrDefault(candidate =>
+            string.Equals(candidate.PluginId, pluginId, StringComparison.OrdinalIgnoreCase));
+        if (discovery is null)
+        {
+            return new LocalPluginListItem(pluginId, "?", false, "local package was not discovered") { Available = false };
+        }
+
+        if (!discovery.IsValid || discovery.Manifest is null)
+        {
+            return new LocalPluginListItem(pluginId, discovery.Manifest?.Version ?? "?", false,
+                string.Join("; ", discovery.Errors)) { Available = false };
+        }
+
+        if (_localRiskStore is null
+            || !_localRiskStore.IsAcknowledged(pluginId, discovery.Manifest.Version))
+        {
+            return new LocalPluginListItem(pluginId, discovery.Manifest.Version, false,
+                "The first load of this local plugin version requires the one-time risk acknowledgement.")
+            {
+                Available = true,
+                Permissions = discovery.Manifest.Capabilities.GetDeclaredCapabilityNames().ToArray(),
+            };
+        }
+
+        var result = await _localHost.LoadAsync(pluginId, cancellationToken).ConfigureAwait(false);
+        RaiseChanged();
+        return new LocalPluginListItem(
+            pluginId,
+            result.Handle?.Manifest.Version ?? discovery.Manifest.Version,
+            result.Success,
+            result.Success ? null : result.Message)
+        {
+            Available = true,
+            Permissions = discovery.Manifest.Capabilities.GetDeclaredCapabilityNames().ToArray(),
+        };
     }
 
     async Task<LocalPluginListItem> ILocalPluginUiService.ReloadLocalPluginAsync(
@@ -796,12 +865,27 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         }
 
         var result = await _localHost.ReloadAsync(pluginId, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _localDiscoveries = await _localHost.DiscoverAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn(pluginId, $"Local discovery refresh failed: {exception.GetType().Name}: {exception.Message}");
+        }
+
+        var discovery = _localDiscoveries.FirstOrDefault(candidate =>
+            string.Equals(candidate.PluginId, pluginId, StringComparison.OrdinalIgnoreCase));
         RaiseChanged();
         return new LocalPluginListItem(
             pluginId,
-            result.Handle?.Manifest.Version ?? "?",
+            result.Handle?.Manifest.Version ?? discovery?.Manifest?.Version ?? "?",
             result.Success,
-            result.Success ? null : result.Message);
+            result.Success ? null : result.Message)
+        {
+            Available = discovery?.IsValid ?? result.Success,
+            Permissions = discovery?.Manifest?.Capabilities.GetDeclaredCapabilityNames().ToArray() ?? [],
+        };
     }
 
     async Task<bool> ILocalPluginUiService.UnloadLocalPluginAsync(
@@ -825,6 +909,15 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         RaiseChanged();
         return result.Success;
     }
+
+    bool ILocalPluginUiService.IsLocalRiskAcknowledged(string pluginId, string version)
+        => _localRiskStore?.IsAcknowledged(pluginId, version) == true;
+
+    void ILocalPluginUiService.AcknowledgeLocalRisk(string pluginId, string version)
+        => _localRiskStore?.Acknowledge(pluginId, version);
+
+    string? ILocalPluginUiService.LogDirectory
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FluidBar", "logs");
 
     LocalizedString? IPluginContributionUiService.DisplayName(string pluginId)
         => FindBuiltinDescriptor(pluginId)?.DisplayName ?? Host.Find(pluginId)?.Manifest.Name;

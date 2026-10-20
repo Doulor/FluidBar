@@ -115,6 +115,13 @@ public sealed class PluginHost : IAsyncDisposable
                     continue;
                 }
 
+                if (await EvaluatePackageGateAsync(discovery, cancellationToken).ConfigureAwait(false) is { Allowed: false } rejected)
+                {
+                    _logger.Error(discovery.PluginId, $"Plugin package rejected by load-time trust gate: {rejected.Error}");
+                    results.Add(PluginLoadResult.Fail(null, rejected.FailureKind, rejected.Error, [rejected.Error]));
+                    continue;
+                }
+
                 var handle = ResolveHandle(discovery.Manifest, discovery.PackageDirectory);
                 results.Add(await LoadCoreAsync(handle, cancellationToken).ConfigureAwait(false));
             }
@@ -164,6 +171,11 @@ public sealed class PluginHost : IAsyncDisposable
                 }
             }
 
+            if (await EvaluatePackageGateAsync(discovery, cancellationToken).ConfigureAwait(false) is { Allowed: false } rejected)
+            {
+                return PluginLoadResult.Fail(null, rejected.FailureKind, rejected.Error, [rejected.Error]);
+            }
+
             var handle = ResolveHandle(discovery.Manifest, discovery.PackageDirectory);
             return await LoadCoreAsync(handle, cancellationToken).ConfigureAwait(false);
         }
@@ -194,10 +206,17 @@ public sealed class PluginHost : IAsyncDisposable
             return PluginLoadResult.Fail(null, PluginLoadFailureKind.ManifestInvalid, exception.Message);
         }
 
+        var fullDirectory = Path.GetFullPath(packageDirectory);
+        var discovery = new PluginDiscoveryInfo(manifest.Id, fullDirectory, manifestPath, manifest, true, []);
+        if (await EvaluatePackageGateAsync(discovery, cancellationToken).ConfigureAwait(false) is { Allowed: false } rejected)
+        {
+            return PluginLoadResult.Fail(null, rejected.FailureKind, rejected.Error, [rejected.Error]);
+        }
+
         await _lifecycleGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var handle = ResolveHandle(manifest, Path.GetFullPath(packageDirectory));
+            var handle = ResolveHandle(manifest, fullDirectory);
             return await LoadCoreAsync(handle, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -1069,6 +1088,30 @@ public sealed class PluginHost : IAsyncDisposable
         }
 
         return true;
+    }
+
+    private async Task<PluginPackageGateResult> EvaluatePackageGateAsync(
+        PluginDiscoveryInfo discovery,
+        CancellationToken cancellationToken)
+    {
+        if (_options.PackageGate is not { } gate)
+        {
+            return PluginPackageGateResult.Allow;
+        }
+
+        try
+        {
+            return await gate(discovery, cancellationToken).ConfigureAwait(false) ?? PluginPackageGateResult.Allow;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.Error(discovery.PluginId, $"Package trust gate failed: {DescribeException(exception)}");
+            return PluginPackageGateResult.Reject("Package trust verification failed.", PluginLoadFailureKind.Unexpected);
+        }
     }
 
     private void ThrowIfDisposed()

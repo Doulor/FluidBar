@@ -333,7 +333,7 @@ public sealed class SkiaIslandController : IDisposable
         && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
-    public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
+    public TimeSpan PreferredFrameInterval => IsWaveOnly
         ? TimeSpan.FromMilliseconds(33)
         : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
 
@@ -1845,7 +1845,7 @@ public sealed class SkiaIslandController : IDisposable
         }
         else if (dynamicChanged)
         {
-            InvalidateDynamic();
+            InvalidateMediaDynamic();
         }
 
         return true;
@@ -2806,6 +2806,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>1/255: the smallest sweep change that can move a lit pixel on a normal-width line.</summary>
     private const double KaraokeHighlightTolerance = 1.0 / 255.0;
 
+    /// <summary>Progress percent of the last dynamic sync (drives the seek-row damage).</summary>
+    private double _lastDynamicProgress = double.NaN;
+
     /// <summary>
     /// Anchors the local progress clock when a media sample arrives. Repeated samples with the same
     /// position (fallback sources whose time text occasionally stops updating) must not re-anchor:
@@ -3042,7 +3045,13 @@ public sealed class SkiaIslandController : IDisposable
         _pendingDirty = true;
     }
 
-    private void InvalidateDynamic()
+    /// <summary>
+    /// Damage for a dynamic-only content sync, split per control. The media page used to invalidate the
+    /// union of the lyric card and the seek row, which merged two distant controls into one tall rectangle
+    /// and made every karaoke frame repaint far more than the lyric line. The two controls are now damaged
+    /// independently (the lyric card for text/sweep changes, the seek row only when the progress moved).
+    /// </summary>
+    private void InvalidateMediaDynamic()
     {
         if (!_hasRenderState)
         {
@@ -3050,28 +3059,27 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
+        var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
         if (CurrentPageIs(PageSlotKind.Media))
         {
             var page = IslandMetrics.PageRect(_renderState, 1);
-            var lyric = PageLayout.MediaLyricCard(page);
-            var seek = PageLayout.MediaSeekRow(page);
-            var damage = Union(
-                new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height),
-                new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height)).Inflate(2);
-            InvalidateDirty(damage);
+            var progress = _pages.Media.ProgressPercent;
+            var progressMoved = Math.Abs(progress - _lastDynamicProgress) > 0.05;
+            _lastDynamicProgress = progress;
+            var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
+            InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
+            if (progressMoved)
+            {
+                var seek = PageMetricsLayout.MediaSeekRow(page, metrics);
+                InvalidateDirty(new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height).Inflate(2));
+            }
+
             return;
         }
 
         if (_renderState.Form != ShellForm.Expanded && _compact.Kind == ActivityKind.Media)
         {
-            InvalidateDirty(WaveDamage());
-            if (_compact.Model is { ShowLyrics: true })
-            {
-                // The karaoke sweep and the lyric text sit outside the wave box: damage them too, or a
-                // line whose highlight advances would look frozen.
-                InvalidateDirty(CompactLyricDamage());
-            }
-
+            InvalidateDirty(CompactLyricDamage());
             return;
         }
 

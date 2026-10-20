@@ -112,6 +112,8 @@ public sealed class PluginPackageIntegrationTests
         var discovery = Assert.Single(discoveries);
         Assert.True(discovery.IsValid, string.Join("; ", discovery.Errors));
         Assert.EndsWith(Path.Combine("sample-minimal", "1.0.0"), discovery.PackageDirectory, StringComparison.OrdinalIgnoreCase);
+        var integrity = await PluginIntegrity.VerifyAsync(discovery.PackageDirectory, keys.Trust);
+        Assert.True(integrity.Verified, string.Join("; ", integrity.Errors));
 
         var load = await host.LoadAsync("sample-minimal");
         Assert.True(load.Success, load.Message);

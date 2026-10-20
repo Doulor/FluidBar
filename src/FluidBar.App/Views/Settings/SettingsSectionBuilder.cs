@@ -771,57 +771,151 @@ public static class SettingsSectionBuilder
             SettingsTone.Neutral,
             SettingsMetrics.RowDescSize));
 
-        var plugins = service.ListLocalPlugins();
-        if (plugins.Count == 0)
-        {
-            stack.Children.Add(SettingsControls.StatusLine(
-                "No local plugin packages found. Drop a folder with manifest.json into the local folder.",
-                palette,
-                SettingsTone.Neutral,
-                SettingsMetrics.RowDescSize));
-            return stack;
-        }
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        actions.Children.Add(SettingsControls.Button(
+            "Open folder",
+            palette,
+            SettingsButtonVariant.Raised,
+            SettingsButtonSize.Md,
+            SettingsIconKind.Folder,
+            () => ctx.OpenPath(service.LocalPluginRootDirectory)));
+        actions.Children.Add(SettingsControls.Button(
+            "View logs",
+            palette,
+            SettingsButtonVariant.Raised,
+            SettingsButtonSize.Md,
+            SettingsIconKind.Settings,
+            () => ctx.OpenPath(service.LogDirectory)));
+        stack.Children.Add(actions);
 
-        foreach (var plugin in plugins)
+        var list = new StackPanel { Spacing = 6 };
+        stack.Children.Add(list);
+
+        void Rebuild()
         {
-            var row = new Grid
+            list.Children.Clear();
+            var plugins = service.ListLocalPlugins();
+            if (plugins.Count == 0)
             {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
-                Margin = new Thickness(0, 4, 0, 0),
-            };
-            row.Children.Add(SettingsControls.StatusLine(
-                $"{plugin.Id} {plugin.Version} · {(plugin.Active ? "active" : "stopped")}"
-                + (plugin.Error is null ? string.Empty : $" · {plugin.Error}"),
-                palette,
-                plugin.Active ? SettingsTone.Success : SettingsTone.Neutral,
-                SettingsMetrics.RowDescSize));
+                list.Children.Add(SettingsControls.StatusLine(
+                    "No local plugin packages found. Drop a folder with manifest.json into the local folder.",
+                    palette,
+                    SettingsTone.Neutral,
+                    SettingsMetrics.RowDescSize));
+                return;
+            }
 
-            var reload = SettingsControls.Button(
-                "Reload",
-                palette,
-                SettingsButtonVariant.Raised,
-                SettingsButtonSize.Md,
-                SettingsIconKind.Settings,
-                () => _ = service.ReloadLocalPluginAsync(plugin.Id, CancellationToken.None));
-            reload.Margin = new Thickness(8, 0, 0, 0);
-            Grid.SetColumn(reload, 1);
-            row.Children.Add(reload);
+            foreach (var plugin in plugins)
+            {
+                var row = new StackPanel { Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
+                row.Children.Add(SettingsControls.StatusLine(
+                    $"{plugin.Id} {plugin.Version} · {(plugin.Active ? "active" : "stopped")}"
+                    + (plugin.Error is null ? string.Empty : $" · {plugin.Error}"),
+                    palette,
+                    plugin.Active ? SettingsTone.Success : SettingsTone.Neutral,
+                    SettingsMetrics.RowDescSize));
+                row.Children.Add(SettingsControls.StatusLine(
+                    "Permissions: " + (plugin.Permissions.Count == 0
+                        ? "none declared"
+                        : string.Join(", ", plugin.Permissions)),
+                    palette,
+                    SettingsTone.Neutral,
+                    SettingsMetrics.RowDescSize));
 
-            var unload = SettingsControls.Button(
-                "Unload",
-                palette,
-                SettingsButtonVariant.Raised,
-                SettingsButtonSize.Md,
-                SettingsIconKind.Close,
-                () => _ = service.UnloadLocalPluginAsync(plugin.Id, CancellationToken.None));
-            unload.Margin = new Thickness(8, 0, 0, 0);
-            Grid.SetColumn(unload, 2);
-            row.Children.Add(unload);
-            stack.Children.Add(row);
+                var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                if (!plugin.Active)
+                {
+                    buttons.Children.Add(SettingsControls.Button(
+                        "Load",
+                        palette,
+                        SettingsButtonVariant.Raised,
+                        SettingsButtonSize.Md,
+                        SettingsIconKind.Settings,
+                        () => _ = LoadAsync(plugin)));
+                }
+                else
+                {
+                    buttons.Children.Add(SettingsControls.Button(
+                        "Unload",
+                        palette,
+                        SettingsButtonVariant.Raised,
+                        SettingsButtonSize.Md,
+                        SettingsIconKind.Close,
+                        () => _ = RunAsync(() => service.UnloadLocalPluginAsync(plugin.Id, CancellationToken.None))));
+                }
+
+                buttons.Children.Add(SettingsControls.Button(
+                    "Reload",
+                    palette,
+                    SettingsButtonVariant.Raised,
+                    SettingsButtonSize.Md,
+                    SettingsIconKind.Settings,
+                    () => _ = RunAsync(() => service.ReloadLocalPluginAsync(plugin.Id, CancellationToken.None))));
+                buttons.Children.Add(SettingsControls.Button(
+                    "Open folder",
+                    palette,
+                    SettingsButtonVariant.Raised,
+                    SettingsButtonSize.Md,
+                    SettingsIconKind.Folder,
+                    () => ctx.OpenPath(Path.Combine(service.LocalPluginRootDirectory, plugin.Id))));
+                row.Children.Add(buttons);
+                list.Children.Add(row);
+            }
         }
 
+        async Task RunAsync(Func<Task> action)
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception exception)
+            {
+                ctx.ShowStatus(exception.Message);
+            }
+
+            Rebuild();
+        }
+
+        async Task LoadAsync(LocalPluginListItem plugin)
+        {
+            if (!service.IsLocalRiskAcknowledged(plugin.Id, plugin.Version))
+            {
+                var owner = ctx.Owner();
+                if (owner is null)
+                {
+                    return;
+                }
+
+                var accepted = await new LocalPluginRiskDialog(plugin, palette).ShowDialog<bool>(owner);
+                if (accepted != true)
+                {
+                    return;
+                }
+
+                service.AcknowledgeLocalRisk(plugin.Id, plugin.Version);
+            }
+
+            try
+            {
+                var result = await service.LoadLocalPluginAsync(plugin.Id, CancellationToken.None);
+                if (result.Error is { Length: > 0 } error)
+                {
+                    ctx.ShowStatus(error);
+                }
+            }
+            catch (Exception exception)
+            {
+                ctx.ShowStatus(exception.Message);
+            }
+
+            Rebuild();
+        }
+
+        Rebuild();
         return stack;
     }
+
 
     private static Control BuildPlugins(SettingsWindowContext ctx)
     {
