@@ -18,9 +18,11 @@ namespace FluidBar.Ui.Tests;
 public sealed class SettingsWindowChromeTests
 {
     [Fact]
-    public async Task Window_UsesBorderlessRoundedChrome()
+    public async Task Window_IsBorderlessSquarePanel_ByDefault()
     {
-        var chrome = await AvaloniaTest.Run(() =>
+        // Plan B contract: no window decorations, no DWM rounding requested, square shell (radius 0),
+        // and the window surface painted with the same colour as the panel.
+        var state = await AvaloniaTest.Run(() =>
         {
             var localizer = TestFixtures.CreateLocalizer("en-US");
             var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
@@ -29,11 +31,10 @@ public sealed class SettingsWindowChromeTests
             try
             {
                 var shell = FindShell(window);
-                return (
-                    window.WindowDecorations,
-                    window.Background is ISolidColorBrush { Color.A: 0 },
-                    window.TransparencyLevelHint.Contains(WindowTransparencyLevel.Transparent),
-                    shell.CornerRadius.TopLeft,
+                return (window.WindowDecorations, window.DwmRoundingActive, window.ShellCornerRadiusDip,
+                    shell.CornerRadius.TopLeft, window.ChromeMode,
+                    window.Background is ISolidColorBrush windowBrush ? windowBrush.Color : default,
+                    shell.Background is ISolidColorBrush shellBrush ? shellBrush.Color : default,
                     shell.ClipToBounds);
             }
             finally
@@ -42,11 +43,54 @@ public sealed class SettingsWindowChromeTests
             }
         });
 
-        Assert.Equal(WindowDecorations.None, chrome.WindowDecorations);
-        Assert.True(chrome.Item2, "the window surface must stay transparent so the rounded shell can breathe");
-        Assert.True(chrome.Item3, "the window must request per-pixel transparency");
-        Assert.True(chrome.TopLeft > 0, "the shell must paint the rounded corners");
-        Assert.True(chrome.ClipToBounds, "the shell must clip its content to the rounded shape");
+        Assert.Equal(WindowDecorations.None, state.WindowDecorations);
+        Assert.False(state.DwmRoundingActive, "plan B must not ask DWM for a rounded corner");
+        Assert.Equal(0, state.ShellCornerRadiusDip);
+        Assert.Equal(0, state.TopLeft);
+        Assert.Equal(SettingsWindowChrome.Opaque, state.ChromeMode);
+        Assert.Equal(state.Item6, state.Item7);
+        Assert.Equal(255, state.Item6.A);
+        Assert.True(state.ClipToBounds, "the shell still clips its content to its own bounds");
+    }
+
+    [Fact]
+    public async Task Window_AlphaSwitch_RestoresTheRoundedTransparentChrome()
+    {
+        // FLUIDBAR_WINDOW_ALPHA=1 enables the per-pixel-alpha path: 22 DIP rounded panel, transparent
+        // window background. This is the contract a machine with real client alpha will run.
+        var previous = Environment.GetEnvironmentVariable("FLUIDBAR_WINDOW_ALPHA");
+        try
+        {
+            Environment.SetEnvironmentVariable("FLUIDBAR_WINDOW_ALPHA", "1");
+            var state = await AvaloniaTest.Run(() =>
+            {
+                var localizer = TestFixtures.CreateLocalizer("en-US");
+                var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
+                var window = new SettingsWindow(controller, localizer, SettingsWindowSection.General);
+                window.Show();
+                try
+                {
+                    var shell = FindShell(window);
+                    return (window.ChromeMode, window.ShellCornerRadiusDip, shell.CornerRadius.TopLeft,
+                        window.Background is ISolidColorBrush brush ? brush.Color.A : (byte)255,
+                        window.DwmRoundingActive);
+                }
+                finally
+                {
+                    window.Close();
+                }
+            });
+
+            Assert.Equal(SettingsWindowChrome.Transparent, state.ChromeMode);
+            Assert.Equal(22, state.ShellCornerRadiusDip);
+            Assert.Equal(22, state.Item3);
+            Assert.Equal(0, state.Item4);
+            Assert.False(state.DwmRoundingActive);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FLUIDBAR_WINDOW_ALPHA", previous);
+        }
     }
 
     [Fact]
