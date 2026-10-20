@@ -208,6 +208,18 @@ public sealed class SettingsWindow : Window, ILocalizable
                     {
                         overlay.Opacity = state == SettingsMaterialVisualState.Pressed ? 1 : 0;
                     }
+
+                    var pressHighlight = stack.Children.OfType<Border>()
+                        .FirstOrDefault(border => border.Name == "MaterialPressHighlight");
+                    if (pressHighlight is not null)
+                    {
+                        // Row cards: 1.5 DIP press highlight + a draw-only 0.99 scale (layout unchanged).
+                        pressHighlight.Opacity = state == SettingsMaterialVisualState.Pressed ? 1 : 0;
+                        card.RenderTransformOrigin = Avalonia.RelativePoint.Center;
+                        card.RenderTransform = state == SettingsMaterialVisualState.Pressed
+                            ? new ScaleTransform(0.99, 0.99)
+                            : null;
+                    }
                 }
 
                 count++;

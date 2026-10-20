@@ -81,4 +81,70 @@ public sealed class SettingsMaterialStateTests
         Assert.Equal(10, glow.Blur);
         Assert.Equal(Color.FromArgb(20, 255, 255, 255), glow.Color);
     }
+
+    [Fact]
+    public async Task Row_press_scales_without_reflowing_the_card()
+    {
+        var result = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("en-US");
+            var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
+            var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Plugins);
+            window.Show();
+            try
+            {
+                var row = window.GetVisualDescendants().OfType<Border>()
+                    .First(border => border.Child is Grid stack
+                        && stack.Children.OfType<Border>().Any(child => child.Name == "MaterialPressHighlight"));
+                var idleHeight = row.Bounds.Height;
+
+                _ = window.ForceMaterialState(SettingsWindow.SettingsMaterialVisualState.Pressed);
+                var highlight = ((Grid)row.Child).Children.OfType<Border>()
+                    .Single(child => child.Name == "MaterialPressHighlight");
+                var scale = Assert.IsType<ScaleTransform>(row.RenderTransform);
+                Assert.Equal(0.99, scale.ScaleX, 3);
+                Assert.Equal(0.99, scale.ScaleY, 3);
+                Assert.Equal(1, highlight.Opacity);
+                Assert.Equal(1.5, highlight.Height);
+                // Draw-only scale: the layout height must not change (no reflow, no scroll jump).
+                Assert.Equal(idleHeight, row.Bounds.Height, 3);
+
+                _ = window.ForceMaterialState(SettingsWindow.SettingsMaterialVisualState.Idle);
+                Assert.Null(row.RenderTransform);
+                Assert.Equal(0, highlight.Opacity);
+                return true;
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task Tiles_do_not_get_the_press_scale()
+    {
+        var result = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("en-US");
+            var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
+            var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Marketplace);
+            window.Show();
+            try
+            {
+                _ = window.ForceMaterialState(SettingsWindow.SettingsMaterialVisualState.Pressed);
+                var scaled = window.GetVisualDescendants().OfType<Border>()
+                    .Count(border => border.RenderTransform is ScaleTransform);
+                return scaled == 0;
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.True(result, "only Row cards may scale on press");
+    }
 }

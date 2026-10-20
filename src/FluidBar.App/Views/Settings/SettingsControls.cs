@@ -386,6 +386,32 @@ internal static class SettingsControls
             },
         });
 
+        if (kind == SettingsCardKind.Row)
+        {
+            // Press-only top highlight: 1.5 DIP white band above the L4 shade, so the card reads as
+            // "lifted" at the edge while the 8 DIP shade darkens the body underneath.
+            stack.Children.Add(new Border
+            {
+                Name = "MaterialPressHighlight",
+                Height = SettingsPalette.TopHighlightHeightDip,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                CornerRadius = new CornerRadius(radius, radius, 0, 0),
+                IsHitTestVisible = false,
+                Opacity = 0,
+                Background = new LinearGradientBrush
+                {
+                    StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+                    EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new Avalonia.Media.GradientStop(Color.FromArgb(28, 255, 255, 255), 0),
+                        new Avalonia.Media.GradientStop(Color.FromArgb(0, 255, 255, 255), 1),
+                    },
+                },
+            });
+        }
+
         var card = new Border
         {
             CornerRadius = new CornerRadius(radius),
@@ -438,14 +464,28 @@ internal static class SettingsControls
         /// <param name="pressed">True to show the shade.</param>
         public static void SetPressedOverlay(Border card, bool pressed)
         {
-            if (card.Child is Grid stack)
+            if (card.Child is not Grid stack)
             {
-                foreach (var overlay in stack.Children.OfType<Border>()
-                    .Where(border => border.Name == "MaterialPressedInset"))
-                {
-                    overlay.Opacity = pressed ? 1 : 0;
-                }
+                return;
             }
+
+            foreach (var overlay in stack.Children.OfType<Border>()
+                .Where(border => border.Name == "MaterialPressedInset"))
+            {
+                overlay.Opacity = pressed ? 1 : 0;
+            }
+
+            var highlight = stack.Children.OfType<Border>()
+                .FirstOrDefault(border => border.Name == "MaterialPressHighlight");
+            if (highlight is null)
+            {
+                return; // tiles/featured keep their look: press feedback is Row-only
+            }
+
+            highlight.Opacity = pressed ? 1 : 0;
+            // Draw-only scale: the layout size never changes (no reflow, no scroll jump).
+            card.RenderTransformOrigin = Avalonia.RelativePoint.Center;
+            card.RenderTransform = pressed ? new ScaleTransform(0.99, 0.99) : null;
         }
 
         public static void Attach(Border card)
