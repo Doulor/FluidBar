@@ -419,8 +419,15 @@ public static class SkiaIslandStateBuilder
             .Append(media?.Title).Append('|').Append(media?.Artist).Append('|').Append(media?.Album).Append('|')
             // Cover art arrives after the metadata (asynchronous fetch); without it here the page models
             // keep the placeholder for the whole track because nothing else changes.
-            .Append(media?.ArtworkKey).Append('|')
+            .Append(media?.ArtworkKey).Append('|').Append(media?.AccentHex).Append('|')
+            .Append(media?.HasTimeline).Append('|')
             .Append(content.BatteryPercent).Append('|').Append(content.IsCharging).Append('|')
+            // Audio/brightness values are painted by the home sliders; missing them let a no-op content
+            // heartbeat skip the only rebuild that updated them.
+            .Append(content.VolumePercent).Append('|').Append(content.IsMuted).Append('|')
+            .Append(content.BrightnessPercent).Append('|')
+            // Home clock/date derive from Now; minute ticks are real content changes.
+            .Append(content.Now.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)).Append('|')
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
             .Append(content.UnreadCount).Append('|')
             .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|')
@@ -468,10 +475,32 @@ public static class SkiaIslandStateBuilder
         {
             var item = items[i];
             builder.Append(item.Name).Append('|').Append(item.StatusText).Append('|')
-                .Append(item.TimeText).Append('|').Append(item.Detail).Append('|')
+                .Append(item.Detail).Append('|')
                 .Append(item.PrimaryText).Append('|').Append(item.Project).Append('|')
                 .Append((int)item.Tone).Append('|');
         }
+    }
+
+    /// <summary>
+    /// Elapsed-time-only signature. Agent durations tick once per second but the page skeleton,
+    /// labels and shell size do not change; keeping them out of <see cref="StructuralSignature"/>
+    /// lets the controller repaint just the time strip instead of rebuilding the whole layout.
+    /// </summary>
+    /// <param name="content">Non-activity content snapshot.</param>
+    /// <param name="island">Activity view model (compact agent duration lives on the primary activity).</param>
+    public static string AgentTimingSignature(IslandContent content, IslandViewModel island)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(island);
+        var builder = new StringBuilder(96);
+        var items = content.Agents;
+        builder.Append(items.Length).Append('|');
+        for (var i = 0; i < items.Length; i++)
+        {
+            builder.Append(items[i].TimeText).Append('|');
+        }
+
+        return builder.ToString();
     }
 
     private static void AppendStats(StringBuilder builder, IReadOnlyList<WidgetStatData> items)

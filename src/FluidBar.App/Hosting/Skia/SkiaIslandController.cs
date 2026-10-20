@@ -100,6 +100,7 @@ public sealed class SkiaIslandController : IDisposable
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
     private string _dynamicSignature = string.Empty;
+    private string _agentTimingSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
     private VisualRect? _accessibilityFocus;
@@ -522,7 +523,8 @@ public sealed class SkiaIslandController : IDisposable
 
         // Agent spinner / progress pulse use their own clock; it only advances while an agent is
         // actually running, so the host's frame loop stops (and CPU drops) as soon as it finishes.
-        if (IsAgentAnimating)
+        var agentWasAnimating = IsAgentAnimating;
+        if (agentWasAnimating)
         {
             _agentAnimationSeconds += dt;
         }
@@ -552,6 +554,15 @@ public sealed class SkiaIslandController : IDisposable
         UpdateArchipelago(now);
         var railWasRunning = SyncRailMotion(dt);
         BuildRenderState();
+
+        if (agentWasAnimating)
+        {
+            // The spinner/pulse phase changes every frame, but no content change arrives until the
+            // next elapsed-time tick. Damage only the animated glyphs (or the agent page for the
+            // full-row progress bar) so the host actually paints a new frame instead of freezing
+            // between one-second content updates.
+            InvalidateDirty(AgentFrameDamage());
+        }
 
         if (motionWasRunning)
         {
@@ -612,6 +623,7 @@ public sealed class SkiaIslandController : IDisposable
         _pendingDirty = false;
         _pendingDamage = VisualRect.Empty;
     }
+
 
     /// <summary>Applies one Core reducer input and executes the emitted effects.</summary>
     /// <param name="input">Reducer input.</param>
@@ -1391,7 +1403,12 @@ public sealed class SkiaIslandController : IDisposable
         }
     }
 
-    private void SyncContent(bool full)
+    /// <summary>
+    /// Rebuilds content after a data/settings event. Returns false when nothing that affects the
+    /// painted island changed, so a producer heartbeating at frame rate cannot force a full repaint or
+    /// restart the shell transitions on every tick.
+    /// </summary>
+    private bool SyncContent(bool full)
     {
         var content = _data.Snapshot();
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
@@ -1400,10 +1417,35 @@ public sealed class SkiaIslandController : IDisposable
 
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
+        var timingSignature = SkiaIslandStateBuilder.AgentTimingSignature(content, viewModel);
         var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
         var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
+        var timingChanged = !string.Equals(timingSignature, _agentTimingSignature, StringComparison.Ordinal);
         _structuralSignature = structural;
         _dynamicSignature = dynamicSignature;
+        _agentTimingSignature = timingSignature;
+
+        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && !timingChanged)
+        {
+            // A producer heartbeat with identical content: no relayout, no transition retarget, no frame.
+            return false;
+        }
+
+        if (!full && _hasRenderState && !structuralChanged && !dynamicChanged && timingChanged)
+        {
+            // Elapsed-time-only update: patch the duration strings and repaint the time strip. The
+            // page models, shell target and text layout stay untouched, so the one-second tick can
+            // never resize the island or reflow the row.
+            ApplyAgentTiming(content);
+            BuildRenderState();
+            InvalidateDirty(AgentTimingDamage());
+            if (IsAgentAnimating)
+            {
+                FrameRequested?.Invoke();
+            }
+
+            return true;
+        }
 
         SyncKaraoke(content);
 
@@ -1426,6 +1468,10 @@ public sealed class SkiaIslandController : IDisposable
         {
             InvalidateDynamic();
         }
+        else if (timingChanged)
+        {
+            InvalidateDirty(AgentTimingDamage());
+        }
 
         // A content change may have started an agent run: ask the host for a frame loop now so the
         // spinner starts immediately (the loop keeps itself alive while IsAgentAnimating is true).
@@ -1434,6 +1480,77 @@ public sealed class SkiaIslandController : IDisposable
             InvalidateDirty(ContentDamage());
             FrameRequested?.Invoke();
         }
+
+        return true;
+    }
+
+    /// <summary>Updates only the elapsed-time strings on the already-built agent page model.</summary>
+    /// <param name="content">Fresh non-activity snapshot (agent rows).</param>
+    private void ApplyAgentTiming(IslandContent content)
+    {
+        var source = content.Agents;
+        var items = _pages.Agent.Items;
+        if (items.Count == source.Length)
+        {
+            var updated = new AgentItemModel[items.Count];
+            for (var i = 0; i < updated.Length; i++)
+            {
+                updated[i] = items[i] with { DurationText = source[i].TimeText };
+            }
+
+            _pages = _pages with { Agent = _pages.Agent with { Items = updated } };
+        }
+    }
+
+    /// <summary>Damage of the elapsed-time glyphs only (right time column / compact meta right edge).</summary>
+    private VisualRect AgentTimingDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return ContentDamage();
+        }
+
+        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 4)
+        {
+            // Agent rows stack status over duration in a fixed right column; repaint that strip for
+            // every visible row without touching the task text or the shell.
+            var page = IslandMetrics.PageRect(_renderState, 4);
+            return new VisualRect(page.Right - 150, page.Top, 150, page.Height).Inflate(2);
+        }
+
+        if (_compact.Kind == ActivityKind.Agent && _renderState.Form != ShellForm.Expanded)
+        {
+            var shell = IslandMetrics.ShellRect(_renderState);
+            return new VisualRect(shell.Right - 160, shell.Top, 158, shell.Height).Inflate(2);
+        }
+
+        return ContentDamage();
+    }
+
+    /// <summary>Damage of the per-frame spinner/progress glyphs.</summary>
+    private VisualRect AgentFrameDamage()
+    {
+        if (!_hasRenderState)
+        {
+            return ContentDamage();
+        }
+
+        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 4)
+        {
+            // The indeterminate progress bar spans each row, so repaint the agent page content only
+            // (never the whole layered surface).
+            return ContentDamage();
+        }
+
+        if (_compact.Kind == ActivityKind.Agent)
+        {
+            // prototype2 .agent-ring is a 20 DIP circle at x=10..30, vertically centred.
+            var shell = IslandMetrics.ShellRect(_renderState);
+            var ringTop = shell.Top + ((shell.Height - 20) / 2);
+            return new VisualRect(shell.Left + 10, ringTop, 20, 20).Inflate(2);
+        }
+
+        return ContentDamage();
     }
 
     private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
@@ -1520,8 +1637,11 @@ public sealed class SkiaIslandController : IDisposable
     {
         if (_dispatcher.IsOnDispatcherThread)
         {
-            SyncContent(full: false);
-            StateChanged?.Invoke();
+            if (SyncContent(full: false))
+            {
+                StateChanged?.Invoke();
+            }
+
             return;
         }
 
@@ -1532,8 +1652,10 @@ public sealed class SkiaIslandController : IDisposable
                 return;
             }
 
-            SyncContent(full: false);
-            StateChanged?.Invoke();
+            if (SyncContent(full: false))
+            {
+                StateChanged?.Invoke();
+            }
         });
     }
 

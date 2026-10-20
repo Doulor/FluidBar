@@ -361,24 +361,42 @@ internal sealed class CompactRenderer : IDisposable
 
         var status = model.StatusText;
         var duration = model.DurationText;
-        var meta = string.IsNullOrEmpty(status)
-            ? duration
-            : string.IsNullOrEmpty(duration) ? status : status + " · " + duration;
         // Status-only fallback: the main slot already carries the localized status, so repeating it in
         // the meta column would read "运行中 运行中".
+        var metaStatus = status;
         if (!string.IsNullOrEmpty(model.Title) && string.Equals(model.Title, status, StringComparison.Ordinal))
         {
-            meta = duration;
+            metaStatus = null;
         }
 
         var metaRight = width - 12;
         var textRight = metaRight;
-        if (!string.IsNullOrEmpty(meta))
+        var hasStatus = !string.IsNullOrEmpty(metaStatus);
+        var hasDuration = !string.IsNullOrEmpty(duration);
+        if (hasStatus || hasDuration)
         {
-            var metaWidth = _text.Measure(meta, IslandType.CompactTiny);
-            _text.Draw(canvas, meta, IslandType.CompactTiny,
-                new SKRect(metaRight - metaWidth, 0, metaRight, height), _theme.ForegroundTertiary,
-                TextAlign.Right, _opacity);
+            // Reserve the widest tabular duration ("00:00") for the whole run: a per-second text change
+            // (0:09 -> 0:10, 0:59 -> 1:00) may not resize the meta column or push the task line.
+            var durationColumn = hasDuration ? _text.Measure("00:00", IslandType.CompactTinyMono) : 0;
+            var statusWidth = hasStatus ? _text.Measure(metaStatus!, IslandType.CompactTiny) : 0;
+            var separator = hasStatus && hasDuration ? _text.Measure(" · ", IslandType.CompactTiny) : 0;
+            var metaWidth = statusWidth + separator + durationColumn;
+            var durationLeft = metaRight - durationColumn;
+            if (hasDuration)
+            {
+                _text.Draw(canvas, duration, IslandType.CompactTinyMono,
+                    new SKRect(durationLeft, 0, metaRight, height), _theme.ForegroundTertiary,
+                    TextAlign.Right, _opacity);
+            }
+
+            if (hasStatus)
+            {
+                var statusRight = durationLeft - separator;
+                _text.Draw(canvas, metaStatus, IslandType.CompactTiny,
+                    new SKRect(statusRight - statusWidth, 0, statusRight, height),
+                    _theme.ForegroundTertiary, TextAlign.Right, _opacity);
+            }
+
             textRight = metaRight - metaWidth - 8;
         }
 

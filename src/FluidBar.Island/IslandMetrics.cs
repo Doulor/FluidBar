@@ -243,6 +243,13 @@ public static class IslandType
     /// <summary>Compact tiny caption (9.5 DIP).</summary>
     public static readonly TextStyle CompactTiny = new(FontRole.Ui, 9.5f);
 
+    /// <summary>
+    /// Tabular digits for the compact elapsed time: "0:09" and "0:10" stay the same width so a
+    /// per-second update cannot move the layout (task-39).
+    /// </summary>
+    public static readonly TextStyle CompactTinyMono = new(FontRole.Mono, 9.5f);
+
+
     /// <summary>Transient-rail capsule label (9 DIP regular; prototype2 `.mini-label` inherits 400).</summary>
     public static readonly TextStyle MiniLabel = new(FontRole.Ui, 9f);
 
@@ -319,6 +326,9 @@ public static class IslandType
 
     /// <summary>Row meta line, semibold (status label).</summary>
     public static readonly TextStyle RowMetaStrong = new(FontRole.UiSemiBold, 8f);
+
+    /// <summary>Tabular agent-row duration (8 DIP).</summary>
+    public static readonly TextStyle RowMetaMono = new(FontRole.Mono, 8f);
 
     /// <summary>Agent row head tool/brand label (prototype2 .agent-tool: 9px/600).</summary>
     public static readonly TextStyle AgentTool = new(FontRole.UiSemiBold, 9f);

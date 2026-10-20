@@ -438,13 +438,14 @@ internal sealed partial class PageRenderer
 
         // prototype2 .agent-head: tool/brand 9px/600 fg-2, project 8px fg-3, 6 DIP gap, baseline-aligned;
         // the right column is 8px/600 status over 8px fg-3 duration, right-aligned 10 DIP in.
-        // +2 DIP per column: a measured-to-fit status ("Running" at 1.6) was ellipsized to "Runni…".
+        // The duration column is reserved for the widest "00:00" with tabular (mono) digits: the
+        // per-second text change must not move the left column. Status width still follows its text
+        // (a real status change is a content change), but the duration always sits in this fixed slot.
         var statusWidth = string.IsNullOrEmpty(item.StatusText)
             ? 0
             : _text.Measure(item.StatusText, IslandType.RowMetaStrong) + 2f;
-        var durationWidth = string.IsNullOrEmpty(item.DurationText)
-            ? 0
-            : _text.Measure(item.DurationText, IslandType.RowMeta) + 2f;
+        var durationColumnWidth = _text.Measure("00:00", IslandType.RowMetaMono) + 2f;
+        var durationWidth = string.IsNullOrEmpty(item.DurationText) ? 0 : durationColumnWidth;
         var rightRight = row.Right - 10;
         var rightLeft = rightRight - Math.Max(statusWidth, durationWidth);
         var mainLeft = row.Left + 39;
@@ -506,8 +507,8 @@ internal sealed partial class PageRenderer
             _text.Draw(
                 canvas,
                 item.DurationText,
-                IslandType.RowMeta,
-                new SKRect(rightLeft, row.Top + 23, rightRight, row.Top + 23 + 12),
+                IslandType.RowMetaMono,
+                new SKRect(rightRight - durationColumnWidth, row.Top + 23, rightRight, row.Top + 23 + 12),
                 _theme.ForegroundTertiary,
                 TextAlign.Right,
                 _opacity);
