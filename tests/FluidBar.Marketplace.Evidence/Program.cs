@@ -17,6 +17,7 @@ using FluidBar.Marketplace.Install;
 using FluidBar.Marketplace.Packaging;
 using FluidBar.Marketplace.Signing;
 using FluidBar.Sdk.Manifest;
+using SkiaSharp;
 
 namespace FluidBar.Marketplace.Evidence;
 
@@ -34,6 +35,23 @@ internal static class Program
         if (args.Contains("--verify", StringComparer.OrdinalIgnoreCase))
         {
             return VerifyOnlyAsync(options).GetAwaiter().GetResult();
+        }
+
+        if (args.Contains("--shadow-probe", StringComparer.OrdinalIgnoreCase))
+        {
+            return RunShadowProbe(options);
+        }
+
+        if (args.Contains("--settings-material", StringComparer.OrdinalIgnoreCase))
+        {
+            var section = SettingsWindowSection.Appearance;
+            var requested = ArgValue(args, "--settings-section");
+            if (!string.IsNullOrWhiteSpace(requested) && !Enum.TryParse(requested, ignoreCase: true, out section))
+            {
+                throw new ArgumentException($"Unknown settings section '{requested}'.");
+            }
+
+            return RunSettingsMaterialCapture(options, section);
         }
 
         ResetOutputDirectory(options);
@@ -329,6 +347,310 @@ internal static class Program
             .ToArray();
         return candidates.FirstOrDefault()
             ?? throw new DirectoryNotFoundException($"No net10.0 output under '{bin}'. Build the solution first.");
+    }
+
+    /// <summary>
+    /// Offscreen evidence for the settings material states: renders the real SettingsWindow on the Appearance
+    /// page in Idle / Pressed (L4 inset) / Hover (L3 glow) using <c>SettingsWindow.ForceMaterialState</c>, so no
+    /// pointer input is involved. Writes build/reports/ui-audit/material/settings-{idle,press,hover}.png plus
+    /// 2x crops of the first card row.
+    /// </summary>
+    private static string? ArgValue(string[] args, string name)
+    {
+        for (var index = 0; index < args.Length - 1; index++)
+        {
+            if (string.Equals(args[index], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[index + 1];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Diagnostic: does Avalonia 12 render an inset BoxShadow on a Border? Renders a plain and an
+    /// inset-shadowed card side by side and reports the pixel delta (0 means the inset shadow is ignored).</summary>
+    private static int RunShadowProbe(Options options)
+    {
+        var exitCode = 1;
+        var builder = AppBuilder.Configure<EvidenceApplication>().UsePlatformDetect();
+        var lifetime = new ClassicDesktopStyleApplicationLifetime { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        builder.SetupWithLifetime(lifetime);
+        lifetime.Startup += (_, _) => _ = ProbeAsync(lifetime, options, code => exitCode = code);
+        lifetime.Start(Array.Empty<string>());
+        return exitCode;
+    }
+
+    private static async Task ProbeAsync(
+        ClassicDesktopStyleApplicationLifetime lifetime,
+        Options options,
+        Action<int> setExitCode)
+    {
+        var status = 1;
+        try
+        {
+            var outputDir = Path.Combine(options.RepoRoot, "build", "reports", "ui-audit", "material");
+            Directory.CreateDirectory(outputDir);
+            var window = new Window
+            {
+                Width = 940,
+                Height = 260,
+                Background = new SolidColorBrush(Color.Parse("#08080A")),
+                Content = BuildProbe(),
+                WindowDecorations = WindowDecorations.None,
+                ShowInTaskbar = false,
+            };
+            window.Show();
+            await Task.Delay(900);
+            Dispatcher.UIThread.RunJobs();
+            var content = window.Content as Control ?? throw new InvalidOperationException("Probe content missing.");
+            var png = Path.Combine(outputDir, "shadow-probe.png");
+            Capture(content, png);
+
+            using var bitmap = SKBitmap.Decode(png) ?? throw new InvalidOperationException("Probe render failed.");
+            var opaque = Measure(bitmap, 12, 236);
+            var translucent = Measure(bitmap, 460, 684);
+
+            var report = new
+            {
+                probe = png,
+                opaqueCard = new { meanDelta = opaque.meanDelta, maxDelta = opaque.maxDelta, changedPixels = opaque.changedPixels },
+                translucentCard = new { meanDelta = translucent.meanDelta, maxDelta = translucent.maxDelta, changedPixels = translucent.changedPixels },
+                verdict = opaque.maxDelta <= 1.0
+                    ? "inset BoxShadow is ignored by the renderer"
+                    : translucent.maxDelta <= 1.0
+                        ? "inset BoxShadow renders on opaque cards but NOT on the production translucent card"
+                        : "inset BoxShadow renders on both card kinds",
+            };
+            Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(outputDir, "shadow-probe.json"), JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            window.Close();
+            status = 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+        }
+        finally
+        {
+            setExitCode(status);
+            Dispatcher.UIThread.Post(() => lifetime.Shutdown(status));
+        }
+    }
+
+    private static (double meanDelta, double maxDelta, int changedPixels) Measure(SKBitmap bitmap, int leftX, int rightX)
+    {
+        var deltas = new List<double>();
+        for (var y = 40; y < 200; y++)
+        {
+            for (var x = leftX; x < leftX + 200; x++)
+            {
+                var left = bitmap.GetPixel(x, y);
+                var right = bitmap.GetPixel(rightX + (x - leftX), y);
+                deltas.Add((Math.Abs(left.Red - right.Red) + Math.Abs(left.Green - right.Green) + Math.Abs(left.Blue - right.Blue)) / 3.0);
+            }
+        }
+
+        return (deltas.Average(), deltas.Max(), deltas.Count(static delta => delta > 1.0));
+    }
+
+    private static Control BuildProbe()
+    {
+        static Border Card(string background, BoxShadows shadow) => new()
+        {
+            Width = 200,
+            Height = 200,
+            Margin = new Thickness(12),
+            Background = new SolidColorBrush(Color.Parse(background)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(23, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            BoxShadow = shadow,
+            Child = new TextBlock { Text = background, Foreground = new SolidColorBrush(Color.Parse("#EDEDEE")), Margin = new Thickness(16) },
+        };
+
+        var inset = new BoxShadows(new BoxShadow
+        {
+            IsInset = true,
+            Blur = 4,
+            Spread = -8,
+            OffsetY = 8,
+            Color = Color.FromArgb(46, 0, 0, 0),
+        });
+
+        // Opaque card (control) / translucent card (production #99141418) each without and with the inset.
+        return new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Children =
+            {
+                Card("#141418", default),
+                Card("#141418", inset),
+                Card("#99141418", default),
+                Card("#99141418", inset),
+            },
+        };
+    }
+
+    private static int RunSettingsMaterialCapture(Options options, SettingsWindowSection section)
+    {
+        var exitCode = 1;
+        var builder = AppBuilder.Configure<EvidenceApplication>().UsePlatformDetect();
+        var lifetime = new ClassicDesktopStyleApplicationLifetime
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown,
+        };
+        builder.SetupWithLifetime(lifetime);
+        lifetime.Startup += (_, _) => _ = CaptureSettingsMaterialAsync(lifetime, options, section, code => exitCode = code);
+        lifetime.Start(Array.Empty<string>());
+        return exitCode;
+    }
+
+    private static async Task CaptureSettingsMaterialAsync(
+        ClassicDesktopStyleApplicationLifetime lifetime,
+        Options options,
+        SettingsWindowSection section,
+        Action<int> setExitCode)
+    {
+        var status = 1;
+        try
+        {
+            var outputDir = Path.Combine(options.RepoRoot, "build", "reports", "ui-audit", "material");
+            Directory.CreateDirectory(outputDir);
+
+            var localizer = LocalizationService.CreateDefault("en-US", showMissingKeys: false, enablePseudoLocale: false);
+            LocalizationRuntime.Current = localizer;
+            var settingsStore = new InMemoryUiSettingsStore(AppSettings.Default);
+            var controller = new SettingsController(AppSettings.Default, settingsStore, NullAppLogger.Instance);
+            var window = new SettingsWindow(controller, localizer, section);
+            window.Show();
+            await Task.Delay(1600);
+            Dispatcher.UIThread.RunJobs();
+
+            var content = window.Content as Control
+                ?? throw new InvalidOperationException("The settings window has no content.");
+
+            var captures = new List<object>();
+            var states = new (SettingsWindow.SettingsMaterialVisualState State, string File)[]
+            {
+                (SettingsWindow.SettingsMaterialVisualState.Idle, "settings-idle.png"),
+                (SettingsWindow.SettingsMaterialVisualState.Pressed, "settings-press.png"),
+                (SettingsWindow.SettingsMaterialVisualState.Hover, "settings-hover.png"),
+            };
+
+            foreach (var (state, file) in states)
+            {
+                var applied = window.ForceMaterialState(state);
+                await Task.Delay(300);
+                Dispatcher.UIThread.RunJobs();
+
+                // Re-apply right before the render: a background refresh may have rebuilt the section and
+                // dropped the shadow between the first call and the capture.
+                applied = Math.Max(applied, window.ForceMaterialState(state));
+                Dispatcher.UIThread.RunJobs();
+                var matched = window.GetVisualDescendants().OfType<Border>()
+                    .Where(static border => border.Child is Grid && border.BorderThickness.Left == 1 && border.CornerRadius.TopLeft > 0)
+                    .Select(static border => new
+                    {
+                        x = Math.Round(border.Bounds.X, 1),
+                        y = Math.Round(border.Bounds.Y, 1),
+                        w = Math.Round(border.Bounds.Width, 1),
+                        h = Math.Round(border.Bounds.Height, 1),
+                        child = border.Child?.GetType().Name,
+                    })
+                    .ToArray();
+                var full = Path.Combine(outputDir, file);
+                captures.Add(new { state = state.ToString(), cardsMatched = matched });
+                captures.Add(Capture(content, full));
+                var zoom = Path.Combine(outputDir, file.Replace(".png", "-card2x.png", StringComparison.Ordinal));
+                CropAndZoom(full, zoom, CardCropRegion(content.Bounds.Width, content.Bounds.Height));
+                captures.Add(new { state = state.ToString(), cards = applied, zoom });
+            }
+
+            var comparison = Path.Combine(outputDir, "settings-material-states-compare.png");
+            BuildComparison(
+                comparison,
+                ["Idle (baseline)", "Pressed — L4 inset (black 18 %, top inset 8, σ 4)", "Hover — L3 soft glow (white 8 %)"],
+                states.Select(state => Path.Combine(outputDir, state.File)).ToArray());
+            captures.Add(new { comparison });
+
+            var report = new { section = section.ToString(), captures };
+            Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(
+                Path.Combine(outputDir, "settings-material-states.json"),
+                JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            window.Close();
+            status = 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+        }
+        finally
+        {
+            setExitCode(status);
+            Dispatcher.UIThread.Post(() => lifetime.Shutdown(status));
+        }
+    }
+
+    /// <summary>Card region (window DIP) used for the 2x zoom: the first two plugin rows on the Plugins page.</summary>
+    private static System.Drawing.Rectangle CardCropRegion(double contentWidth, double contentHeight)
+    {
+        _ = contentWidth;
+        _ = contentHeight;
+        return new System.Drawing.Rectangle(238, 198, 632, 176);
+    }
+
+    private static void CropAndZoom(string sourcePng, string targetPng, System.Drawing.Rectangle region, int scale = 2)
+    {
+        using var source = System.Drawing.Image.FromFile(sourcePng);
+        var width = Math.Min(region.Width, source.Width - region.Left);
+        var height = Math.Min(region.Height, source.Height - region.Top);
+        using var target = new System.Drawing.Bitmap(width * scale, height * scale);
+        using (var graphics = System.Drawing.Graphics.FromImage(target))
+        {
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.DrawImage(
+                source,
+                new System.Drawing.Rectangle(0, 0, width * scale, height * scale),
+                new System.Drawing.Rectangle(region.Left, region.Top, width, height),
+                System.Drawing.GraphicsUnit.Pixel);
+        }
+
+        target.Save(targetPng, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    /// <summary>Stacks the same card crop for idle/pressed/hover into one labelled comparison sheet.</summary>
+    private static void BuildComparison(string targetPng, string[] labels, string[] files)
+    {
+        var region = CardCropRegion(900, 620);
+        const int scale = 2;
+        const int labelHeight = 34;
+        var width = region.Width * scale;
+        var height = region.Height * scale;
+
+        using var target = new System.Drawing.Bitmap(width, (labelHeight + height) * labels.Length);
+        using var graphics = System.Drawing.Graphics.FromImage(target);
+        graphics.Clear(System.Drawing.Color.FromArgb(5, 5, 7));
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+        using var font = new System.Drawing.Font("Segoe UI", 15, System.Drawing.FontStyle.Bold);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(237, 237, 238));
+
+        for (var index = 0; index < labels.Length; index++)
+        {
+            var blockTop = index * (labelHeight + height);
+            using var source = System.Drawing.Image.FromFile(files[index]);
+            graphics.DrawImage(
+                source,
+                new System.Drawing.Rectangle(0, blockTop + labelHeight, width, height),
+                new System.Drawing.Rectangle(region.Left, region.Top, region.Width, region.Height),
+                System.Drawing.GraphicsUnit.Pixel);
+            graphics.DrawString(labels[index], font, brush, 10, blockTop + 6);
+        }
+
+        target.Save(targetPng, System.Drawing.Imaging.ImageFormat.Png);
     }
 
     private static int RunUiCapture(Options options, EvidenceRecorder evidence)
