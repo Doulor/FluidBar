@@ -1,7 +1,0 @@
-Isolated Avalonia initialization cost probe (Release console, 5s after startup)
-time: 2026-10-20 15:09:40
-none = plain .NET console; avalonia = platform default (GPU/ANGLE); software = Win32RenderingMode.Software
-
-MODE=none ws=35.4MB private=9.8MB heap=0.9MB modules=68 moduleImage=85.3MB keyModules=[d2d1.dll=6.2MB; Avalonia.Controls.dll=1.3MB; Avalonia.Base.dll=2.3MB; Avalonia.Desktop.dll=0MB; Avalonia.Win32.dll=0.9MB]
-MODE=avalonia ws=85.1MB private=65.7MB heap=1.3MB modules=122 moduleImage=308.9MB keyModules=[d2d1.dll=6.2MB; Avalonia.Controls.dll=1.3MB; Avalonia.Base.dll=2.3MB; Avalonia.Desktop.dll=0MB; Avalonia.Win32.dll=0.9MB; Avalonia.HarfBuzz.dll=0MB; Avalonia.Skia.dll=0.1MB; libSkiaSharp.DLL=11.1MB; Avalonia.OpenGL.dll=0.1MB; Avalonia.Vulkan.dll=0.2MB; av_libGLESv2.dll=5.2MB; nvgpucomp64.dll=79.3MB; nvwgf2umx.dll=83.7MB; Avalonia.MicroCom.dll=0MB; Avalonia.Metal.dll=0MB]
-MODE=software ws=48.9MB private=12.2MB heap=1.2MB modules=90 moduleImage=107.7MB keyModules=[d2d1.dll=6.2MB; Avalonia.Controls.dll=1.3MB; Avalonia.Base.dll=2.3MB; Avalonia.Desktop.dll=0MB; Avalonia.Win32.dll=0.9MB; Avalonia.HarfBuzz.dll=0MB; Avalonia.Skia.dll=0.1MB; Avalonia.OpenGL.dll=0.1MB; libSkiaSharp.DLL=11.1MB; Avalonia.Vulkan.dll=0.2MB; Avalonia.Metal.dll=0MB]
