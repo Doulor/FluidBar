@@ -53,6 +53,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly List<TextBlock> _navLabels = [];
     private readonly Dictionary<SettingsWindowSection, Border> _navCounts = [];
     private readonly Border _shell;
+    private Border? _topHighlight;
     private SettingsWindowSection _section;
     private IslandPreview? _preview;
     private bool _closed;
@@ -114,6 +115,17 @@ public sealed class SettingsWindow : Window, ILocalizable
         Avalonia.Controls.Win32Properties.AddWndProcHookCallback(this, OnNativeMessage);
 
         _bleed = new Border { IsVisible = false };
+        // Material L3: 1.5 DIP top micro-highlight (white 5.1 % fading to transparent) on the panel edge.
+        _topHighlight = new Border
+        {
+            Height = SettingsPalette.TopHighlightHeightDip,
+            Background = _palette.TopHighlightBrush,
+            CornerRadius = new CornerRadius(SettingsPalette.CardCornerRadiusDip,
+                SettingsPalette.CardCornerRadiusDip, 0, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            IsHitTestVisible = false,
+        };
         _shell = new Border
         {
             CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius),
@@ -125,6 +137,12 @@ public sealed class SettingsWindow : Window, ILocalizable
         var root = new Grid();
         root.Children.Add(_bleed);
         root.Children.Add(_shell);
+        if (_topHighlight is not null)
+        {
+            // Material L3: 1.5 DIP top micro-highlight over the panel edge.
+            root.Children.Add(_topHighlight);
+        }
+
         Content = root;
 
         _settings.Changed += OnSettingsChanged;
