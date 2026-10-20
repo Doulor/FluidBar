@@ -8,10 +8,14 @@ using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
+using FluidBar.App.State;
 using FluidBar.App.Views.Settings;
+using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
+using FluidBar.Island;
 using FluidBar.Marketplace.Community;
 using FluidBar.Marketplace.Install;
 using FluidBar.Marketplace.Packaging;
@@ -35,6 +39,11 @@ internal static class Program
         if (args.Contains("--verify", StringComparer.OrdinalIgnoreCase))
         {
             return VerifyOnlyAsync(options).GetAwaiter().GetResult();
+        }
+
+        if (args.Contains("--motion-capture", StringComparer.OrdinalIgnoreCase))
+        {
+            return RunMotionCapture(options);
         }
 
         if (args.Contains("--shadow-probe", StringComparer.OrdinalIgnoreCase))
@@ -490,6 +499,481 @@ internal static class Program
                 Card("#99141418", inset),
             },
         };
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    // Motion capture: drive the real SkiaIslandController + IslandRenderer at 60 fps and record frames.
+    // -------------------------------------------------------------------------------------------------
+
+    private static int RunMotionCapture(Options options)
+    {
+        var outputDir = Path.Combine(options.RepoRoot, "build", "reports", "ui-audit", "motion-capture");
+        Directory.CreateDirectory(outputDir);
+        var time = new HarnessTimeProvider();
+        var localizer = new HarnessLocalizer();
+        var store = new InMemoryUiSettingsStore(AppSettings.Default with { AutoCollapseMs = 0, AutoHideMs = 0 });
+        var settings = new SettingsController(store.LastSaved, store, NullAppLogger.Instance);
+        var data = new DesignIslandDataSource(localizer, time, static action => action());
+        using var controller = new SkiaIslandController(
+            new SkiaIslandHostOptions
+            {
+                Localizer = localizer,
+                Settings = settings,
+                Data = data,
+                TimeProvider = time,
+                TargetFrameRate = 60,
+            },
+            mediaPill: MediaPillPreferences.Default);
+        controller.Start();
+        using var renderer = new IslandRenderer(IslandTheme.Dark);
+
+        var step = TimeSpan.FromSeconds(1.0 / 60.0);
+        controller.HandleShowHotkey(); // deterministic start: compact pill visible
+        Settle(controller, time, step);
+
+        var segments = new List<MotionSegment>();
+        segments.Add(CaptureSegment(controller, renderer, time, outputDir, step, "expand", 60, MotionDirection.Increasing,
+            () => controller.HandleToggleHotkey(),
+            () => controller.Motion.ExpandedFactor));
+
+        Settle(controller, time, step);
+        segments.Add(CaptureSegment(controller, renderer, time, outputDir, step, "collapse", 60, MotionDirection.Decreasing,
+            () => controller.HandleEscape(),
+            () => controller.Motion.ExpandedFactor));
+
+        Settle(controller, time, step);
+        controller.HandleToggleHotkey();
+        Settle(controller, time, step);
+        segments.Add(CaptureSegment(controller, renderer, time, outputDir, step, "page", 60, MotionDirection.Increasing,
+            () => controller.HandlePageMove(1),
+            () => controller.Pager.PagePosition));
+
+        // Satellite birth (frames 0..29) then fusion (frames 30..59) inside one 1 s segment.
+        // Split islets only exist in the compact pill, so collapse the panel first.
+        Settle(controller, time, step);
+        controller.HandleEscape();
+        Settle(controller, time, step);
+        controller.PublishActivity(
+            ActivityKind.Media,
+            new ActivityPayload
+            {
+                Title = "Midnight City",
+                Subtitle = "M83",
+                IsActive = true,
+                ShowsAudioWave = true,
+                ProgressPercent = 46,
+            },
+            sequence: 1);
+        controller.PublishActivity(
+            ActivityKind.Agent,
+            new ActivityPayload { Title = "Refactor parser", Body = "Running tests", IsActive = true },
+            sequence: 2);
+        segments.Add(CaptureSegment(controller, renderer, time, outputDir, step, "satellite", 60, MotionDirection.Peaks,
+            static () => { },
+            () => controller.Motion.SplitProgress,
+            midTrigger: () => settings.Update(current => current with { Stacking = StackingStrategySetting.Latest })));
+
+        WriteTimingCsv(outputDir, segments);
+        WriteMotionReport(outputDir, segments);
+        BuildMotionStrip(outputDir, segments);
+
+        Console.WriteLine(JsonSerializer.Serialize(
+            segments.Select(static segment => new
+            {
+                segment = segment.Name,
+                frames = segment.Frames.Count,
+                p50 = Math.Round(segment.Percentile(50), 3),
+                p99 = Math.Round(segment.Percentile(99), 3),
+                overBudget = segment.OverBudgetCount,
+                backJumps = segment.BackJumpCount,
+                stalledFrames = segment.StalledFrames,
+                maxJump = Math.Round(segment.MaxJump, 4),
+            }),
+            new JsonSerializerOptions { WriteIndented = true }));
+        return 0;
+    }
+
+    private enum MotionDirection
+    {
+        Increasing,
+        Decreasing,
+        Peaks,
+    }
+
+    private sealed record MotionFrame(
+        int Index,
+        double WallMs,
+        double SimulatedMs,
+        double Metric,
+        double Width,
+        double Height,
+        string Form,
+        bool AnimatingAfter,
+        ulong Hash);
+
+    private sealed class MotionSegment
+    {
+        public required string Name { get; init; }
+
+        public required MotionDirection Direction { get; init; }
+
+        public required List<MotionFrame> Frames { get; init; }
+
+        public int OverBudgetCount => Frames.Count(static frame => frame.WallMs > 16.7);
+
+        public int BackJumpCount { get; set; }
+
+        public int StalledFrames { get; set; }
+
+        public int DuplicateFrames { get; set; }
+
+        public double Overshoot { get; set; }
+
+        public double MaxJump { get; set; }
+
+        public double Percentile(double percentile)
+        {
+            if (Frames.Count == 0)
+            {
+                return 0;
+            }
+
+            var sorted = Frames.Select(static frame => frame.WallMs).OrderBy(static value => value).ToArray();
+            var rank = (int)Math.Clamp(Math.Ceiling((percentile / 100.0) * sorted.Length) - 1, 0, sorted.Length - 1);
+            return sorted[rank];
+        }
+    }
+
+    private static MotionSegment CaptureSegment(
+        SkiaIslandController controller,
+        IslandRenderer renderer,
+        HarnessTimeProvider time,
+        string outputDir,
+        TimeSpan step,
+        string name,
+        int frames,
+        MotionDirection direction,
+        Action trigger,
+        Func<double> metric,
+        Action? midTrigger = null)
+    {
+        var segmentDir = Path.Combine(outputDir, name);
+        Directory.CreateDirectory(segmentDir);
+        foreach (var stale in Directory.EnumerateFiles(segmentDir, "frame-*.png"))
+        {
+            File.Delete(stale);
+        }
+
+        trigger();
+        var framesRecorded = new List<MotionFrame>(frames);
+        var maxJump = 0.0;
+        for (var index = 0; index < frames; index++)
+        {
+            if (index == frames / 2)
+            {
+                midTrigger?.Invoke();
+            }
+
+            time.Advance(step);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            controller.Advance(step);
+            var state = controller.RenderState;
+            ulong hash;
+            using (var bitmap = renderer.RenderToBitmap(state, 1.5f))
+            {
+                var crop = IslandCrop(controller, state, 1.5f, bitmap.Width, bitmap.Height);
+                hash = SavePng(bitmap, Path.Combine(segmentDir, $"frame-{index:000}.png"), crop);
+            }
+
+            stopwatch.Stop();
+            framesRecorded.Add(new MotionFrame(
+                index,
+                stopwatch.Elapsed.TotalMilliseconds,
+                step.TotalMilliseconds,
+                metric(),
+                state.ShellWidth,
+                state.ShellHeight,
+                state.Form.ToString(),
+                controller.IsAnimating,
+                hash));
+        }
+
+        var segment = new MotionSegment { Name = name, Direction = direction, Frames = framesRecorded };
+        var peakIndex = direction == MotionDirection.Decreasing
+            ? framesRecorded.IndexOf(framesRecorded.MinBy(static frame => frame.Metric)!)
+            : framesRecorded.IndexOf(framesRecorded.MaxBy(static frame => frame.Metric)!);
+        var finalMetric = framesRecorded[^1].Metric;
+        for (var index = 1; index < framesRecorded.Count; index++)
+        {
+            var previous = framesRecorded[index - 1];
+            var current = framesRecorded[index];
+            var delta = current.Metric - previous.Metric;
+            maxJump = Math.Max(maxJump, Math.Abs(delta));
+
+            if (index <= peakIndex)
+            {
+                // Only motion that stalls or reverses before the target is reached is a defect; the damped
+                // spring settling afterwards legitimately oscillates around the target.
+                var backJump = direction == MotionDirection.Decreasing ? delta > 1e-4 : delta < -1e-4;
+                if (backJump)
+                {
+                    segment.BackJumpCount++;
+                }
+
+                if (Math.Abs(delta) < 1e-6)
+                {
+                    segment.StalledFrames++;
+                }
+
+                if (current.Hash == previous.Hash)
+                {
+                    segment.DuplicateFrames++;
+                }
+            }
+            else
+            {
+                segment.Overshoot = Math.Max(segment.Overshoot, Math.Abs(current.Metric - finalMetric));
+            }
+        }
+
+        segment.MaxJump = maxJump;
+        return segment;
+    }
+
+    /// <summary>Pixels (at dpiScale) of the island plus a shadow margin, so frames are not mostly empty canvas.</summary>
+    private static System.Drawing.Rectangle? IslandCrop(
+        SkiaIslandController controller,
+        IslandRenderState state,
+        float dpiScale,
+        int bitmapWidth,
+        int bitmapHeight)
+    {
+        if (state.ShellWidth < 1 || state.ShellHeight < 1)
+        {
+            return null;
+        }
+
+        var origin = controller.Motion.ShellOrigin;
+        const double pad = 20;
+        var left = (int)Math.Round((origin.X - pad) * dpiScale);
+        var top = (int)Math.Round((origin.Y - pad) * dpiScale);
+        var right = (int)Math.Round((origin.X + state.ShellWidth + pad) * dpiScale);
+        var bottom = (int)Math.Round((origin.Y + state.ShellHeight + pad) * dpiScale);
+        left = Math.Clamp(left, 0, bitmapWidth - 1);
+        top = Math.Clamp(top, 0, bitmapHeight - 1);
+        right = Math.Clamp(right, left + 1, bitmapWidth);
+        bottom = Math.Clamp(bottom, top + 1, bitmapHeight);
+        return new System.Drawing.Rectangle(left, top, right - left, bottom - top);
+    }
+
+    private static void Settle(SkiaIslandController controller, HarnessTimeProvider time, TimeSpan step)
+    {
+        var guard = 0;
+        while (controller.IsAnimating && guard++ < 900)
+        {
+            time.Advance(step);
+            controller.Advance(step);
+        }
+    }
+
+    private static void WriteTimingCsv(string outputDir, IReadOnlyList<MotionSegment> segments)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("segment,frame,wall_ms,simulated_ms,metric,width,height,form,animating_after");
+        foreach (var segment in segments)
+        {
+            foreach (var frame in segment.Frames)
+            {
+                builder.Append(segment.Name).Append(',')
+                    .Append(frame.Index).Append(',')
+                    .Append(frame.WallMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.SimulatedMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.Metric.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.Width.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.Height.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.Form).Append(',')
+                    .Append(frame.AnimatingAfter ? "1" : "0")
+                    .AppendLine();
+            }
+        }
+
+        File.WriteAllText(Path.Combine(outputDir, "timing.csv"), builder.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    private static void WriteMotionReport(string outputDir, IReadOnlyList<MotionSegment> segments)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("# Motion capture — 60 fps frame evidence").AppendLine();
+        builder.AppendLine($"Generated: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}").AppendLine();
+        builder.AppendLine("Driver: real SkiaIslandController (motion/pager/split springs) + IslandRenderer.RenderToBitmap at 1.5x.");
+        builder.AppendLine("Wall time per frame includes Advance + full Skia render + PNG encode, so it is an upper bound of the UI frame cost.");
+        builder.AppendLine();
+        builder.AppendLine("| segment | frames | duration (sim) | wall p50 | wall p99 | frames > 16.7 ms | back-jumps | stalled | duplicate | settle overshoot | max step |");
+        builder.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+        foreach (var segment in segments)
+        {
+            builder.AppendLine($"| {segment.Name} | {segment.Frames.Count} | {segment.Frames.Count / 60.0:0.00} s | {segment.Percentile(50):0.00} ms | {segment.Percentile(99):0.00} ms | {segment.OverBudgetCount} | {segment.BackJumpCount} | {segment.StalledFrames} | {segment.DuplicateFrames} | {segment.Overshoot:0.000} | {segment.MaxJump:0.000} |");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("## Notes");
+        builder.AppendLine("- back-jumps: frames before the target is reached where the driving metric moves opposite to the expected direction (expand/page: rising; collapse: falling; satellite: rising until the fusion trigger, then falling).");
+        builder.AppendLine("- stalled / duplicate: frames before the target where the metric does not change, or the encoded frame is byte-identical to the previous one (a dropped or duplicated frame on screen).");
+        builder.AppendLine("- settle overshoot: after the peak, the largest distance from the final value; damped spring oscillation is expected there and is not counted as a back-jump.");
+        builder.AppendLine("- frames > 16.7 ms: wall-clock budget misses; the capture loop is synchronous, so this includes PNG encoding, not just UI work.");
+        builder.AppendLine("- Per-frame bitmaps: expand/, collapse/, page/, satellite/ (frame-000.png ...). Raw timings: timing.csv.");
+        File.WriteAllText(Path.Combine(outputDir, "motion-capture.md"), builder.ToString(), System.Text.Encoding.UTF8);
+    }
+
+    private static void BuildMotionStrip(string outputDir, IReadOnlyList<MotionSegment> segments)
+    {
+        const int columns = 8;
+        const int thumbWidth = 220;
+        const int labelHeight = 26;
+        const int padding = 8;
+        var first = Path.Combine(outputDir, segments[0].Name, "frame-000.png");
+        using var probe = System.Drawing.Image.FromFile(first);
+        var thumbHeight = (int)Math.Round(thumbWidth * (double)probe.Height / probe.Width);
+        var width = (columns * (thumbWidth + padding)) + padding;
+        var height = (segments.Count * (thumbHeight + labelHeight + padding)) + padding;
+
+        using var target = new System.Drawing.Bitmap(width, height);
+        using var graphics = System.Drawing.Graphics.FromImage(target);
+        graphics.Clear(System.Drawing.Color.FromArgb(5, 5, 7));
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        using var font = new System.Drawing.Font("Segoe UI", 11, System.Drawing.FontStyle.Bold);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(237, 237, 238));
+
+        for (var row = 0; row < segments.Count; row++)
+        {
+            var segment = segments[row];
+            var top = padding + (row * (thumbHeight + labelHeight + padding));
+            var stride = Math.Max(1, segment.Frames.Count / columns);
+            graphics.DrawString($"{segment.Name} — every {stride} frames", font, brush, padding, top);
+            for (var column = 0; column < columns; column++)
+            {
+                var frameIndex = Math.Min(segment.Frames.Count - 1, column * stride);
+                var file = Path.Combine(outputDir, segment.Name, $"frame-{frameIndex:000}.png");
+                using var image = System.Drawing.Image.FromFile(file);
+                graphics.DrawImage(
+                    image,
+                    new System.Drawing.Rectangle(padding + (column * (thumbWidth + padding)), top + labelHeight, thumbWidth, thumbHeight));
+            }
+        }
+
+        target.Save(Path.Combine(outputDir, "motion-strip.png"), System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    private static ulong SavePng(SKBitmap bitmap, string path, System.Drawing.Rectangle? crop = null)
+    {
+        SKBitmap? cropped = null;
+        try
+        {
+            var source = bitmap;
+            if (crop is { } region && (region.Width < bitmap.Width || region.Height < bitmap.Height))
+            {
+                cropped = new SKBitmap(new SKImageInfo(region.Width, region.Height, bitmap.ColorType, bitmap.AlphaType));
+                using (var canvas = new SKCanvas(cropped))
+                {
+                    // Host surface is transparent; composite on the desktop-ish L0 shade so frames read as
+                    // screenshots instead of black-on-checkerboard.
+                    canvas.Clear(new SKColor(8, 8, 10));
+                    canvas.DrawBitmap(bitmap, -region.Left, -region.Top);
+                }
+
+                source = cropped;
+            }
+
+            using var image = SKImage.FromBitmap(source);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 92);
+            var bytes = data.ToArray();
+            File.WriteAllBytes(path, bytes);
+            var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+            return BitConverter.ToUInt64(hash, 0);
+        }
+        finally
+        {
+            cropped?.Dispose();
+        }
+    }
+
+    /// <summary>Minimal localizer for the headless motion capture (same keys the island pages resolve).</summary>
+    private sealed class HarnessLocalizer : ILocalizer
+    {
+        private readonly Dictionary<string, string> _messages = new(StringComparer.Ordinal)
+        {
+            ["Page.Home.Title"] = "Control center",
+            ["Page.Media.Title"] = "Now playing",
+            ["Page.Notifications.Title"] = "Notifications",
+            ["Page.Clipboard.Title"] = "Clipboard",
+            ["Page.Agent.Title"] = "Agent activity",
+            ["Page.Widgets.Title"] = "Widgets",
+            ["Page.Widgets.Tasks"] = "Today",
+            ["Page.Widgets.Today"] = "Today",
+            ["Page.Home.FocusTime"] = "Focus",
+            ["Page.Home.System"] = "System",
+            ["Page.Widgets.Task.Review"] = "Review",
+            ["Page.Widgets.Task.Ship"] = "Ship",
+            ["Page.Widgets.Task.Inbox"] = "Inbox",
+            ["Common.Next"] = "Next",
+            ["Common.Charging"] = "Charging",
+            ["Common.Copied"] = "Copied",
+            ["Media.NowPlaying"] = "Now playing",
+            ["Media.NoSession"] = "Nothing playing",
+            ["Media.UnknownTitle"] = "Unknown title",
+            ["Media.UnknownArtist"] = "Unknown artist",
+            ["Clipboard.Image"] = "Image",
+            ["Agent.Running"] = "Running",
+            ["Agent.Completed"] = "Completed",
+            ["Agent.Title"] = "Agent",
+            ["Rail.Home"] = "Home",
+            ["Rail.Media"] = "Media",
+            ["Rail.Notifications"] = "Alerts",
+            ["Rail.Clipboard"] = "Clip",
+            ["Rail.Agent"] = "Agent",
+            ["Rail.Widgets"] = "Widgets",
+            ["Battery.Low"] = "Low battery",
+            ["Timer.Pomodoro"] = "Pomodoro",
+            ["Activity.Idle"] = "Idle",
+        };
+
+        public string Culture => "en-US";
+
+        public int Version => 1;
+
+        public event EventHandler? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public IReadOnlyList<string> AvailableCultures => ["en-US"];
+
+        public bool IsRightToLeft => false;
+
+        public System.Globalization.CultureInfo CurrentCulture => System.Globalization.CultureInfo.GetCultureInfo("en-US");
+
+        public string GetCultureDisplayName(string cultureTag) => cultureTag;
+
+        public string Get(string key) => _messages.TryGetValue(key, out var value) ? value : key;
+
+        public string Format(string key, IReadOnlyDictionary<string, object?> arguments) => Get(key);
+
+        public string Format(string key, params (string Name, object? Value)[] arguments) => Get(key);
+
+        public bool TryGet(string key, out string value) => _messages.TryGetValue(key, out value!);
+    }
+
+    /// <summary>Manual clock: the capture loop owns time so every frame is deterministic.</summary>
+    private sealed class HarnessTimeProvider : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 10, 21, 9, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+
+        public void Advance(TimeSpan delta) => _now += delta;
     }
 
     private static int RunSettingsMaterialCapture(Options options, SettingsWindowSection section)
