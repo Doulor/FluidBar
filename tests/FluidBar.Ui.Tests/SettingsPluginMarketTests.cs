@@ -1,8 +1,13 @@
+using Avalonia.Controls;
+using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
+using FluidBar.Sdk.Contributions;
 using Avalonia;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
 using FluidBar.App.Views.Plugins;
+using FluidBar.App.Views.Settings;
 using FluidBar.Core.Settings;
 using FluidBar.Marketplace.Index;
 using FluidBar.Sdk.Manifest;
@@ -175,14 +180,37 @@ public sealed class PluginAndMarketplaceAdapterTests
     }
 
     [Fact]
-    public void Schema_SecretControlsRenderRedacted()
+    public async Task Schema_SecretControlsRenderRedacted()
     {
-        // The renderer path is covered through the built-in pages; secret redaction is structural:
-        // the editor always renders a fixed masked string and never binds the secret value to text.
-        var source = File.ReadAllText(RepoPath("src/FluidBar.App/Views/Plugins/PluginContributionsUi.cs"));
-        Assert.Contains("••••••••", source);
-        Assert.Contains("SettingControlType.Secret", source);
-        Assert.Contains("IsReadOnly = true", source);
+        var outcome = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("en-US");
+            var palette = SettingsPalette.For(AppTheme.Dark);
+            var values = new InMemoryPluginSettingsValues();
+            values.Set("sample", "api.token", System.Text.Json.JsonSerializer.SerializeToElement("s3cr3t"));
+            var page = new SettingsPageContribution
+            {
+                Id = "sample",
+                Controls =
+                [
+                    new SettingControlContribution
+                    {
+                        Type = SettingControlType.Secret,
+                        Key = "api.token",
+                        Title = LocalizedString.From("api.token"),
+                    },
+                ],
+            };
+            var content = PluginSettingsPageRenderer.BuildPage(
+                page, "sample", localizer, values, (_, _) => { }, _ => { }, palette);
+            var boxes = content.GetLogicalDescendants().OfType<TextBox>().ToList();
+            return (boxes.Count, Masked: boxes.All(box => box.Text == "••••••••" && box.IsReadOnly),
+                Leaks: boxes.Any(box => (box.Text ?? string.Empty).Contains("s3cr3t", StringComparison.Ordinal)));
+        });
+
+        Assert.Equal(1, outcome.Count);
+        Assert.True(outcome.Masked, "the secret control must render a read-only mask");
+        Assert.False(outcome.Leaks, "the stored secret must never be bound into the UI");
     }
 
     [Fact]

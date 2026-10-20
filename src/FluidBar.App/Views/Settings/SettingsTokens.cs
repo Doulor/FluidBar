@@ -175,6 +175,8 @@ internal static class SettingsMetrics
     public const double PermSize = 8;
     public const double PermGap = 3;
     public const double IconButton = 24;
+    /// <summary><c>.icon-btn</c> corner radius.</summary>
+    public const double IconButtonRadius = 6;
     public const double IconButtonGlyph = 12;
     public const double PluginSwitchWidth = 30;
     public const double PluginSwitchHeight = 18;
@@ -229,6 +231,42 @@ internal static class SettingsMetrics
     public const double MarketFootnoteMarginTop = 14;
     public const double MarketFootnoteSize = 8.5;
     public const double MarketFootnoteIcon = 10;
+
+    // ---- unified control layer (task-22): one source of truth for every element -----------------
+    /// <summary>Shared button radius (all variants).</summary>
+    public const double ButtonRadius = 7;
+
+    /// <summary>Button heights by size token.</summary>
+    public const double ButtonXs = 27;
+    public const double ButtonSm = 28;
+    public const double ButtonMd = 30;
+    public const double ButtonLg = 32;
+
+    /// <summary>Button horizontal padding by size token.</summary>
+    public const double ButtonPadXs = 9;
+    public const double ButtonPadSm = 11;
+    public const double ButtonPadMd = 10;
+    public const double ButtonPadLg = 12;
+
+    /// <summary>Button label sizes by size token.</summary>
+    public const double ButtonSizeXs = 9.5;
+    public const double ButtonSizeSm = 9.5;
+    public const double ButtonSizeMd = 9.5;
+    public const double ButtonSizeLg = 10.5;
+
+    /// <summary>Dropdown (select) metrics for plugin settings pages.</summary>
+    public const double SelectHeight = 32;
+    public const double SelectRadius = 8;
+    public const double SelectPadX = 10;
+    public const double SelectMinWidth = 160;
+    public const double SelectFontSize = 11;
+
+    /// <summary>Install/download progress bar.</summary>
+    public const double ProgressHeight = 4;
+
+    /// <summary>Inline status line / empty state type sizes.</summary>
+    public const double StatusSize = 9.5;
+
 
     // ---- advanced / about / footer (3025-3160) ----------------------------------------------
     public const double PathFieldHeight = 34;

@@ -29,6 +29,9 @@ internal enum SettingsIconKind
     Shield,
     Star,
     Alert,
+    ChevronLeft,
+    ChevronDown,
+    ArrowRight,
 }
 
 /// <summary>
@@ -159,6 +162,9 @@ internal static class PrototypeIcons
             ["m12 3.2 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"],
             []),
         [SettingsIconKind.Alert] = new(["M12 3.6 2.8 20h18.4z", "M12 9.2v4.6"], [Circle(12, 16.8, 0.9)]),
+        [SettingsIconKind.ChevronLeft] = new(["m15 18-6-6 6-6"], []),
+        [SettingsIconKind.ChevronDown] = new(["m6 9 6 6 6-6"], []),
+        [SettingsIconKind.ArrowRight] = new(["M4 12h15", "m14 7 5 5-5 5"], []),
     };
 
     private static readonly Dictionary<string, Geometry> GeometryCache = new(StringComparer.Ordinal);

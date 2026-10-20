@@ -102,8 +102,9 @@ public sealed class UpdateAboutPaneTests
 
     private static void ClickChip(SettingsWindow window, string label)
     {
+        // Pane actions are real buttons (one control layer): click the button that owns the label.
         var text = window.GetVisualDescendants().OfType<TextBlock>().First(block => block.Text == label);
-        var chip = text.GetVisualAncestors().OfType<Border>().First();
+        var chip = text.GetVisualAncestors().OfType<Button>().First();
         var center = chip.TranslatePoint(new Point(chip.Bounds.Width / 2, chip.Bounds.Height / 2), window)!.Value;
         window.MouseMove(center, RawInputModifiers.None);
         window.MouseDown(center, MouseButton.Left, RawInputModifiers.None);

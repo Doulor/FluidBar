@@ -271,7 +271,11 @@ public sealed class SettingsAboutAndMarketTests
                     placeholder,
                     chips,
                     cards.Count,
-                    cards.FirstOrDefault()?.Padding.Top ?? 0,
+                    cards.FirstOrDefault() is { } firstCard
+                        ? firstCard.GetVisualDescendants().OfType<Border>()
+                            .Select(border => border.Padding.Top)
+                            .FirstOrDefault(padding => padding > 0)
+                        : 0,
                     cards.FirstOrDefault()?.CornerRadius.TopLeft ?? 0,
                     gridCount,
                     texts);

@@ -97,6 +97,8 @@ public sealed class MarketplaceSectionView : StackPanel
         DetachedFromVisualTree += OnSectionDetached;
     }
 
+    private SettingsPalette Palette => _palette!;
+
     private void OnSectionAttached(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
     {
         _marketplace.Changed -= OnMarketplaceChanged;
@@ -284,36 +286,14 @@ public sealed class MarketplaceSectionView : StackPanel
 
         // The offline/demo notice is honest state, not prototype chrome: it stays at the bottom of the
         // pane so the grid above matches the prototype's layout exactly.
-        Children.Add(BuildMarketNotice(secondary, tertiary, line));
+        Children.Add(BuildMarketNotice());
 
         // .market-footnote { margin-top: 14px; gap: 5px; 8.5px --ui-fg-3 } with a 10 px shield.
-        var footnote = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 5,
-            Margin = new Thickness(0, SettingsMetrics.MarketFootnoteMarginTop, 0, 0),
-        };
-        footnote.Children.Add(new SettingsIcon
-        {
-            Kind = SettingsIconKind.Shield,
-            Brush = tertiary,
-            Width = SettingsMetrics.MarketFootnoteIcon,
-            Height = SettingsMetrics.MarketFootnoteIcon,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        footnote.Children.Add(new TextBlock
-        {
-            Text = _localizer.Get(LocKeys.Settings.Market.Footnote),
-            FontSize = SettingsMetrics.MarketFootnoteSize,
-            Foreground = tertiary,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 620,
-        });
-        Children.Add(footnote);
+        Children.Add(SettingsControls.FooterNote(_localizer.Get(LocKeys.Settings.Market.Footnote), Palette, market: true));
     }
 
     /// <summary>Compact catalog-state notice (offline/demo/errors) shown below the grid.</summary>
-    private Control BuildMarketNotice(IBrush secondary, IBrush tertiary, IBrush line)
+    private Control BuildMarketNotice()
     {
         var panel = new StackPanel
         {
@@ -322,29 +302,22 @@ public sealed class MarketplaceSectionView : StackPanel
         };
         if (_marketplace.IsOfflineFallback)
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = _marketplace.StatusMessage ?? _localizer.Get(LocKeys.Settings.Market.DemoCatalog),
-                Foreground = new SolidColorBrush(Accents.Warning),
-                FontSize = SettingsMetrics.MarketFootnoteSize,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            panel.Children.Add(SettingsControls.StatusLine(
+                _marketplace.StatusMessage ?? _localizer.Get(LocKeys.Settings.Market.DemoCatalog),
+                Palette,
+                SettingsTone.Warning,
+                SettingsMetrics.MarketFootnoteSize));
         }
 
         if (!string.IsNullOrEmpty(_status))
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = _status,
-                Foreground = new SolidColorBrush(Accents.Warning),
-                FontSize = SettingsMetrics.MarketFootnoteSize,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            panel.Children.Add(SettingsControls.StatusLine(
+                _status!,
+                Palette,
+                SettingsTone.Warning,
+                SettingsMetrics.MarketFootnoteSize));
         }
 
-        _ = secondary;
-        _ = tertiary;
-        _ = line;
         return panel;
     }
 
@@ -353,49 +326,13 @@ public sealed class MarketplaceSectionView : StackPanel
         var stack = new StackPanel { Spacing = 0, Margin = new Thickness(0, SettingsMetrics.MarketToolbarMarginTop, 0, 0) };
 
         // .search-field { height:34; radius:8; background: var(--ui-field); border: 1px var(--ui-line) }
-        var field = new Border
-        {
-            Height = SettingsMetrics.SearchHeight,
-            CornerRadius = new CornerRadius(SettingsMetrics.SearchRadius),
-            Background = _palette?.FieldBrush ?? raised,
-            BorderBrush = line,
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(SettingsMetrics.SearchPadX, 0, SettingsMetrics.SearchPadX, 0),
-        };
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        grid.Children.Add(new SettingsIcon
-        {
-            Kind = SettingsIconKind.Search,
-            Brush = tertiary,
-            Width = SettingsMetrics.SearchIcon,
-            Height = SettingsMetrics.SearchIcon,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        var search = new TextBox
-        {
-            Watermark = _localizer.Get(LocKeys.Settings.Market.Search),
-            Text = _search,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(0),
-            MinHeight = 0,
-            FontSize = SettingsMetrics.SearchFontSize,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(SettingsMetrics.SearchGap, 0, 0, 0),
-        };
-        Grid.SetColumn(search, 1);
-        grid.Children.Add(search);
-        search.TextChanged += (_, _) => _search = search.Text ?? string.Empty;
-        search.KeyDown += (_, e) =>
-        {
-            if (e.Key == Avalonia.Input.Key.Enter)
-            {
-                Refresh();
-                e.Handled = true;
-            }
-        };
-        field.Child = grid;
-        stack.Children.Add(field);
+        stack.Children.Add(SettingsControls.TextField(
+            Palette,
+            SettingsFieldKind.Search,
+            _search,
+            _localizer.Get(LocKeys.Settings.Market.Search),
+            onChanged: text => _search = text,
+            onEnter: Refresh));
 
         // .market-cats { gap:4; margin: 9px 0 10px }
         var chips = new StackPanel
@@ -407,24 +344,8 @@ public sealed class MarketplaceSectionView : StackPanel
         foreach (var (token, key) in Categories)
         {
             var active = string.Equals(token, _category, StringComparison.Ordinal);
-            var chip = new Border
-            {
-                Height = SettingsMetrics.CatChipHeight,
-                Padding = new Thickness(SettingsMetrics.CatChipPadX, 0, SettingsMetrics.CatChipPadX, 0),
-                CornerRadius = new CornerRadius(SettingsMetrics.CatChipRadius),
-                Background = active ? new SolidColorBrush(_surfaces.Active) : raised,
-                BorderBrush = active ? Brushes.Transparent : line,
-                BorderThickness = new Thickness(active ? 0 : 1),
-                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
-                Child = new TextBlock
-                {
-                    Text = _localizer.Get(key),
-                    FontSize = SettingsMetrics.CatChipSize,
-                    FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
-                    Foreground = active ? new SolidColorBrush(_surfaces.ActiveForeground) : secondary,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            };
+            var chip = SettingsControls.Chip(_localizer.Get(key), Palette, SettingsChipKind.Category, active);
+            chip.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
             var categoryToken = token;
             chip.PointerPressed += (_, e) =>
             {
@@ -590,15 +511,9 @@ public sealed class MarketplaceSectionView : StackPanel
             Child = body,
         });
 
-        return new Border
-        {
-            MinHeight = SettingsMetrics.FeaturedMinHeight,
-            CornerRadius = new CornerRadius(SettingsMetrics.FeaturedRadius),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(23, 255, 255, 255)),
-            BorderThickness = new Thickness(1),
-            ClipToBounds = true,
-            Child = host,
-        };
+        // The shell (radius, hairline, 122 px minimum) is the shared card control; the gradient
+        // fills it edge to edge and the 18 px inset rides on the content.
+        return SettingsControls.Card(host, Palette, SettingsCardKind.Featured);
     }
 
     private Control BuildFeaturedInstall(MarketPlugin plugin)
@@ -611,37 +526,13 @@ public sealed class MarketplaceSectionView : StackPanel
                 ? _localizer.Get(LocKeys.Settings.Market.Installing)
                 : _localizer.Get(LocKeys.Settings.Market.Install);
 
-        var chip = new Border
-        {
-            Height = 28,
-            Padding = new Thickness(12, 0, 12, 0),
-            CornerRadius = new CornerRadius(7),
-            Background = installed || installing
-                ? new SolidColorBrush(Color.FromArgb(26, 255, 255, 255))
-                : new SolidColorBrush(Color.Parse("#EAFAFF")),
-            Child = new TextBlock
-            {
-                Text = label,
-                FontSize = 9.5,
-                FontWeight = FontWeight.SemiBold,
-                Foreground = installed || installing
-                    ? new SolidColorBrush(Color.FromArgb(180, 255, 255, 255))
-                    : new SolidColorBrush(Color.Parse("#07151B")),
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
-
-        if (!installed && !installing)
-        {
-            chip.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
-            chip.PointerPressed += (_, e) =>
-            {
-                _ = RunInstallAsync(plugin);
-                e.Handled = true;
-            };
-        }
-
-        return chip;
+        return SettingsControls.Button(
+            label,
+            Palette,
+            installed || installing ? SettingsButtonVariant.Raised : SettingsButtonVariant.Contrast,
+            SettingsButtonSize.Sm,
+            onClick: () => _ = RunInstallAsync(plugin),
+            enabled: !installed && !installing);
     }
 
     private Control BuildCard(MarketPlugin plugin, IBrush foreground, IBrush secondary, IBrush tertiary,
@@ -730,16 +621,7 @@ public sealed class MarketplaceSectionView : StackPanel
         });
         panel.Children.Add(foot);
 
-        return new Border
-        {
-            MinHeight = 112,
-            Padding = new Thickness(12),
-            CornerRadius = new CornerRadius(10),
-            Background = raised,
-            BorderBrush = line,
-            BorderThickness = new Thickness(1),
-            Child = panel,
-        };
+        return SettingsControls.Card(panel, Palette, SettingsCardKind.Tile);
     }
 
     private static SettingsIconKind CategoryIcon(string category) => category switch
@@ -774,23 +656,13 @@ public sealed class MarketplaceSectionView : StackPanel
         };
 
         var installed = plugin.State is MarketInstallState.Installed or MarketInstallState.Disabled;
-        var button = new Button
-        {
-            Content = _localizer.Get(labelKey),
-            IsEnabled = !_busy && action != "none" && !plugin.IsDemo && !_marketplace.IsOfflineFallback,
-            Height = 27,
-            MinWidth = 58,
-            Padding = new Thickness(9, 0, 9, 0),
-            CornerRadius = new CornerRadius(7),
-            FontSize = 9.5,
-            FontWeight = installed ? FontWeight.Normal : FontWeight.SemiBold,
-            Background = installed ? new SolidColorBrush(_surfaces.Raised) : new SolidColorBrush(_surfaces.Active),
-            Foreground = installed ? new SolidColorBrush(_surfaces.ForegroundSecondary) : new SolidColorBrush(_surfaces.ActiveForeground),
-            BorderBrush = installed ? new SolidColorBrush(_surfaces.LineStrong) : Brushes.Transparent,
-            BorderThickness = new Thickness(installed ? 1 : 0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-        };
+        var button = SettingsControls.Button(
+            _localizer.Get(labelKey),
+            Palette,
+            installed ? SettingsButtonVariant.Raised : SettingsButtonVariant.Solid,
+            SettingsButtonSize.Xs,
+            enabled: !_busy && action != "none" && !plugin.IsDemo && !_marketplace.IsOfflineFallback,
+            minWidth: 58);
         button.Click += async (_, _) =>
         {
             if (_busy)
@@ -868,18 +740,12 @@ public sealed class MarketplaceSectionView : StackPanel
             return null;
         }
 
-        var button = new Button
-        {
-            Content = _localizer.Get(LocKeys.Settings.Market.Rollback),
-            IsEnabled = !_busy && !_marketplace.IsOfflineFallback,
-            Height = 27,
-            Padding = new Thickness(9, 0, 9, 0),
-            CornerRadius = new CornerRadius(7),
-            FontSize = 9.5,
-            Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(_surfaces.ForegroundTertiary),
-            BorderThickness = new Thickness(0),
-        };
+        var button = SettingsControls.Button(
+            _localizer.Get(LocKeys.Settings.Market.Rollback),
+            Palette,
+            SettingsButtonVariant.Quiet,
+            SettingsButtonSize.Xs,
+            enabled: !_busy && !_marketplace.IsOfflineFallback);
         ToolTip.SetTip(button, _localizer.Format(LocKeys.Settings.Market.Latest, ("version", target)));
         button.Click += async (_, _) =>
         {
@@ -926,7 +792,7 @@ public sealed class MarketplaceSectionView : StackPanel
             return;
         }
 
-        var progressBar = new ProgressBar { Minimum = 0, Maximum = 100, Value = 0, Height = 4 };
+        var progressBar = SettingsControls.Progress(Palette);
         Children.Insert(0, progressBar);
         var progress = new Progress<InstallProgress>(value =>
         {
@@ -973,20 +839,13 @@ public sealed class MarketplaceSectionView : StackPanel
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 520,
         });
-        var submit = new Button
-        {
-            Content = _localizer.Get(CommunityCopy.Submit),
-            IsEnabled = !_communityBusy,
-            Height = 28,
-            Padding = new Thickness(11, 0, 11, 0),
-            CornerRadius = new CornerRadius(7),
-            FontSize = 9.5,
-            FontWeight = FontWeight.SemiBold,
-            Background = new SolidColorBrush(_surfaces.Active),
-            Foreground = new SolidColorBrush(_surfaces.ActiveForeground),
-            BorderThickness = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var submit = SettingsControls.Button(
+            _localizer.Get(CommunityCopy.Submit),
+            Palette,
+            SettingsButtonVariant.Solid,
+            SettingsButtonSize.Sm,
+            enabled: !_communityBusy);
+        submit.VerticalAlignment = VerticalAlignment.Center;
         submit.Click += async (_, _) => await PickAndSubmitAsync();
         Grid.SetColumn(submit, 1);
         header.Children.Add(titles);
@@ -995,13 +854,8 @@ public sealed class MarketplaceSectionView : StackPanel
 
         if (!string.IsNullOrEmpty(_communityStatus))
         {
-            stack.Children.Add(new TextBlock
-            {
-                Text = _communityStatus,
-                Foreground = new SolidColorBrush(Accents.Warning),
-                FontSize = 9,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            stack.Children.Add(SettingsControls.StatusLine(
+                _communityStatus!, Palette, SettingsTone.Warning, SettingsMetrics.MarketFootnoteSize));
         }
 
         if (_pendingSubmissions.Count > 0)
@@ -1022,22 +876,9 @@ public sealed class MarketplaceSectionView : StackPanel
 
         if (_communityListings.Count == 0)
         {
-            stack.Children.Add(new Border
-            {
-                Margin = new Thickness(0, 4, 0, 0),
-                Padding = new Thickness(12),
-                CornerRadius = new CornerRadius(10),
-                Background = raised,
-                BorderBrush = line,
-                BorderThickness = new Thickness(1),
-                Child = new TextBlock
-                {
-                    Text = _localizer.Get(CommunityCopy.Empty),
-                    FontSize = 9.5,
-                    Foreground = tertiary,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-            });
+            var empty = SettingsControls.EmptyState(_localizer.Get(CommunityCopy.Empty), Palette);
+            empty.Margin = new Thickness(0, 4, 0, 0);
+            stack.Children.Add(empty);
             return stack;
         }
 
@@ -1089,22 +930,10 @@ public sealed class MarketplaceSectionView : StackPanel
             Foreground = tertiary,
             VerticalAlignment = VerticalAlignment.Center,
         });
-        nameRow.Children.Add(new Border
-        {
-            Padding = new Thickness(5, 1, 5, 1),
-            CornerRadius = new CornerRadius(5),
-            Background = new SolidColorBrush(submission.SignatureState == CommunitySignatureState.Verified
-                ? Color.FromArgb(38, 74, 222, 128)
-                : Color.FromArgb(38, 255, 149, 0)),
-            Child = new TextBlock
-            {
-                Text = SignatureLabel(submission.SignatureState),
-                FontSize = 8,
-                Foreground = new SolidColorBrush(submission.SignatureState == CommunitySignatureState.Verified
-                    ? Accents.Success
-                    : Accents.Warning),
-            },
-        });
+        nameRow.Children.Add(SettingsControls.Chip(
+            SignatureLabel(submission.SignatureState),
+            Palette,
+            SettingsChipKind.Badge));
         info.Children.Add(nameRow);
         info.Children.Add(new TextBlock
         {
@@ -1127,13 +956,11 @@ public sealed class MarketplaceSectionView : StackPanel
         };
         actions.Children.Add(CommunityAction(
             _localizer.Get(CommunityCopy.Approve),
-            new SolidColorBrush(_surfaces.Active),
-            new SolidColorBrush(_surfaces.ActiveForeground),
+            SettingsButtonVariant.Solid,
             () => ReviewAsync(submission, approve: true)));
         actions.Children.Add(CommunityAction(
             _localizer.Get(CommunityCopy.Reject),
-            raised,
-            new SolidColorBrush(Accents.Warning),
+            SettingsButtonVariant.Raised,
             () => ReviewAsync(submission, approve: false)));
 
         var grid = new Grid
@@ -1149,7 +976,7 @@ public sealed class MarketplaceSectionView : StackPanel
         return new Border
         {
             Padding = new Thickness(12, 9, 12, 9),
-            CornerRadius = new CornerRadius(9),
+            CornerRadius = new CornerRadius(SettingsMetrics.MarketCardRadius),
             Background = raised,
             BorderBrush = line,
             BorderThickness = new Thickness(1),
@@ -1173,9 +1000,9 @@ public sealed class MarketplaceSectionView : StackPanel
             Height = 30,
             CornerRadius = new CornerRadius(8),
             Background = new SolidColorBrush(Color.Parse("#4C5566")),
-            Child = new SettingsGlyph
+            Child = new SettingsIcon
             {
-                Kind = IconKind.Store,
+                Kind = SettingsIconKind.Storefront,
                 Brush = Brushes.White,
                 Width = 16,
                 Height = 16,
@@ -1260,37 +1087,24 @@ public sealed class MarketplaceSectionView : StackPanel
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var install = new Button
-        {
-            Content = _localizer.Get(CommunityCopy.Install),
-            IsEnabled = !_communityBusy,
-            Height = 26,
-            MinWidth = 58,
-            Padding = new Thickness(9, 0, 9, 0),
-            CornerRadius = new CornerRadius(7),
-            FontSize = 9,
-            FontWeight = FontWeight.SemiBold,
-            Background = new SolidColorBrush(_surfaces.Active),
-            Foreground = new SolidColorBrush(_surfaces.ActiveForeground),
-            BorderThickness = new Thickness(0),
-        };
+        var install = SettingsControls.Button(
+            _localizer.Get(CommunityCopy.Install),
+            Palette,
+            SettingsButtonVariant.Solid,
+            SettingsButtonSize.Xs,
+            enabled: !_communityBusy,
+            minWidth: 58);
         install.Click += async (_, _) => await InstallCommunityAsync(listing);
         actions.Children.Add(install);
-        actions.Children.Add(CommunityAction(_localizer.Get(CommunityCopy.Delist), Brushes.Transparent, tertiary, () => DelistAsync(listing)));
+        actions.Children.Add(CommunityAction(
+            _localizer.Get(CommunityCopy.Delist),
+            SettingsButtonVariant.Quiet,
+            () => DelistAsync(listing)));
         Grid.SetColumn(actions, 1);
         foot.Children.Add(actions);
         panel.Children.Add(foot);
 
-        return new Border
-        {
-            MinHeight = 104,
-            Padding = new Thickness(11),
-            CornerRadius = new CornerRadius(10),
-            Background = raised,
-            BorderBrush = line,
-            BorderThickness = new Thickness(1),
-            Child = panel,
-        };
+        return SettingsControls.Card(panel, Palette, SettingsCardKind.Tile);
     }
 
     private Control BuildStarRating(CommunityListing listing, IBrush tertiary)
@@ -1322,20 +1136,10 @@ public sealed class MarketplaceSectionView : StackPanel
         return row;
     }
 
-    private Button CommunityAction(string label, IBrush background, IBrush foreground, Func<Task> action)
+    private Button CommunityAction(string label, SettingsButtonVariant variant, Func<Task> action)
     {
-        var button = new Button
-        {
-            Content = label,
-            IsEnabled = !_communityBusy,
-            Height = 26,
-            Padding = new Thickness(9, 0, 9, 0),
-            CornerRadius = new CornerRadius(7),
-            FontSize = 9,
-            Background = background,
-            Foreground = foreground,
-            BorderThickness = new Thickness(0),
-        };
+        var button = SettingsControls.Button(label, Palette, variant, SettingsButtonSize.Xs,
+            enabled: !_communityBusy);
         button.Click += async (_, _) => await action();
         return button;
     }

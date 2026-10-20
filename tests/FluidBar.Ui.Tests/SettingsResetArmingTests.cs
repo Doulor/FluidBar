@@ -37,14 +37,14 @@ public sealed class SettingsResetArmingTests
                 .First(box => box.Watermark?.Contains("RESET", StringComparison.OrdinalIgnoreCase) == true);
             var resetLabel = localizer.Get(LocKeys.Settings.Advanced.Reset);
             var label = window.GetVisualDescendants().OfType<TextBlock>().First(text => text.Text == resetLabel);
-            var chip = label.GetVisualAncestors().OfType<Border>().First();
+            var chip = label.GetVisualAncestors().OfType<Button>().First();
 
-            Assert.False(chip.IsHitTestVisible);
+            Assert.False(chip.IsEnabled);
 
             textBox.Focus();
             window.KeyTextInput("RESET");
             Assert.Equal("RESET", textBox.Text);
-            Assert.True(chip.IsHitTestVisible);
+            Assert.True(chip.IsEnabled);
             Assert.Equal(1.0, chip.Opacity);
 
             var center = chip.TranslatePoint(new Point(chip.Bounds.Width / 2, chip.Bounds.Height / 2), window)!.Value;
@@ -60,7 +60,7 @@ public sealed class SettingsResetArmingTests
 
             // Wrong confirmation text keeps the chip disabled.
             textBox.Text = "reset";
-            Assert.False(chip.IsHitTestVisible);
+            Assert.False(chip.IsEnabled);
 
             window.Close();
         });

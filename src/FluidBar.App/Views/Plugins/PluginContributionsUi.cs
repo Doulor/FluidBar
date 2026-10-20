@@ -200,17 +200,34 @@ public static class LocalizedValue
 /// Generic renderer for declarative plugin settings pages (frozen plugin contract, 2026-10-18):
 /// loose controls first, then groups; no plugin XAML. Secrets are redacted; buttons require a declared
 /// command; status rows are read-only host-rendered values.
+/// <para>
+/// Every row, editor, chip and button comes from the shared settings control layer, so a plugin page
+/// looks exactly like the General/Appearance panes (same 53 px row rhythm, same switch, same field
+/// chrome, same caption/section treatment).
+/// </para>
 /// </summary>
 public static class PluginSettingsPageRenderer
 {
+    private const string SecretMask = "••••••••";
+
     /// <summary>Builds one settings page for <paramref name="pluginId"/>.</summary>
+    /// <param name="page">Declarative page.</param>
+    /// <param name="pluginId">Owning plugin id (settings value namespace).</param>
+    /// <param name="localizer">Localizer for titles/descriptions.</param>
+    /// <param name="values">Host-owned value store.</param>
+    /// <param name="invokeCommand">Invokes a declared command (id, commandId).</param>
+    /// <param name="openUrl">Opens a link row target.</param>
+    /// <param name="palette">Pane palette; defaults to the dark prototype palette.</param>
+    /// <param name="accent">Window accent (switch track), matching the other panes.</param>
     public static Control BuildPage(
         SettingsPageContribution page,
         string pluginId,
         ILocalizer localizer,
         IPluginSettingsValues values,
         Action<string, string> invokeCommand,
-        Action<string?> openUrl)
+        Action<string?> openUrl,
+        SettingsPalette? palette = null,
+        Color? accent = null)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginId);
@@ -219,58 +236,66 @@ public static class PluginSettingsPageRenderer
         ArgumentNullException.ThrowIfNull(invokeCommand);
         ArgumentNullException.ThrowIfNull(openUrl);
 
-        var panel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 4, 0, 12) };
-        panel.Children.Add(new TextBlock
+        var theme = palette ?? SettingsPalette.For(AppTheme.Dark);
+        var themeAccent = accent ?? theme.Active;
+        var panel = new StackPanel { Spacing = 0, Margin = new Thickness(0, 14, 0, 0) };
+
+        var title = LocalizedValue.Resolve(page.Title, localizer);
+        if (!string.IsNullOrEmpty(title))
         {
-            Text = LocalizedValue.Resolve(page.Title, localizer),
-            FontFamily = Fonts.DisplaySemiBold.FontFamily,
-            FontSize = Typography.SettingsBodySize + 1,
-            FontWeight = FontWeight.SemiBold,
-        });
+            panel.Children.Add(SettingsWidgets.Caption(title, theme));
+        }
+
         var description = LocalizedValue.Resolve(page.Description, localizer);
         if (!string.IsNullOrEmpty(description))
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = description,
-                FontSize = Typography.SettingsCaptionSize,
-                Opacity = 0.65,
-                TextWrapping = TextWrapping.Wrap,
-            });
+            var hint = SettingsControls.StatusLine(description, theme, SettingsTone.Neutral,
+                SettingsMetrics.RowDescSize);
+            hint.Margin = new Thickness(0, 0, 0, 4);
+            panel.Children.Add(hint);
         }
 
-        foreach (var control in page.Controls ?? [])
+        var rows = (page.Controls ?? [])
+            .Select(control => BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl, theme, themeAccent))
+            .ToList();
+        if (rows.Count > 0)
         {
-            panel.Children.Add(BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl));
+            panel.Children.Add(SettingsWidgets.Group(theme, topBorder: true, [.. rows]));
         }
 
         foreach (var group in page.Groups ?? [])
         {
-            var groupPanel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
             var groupTitle = LocalizedValue.Resolve(group.Title, localizer);
+            var groupDescription = LocalizedValue.Resolve(group.Description, localizer);
+            var groupRows = (group.Controls ?? [])
+                .Select(control => BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl, theme, themeAccent))
+                .ToList();
+            if (groupRows.Count == 0)
+            {
+                continue;
+            }
+
+            var header = !string.IsNullOrEmpty(groupTitle) || !string.IsNullOrEmpty(groupDescription);
             if (!string.IsNullOrEmpty(groupTitle))
             {
-                groupPanel.Children.Add(new TextBlock
-                {
-                    Text = groupTitle,
-                    FontSize = Typography.SettingsCaptionSize,
-                    FontWeight = FontWeight.SemiBold,
-                    Opacity = 0.8,
-                });
+                panel.Children.Add(SettingsWidgets.Caption(groupTitle, theme));
             }
 
-            var groupDescription = LocalizedValue.Resolve(group.Description, localizer);
             if (!string.IsNullOrEmpty(groupDescription))
             {
-                groupPanel.Children.Add(new TextBlock { Text = groupDescription, FontSize = 10, Opacity = 0.55, TextWrapping = TextWrapping.Wrap });
+                var hint = SettingsControls.StatusLine(groupDescription, theme, SettingsTone.Neutral,
+                    SettingsMetrics.RowDescSize);
+                hint.Margin = new Thickness(0, 0, 0, 4);
+                panel.Children.Add(hint);
             }
 
-            foreach (var control in group.Controls ?? [])
-            {
-                groupPanel.Children.Add(BuildControl(pluginId, control, localizer, values, invokeCommand, openUrl));
-            }
+            panel.Children.Add(SettingsWidgets.Group(theme, topBorder: !header, [.. groupRows]));
+        }
 
-            panel.Children.Add(groupPanel);
+        if (panel.Children.Count == 0)
+        {
+            panel.Children.Add(SettingsControls.EmptyState(
+                localizer.Get(LocKeys.Settings.Plugins.DetailEmpty), theme));
         }
 
         return panel;
@@ -282,179 +307,187 @@ public static class PluginSettingsPageRenderer
         ILocalizer localizer,
         IPluginSettingsValues values,
         Action<string, string> invokeCommand,
-        Action<string?> openUrl)
+        Action<string?> openUrl,
+        SettingsPalette palette,
+        Color accent)
     {
+        ArgumentNullException.ThrowIfNull(control);
         var title = LocalizedValue.Resolve(control.Title, localizer);
+        var label = string.IsNullOrEmpty(title) ? control.Key : title;
         var description = LocalizedValue.Resolve(control.Description, localizer);
         var current = values.Get(pluginId, control.Key) ?? control.Default;
-        var editor = CreateEditor(pluginId, control, current, values);
 
-        if (control.Type is SettingControlType.Info or SettingControlType.Status or SettingControlType.Link)
-        {
-            return BuildReadonlyRow(control, title, description, current, localizer, openUrl);
-        }
-
-        if (control.Type == SettingControlType.Button)
-        {
-            var button = new Button
-            {
-                Content = string.IsNullOrEmpty(title) ? control.Key : title,
-                IsEnabled = !string.IsNullOrWhiteSpace(control.Command),
-            };
-            button.Click += (_, _) =>
-            {
-                if (!string.IsNullOrWhiteSpace(control.Command))
-                {
-                    invokeCommand(pluginId, control.Command);
-                }
-            };
-            return button;
-        }
-
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), MinHeight = 34 };
-        var info = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        info.Children.Add(new TextBlock { Text = string.IsNullOrEmpty(title) ? control.Key : title, FontSize = Typography.SettingsBodySize });
-        if (!string.IsNullOrEmpty(description))
-        {
-            info.Children.Add(new TextBlock { Text = description, FontSize = Typography.SettingsCaptionSize, Opacity = 0.6, TextWrapping = TextWrapping.Wrap });
-        }
-
-        Grid.SetColumn(info, 0);
-        grid.Children.Add(info);
-        editor.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetColumn(editor, 1);
-        grid.Children.Add(editor);
-        return grid;
-    }
-
-    private static Control CreateEditor(string pluginId, SettingControlContribution control, JsonElement? current, IPluginSettingsValues values)
-    {
         switch (control.Type)
         {
             case SettingControlType.Toggle:
             {
-                var toggle = new ToggleSwitch { IsChecked = ReadBool(current), OnContent = string.Empty, OffContent = string.Empty };
-                toggle.IsCheckedChanged += (_, _) => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(toggle.IsChecked == true));
-                return toggle;
+                var toggle = new SettingsSwitch
+                {
+                    IsOn = ReadBool(current),
+                    Accent = new SolidColorBrush(accent),
+                    OffTrack = palette.RaisedHoverBrush,
+                    OffHairline = palette.LineStrongBrush,
+                    OffKnob = palette.SecondaryBrush,
+                };
+                toggle.Toggled += value => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(value));
+                return SettingsWidgets.Row(label, description, toggle, palette);
             }
 
             case SettingControlType.Select:
             {
-                var combo = new ComboBox { Width = 200 };
-                var selectedIndex = 0;
-                var options = control.Options ?? [];
-                for (var i = 0; i < options.Count; i++)
-                {
-                    combo.Items.Add(new ComboBoxItem { Content = LocalizedValue.Resolve(options[i].Label, LocalizationRuntime.Current), Tag = options[i].Value });
-                    if (string.Equals(ReadString(current), options[i].Value, StringComparison.Ordinal))
-                    {
-                        selectedIndex = i;
-                    }
-                }
-
-                combo.SelectedIndex = selectedIndex;
-                combo.SelectionChanged += (_, _) =>
-                {
-                    if (combo.SelectedItem is ComboBoxItem { Tag: string value })
-                    {
-                        values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(value));
-                    }
-                };
-                return combo;
+                return SettingsWidgets.Row(label, description, BuildSelect(pluginId, control, current, values, localizer, palette), palette);
             }
 
             case SettingControlType.Slider:
+            {
+                return SettingsWidgets.Row(label, description, BuildSlider(pluginId, control, current, values, palette), palette);
+            }
+
             case SettingControlType.Number:
             {
                 var number = ReadDouble(current) ?? control.Min ?? 0;
-                if (control.Type == SettingControlType.Slider)
-                {
-                    var slider = new Slider
+                var field = SettingsControls.TextField(
+                    palette,
+                    SettingsFieldKind.Number,
+                    number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    onCommit: text =>
                     {
-                        Width = 200,
-                        Minimum = control.Min ?? 0,
-                        Maximum = control.Max ?? 100,
-                        TickFrequency = control.Step ?? 1,
-                        IsSnapToTickEnabled = control.Step is > 0,
-                        Value = number,
-                    };
-                    slider.PropertyChanged += (_, e) =>
-                    {
-                        if (e.Property == Slider.ValueProperty)
+                        if (double.TryParse(text, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.CurrentCulture, out var parsed))
                         {
-                            values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(slider.Value));
+                            values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(parsed));
                         }
-                    };
-                    return slider;
-                }
-
-                var box = new TextBox { Text = number.ToString(System.Globalization.CultureInfo.CurrentCulture), Width = 120 };
-                box.LostFocus += (_, _) =>
-                {
-                    if (double.TryParse(box.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var parsed))
-                    {
-                        values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(parsed));
-                    }
-                };
-                return box;
+                    });
+                return SettingsWidgets.Row(label, description, field, palette);
             }
 
             case SettingControlType.Secret:
             {
-                // Secrets are redacted in the UI; the plugin reads them through IPluginSettings.
-                var secret = new TextBox { Text = "••••••••", IsReadOnly = true, Width = 180 };
-                secret.IsEnabled = false;
-                return secret;
+                // Secrets are redacted in the UI and are never bound to their value; the plugin reads
+                // them through IPluginSettings.
+                var secret = SettingsControls.TextField(palette, SettingsFieldKind.Secret, SecretMask);
+                return SettingsWidgets.Row(label, description, secret, palette);
+            }
+
+            case SettingControlType.Path:
+            {
+                var path = SettingsControls.TextField(palette, SettingsFieldKind.Path, ReadString(current) ?? string.Empty);
+                return SettingsWidgets.Row(label, description, path, palette);
+            }
+
+            case SettingControlType.Button:
+            {
+                var command = control.Command;
+                var button = SettingsControls.Button(
+                    localizer.Get(LocKeys.Settings.Plugins.DetailRun),
+                    palette,
+                    SettingsButtonVariant.Raised,
+                    SettingsButtonSize.Sm,
+                    SettingsIconKind.ArrowRight,
+                    () =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(command))
+                        {
+                            invokeCommand(pluginId, command);
+                        }
+                    },
+                    enabled: !string.IsNullOrWhiteSpace(command));
+                return SettingsWidgets.Row(label, description, button, palette);
+            }
+
+            case SettingControlType.Link:
+            {
+                var url = ReadString(current);
+                var link = SettingsControls.IconButton(SettingsIconKind.External, palette, () => openUrl(url));
+                ToolTip.SetTip(link, label);
+                return SettingsWidgets.Row(label, description, link, palette);
+            }
+
+            case SettingControlType.Info:
+            {
+                var text = ReadString(current) ?? string.Empty;
+                var value = string.IsNullOrEmpty(text)
+                    ? SettingsControls.StatusLine("—", palette)
+                    : SettingsControls.StatusLine(text, palette, SettingsTone.Info);
+                return SettingsWidgets.Row(label, description, value, palette);
+            }
+
+            case SettingControlType.Status:
+            {
+                var text = FormatStatus(current, control);
+                if (!string.IsNullOrEmpty(control.Unit) && !string.IsNullOrEmpty(text))
+                {
+                    text = text + " " + control.Unit;
+                }
+
+                var tone = string.IsNullOrEmpty(text) ? SettingsTone.Neutral : SettingsTone.Info;
+                var value = SettingsControls.StatusLine(string.IsNullOrEmpty(text) ? "—" : text, palette, tone);
+                return SettingsWidgets.Row(label, description, value, palette);
             }
 
             default:
             {
-                var text = new TextBox { Text = ReadString(current) ?? string.Empty, Width = 220 };
-                text.LostFocus += (_, _) => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(text.Text ?? string.Empty));
-                return text;
+                var field = SettingsControls.TextField(
+                    palette,
+                    SettingsFieldKind.Text,
+                    ReadString(current) ?? string.Empty,
+                    width: 220,
+                    onCommit: text => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(text)));
+                return SettingsWidgets.Row(label, description, field, palette);
             }
         }
     }
 
-    private static Control BuildReadonlyRow(
+    private static Control BuildSelect(
+        string pluginId,
         SettingControlContribution control,
-        string title,
-        string description,
         JsonElement? current,
+        IPluginSettingsValues values,
         ILocalizer localizer,
-        Action<string?> openUrl)
+        SettingsPalette palette)
     {
-        if (control.Type == SettingControlType.Link)
+        var options = control.Options ?? [];
+        var items = new List<(string Label, string Value)>(options.Count);
+        foreach (var option in options)
         {
-            var url = ReadString(current);
-            var link = new Button { Content = string.IsNullOrEmpty(title) ? (url ?? control.Key) : title };
-            link.Click += (_, _) => openUrl(url);
-            return link;
+            items.Add((LocalizedValue.Resolve(option.Label, localizer), option.Value));
         }
 
-        var text = control.Type == SettingControlType.Status
-            ? FormatStatus(current, control)
-            : ReadString(current) ?? string.Empty;
-        if (!string.IsNullOrEmpty(control.Unit) && !string.IsNullOrEmpty(text))
-        {
-            text = $"{text} {control.Unit}";
-        }
+        return SettingsControls.Select(
+            items,
+            ReadString(current) ?? string.Empty,
+            palette,
+            value => values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(value)));
+    }
 
-        var panel = new StackPanel { Spacing = 2 };
-        panel.Children.Add(new TextBlock { Text = string.IsNullOrEmpty(title) ? control.Key : title, FontSize = Typography.SettingsBodySize });
-        panel.Children.Add(new TextBlock
+    private static Control BuildSlider(
+        string pluginId,
+        SettingControlContribution control,
+        JsonElement? current,
+        IPluginSettingsValues values,
+        SettingsPalette palette)
+    {
+        var slider = new SettingsSlider
         {
-            Text = string.IsNullOrEmpty(text) ? "—" : text,
-            FontSize = Typography.SettingsCaptionSize,
-            Foreground = new SolidColorBrush(Accents.Info),
-            TextWrapping = TextWrapping.Wrap,
-        });
-        if (!string.IsNullOrEmpty(description))
+            Minimum = control.Min ?? 0,
+            Maximum = control.Max ?? 100,
+            Step = control.Step ?? 1,
+            Value = ReadDouble(current) ?? control.Min ?? 0,
+            Fill = palette.ForegroundBrush,
+            Track = palette.RaisedHoverBrush,
+            Width = SettingsMetrics.RangeWidth - SettingsMetrics.RangeGap - SettingsMetrics.ValueTagMinWidth,
+        };
+        var format = string.IsNullOrEmpty(control.Unit)
+            ? (Func<double, string>)(value => value.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture))
+            : value => value.ToString("0.##", System.Globalization.CultureInfo.CurrentCulture) + " " + control.Unit;
+        var tag = SettingsControls.Chip(format(slider.Value), palette, SettingsChipKind.Tag);
+        var tagLabel = tag.Label;
+        slider.ValueChanged += value =>
         {
-            panel.Children.Add(new TextBlock { Text = description, FontSize = 10, Opacity = 0.55 });
-        }
-
-        return panel;
+            tagLabel.Text = format(value);
+            values.Set(pluginId, control.Key, JsonSerializer.SerializeToElement(value));
+        };
+        return SettingsControls.Range(slider, tag);
     }
 
     private static string FormatStatus(JsonElement? value, SettingControlContribution control)

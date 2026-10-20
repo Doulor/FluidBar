@@ -804,6 +804,20 @@ public static partial class LocKeys
             public const string DetailRun = "Settings.Plugins.Detail.Run";
             /// <summary><c>Settings.Plugins.Detail.Meta</c></summary>
             public const string DetailMeta = "Settings.Plugins.Detail.Meta";
+            /// <summary>Declared settings-page descriptions of the first-party plugin catalog.</summary>
+            public static class Pages
+            {
+                /// <summary><c>settings.media.settings.description</c></summary>
+                public const string Media = "settings.media.settings.description";
+                /// <summary><c>settings.clipboard.settings.description</c></summary>
+                public const string Clipboard = "settings.clipboard.settings.description";
+                /// <summary><c>settings.notifications.settings.description</c></summary>
+                public const string Notifications = "settings.notifications.settings.description";
+                /// <summary><c>settings.agent.settings.description</c></summary>
+                public const string Agent = "settings.agent.settings.description";
+                /// <summary><c>settings.devices.settings.description</c></summary>
+                public const string Devices = "settings.devices.settings.description";
+            }
         }
         /// <summary>Keys in the 'Marketplace' area.</summary>
         public static class Marketplace
