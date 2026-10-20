@@ -6,8 +6,53 @@ namespace FluidBar.Island;
 /// Karaoke text: paints the whole line dim, then re-paints the sung prefix in the highlight colour,
 /// clipped at the progress fraction (the KRC word timeline drives that fraction).
 /// </summary>
-internal static class KaraokeText
+public static class KaraokeText
 {
+    /// <summary>
+    /// Unsung lyric colour: the foreground at ~47 % opacity. Deliberately much dimmer than the sung
+    /// colour so the karaoke boundary reads even on a dark glass card (user request: ΔL &gt; 30).
+    /// </summary>
+    public static SKColor UnsungColor(SKColor foreground) => foreground.WithAlpha(120);
+
+    /// <summary>
+    /// Sung lyric colour: the artwork accent pushed toward white (keeps hue, raises luminance) so the
+    /// sung prefix is clearly brighter than the unsung remainder.
+    /// </summary>
+    public static SKColor SungColor(SKColor accent)
+    {
+        const float lift = 0.38f;
+        return new SKColor(
+            (byte)Math.Clamp(accent.Red + ((255 - accent.Red) * lift), 0, 255),
+            (byte)Math.Clamp(accent.Green + ((255 - accent.Green) * lift), 0, 255),
+            (byte)Math.Clamp(accent.Blue + ((255 - accent.Blue) * lift), 0, 255),
+            accent.Alpha);
+    }
+
+    /// <summary>
+    /// Picks the karaoke accent: the artwork accent when it is saturated enough, otherwise the theme
+    /// track accent. Monochrome covers (common for KuGou lyric videos) would otherwise make the sung
+    /// prefix a slightly brighter white with no visible colour.
+    /// </summary>
+    public static SKColor SaturatedAccent(SKColor accent, SKColor fallback)
+    {
+        var max = Math.Max(accent.Red, Math.Max(accent.Green, accent.Blue));
+        var min = Math.Min(accent.Red, Math.Min(accent.Green, accent.Blue));
+        var saturation = max <= 0 ? 0 : (max - min) / (double)max;
+        return saturation < 0.18 ? fallback : accent;
+    }
+
+    /// <summary>WCAG relative luminance (0..1) for a colour, used by the contrast tests.</summary>
+    public static double RelativeLuminance(SKColor color)
+    {
+        static double Channel(byte value)
+        {
+            var c = value / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(color.Red)) + (0.7152 * Channel(color.Green)) + (0.0722 * Channel(color.Blue));
+    }
+
     /// <summary>Draws one line with a highlight sweep.</summary>
     /// <param name="text">Scaled text helper (font scale already applied).</param>
     /// <param name="canvas">Target canvas.</param>

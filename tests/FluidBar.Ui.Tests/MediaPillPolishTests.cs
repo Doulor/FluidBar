@@ -212,6 +212,29 @@ public sealed class MediaPillPolishTests
     }
 
     [Fact]
+    public Task Single_span_karaoke_falls_back_to_a_whole_line_fill()
+    {
+        return AvaloniaTest.Run(() =>
+        {
+            var media = Media("Track", "line", positionMs: 0) with
+            {
+                LyricHighlight = 0,
+                Karaoke = KaraokeTrack.Create(0, 3000,
+                    ImmutableArray.Create(new KaraokeSpan(0, 4)))!,
+            };
+            using var fixture = StartMedia(media);
+            fixture.ExpandAndSettle();
+            fixture.GoToPage(1);
+
+            var first = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+            Assert.True(first >= 0, "a single-span fallback must still produce a sweep");
+            Advance(fixture, 120);
+            var second = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+            Assert.True(second > first, $"{second} should advance past {first}");
+        });
+    }
+
+    [Fact]
     public Task Track_change_shrinks_fades_then_springs_back()
     {
         return AvaloniaTest.Run(() =>

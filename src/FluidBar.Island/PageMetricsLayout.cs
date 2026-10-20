@@ -191,18 +191,20 @@ public static class PageMetricsLayout
     private const float MediaTransportSize = 30f;
 
     /// <summary>Gap between the seek row and the transport row, shrunk first when the page overflows.</summary>
-    private static float MediaTransportGap(float squeeze) => Math.Max(8, 16 - (squeeze * 0.4f));
+    private static float MediaTransportGap(float squeeze) => Math.Max(4, 16 - (squeeze * 0.4f));
 
     /// <summary>Gap above the lyric card, shrunk when the page overflows.</summary>
-    private static float MediaCardGap(float squeeze) => Math.Max(3, 8 - (squeeze * 0.15f));
+    private static float MediaCardGap(float squeeze) => Math.Max(2, 8 - (squeeze * 0.15f));
 
     /// <summary>Gap above the seek row, shrunk when the page overflows.</summary>
-    private static float MediaSeekGap(float squeeze) => Math.Max(4, 10 - (squeeze * 0.25f));
+    private static float MediaSeekGap(float squeeze) => Math.Max(2, 10 - (squeeze * 0.25f));
 
     private static SKRect MediaLyricCard(SKRect page, in FontScaleMetrics metrics, float squeeze)
     {
         var top = MediaTopBottom(page, metrics) + MediaCardGap(squeeze);
-        var content = 7 + 14 + 3 + 12 + 4
+        // 13 DIP lyric + 10.5 DIP next line (readability-first): 7 top + 17 lyric + 3 gap +
+        // 14 next + 4 bottom = 45; the 50 DIP floor keeps the two lines from touching the card edge.
+        var content = 7 + 17 + 3 + 14 + 4
             + metrics.LineGrow(IslandType.Lyric) + metrics.LineGrow(IslandType.LyricNext);
         var height = Math.Max(46, content);
         return new SKRect(page.Left, top, page.Left + 400, top + height);

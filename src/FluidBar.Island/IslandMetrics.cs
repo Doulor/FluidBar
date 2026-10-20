@@ -210,6 +210,9 @@ public static class IslandType
     /// <summary>Compact media title (prototype2 13 DIP / 600).</summary>
     public static readonly TextStyle CompactMediaTitle = new(FontRole.UiSemiBold, 13f);
 
+    /// <summary>Compact lyric line: readability-first +1 DIP over the compact title.</summary>
+    public static readonly TextStyle CompactMediaLyric = new(FontRole.UiSemiBold, 14f);
+
     /// <summary>Compact media subtitle (prototype2 10 DIP / 400).</summary>
     public static readonly TextStyle CompactMediaSub = new(FontRole.Ui, 10f);
 
@@ -268,11 +271,12 @@ public static class IslandType
     /// <summary>Media eyebrow label.</summary>
     public static readonly TextStyle MediaEyebrow = new(FontRole.UiSemiBold, 8f);
 
-    /// <summary>Media lyric line (prototype2 `.lyric-now`: 11 DIP, weight 500, 90 % foreground).</summary>
-    public static readonly TextStyle Lyric = new(FontRole.UiMedium, 11f);
+    /// <summary>Media lyric line. Prototype2's 11 DIP was too small in real sessions: readability
+    /// first, 13 DIP (weight 500 retained).</summary>
+    public static readonly TextStyle Lyric = new(FontRole.UiMedium, 13f);
 
-    /// <summary>Media next lyric.</summary>
-    public static readonly TextStyle LyricNext = new(FontRole.Ui, 9f);
+    /// <summary>Media next lyric; readability-first 10.5 DIP (prototype 9).</summary>
+    public static readonly TextStyle LyricNext = new(FontRole.Ui, 10.5f);
 
     /// <summary>Media seek time.</summary>
     public static readonly TextStyle SeekTime = new(FontRole.Mono, 8.5f);

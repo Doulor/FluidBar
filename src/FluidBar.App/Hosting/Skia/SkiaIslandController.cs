@@ -1741,7 +1741,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Measures the compact lyric line at the current font scale (cached by the text engine).</summary>
     private float MeasureCompactLyric(string lyric, double fontScale)
     {
-        var style = IslandType.CompactMediaTitle;
+        var style = IslandType.CompactMediaLyric;
         var scale = double.IsFinite(fontScale) && fontScale > 0 ? fontScale : 1.0;
         var scaled = new TextStyle(style.Role, (float)(style.Size * scale));
         return _lyricMeasure.Measure(lyric, scaled);

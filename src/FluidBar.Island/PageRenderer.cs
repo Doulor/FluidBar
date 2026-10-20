@@ -304,15 +304,20 @@ internal sealed partial class PageRenderer : IDisposable
         {
             DrawCard(canvas, lyricCard, 10);
             var lyricTop = lyricCard.Top + 7;
-            var lyricBottom = lyricTop + 14 + m.LineGrow(IslandType.Lyric);
+            var lyricBottom = lyricTop + 17 + m.LineGrow(IslandType.Lyric);
             // Karaoke sweep from the KRC word timeline; a line without word timing paints as a plain line
             // in the primary colour, exactly like before.
-            var baseColor = media.LyricHighlight < 0 ? _theme.Foreground : _theme.ForegroundSecondary;
+            var baseColor = media.LyricHighlight < 0
+                ? _theme.Foreground
+                : KaraokeText.UnsungColor(_theme.Foreground);
+            var sungColor = media.LyricHighlight < 0
+                ? accent
+                : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
             KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
                 new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
-                baseColor, accent, TextAlign.Left, _opacity);
+                baseColor, sungColor, TextAlign.Left, _opacity);
             var nextTop = lyricBottom + 3;
-            var nextBottom = nextTop + 12 + m.LineGrow(IslandType.LyricNext);
+            var nextBottom = nextTop + 14 + m.LineGrow(IslandType.LyricNext);
             // The tag is measured instead of parked in a fixed 30 DIP column: at a 1.6 font scale the old
             // column clipped it to "NE…" (prototype2 keeps it whole and spaces the text 6 DIP after it).
             var tagLeft = lyricCard.Left + 10;

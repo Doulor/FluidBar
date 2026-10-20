@@ -551,34 +551,79 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         // SelectDetailed also returns the karaoke sweep of the current line (KRC word timeline).
         var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
-        return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line));
+        return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line, document));
     }
 
-    /// <summary>Portable per-word timeline for the island (which advances the sweep per frame).</summary>
-    private static FluidBar.Island.KaraokeTrack? ToKaraokeTrack(LyricsLine? line)
+    /// <summary>
+    /// Portable timeline for the island (which advances the sweep per frame). Word timing wins; a
+    /// whole-line-only lyric source falls back to one span spanning the line's real duration so the
+    /// user still sees a progressive fill instead of no effect at all.
+    /// </summary>
+    private static FluidBar.Island.KaraokeTrack? ToKaraokeTrack(
+        LyricsLine? line,
+        LyricsDocument document)
     {
-        if (line is null || !line.HasWordTiming)
+        if (line is null || line.Text.Length == 0)
         {
             return null;
         }
 
-        var spans = System.Collections.Immutable.ImmutableArray.CreateBuilder<FluidBar.Island.KaraokeSpan>(
-            line.Words.Length);
-        var lastOffset = 0;
-        foreach (var word in line.Words)
+        var lineStart = (int)Math.Round(line.Time.TotalMilliseconds);
+        if (line.HasWordTiming)
         {
-            spans.Add(new FluidBar.Island.KaraokeSpan(word.OffsetMs, word.Length));
-            lastOffset = Math.Max(lastOffset, Math.Max(0, word.OffsetMs));
+            var spans = System.Collections.Immutable.ImmutableArray.CreateBuilder<FluidBar.Island.KaraokeSpan>(
+                line.Words.Length);
+            var lastOffset = 0;
+            foreach (var word in line.Words)
+            {
+                spans.Add(new FluidBar.Island.KaraokeSpan(word.OffsetMs, word.Length));
+                lastOffset = Math.Max(lastOffset, Math.Max(0, word.OffsetMs));
+            }
+
+            // Some real KRC sources repeat the same offset for every word (notably repeated
+            // "Na na na" lines); the scalar highlight then sits at 1 and the user sees no sweep.
+            // Only trust word timing when it actually spans time.
+            if (lastOffset >= MinWordTimingSpanMs)
+            {
+                return FluidBar.Island.KaraokeTrack.Create(
+                    lineStart,
+                    lastOffset + KaraokeTailMs,
+                    spans.MoveToImmutable());
+            }
+        }
+
+        // Whole-line fallback: duration = next timed line (or the document's track length). No
+        // duration means no honest fill, so keep the plain line instead of inventing one.
+        var lineEnd = document.Duration;
+        foreach (var candidate in document.Lines)
+        {
+            if (candidate.Time > line.Time)
+            {
+                lineEnd = candidate.Time;
+                break;
+            }
+        }
+
+        var durationMs = (int)Math.Round((lineEnd - line.Time).TotalMilliseconds);
+        if (durationMs <= 0)
+        {
+            // Last line of a source without a track duration: infer a conservative reading time from
+            // the text so the whole-line fallback still animates instead of freezing.
+            durationMs = Math.Clamp(line.Text.Length * 160, 900, 6000);
         }
 
         return FluidBar.Island.KaraokeTrack.Create(
-            (int)Math.Round(line.Time.TotalMilliseconds),
-            lastOffset + KaraokeTailMs,
-            spans.MoveToImmutable());
+            lineStart,
+            durationMs,
+            System.Collections.Immutable.ImmutableArray.Create(
+                new FluidBar.Island.KaraokeSpan(0, line.Text.Length)));
     }
 
     /// <summary>Trailing duration given to the last span when the file carries no line duration.</summary>
     private const int KaraokeTailMs = 400;
+
+    /// <summary>Word timings that never advance (all offsets 0) are treated as line-only.</summary>
+    private const int MinWordTimingSpanMs = 250;
 
     /// <summary>
     /// Track length for sources that expose none of their own (the window-title fallback). The lyric

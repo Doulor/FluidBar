@@ -34,15 +34,22 @@ public sealed class MediaWaveAndLyricEvidenceTests
     }
 
     [Fact]
-    public void Expanded_lyric_is_karaoke_at_the_prototype_11_dip_size()
+    public void Expanded_lyric_is_readable_karaoke_at_13_dip()
     {
-        Assert.Equal(11f, IslandType.Lyric.Size, 3);
+        Assert.Equal(13f, IslandType.Lyric.Size, 3);
+        Assert.Equal(10.5f, IslandType.LyricNext.Size, 3);
 
-        var early = ExpandedLyric(0.18);
-        var late = ExpandedLyric(0.82);
+        var frames = new[] { 0.2, 0.5, 0.8 };
+        var states = frames.Select(ExpandedLyric).ToArray();
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        using var earlyBitmap = renderer.RenderToBitmap(early, Scale);
-        using var lateBitmap = renderer.RenderToBitmap(late, Scale);
+        var bitmaps = states.Select(state => renderer.RenderToBitmap(state, Scale)).ToArray();
+        var early = states[0];
+        using var earlyBitmap = bitmaps[0];
+        using var lateBitmap = bitmaps[2];
+        foreach (var (bitmap, frame) in bitmaps.Select((bitmap, index) => (bitmap, frames[index])))
+        {
+            Save(bitmap, $"expanded-lyric-sweep-{frame:0.0}".Replace('.', '-') + ".png");
+        }
 
         var shell = IslandMetrics.ShellRect(early);
         var page = IslandMetrics.PageRect(early, 1);

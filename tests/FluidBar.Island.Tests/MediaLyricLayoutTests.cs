@@ -37,7 +37,8 @@ public sealed class MediaLyricLayoutTests
         var page = IslandMetrics.PageRect(state, 1);
         var card = PageMetricsLayout.MediaLyricCard(page, metrics);
 
-        // prototype2 `.lyric-card`: height 46, radius 10, margin-top 8, padding 7/10.
+        // Readability-first 13 DIP lyric / 10.5 DIP next line fit the prototype's 46 DIP card
+        // (17 DIP lyric + 14 DIP next line + 7/3/4 padding = 45); radius and 8/10 margins unchanged.
         Assert.Equal(46, card.Height, 1);
         Assert.Equal(8, card.Top - PageMetricsLayout.MediaTopBottom(page, metrics), 1);
         // `.seek-row`: margin-top 10, height 22.
@@ -49,10 +50,10 @@ public sealed class MediaLyricLayoutTests
     [Fact]
     public void Media_lyric_line_is_medium_weight_like_the_prototype()
     {
-        // prototype2 `.lyric-now`: font-weight 500 — the sung line has to read heavier than the next one.
+        // Readability-first: keep the medium role but 13 DIP (prototype was 11) and 10.5 DIP next.
         Assert.Equal(FontRole.UiMedium, IslandType.Lyric.Role);
-        Assert.Equal(11, IslandType.Lyric.Size, 3);
+        Assert.Equal(13, IslandType.Lyric.Size, 3);
         Assert.Equal(FontRole.Ui, IslandType.LyricNext.Role);
-        Assert.Equal(9, IslandType.LyricNext.Size, 3);
+        Assert.Equal(10.5, IslandType.LyricNext.Size, 3);
     }
 }

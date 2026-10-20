@@ -185,13 +185,18 @@ internal sealed class CompactRenderer : IDisposable
         canvas.Save();
         canvas.ClipRect(new SKRect(rect.Left - 1, rect.Top - 3, rect.Right + 1, rect.Bottom + 3));
         // Without word timing the line paints exactly as before (primary colour, whole line).
-        var baseColor = model.LyricHighlight < 0 ? _theme.Foreground : _theme.ForegroundSecondary;
+        var baseColor = model.LyricHighlight < 0
+            ? _theme.Foreground
+            : KaraokeText.UnsungColor(_theme.Foreground);
+        var sungColor = model.LyricHighlight < 0
+            ? accent
+            : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
         // Content-fit short lines are centred between the artwork and the wave; an over-long line falls
         // back to left alignment so it ellipsises at the trailing edge instead of losing its beginning.
-        var measured = _text.Measure(model.LyricLine, IslandType.CompactMediaTitle, line.Width);
+        var measured = _text.Measure(model.LyricLine, IslandType.CompactMediaLyric, line.Width);
         var align = measured <= line.Width - 4 ? TextAlign.Center : TextAlign.Left;
-        KaraokeText.Draw(_text, canvas, model.LyricLine, model.LyricHighlight, IslandType.CompactMediaTitle,
-            line, baseColor, accent, align, alpha);
+        KaraokeText.Draw(_text, canvas, model.LyricLine, model.LyricHighlight, IslandType.CompactMediaLyric,
+            line, baseColor, sungColor, align, alpha);
         canvas.Restore();
     }
 
