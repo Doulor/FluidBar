@@ -40,7 +40,7 @@ public sealed class AppSurfaceMaterialTests
         Assert.Equal(ToSkia(surfaces.Line), stack.L2.Color);
         Assert.Equal(1, stack.L2.StrokeWidthDip);
         Assert.Equal(12, stack.L1.CornerRadiusDip);
-        Assert.Equal(stack.L1.Color, stack.EffectiveL1);
+        Assert.Equal(MaterialContrast.Composite(stack.L1.Color, stack.L0.Color), stack.EffectiveL1);
         Assert.Equal(MaterialLayer.L3TopHighlight, stack.L3.Layer);
         Assert.True(stack.L3.UsesGradient);
         Assert.Equal(MaterialLayer.L4InnerShadow, stack.L4.Layer);
@@ -51,8 +51,8 @@ public sealed class AppSurfaceMaterialTests
     {
         var issues = AppSurfaceMaterial.Validate(AppSurfaceColors.Dark);
 
-        // The settings hairlines are ~7 % white — below the iOS 8–11 % band — and that must be reported.
-        Assert.Contains(issues, static issue => issue.StartsWith("L2:", StringComparison.Ordinal));
+        // The hairlines were realigned to the iOS 8–11 % band, so no layer deviation may be reported.
+        Assert.DoesNotContain(issues, static issue => issue.StartsWith("L2:", StringComparison.Ordinal));
         Assert.DoesNotContain(issues, static issue => issue.StartsWith("contrast:", StringComparison.Ordinal));
     }
 

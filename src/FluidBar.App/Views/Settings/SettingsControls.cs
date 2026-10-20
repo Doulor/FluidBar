@@ -349,7 +349,21 @@ internal static class SettingsControls
                 palette.LineBrush),
         };
 
-        return new Border
+        var content = new Border { Padding = padding, Child = child };
+        var stack = new Grid();
+        stack.Children.Add(content);
+        // Material L3: every card carries the 1.5 DIP top micro-highlight (white 5.1 % -> transparent).
+        stack.Children.Add(new Border
+        {
+            Height = SettingsPalette.TopHighlightHeightDip,
+            Background = palette.TopHighlightBrush,
+            CornerRadius = new CornerRadius(radius, radius, 0, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            IsHitTestVisible = false,
+        });
+
+        var card = new Border
         {
             CornerRadius = new CornerRadius(radius),
             MinHeight = minHeight,
@@ -357,8 +371,58 @@ internal static class SettingsControls
             BorderBrush = border,
             BorderThickness = new Thickness(1),
             ClipToBounds = kind == SettingsCardKind.Featured,
-            Child = new Border { Padding = padding, Child = child },
+            Child = stack,
         };
+        SettingsMaterialStates.Attach(card);
+        return card;
+    }
+
+
+    /// <summary>
+    /// Material interaction states shared by every card and button: idle (no shadow), hover (1 DIP soft
+    /// outer glow) and pressed (L4 inset: black 18 %, blur 4, y offset 8, negative spread so the shade
+    /// enters from the top edge). One implementation, reused by all cards.
+    /// </summary>
+    internal static class SettingsMaterialStates
+    {
+        private static readonly BoxShadows Hover = new(new BoxShadow
+        {
+            Blur = 10,
+            Spread = 0,
+            OffsetY = 0,
+            Color = Color.FromArgb(20, 255, 255, 255),
+        });
+
+        private static readonly BoxShadows Pressed = new(new BoxShadow
+        {
+            Blur = 4,
+            Spread = -8,
+            OffsetY = 8,
+            IsInset = true,
+            Color = Color.FromArgb(46, 0, 0, 0),
+        });
+
+        /// <summary>Wires hover/pressed material states onto a card border.</summary>
+        /// <param name="card">Card container to decorate.</param>
+        public static void Attach(Border card)
+        {
+            card.PointerEntered += (_, _) => card.BoxShadow = Hover;
+            card.PointerExited += (_, _) =>
+            {
+                card.BoxShadow = default;
+                card.Classes.Remove("pressed");
+            };
+            card.PointerPressed += (_, _) =>
+            {
+                card.BoxShadow = Pressed;
+                card.Classes.Add("pressed");
+            };
+            card.PointerReleased += (_, _) =>
+            {
+                card.BoxShadow = Hover;
+                card.Classes.Remove("pressed");
+            };
+        }
     }
 
     // ---- fields -------------------------------------------------------------------------------

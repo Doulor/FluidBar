@@ -24,6 +24,16 @@ public sealed class SettingsMaterialLayerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Theme_palette_has_no_material_deviations(bool light)
+    {
+        // Token values were aligned with the material bands, so the theme palette must validate clean too.
+        var surfaces = light ? AppSurfaceColors.Light : AppSurfaceColors.Dark;
+        Assert.Empty(AppSurfaceMaterial.Validate(surfaces));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Card_and_separator_match_the_material_bands(bool light)
     {
         var palette = SettingsPalette.For(light ? AppTheme.Light : AppTheme.Dark);

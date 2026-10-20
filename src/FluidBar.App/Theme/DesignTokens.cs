@@ -106,12 +106,12 @@ public readonly record struct AppSurfaceColors(
 {
     /// <summary>Dark desktop UI ("Graphite").</summary>
     public static AppSurfaceColors Dark { get; } = new(
-        Color.Parse("#0D0E12"),
-        Color.Parse("#121317"),
+        Color.Parse("#08080A"),
+        Color.Parse("#99141418"),
         Color.Parse("#16FFFFFF"),
         Color.Parse("#22FFFFFF"),
         Color.Parse("#16FFFFFF"),
-        Color.Parse("#12FFFFFF"),
+        Color.Parse("#17FFFFFF"),
         Color.Parse("#1FFFFFFF"),
         Color.Parse("#F4F4F6"),
         Color.Parse("#9B9BA5"),
@@ -121,12 +121,12 @@ public readonly record struct AppSurfaceColors(
 
     /// <summary>Light desktop UI ("Porcelain").</summary>
     public static AppSurfaceColors Light { get; } = new(
-        Color.Parse("#F5F6F8"),
-        Color.Parse("#FAFBFD"),
+        Color.Parse("#F9FAFC"),
+        Color.Parse("#99FFFFFF"),
         Color.Parse("#0E111827"),
         Color.Parse("#1611181F"),
         Color.Parse("#0E111827"),
-        Color.Parse("#14111827"),
+        Color.Parse("#17111827"),
         Color.Parse("#22111827"),
         Color.Parse("#151A21"),
         Color.Parse("#59626F"),
