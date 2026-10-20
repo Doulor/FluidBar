@@ -1762,6 +1762,13 @@ public sealed class SkiaIslandController : IDisposable
         if (_renderState.Form != ShellForm.Expanded && _compact.Kind == ActivityKind.Media)
         {
             InvalidateDirty(WaveDamage());
+            if (_compact.Model is { ShowLyrics: true })
+            {
+                // The karaoke sweep and the lyric text sit outside the wave box: damage them too, or a
+                // line whose highlight advances would look frozen.
+                InvalidateDirty(CompactLyricDamage());
+            }
+
             return;
         }
 
