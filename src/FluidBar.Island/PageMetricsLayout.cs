@@ -234,40 +234,48 @@ public static class PageMetricsLayout
         return (seek.Bottom + MediaTransportGap(squeeze)) - (page.Top + 222);
     }
 
-    /// <summary>Media previous-track hit rectangle.</summary>
+    // Media footer split: volume + output on the left, the three transport buttons exactly centred,
+    // queue on the right. Group width = 28 + 3 + 30 + 3 + 28 = 92, so its left edge is 154 (400 DIP).
+    /// <summary>Media previous-track hit rectangle (left button of the centred transport group).</summary>
     public static SKRect MediaPrevious(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left, page.Top + 219 + dy, page.Left + 28, page.Top + 247 + dy);
+        return new SKRect(page.Left + 154, page.Top + 219 + dy, page.Left + 182, page.Top + 247 + dy);
     }
 
-    /// <summary>Media play/pause hit rectangle.</summary>
+    /// <summary>Media play/pause hit rectangle (centre of the transport group).</summary>
     public static SKRect MediaPlay(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left + 31, page.Top + 218 + dy, page.Left + 61, page.Top + 248 + dy);
+        return new SKRect(page.Left + 185, page.Top + 218 + dy, page.Left + 215, page.Top + 248 + dy);
     }
 
-    /// <summary>Media next-track hit rectangle.</summary>
+    /// <summary>Media next-track hit rectangle (right button of the centred transport group).</summary>
     public static SKRect MediaNext(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left + 64, page.Top + 219 + dy, page.Left + 92, page.Top + 247 + dy);
+        return new SKRect(page.Left + 218, page.Top + 219 + dy, page.Left + 246, page.Top + 247 + dy);
     }
 
-    /// <summary>Media output button rectangle.</summary>
+    /// <summary>Left volume readout (speaker + percentage) before the output label.</summary>
+    public static SKRect MediaVolume(SKRect page, in FontScaleMetrics metrics)
+    {
+        var dy = TransportOffset(page, metrics);
+        return new SKRect(page.Left + 10, page.Top + 219 + dy, page.Left + 58, page.Top + 247 + dy);
+    }
+
+    /// <summary>Media output button rectangle, on the left of the footer.</summary>
     public static SKRect MediaOutput(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        // Widened/moved from 250..320 so the disabled "No output" label still fits at a 1.6 font scale.
-        return new SKRect(page.Left + 238, page.Top + 220 + dy, page.Left + 320, page.Top + 246 + dy);
+        return new SKRect(page.Left + 60, page.Top + 220 + dy, page.Left + 148, page.Top + 246 + dy);
     }
 
-    /// <summary>Media queue button rectangle.</summary>
+    /// <summary>Media queue button rectangle, on the right of the footer.</summary>
     public static SKRect MediaQueue(SKRect page, in FontScaleMetrics metrics)
     {
         var dy = TransportOffset(page, metrics);
-        return new SKRect(page.Left + 324, page.Top + 220 + dy, page.Left + 400, page.Top + 246 + dy);
+        return new SKRect(page.Left + 300, page.Top + 220 + dy, page.Left + 390, page.Top + 246 + dy);
     }
 
     /// <summary>Media content height below the title gutter.</summary>

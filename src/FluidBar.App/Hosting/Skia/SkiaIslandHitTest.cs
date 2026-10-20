@@ -172,6 +172,16 @@ public static class SkiaIslandHitTest
             return IslandPageControl.None;
         }
 
+        // An unavailable quick toggle is painted greyed; refusing its hit target keeps that visual
+        // honest (no dead button that swallows the click).
+        if (page == 0
+            && control == IslandPageControl.QuickToggle
+            && (index < 0 || index >= pages.Home.Toggles.Count || !pages.Home.Toggles[index].IsEnabled))
+        {
+            index = -1;
+            return IslandPageControl.None;
+        }
+
         return control;
     }
 

@@ -335,7 +335,7 @@ public sealed class SkiaIslandHostMappingTests
         fixture.RunToRest();
         var media = fixture.Controller.RenderState;
         var mediaPage = IslandMetrics.PageRect(media, 1);
-        var play = PageLayout.MediaPlay(mediaPage);
+        var play = PageMetricsLayout.MediaPlay(mediaPage, FontScaleMetrics.From(media.FontScale));
         var playHit = SkiaIslandHitTest.Hit(media, play.MidX, play.MidY);
         Assert.Equal(IslandHitKind.PageControl, playHit.Kind);
         Assert.Equal(IslandPageControl.PlayPause, playHit.Control);

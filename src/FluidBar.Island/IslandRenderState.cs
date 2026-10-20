@@ -122,6 +122,13 @@ public readonly record struct IslandRenderState
     /// </summary>
     public int GhostCount { get; init; }
 
+    /// <summary>
+    /// Activities that did not fit in the visible stack (scheduler background queue). When greater than
+    /// zero the compact pill reserves <see cref="LayoutTokens.OverflowBadgeReserve"/> at its right edge
+    /// and paints the "+N" chip.
+    /// </summary>
+    public int OverflowCount { get; init; }
+
     /// <summary>Continuous pager position, committed page and gesture flags.</summary>
     public PagerRenderState Pager { get; init; }
 
@@ -621,18 +628,26 @@ public sealed record HomePageModel
     /// <summary>Battery remaining text ("4h left").</summary>
     public string? BatteryRemaining { get; init; }
 
-    /// <summary>Default quick toggles (Wi-Fi on, Bluetooth off, Focus off, Dark on).</summary>
+    /// <summary>Default quick toggles (Wi-Fi on, Bluetooth off, Focus unavailable, Dark on).</summary>
     public static HomeToggleModel[] DefaultToggles { get; } =
     [
         new(IconKind.Wifi, "Wi-Fi", true),
         new(IconKind.Bluetooth, "Bluetooth", false),
-        new(IconKind.Moon, "Focus", false),
+        new(IconKind.Focus, "Focus", false, IsEnabled: false, DisabledReason: "Focus sessions are unavailable"),
         new(IconKind.Moon, "Dark", true),
     ];
 }
 
-/// <summary>One home quick toggle.</summary>
-public readonly record struct HomeToggleModel(IconKind Icon, string Label, bool IsOn);
+/// <summary>
+/// One home quick toggle. <paramref name="IsEnabled"/> = false is drawn greyed and has no hit target,
+/// so an unsupported OS control never looks like a live button that silently does nothing.
+/// </summary>
+public readonly record struct HomeToggleModel(
+    IconKind Icon,
+    string Label,
+    bool IsOn,
+    bool IsEnabled = true,
+    string? DisabledReason = null);
 
 /// <summary>Compact now-playing summary used by the home card.</summary>
 public sealed record MediaSummaryModel
@@ -721,6 +736,12 @@ public sealed record MediaPageModel
 
     /// <summary>Stable artwork cache key (track identity); null disables artwork caching.</summary>
     public string? ArtworkKey { get; init; }
+
+    /// <summary>System output volume 0..100, or null when unknown.</summary>
+    public int? VolumePercent { get; init; }
+
+    /// <summary>Whether a real output volume is known (false renders an em dash).</summary>
+    public bool HasVolume { get; init; }
 
     /// <summary>Output device label.</summary>
     public string? OutputName { get; init; }

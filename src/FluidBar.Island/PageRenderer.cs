@@ -166,18 +166,22 @@ internal sealed partial class PageRenderer : IDisposable
         {
             var toggle = toggles![i];
             var rect = PageMetricsLayout.HomeToggle(page, i, m);
+            var enabled = toggle.IsEnabled;
+            var alpha = (enabled ? 1f : 0.45f) * _opacity;
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(toggle.IsOn ? _theme.Accent : _theme.BackgroundRaised, toggle.IsOn ? 0.10f * _opacity : _opacity);
+            _fill.Color = !enabled
+                ? Alpha(_theme.BackgroundRaised, 0.55f * _opacity)
+                : Alpha(toggle.IsOn ? _theme.Accent : _theme.BackgroundRaised, toggle.IsOn ? 0.10f * _opacity : _opacity);
             canvas.DrawRoundRect(rect, 10, 10, _fill);
 
             var labelWidth = Math.Min(rect.Width - 30, _text.Measure(toggle.Label, IslandType.Toggle));
             var contentWidth = 14 + 5 + labelWidth;
             var startX = rect.Left + ((rect.Width - contentWidth) / 2);
             IconSet.Draw(canvas, toggle.Icon, new SKRect(startX, rect.MidY - 7, startX + 14, rect.MidY + 7),
-                Alpha(toggle.IsOn ? _theme.Accent : _theme.ForegroundTertiary, _opacity), _icon);
+                Alpha(enabled && toggle.IsOn ? _theme.Accent : _theme.ForegroundTertiary, alpha), _icon);
             _text.Draw(canvas, toggle.Label, IslandType.Toggle,
                 new SKRect(startX + 19, rect.Top, rect.Right - 4, rect.Bottom),
-                toggle.IsOn ? _theme.Foreground : _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+                enabled && toggle.IsOn ? _theme.Foreground : _theme.ForegroundSecondary, TextAlign.Left, alpha);
         }
     }
 
@@ -375,67 +379,56 @@ internal sealed partial class PageRenderer : IDisposable
 
         DrawTransport(canvas, media, page);
 
-        // Output/queue always own the right side of the transport row. When the source has no endpoint
-        // or no queue, a light localized placeholder keeps the row balanced: leaving the slots blank read
-        // as a half-rendered page.
+        // Footer follows the requested split: volume + output on the left, transport exactly centred,
+        // queue on the right. Unsupported slots are greyed with an honest placeholder; their hit
+        // targets are refused by SkiaIslandHitTest (OutputAvailable/QueueAvailable stay false).
+        var volume = PageMetricsLayout.MediaVolume(page, m);
+        var volumeAlpha = (media.HasVolume ? 1f : 0.55f) * _opacity;
+        IconSet.Draw(canvas, IconKind.Speaker,
+            new SKRect(volume.Left, volume.MidY - 7, volume.Left + 14, volume.MidY + 7),
+            Alpha(_theme.ForegroundSecondary, volumeAlpha), _icon);
+        _text.Draw(canvas, media.HasVolume ? _numbers.Number(media.VolumePercent ?? 0) + "%" : "—",
+            IslandType.Output,
+            new SKRect(volume.Left + 18, volume.Top, volume.Right, volume.Bottom),
+            _theme.ForegroundSecondary, TextAlign.Left, volumeAlpha);
+
         var output = PageMetricsLayout.MediaOutput(page, m);
         var queue = PageMetricsLayout.MediaQueue(page, m);
         var hasOutput = media.OutputAvailable && !string.IsNullOrWhiteSpace(media.OutputName);
         var hasQueue = media.QueueAvailable && media.QueueCount > 0;
         var outputText = hasOutput ? media.OutputName : media.OutputPlaceholder;
-        var bothUnavailable = !hasOutput && !hasQueue
-            && !string.IsNullOrWhiteSpace(media.OutputPlaceholder)
-            && !string.IsNullOrWhiteSpace(media.QueuePlaceholder);
-        if (bothUnavailable)
+        if (!string.IsNullOrWhiteSpace(outputText))
         {
-            // Both slots are disabled: one combined, measured-to-fit line instead of two ellipsized
-            // halves ("No outp…"/"No que…" at 1.6). The speaker glyph still anchors the right cluster.
-            var alpha = 0.5f * _opacity;
+            var outputAlpha = (hasOutput ? 1f : 0.5f) * _opacity;
             IconSet.Draw(canvas, IconKind.Speaker,
-                new SKRect(output.Left + 4, output.MidY - 6, output.Left + 16, output.MidY + 6),
-                Alpha(_theme.ForegroundTertiary, alpha), _icon);
-            _text.Draw(canvas, $"{media.OutputPlaceholder} · {media.QueuePlaceholder}", IslandType.Output,
-                new SKRect(output.Left + 20, output.Top, page.Right, output.Bottom),
-                _theme.ForegroundTertiary, TextAlign.Left, alpha);
+                new SKRect(output.Left, output.MidY - 6, output.Left + 12, output.MidY + 6),
+                Alpha(_theme.ForegroundTertiary, outputAlpha), _icon);
+            _text.Draw(canvas, outputText, IslandType.Output,
+                new SKRect(output.Left + 16, output.Top, output.Right, output.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Left, outputAlpha);
         }
-        else
-        {
-            if (!string.IsNullOrWhiteSpace(outputText))
-            {
-                // Disabled state: dimmed icon+label that names the reason (localized) instead of a button
-                // that looks active and does nothing. The hit test refuses the rectangle in that case.
-                var outputAlpha = (hasOutput ? 1f : 0.5f) * _opacity;
-                // The glyph only ever appears with a label next to it (never an orphan icon).
-                IconSet.Draw(canvas, IconKind.Speaker,
-                    new SKRect(output.Left + 4, output.MidY - 6, output.Left + 16, output.MidY + 6),
-                    Alpha(_theme.ForegroundTertiary, outputAlpha), _icon);
-                _text.Draw(canvas, outputText, IslandType.Output,
-                    new SKRect(output.Left + 20, output.Top, output.Right, output.Bottom),
-                    _theme.ForegroundTertiary, TextAlign.Left, outputAlpha);
-            }
 
-            if (hasQueue)
-            {
-                IconSet.Draw(canvas, IconKind.Queue,
-                    new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
-                    Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-                _text.Draw(canvas, media.QueueLabel ?? "Queue", IslandType.Output,
-                    new SKRect(queue.Left + 20, queue.Top, queue.Left + 52, queue.Bottom), _theme.ForegroundTertiary,
-                    TextAlign.Left, _opacity);
-                _text.Draw(canvas, _numbers.Number(media.QueueCount), IslandType.Output,
-                    new SKRect(queue.Left + 52, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
-                    TextAlign.Right, _opacity);
-            }
-            else if (!string.IsNullOrWhiteSpace(media.QueuePlaceholder))
-            {
-                var queueAlpha = 0.5f * _opacity;
-                IconSet.Draw(canvas, IconKind.Queue,
-                    new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
-                    Alpha(_theme.ForegroundTertiary, queueAlpha), _icon);
-                _text.Draw(canvas, media.QueuePlaceholder, IslandType.Output,
-                    new SKRect(queue.Left + 20, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
-                    TextAlign.Left, queueAlpha);
-            }
+        if (hasQueue)
+        {
+            IconSet.Draw(canvas, IconKind.Queue,
+                new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
+                Alpha(_theme.ForegroundTertiary, _opacity), _icon);
+            _text.Draw(canvas, media.QueueLabel ?? "Queue", IslandType.Output,
+                new SKRect(queue.Left + 20, queue.Top, queue.Left + 56, queue.Bottom), _theme.ForegroundTertiary,
+                TextAlign.Left, _opacity);
+            _text.Draw(canvas, _numbers.Number(media.QueueCount), IslandType.Output,
+                new SKRect(queue.Left + 56, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
+                TextAlign.Right, _opacity);
+        }
+        else if (!string.IsNullOrWhiteSpace(media.QueuePlaceholder))
+        {
+            var queueAlpha = 0.5f * _opacity;
+            IconSet.Draw(canvas, IconKind.Queue,
+                new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
+                Alpha(_theme.ForegroundTertiary, queueAlpha), _icon);
+            _text.Draw(canvas, media.QueuePlaceholder, IslandType.Output,
+                new SKRect(queue.Left + 20, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
+                TextAlign.Left, queueAlpha);
         }
     }
 

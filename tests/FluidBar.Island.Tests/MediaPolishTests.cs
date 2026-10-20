@@ -161,8 +161,8 @@ public sealed class MediaPolishTests
     {
         // Expanded media page: the play button is the middle transport control (DIP layout × render scale).
         var page = IslandMetrics.PageRect(IslandTestFixtures.Expanded(1), 1);
-        // Media page transport row: play button box is (page + 31,218) .. (+61,248) in DIP.
-        var left = (int)((page.Left + 31) * scale);
+        // Media page transport row: the play button is centred at (page + 185,218)..(+215,248).
+        var left = (int)((page.Left + 185) * scale);
         var top = (int)((page.Top + 218) * scale);
         return new SKRectI(
             left + (int)(30 * scale * 0.3f),

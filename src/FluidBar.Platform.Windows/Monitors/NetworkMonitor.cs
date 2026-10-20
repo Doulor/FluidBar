@@ -37,7 +37,11 @@ public sealed record NetworkAdapterDescriptor(
     uint? SignalQuality = null);
 
 /// <summary>Real WLAN connection details from <c>wlanapi</c>.</summary>
-public sealed record WlanConnectionInfo(string Ssid, uint SignalQuality, string InterfaceDescription);
+public sealed record WlanConnectionInfo(
+    string Ssid,
+    uint SignalQuality,
+    string InterfaceDescription,
+    string? ProfileName = null);
 
 /// <summary>Pure adapter selection and snapshot construction.</summary>
 public static class NetworkAdapterSelector
@@ -87,9 +91,35 @@ public static class NetworkAdapterSelector
             return new NetworkSnapshot(isNetworkAvailable, null, NetworkAdapterKind.Unknown, null, null);
         }
 
-        var ssid = primary.Kind == NetworkAdapterKind.Wifi ? wlan?.Ssid : null;
+        var ssid = primary.Kind == NetworkAdapterKind.Wifi
+            ? (string.IsNullOrWhiteSpace(wlan?.Ssid) ? wlan?.ProfileName : wlan?.Ssid)
+            : null;
         var signal = primary.Kind == NetworkAdapterKind.Wifi ? wlan?.SignalQuality : primary.SignalQuality;
         return new NetworkSnapshot(true, primary.Name, primary.Kind, ssid, signal);
+    }
+
+    /// <summary>
+    /// Display label for a snapshot: real SSID on Wi-Fi, adapter name on wired, and an explicit
+    /// disconnected label instead of pretending a network exists. Null only before the first snapshot.
+    /// </summary>
+    public static string? DisplayName(NetworkSnapshot? snapshot, string disconnectedLabel)
+    {
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        if (!snapshot.IsConnected)
+        {
+            return disconnectedLabel;
+        }
+
+        if (snapshot.Kind == NetworkAdapterKind.Wifi)
+        {
+            return string.IsNullOrWhiteSpace(snapshot.Ssid) ? snapshot.AdapterName : snapshot.Ssid;
+        }
+
+        return snapshot.AdapterName;
     }
 
     /// <summary>Maps a <see cref="NetworkInterfaceType"/> to the small UI-facing enum.</summary>
@@ -192,9 +222,18 @@ internal static class WlanSsidReader
             var ssid = WlanSsidParser.ParseSsid(
                 connection.wlanAssociationAttributes.dot11Ssid.ucSSID,
                 connection.wlanAssociationAttributes.dot11Ssid.uSSIDLength);
+            if (string.IsNullOrEmpty(ssid))
+            {
+                ssid = connection.strProfileName?.TrimEnd('\0');
+            }
+
             return string.IsNullOrEmpty(ssid)
                 ? null
-                : new WlanConnectionInfo(ssid, connection.wlanAssociationAttributes.wlanSignalQuality, string.Empty);
+                : new WlanConnectionInfo(
+                    ssid,
+                    connection.wlanAssociationAttributes.wlanSignalQuality,
+                    string.Empty,
+                    connection.strProfileName?.TrimEnd('\0'));
         }
         catch (Exception ex)
         {

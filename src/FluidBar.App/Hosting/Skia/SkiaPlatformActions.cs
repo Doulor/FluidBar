@@ -49,6 +49,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly VolumeMonitor _volume;
     private readonly BatteryMonitor _battery;
     private readonly BrightnessMonitor _brightness;
+    private readonly NetworkMonitor _network;
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
     private readonly AgentInboxWatcher _agentInbox;
@@ -119,6 +120,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _volume = new VolumeMonitor(_platformLogger, _counters, time);
         _battery = new BatteryMonitor(_messageHost, _platformLogger, _counters, null, time);
         _brightness = new BrightnessMonitor(_platformLogger, _counters, time);
+        _network = new NetworkMonitor(_platformLogger, _counters, time);
         _artworkCache = new ArtworkCache();
         _artworkTempStore = new ArtworkTempStore(
             new ArtworkTempStoreOptions { DirectoryPath = Path.Combine(Path.GetTempPath(), "FluidBar", "art") },
@@ -206,6 +208,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _battery.SnapshotChanged += OnSnapshotChanged;
         _volume.SnapshotChanged += OnSnapshotChanged;
         _brightness.SnapshotChanged += OnSnapshotChanged;
+        _network.SnapshotChanged += OnSnapshotChanged;
 
         var toggles = quickToggles ?? IslandQuickToggleServices.CreateDefault(_platformLogger, _counters, time);
         _wifi = toggles.Wifi;
@@ -308,6 +311,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var battery = _battery.Current;
         var focus = _focus.Current;
+        var network = _network.Current;
         var media = _media.Current;
         var volume = _volume.Current;
         var brightness = _brightness.Current;
@@ -325,7 +329,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Now = now,
             BatteryPercent = batteryPercent,
             IsCharging = battery?.IsCharging ?? false,
+            // Real WlanAPI SSID when the primary adapter is Wi-Fi; otherwise the adapter name, or
+            // an explicit "Disconnected". The old code never mapped the monitor at all, so the home
+            // tile always said the generic "Wi-Fi".
+            NetworkName = NetworkAdapterSelector.DisplayName(
+                network, Localized(LocKeys.Common.Disconnected, "Disconnected")),
+            IsOnline = network?.IsConnected ?? true,
             FocusOn = focus?.IsActive ?? false,
+            FocusAvailable = focus?.CanToggle ?? false,
             VolumePercent = volume is { HasDevice: true } ? volume.Percent : null,
             IsMuted = volume?.IsMuted ?? false,
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
@@ -371,9 +382,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Settings changed: the widgets weather follows the "weather city" field live.</summary>
+    /// <summary>
+    /// Settings changed: the widgets weather follows the "weather city" field live, and the theme
+    /// toggle must repaint immediately (otherwise the button flips a stored value the island never
+    /// renders again, which reads as a dead button).
+    /// </summary>
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.Theme != current.Theme)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
         if (_weatherCityLockedByEnvironment
             || string.Equals(previous.WeatherCity, current.WeatherCity, StringComparison.Ordinal))
         {
@@ -838,6 +858,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("volume", () => _volume.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("battery", () => _battery.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("brightness", () => _brightness.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("network", () => _network.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("wifi-radio", () => _wifi.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("bluetooth-radio", () => _bluetooth.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("focus-assist", () => _focus.StartAsync(cancellationToken)).ConfigureAwait(false);
@@ -1135,6 +1156,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private string Localized(string key, string fallback) => _localizer?.Get(key) ?? fallback;
 
     /// <summary>
+    /// User-facing network label: the connected Wi-Fi SSID (WlanAPI), the wired adapter name, or the
+    /// localized disconnected state. Null while the monitor has not published its first snapshot.
+    /// </summary>
+    private string? NetworkDisplayName(NetworkSnapshot? network)
+        => NetworkAdapterSelector.DisplayName(
+            network, Localized(LocKeys.Common.Disconnected, "Disconnected"));
+
+    /// <summary>
     /// PowerShell hook command written by the explicit installer: it appends one JSON event file to the
     /// inbox so the island can show the agent session without any polling.
     /// </summary>
@@ -1284,6 +1313,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StopOneAsync("focus-assist", () => _focus.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-radio", () => _bluetooth.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("wifi-radio", () => _wifi.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("network", () => _network.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("brightness", () => _brightness.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("volume", () => _volume.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("battery", () => _battery.DisposeAsync().AsTask()).ConfigureAwait(false);

@@ -24,9 +24,10 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(1);
 
         var page = Page(1, fixture);
-        Click(fixture, PageLayout.MediaPlay(page));
-        Click(fixture, PageLayout.MediaPrevious(page));
-        Click(fixture, PageLayout.MediaNext(page));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.MediaPlay(page, metrics));
+        Click(fixture, PageMetricsLayout.MediaPrevious(page, metrics));
+        Click(fixture, PageMetricsLayout.MediaNext(page, metrics));
 
         Assert.Equal(
             new[]
@@ -102,15 +103,23 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
 
         var page = Page(0, fixture);
-        for (var i = 0; i < 4; i++)
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        var toggles = fixture.Controller.RenderState.Pages.Home.Toggles;
+        for (var i = 0; i < toggles.Count; i++)
         {
-            Click(fixture, PageLayout.HomeToggle(page, i));
+            if (toggles[i].IsEnabled)
+            {
+                Click(fixture, PageMetricsLayout.HomeToggle(page, i, metrics));
+            }
         }
 
-        Assert.Equal(4, actions.Calls.Count);
+        // Focus Assist is a Limited Access Feature on this machine: its toggle is posed as disabled,
+        // has no hit target, and therefore never reaches the action queue (no dead button).
+        Assert.False(toggles[2].IsEnabled);
+        Assert.Equal(3, actions.Calls.Count);
         Assert.All(actions.Calls, call => Assert.Equal(IslandPlatformActionKind.QuickToggle, call.Kind));
         Assert.Equal(
-            new[] { IslandQuickToggle.Wifi, IslandQuickToggle.Bluetooth, IslandQuickToggle.Focus, IslandQuickToggle.Theme },
+            new[] { IslandQuickToggle.Wifi, IslandQuickToggle.Bluetooth, IslandQuickToggle.Theme },
             actions.Calls.Select(call => call.Toggle));
     }
 
@@ -280,7 +289,8 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.MediaCommandRequested += value => command = value;
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
-        Click(fixture, PageLayout.MediaPlay(Page(1, fixture)));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.MediaPlay(Page(1, fixture), metrics));
         Assert.Equal(MediaTransportCommand.TogglePlay, command);
 
         fixture.GoToPage(0);

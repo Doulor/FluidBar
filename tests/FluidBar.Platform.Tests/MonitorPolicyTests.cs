@@ -232,6 +232,21 @@ public sealed class MonitorPolicyTests
         Assert.Null(snapshot.Ssid);
     }
 
+    [Fact]
+    public void NetworkAdapterSelector_DisplayNameUsesSsidForWifiAndFallsBackHonestly()
+    {
+        var wifi = new NetworkSnapshot(true, "Intel Wi-Fi", NetworkAdapterKind.Wifi, "Kuromi-5G", 82);
+        Assert.Equal("Kuromi-5G", NetworkAdapterSelector.DisplayName(wifi, "Disconnected"));
+
+        var wired = new NetworkSnapshot(true, "Realtek Ethernet", NetworkAdapterKind.Ethernet, null, null);
+        Assert.Equal("Realtek Ethernet", NetworkAdapterSelector.DisplayName(wired, "Disconnected"));
+
+        var disconnected = new NetworkSnapshot(false, null, NetworkAdapterKind.Unknown, null, null);
+        Assert.Equal("Disconnected", NetworkAdapterSelector.DisplayName(disconnected, "Disconnected"));
+
+        Assert.Null(NetworkAdapterSelector.DisplayName(null, "Disconnected"));
+    }
+
     [Theory]
     [InlineData(NetworkInterfaceType.Wireless80211, NetworkAdapterKind.Wifi)]
     [InlineData(NetworkInterfaceType.Ethernet, NetworkAdapterKind.Ethernet)]

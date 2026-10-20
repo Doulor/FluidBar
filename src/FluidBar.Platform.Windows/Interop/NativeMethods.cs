@@ -565,7 +565,12 @@ internal static partial class NativeMethods
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     internal struct WLAN_CONNECTION_ATTRIBUTES
     {
+        /// <summary><c>WLAN_INTERFACE_STATE isState</c> (4 bytes).</summary>
         public uint isState;
+
+        /// <summary><c>WLAN_CONNECTION_MODE wlanConnectionMode</c> (4 bytes).</summary>
+        public uint wlanConnectionMode;
+
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
         public string strProfileName;
         public WLAN_ASSOCIATION_ATTRIBUTES wlanAssociationAttributes;

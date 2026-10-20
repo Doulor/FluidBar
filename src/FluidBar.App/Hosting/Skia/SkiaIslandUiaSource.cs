@@ -412,6 +412,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 state: new UiaElementState { IsOffscreen = false }));
         }
 
+        var togglesMetrics = FontScaleMetrics.From(state.FontScale);
         for (var i = 0; i < Math.Min(4, home.Toggles.Count); i++)
         {
             var toggle = home.Toggles[i];
@@ -419,15 +420,20 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 $"island.page.0.toggle.{i}",
                 UiaElementRole.Button,
                 toggle.Label,
-                ToRect(PageLayout.HomeToggle(page, i)),
-                UiaPatternKind.Toggle | UiaPatternKind.Invoke,
+                ToRect(PageMetricsLayout.HomeToggle(page, i, togglesMetrics)),
+                toggle.IsEnabled ? UiaPatternKind.Toggle | UiaPatternKind.Invoke : UiaPatternKind.None,
                 new UiaElementState
                 {
-                    IsFocusable = true,
+                    IsEnabled = toggle.IsEnabled,
+                    IsFocusable = toggle.IsEnabled,
                     IsToggled = toggle.IsOn,
-                    ItemStatus = toggle.IsOn ? L("Common.On", "On") : L("Common.Off", "Off"),
+                    ItemStatus = toggle.IsEnabled
+                        ? toggle.IsOn ? L("Common.On", "On") : L("Common.Off", "Off")
+                        : toggle.DisabledReason ?? L("Common.Disabled", "Disabled"),
                 },
-                help: L("Island.Accessibility.ToggleHelp", "Press Enter to toggle.")));
+                help: toggle.IsEnabled
+                    ? L("Island.Accessibility.ToggleHelp", "Press Enter to toggle.")
+                    : toggle.DisabledReason ?? L("Common.Disabled", "Disabled")));
         }
 
         var nowPlaying = home.NowPlaying;

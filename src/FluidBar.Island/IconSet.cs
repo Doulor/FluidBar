@@ -257,8 +257,10 @@ public static class IconSet
                 b.Arc(12, 22, 11.5f, 220, 100);
                 break;
             case IconKind.Focus:
-                b.Arc(14, 12, 8.2f, 65, 230);
-                b.Ellipse(9.5f, 12, 6.5f, 8.2f);
+                // Do-not-disturb: circle + slash. The old crescent was indistinguishable from Moon,
+                // which made Focus and the dark-theme toggle look like the same button.
+                b.Ellipse(12, 12, 8, 8);
+                b.Line(6.8f, 17.2f, 17.2f, 6.8f);
                 break;
             case IconKind.Settings:
                 b.Ellipse(12, 12, 3.2f, 3.2f);

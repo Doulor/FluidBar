@@ -142,23 +142,29 @@ public sealed class IslandHitTestTests
     {
         var state = IslandTestFixtures.Expanded(1);
         var page = IslandMetrics.PageRect(state, 1);
+        var metrics = FontScaleMetrics.From(state.FontScale);
 
-        var play = Hit(state, PageLayout.MediaPlay(page).MidX, PageLayout.MediaPlay(page).MidY);
+        var play = Hit(state, PageMetricsLayout.MediaPlay(page, metrics).MidX,
+            PageMetricsLayout.MediaPlay(page, metrics).MidY);
         Assert.Equal(IslandPageControl.PlayPause, play.Control);
 
-        var previous = Hit(state, PageLayout.MediaPrevious(page).MidX, PageLayout.MediaPrevious(page).MidY);
+        var previous = Hit(state, PageMetricsLayout.MediaPrevious(page, metrics).MidX,
+            PageMetricsLayout.MediaPrevious(page, metrics).MidY);
         Assert.Equal(IslandPageControl.Previous, previous.Control);
 
-        var next = Hit(state, PageLayout.MediaNext(page).MidX, PageLayout.MediaNext(page).MidY);
+        var next = Hit(state, PageMetricsLayout.MediaNext(page, metrics).MidX,
+            PageMetricsLayout.MediaNext(page, metrics).MidY);
         Assert.Equal(IslandPageControl.Next, next.Control);
 
         var seek = Hit(state, PageLayout.MediaSeekRow(page).MidX, PageLayout.MediaSeekRow(page).MidY);
         Assert.Equal(IslandPageControl.Seek, seek.Control);
 
-        var output = Hit(state, PageLayout.MediaOutput(page).MidX, PageLayout.MediaOutput(page).MidY);
+        var output = Hit(state, PageMetricsLayout.MediaOutput(page, metrics).MidX,
+            PageMetricsLayout.MediaOutput(page, metrics).MidY);
         Assert.Equal(IslandPageControl.Output, output.Control);
 
-        var queue = Hit(state, PageLayout.MediaQueue(page).MidX, PageLayout.MediaQueue(page).MidY);
+        var queue = Hit(state, PageMetricsLayout.MediaQueue(page, metrics).MidX,
+            PageMetricsLayout.MediaQueue(page, metrics).MidY);
         Assert.Equal(IslandPageControl.Queue, queue.Control);
 
         var art = Hit(state, PageLayout.MediaArt(page).MidX, PageLayout.MediaArt(page).MidY);

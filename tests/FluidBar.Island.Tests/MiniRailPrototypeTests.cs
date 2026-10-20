@@ -21,7 +21,7 @@ public sealed class MiniRailPrototypeTests
     private const float CentreX = 720f;
 
     /// <summary>Short labels exactly as the prototype2 rail paints them (zh-Hans).</summary>
-    private static readonly string[] ZhLabels = ["主页", "媒体", "通知", "剪贴板", "代理", "小组件"];
+    private static readonly string[] ZhLabels = ["主页", "媒体", "通知", "剪贴板", "Agent", "小组件"];
 
     [Theory]
     [InlineData("主页", 64f)]
@@ -239,7 +239,7 @@ public sealed class MiniRailPrototypeTests
     [InlineData(1, 64f, 667f, 773f, 0, 3)]
     [InlineData(2, 64f, 667f, 773f, 1, 2)]
     [InlineData(3, 73f, 662.5f, 777.5f, 2, 1)]
-    [InlineData(4, 64f, 667f, 773f, 3, 0)]
+    [InlineData(4, 70f, 664f, 776f, 3, 0)]
     [InlineData(5, 73f, 662.5f, 777.5f, 3, 0)]
     public void PrototypePageTable_IsReproduced(
         int page, float capsule, float prevCentre, float nextCentre, int leftDots, int rightDots)

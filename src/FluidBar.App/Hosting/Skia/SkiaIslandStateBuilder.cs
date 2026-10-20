@@ -127,9 +127,14 @@ public static class SkiaIslandStateBuilder
             [
                 new HomeToggleModel(IslandIcon.Wifi, content.NetworkName ?? "Wi-Fi", content.IsOnline),
                 new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth), false),
-                new HomeToggleModel(IslandIcon.Moon, localizer.Get(LocKeys.Page.Home.FocusTime), content.FocusOn),
                 new HomeToggleModel(
-                    IslandIcon.Moon,
+                    IslandIcon.Focus,
+                    localizer.Get(LocKeys.Page.Home.FocusTime),
+                    content.FocusOn,
+                    content.FocusAvailable,
+                    content.FocusAvailable ? null : localizer.Get(LocKeys.Common.Disabled)),
+                new HomeToggleModel(
+                    settings?.Theme == AppTheme.Light ? IslandIcon.Sun : IslandIcon.Moon,
                     localizer.Get(settings is not null && settings.Theme == AppTheme.Light
                         ? LocKeys.Settings.Appearance.Theme.Light
                         : LocKeys.Settings.Appearance.Theme.Dark),
@@ -168,6 +173,8 @@ public static class SkiaIslandStateBuilder
             LyricLine = media?.LyricLine,
             NextLyricLine = media?.NextLyricLine,
             LyricHighlight = media?.LyricHighlight ?? -1,
+            VolumePercent = content.VolumePercent,
+            HasVolume = content.VolumePercent is not null,
             NextLyricLabel = localizer.Get(LocKeys.Common.Next),
             PositionText = media?.PositionText,
             DurationText = media?.DurationText,
@@ -228,7 +235,7 @@ public static class SkiaIslandStateBuilder
         ];
 
         // The transient preview rail paints the short page names (prototype2 .mini-label:
-        // 主页/媒体/通知/剪贴板/代理/小组件), not the long expanded-page titles.
+        // 主页/媒体/通知/剪贴板/Agent/小组件), not the long expanded-page titles.
         string[] shortTitles =
         [
             localizer.Get(LocKeys.Rail.Home),
@@ -429,6 +436,8 @@ public static class SkiaIslandStateBuilder
             // Home clock/date derive from Now; minute ticks are real content changes.
             .Append(content.Now.ToString("yyyyMMddHHmm", CultureInfo.InvariantCulture)).Append('|')
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
+            .Append(content.FocusAvailable).Append('|')
+            .Append(settings?.Theme).Append('|')
             .Append(content.UnreadCount).Append('|')
             .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|')
             // Widgets weather/task text: a new temperature or a task hint must repaint the page.

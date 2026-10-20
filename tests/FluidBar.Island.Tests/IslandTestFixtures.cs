@@ -66,7 +66,7 @@ internal static class IslandTestFixtures
     ];
 
     /// <summary>Short rail labels exactly as the shipped zh-Hans catalog renders them.</summary>
-    public static string[] ZhShortTitles { get; } = ["主页", "媒体", "通知", "剪贴板", "代理", "小组件"];
+    public static string[] ZhShortTitles { get; } = ["主页", "媒体", "通知", "剪贴板", "Agent", "小组件"];
 
     public static IslandTheme Theme => IslandTheme.Dark;
 
@@ -168,7 +168,7 @@ internal static class IslandTestFixtures
             [
                 new HomeToggleModel(IconKind.Wifi, "Wi-Fi", true),
                 new HomeToggleModel(IconKind.Bluetooth, "Bluetooth", false),
-                new HomeToggleModel(IconKind.Moon, "Focus", false),
+                new HomeToggleModel(IconKind.Focus, "Focus", false),
                 new HomeToggleModel(IconKind.Moon, "Dark", true),
             ],
             NowPlaying = new MediaSummaryModel
@@ -203,6 +203,10 @@ internal static class IslandTestFixtures
             AccentHex = "#F06AB0",
             OutputName = "Speakers",
             QueueCount = 3,
+            VolumePercent = 62,
+            HasVolume = true,
+            OutputPlaceholder = "No output",
+            QueuePlaceholder = "No queue",
         },
         Notifications = new NotificationsPageModel
         {

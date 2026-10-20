@@ -224,6 +224,9 @@ public sealed record IslandContent
     /// <summary>Whether focus assist is on.</summary>
     public bool FocusOn { get; init; }
 
+    /// <summary>Whether Windows allows writing the focus state (false = the toggle is inert).</summary>
+    public bool FocusAvailable { get; init; }
+
     /// <summary>System output volume 0..100, or null when no audio endpoint is available.</summary>
     public int? VolumePercent { get; init; }
 
