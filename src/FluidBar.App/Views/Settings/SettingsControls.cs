@@ -490,11 +490,28 @@ internal static class SettingsControls
 
         public static void Attach(Border card)
         {
-            card.PointerEntered += (_, _) => card.BoxShadow = Hover;
+            card.PointerEntered += (_, _) =>
+            {
+                card.BoxShadow = Hover;
+                if (card.Child is Grid grid && grid.Children.OfType<Border>()
+                    .Any(border => border.Name == "MaterialPressHighlight"))
+                {
+                    // Row hover: L2 4 % white tint + a draw-only 0.99 scale (layout untouched).
+                    card.Background = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
+                    card.RenderTransformOrigin = Avalonia.RelativePoint.Center;
+                    card.RenderTransform = new ScaleTransform(0.99, 0.99);
+                }
+            };
             card.PointerExited += (_, _) =>
             {
                 card.BoxShadow = default;
                 card.Classes.Remove("pressed");
+                if (card.Child is Grid grid && grid.Children.OfType<Border>()
+                    .Any(border => border.Name == "MaterialPressHighlight"))
+                {
+                    card.Background = null;
+                    card.RenderTransform = null;
+                }
             };
             card.PointerPressed += (_, _) =>
             {

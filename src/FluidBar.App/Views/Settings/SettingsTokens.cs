@@ -38,12 +38,12 @@ internal static class SettingsMetrics
     public const double NavPadY = 14;
     public const double NavPadX = 10;
     public const double NavGap = 2;
-    public const double NavItemHeight = 36;
+    public const double NavItemHeight = 40;
     public const double NavItemRadius = 8;
     public const double NavItemPadX = 10;
     public const double NavItemGap = 9;
-    public const double NavIcon = 16;
-    public const double NavLabelSize = 12;
+    public const double NavIcon = 18;
+    public const double NavLabelSize = 13;
     public const double NavCountHeight = 16;
     public const double NavCountRadius = 5;
     public const double NavCountPadX = 4;
@@ -75,14 +75,20 @@ internal static class SettingsMetrics
     public const double DescLineHeight = 1.55;
     public const double DescMarginBottom = 18;
     public const double DescMaxWidth = 560;
-    public const double CaptionSize = 9;
-    public const double CaptionTracking = 0.12;
+    public const double CaptionSize = 11;
+    public const double CaptionTracking = 0.036; // 11 x 0.036 ~= +0.4 DIP letter-spacing
     public const double CaptionMarginTop = 20;
     public const double CaptionMarginBottom = 2;
     public const double RowMinHeight = 53;
     public const double RowPadY = 8;
     public const double RowGap = 18;
-    public const double RowTitleSize = 12;
+    public const double RowTitleSize = 13;
+
+    /// <summary>Row description line ("说明") size.</summary>
+    public const double RowDescriptionSize = 11.5;
+
+    /// <summary>Standard settings row height.</summary>
+    public const double RowHeight = 48;
     public const double RowTitleLineHeight = 1.35;
     public const double RowDescSize = 10;
     public const double RowDescLineHeight = 1.45;
