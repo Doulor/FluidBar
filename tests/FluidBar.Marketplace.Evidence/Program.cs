@@ -528,6 +528,15 @@ internal static class Program
         using var renderer = new IslandRenderer(IslandTheme.Dark);
 
         var step = TimeSpan.FromSeconds(1.0 / 60.0);
+
+        // Warm up Skia/text/glyph caches so the first captured frame is not a JIT outlier.
+        for (var warmup = 0; warmup < 3; warmup++)
+        {
+            time.Advance(step);
+            controller.Advance(step);
+            using var warm = renderer.RenderToBitmap(controller.RenderState, 1.5f);
+        }
+
         controller.HandleShowHotkey(); // deterministic start: compact pill visible
         Settle(controller, time, step);
 
@@ -576,6 +585,7 @@ internal static class Program
         WriteTimingCsv(outputDir, segments);
         WriteMotionReport(outputDir, segments);
         BuildMotionStrip(outputDir, segments);
+        BuildKeyFrames(outputDir, [("expand", 30), ("page", 30), ("satellite", 15)]);
 
         Console.WriteLine(JsonSerializer.Serialize(
             segments.Select(static segment => new
@@ -602,6 +612,9 @@ internal static class Program
 
     private sealed record MotionFrame(
         int Index,
+        double AdvanceMs,
+        double RenderMs,
+        double EncodeMs,
         double WallMs,
         double SimulatedMs,
         double Metric,
@@ -609,7 +622,11 @@ internal static class Program
         double Height,
         string Form,
         bool AnimatingAfter,
-        ulong Hash);
+        ulong Hash)
+    {
+        /// <summary>UI frame cost: controller advance + Skia render (PNG encoding is harness overhead).</summary>
+        public double UiMs => AdvanceMs + RenderMs;
+    }
 
     private sealed class MotionSegment
     {
@@ -619,7 +636,7 @@ internal static class Program
 
         public required List<MotionFrame> Frames { get; init; }
 
-        public int OverBudgetCount => Frames.Count(static frame => frame.WallMs > 16.7);
+        public int OverBudgetCount => Frames.Count(static frame => frame.UiMs > 16.7);
 
         public int BackJumpCount { get; set; }
 
@@ -631,14 +648,16 @@ internal static class Program
 
         public double MaxJump { get; set; }
 
-        public double Percentile(double percentile)
+        public double Percentile(double percentile) => Percentile(static frame => frame.UiMs, percentile);
+
+        public double Percentile(Func<MotionFrame, double> selector, double percentile)
         {
             if (Frames.Count == 0)
             {
                 return 0;
             }
 
-            var sorted = Frames.Select(static frame => frame.WallMs).OrderBy(static value => value).ToArray();
+            var sorted = Frames.Select(selector).OrderBy(static value => value).ToArray();
             var rank = (int)Math.Clamp(Math.Ceiling((percentile / 100.0) * sorted.Length) - 1, 0, sorted.Length - 1);
             return sorted[rank];
         }
@@ -675,20 +694,26 @@ internal static class Program
             }
 
             time.Advance(step);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var advanceWatch = System.Diagnostics.Stopwatch.StartNew();
             controller.Advance(step);
+            advanceWatch.Stop();
             var state = controller.RenderState;
-            ulong hash;
-            using (var bitmap = renderer.RenderToBitmap(state, 1.5f))
-            {
-                var crop = IslandCrop(controller, state, 1.5f, bitmap.Width, bitmap.Height);
-                hash = SavePng(bitmap, Path.Combine(segmentDir, $"frame-{index:000}.png"), crop);
-            }
 
-            stopwatch.Stop();
+            var renderWatch = System.Diagnostics.Stopwatch.StartNew();
+            using var bitmap = renderer.RenderToBitmap(state, 1.5f);
+            renderWatch.Stop();
+            var crop = IslandCrop(controller, state, 1.5f, bitmap.Width, bitmap.Height);
+
+            var encodeWatch = System.Diagnostics.Stopwatch.StartNew();
+            var hash = SavePng(bitmap, Path.Combine(segmentDir, $"frame-{index:000}.png"), crop);
+            encodeWatch.Stop();
+
             framesRecorded.Add(new MotionFrame(
                 index,
-                stopwatch.Elapsed.TotalMilliseconds,
+                advanceWatch.Elapsed.TotalMilliseconds,
+                renderWatch.Elapsed.TotalMilliseconds,
+                encodeWatch.Elapsed.TotalMilliseconds,
+                advanceWatch.Elapsed.TotalMilliseconds + renderWatch.Elapsed.TotalMilliseconds + encodeWatch.Elapsed.TotalMilliseconds,
                 step.TotalMilliseconds,
                 metric(),
                 state.ShellWidth,
@@ -754,7 +779,7 @@ internal static class Program
         }
 
         var origin = controller.Motion.ShellOrigin;
-        const double pad = 20;
+        const double pad = 40;
         var left = (int)Math.Round((origin.X - pad) * dpiScale);
         var top = (int)Math.Round((origin.Y - pad) * dpiScale);
         var right = (int)Math.Round((origin.X + state.ShellWidth + pad) * dpiScale);
@@ -779,13 +804,16 @@ internal static class Program
     private static void WriteTimingCsv(string outputDir, IReadOnlyList<MotionSegment> segments)
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("segment,frame,wall_ms,simulated_ms,metric,width,height,form,animating_after");
+        builder.AppendLine("segment,frame,advance_ms,render_ms,encode_ms,wall_ms,simulated_ms,metric,width,height,form,animating_after");
         foreach (var segment in segments)
         {
             foreach (var frame in segment.Frames)
             {
                 builder.Append(segment.Name).Append(',')
                     .Append(frame.Index).Append(',')
+                    .Append(frame.AdvanceMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.RenderMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                    .Append(frame.EncodeMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
                     .Append(frame.WallMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
                     .Append(frame.SimulatedMs.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
                     .Append(frame.Metric.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
@@ -805,14 +833,18 @@ internal static class Program
         var builder = new System.Text.StringBuilder();
         builder.AppendLine("# Motion capture — 60 fps frame evidence").AppendLine();
         builder.AppendLine($"Generated: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}").AppendLine();
-        builder.AppendLine("Driver: real SkiaIslandController (motion/pager/split springs) + IslandRenderer.RenderToBitmap at 1.5x.");
-        builder.AppendLine("Wall time per frame includes Advance + full Skia render + PNG encode, so it is an upper bound of the UI frame cost.");
+        builder.AppendLine("Driver: real SkiaIslandController (motion/pager/split springs) + IslandRenderer.RenderToBitmap at 1.5x, 3 warm-up frames before capture.");
+        builder.AppendLine("Per-frame cost is split into advance (controller), render (Skia) and encode (PNG, harness overhead); the 16.7 ms budget is judged on advance + render (ui).");
         builder.AppendLine();
-        builder.AppendLine("| segment | frames | duration (sim) | wall p50 | wall p99 | frames > 16.7 ms | back-jumps | stalled | duplicate | settle overshoot | max step |");
-        builder.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+        builder.AppendLine("| segment | frames | duration (sim) | advance p50/p99 | render p50/p99 | encode p50/p99 | ui p50/p99 | frames > 16.7 ms (ui) | back-jumps | stalled | duplicate | settle overshoot | max step |");
+        builder.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
         foreach (var segment in segments)
         {
-            builder.AppendLine($"| {segment.Name} | {segment.Frames.Count} | {segment.Frames.Count / 60.0:0.00} s | {segment.Percentile(50):0.00} ms | {segment.Percentile(99):0.00} ms | {segment.OverBudgetCount} | {segment.BackJumpCount} | {segment.StalledFrames} | {segment.DuplicateFrames} | {segment.Overshoot:0.000} | {segment.MaxJump:0.000} |");
+            var advance = $"{segment.Percentile(static frame => frame.AdvanceMs, 50):0.00}/{segment.Percentile(static frame => frame.AdvanceMs, 99):0.00} ms";
+            var render = $"{segment.Percentile(static frame => frame.RenderMs, 50):0.00}/{segment.Percentile(static frame => frame.RenderMs, 99):0.00} ms";
+            var encode = $"{segment.Percentile(static frame => frame.EncodeMs, 50):0.00}/{segment.Percentile(static frame => frame.EncodeMs, 99):0.00} ms";
+            var ui = $"{segment.Percentile(50):0.00}/{segment.Percentile(99):0.00} ms";
+            builder.AppendLine($"| {segment.Name} | {segment.Frames.Count} | {segment.Frames.Count / 60.0:0.00} s | {advance} | {render} | {encode} | {ui} | {segment.OverBudgetCount} | {segment.BackJumpCount} | {segment.StalledFrames} | {segment.DuplicateFrames} | {segment.Overshoot:0.000} | {segment.MaxJump:0.000} |");
         }
 
         builder.AppendLine();
@@ -820,8 +852,10 @@ internal static class Program
         builder.AppendLine("- back-jumps: frames before the target is reached where the driving metric moves opposite to the expected direction (expand/page: rising; collapse: falling; satellite: rising until the fusion trigger, then falling).");
         builder.AppendLine("- stalled / duplicate: frames before the target where the metric does not change, or the encoded frame is byte-identical to the previous one (a dropped or duplicated frame on screen).");
         builder.AppendLine("- settle overshoot: after the peak, the largest distance from the final value; damped spring oscillation is expected there and is not counted as a back-jump.");
-        builder.AppendLine("- frames > 16.7 ms: wall-clock budget misses; the capture loop is synchronous, so this includes PNG encoding, not just UI work.");
-        builder.AppendLine("- Per-frame bitmaps: expand/, collapse/, page/, satellite/ (frame-000.png ...). Raw timings: timing.csv.");
+        builder.AppendLine("- ui = advance + render (controller + Skia) and is what the 16.7 ms budget is judged on; encode (PNG at 1.5x) is harness overhead and is reported separately.");
+        builder.AppendLine("- Per-frame bitmaps: expand/, collapse/, page/, satellite/ (frame-000.png ...). Raw timings: timing.csv (advance_ms / render_ms / encode_ms / wall_ms columns).");
+        builder.AppendLine("- Key frames (2x): expand-frame-030-2x.png, page-frame-030-2x.png, satellite-frame-015-2x.png.");
+        builder.AppendLine("- Frame crop: island bounds + 40 DIP margin at 1.5x, composited on #08080A.");
         File.WriteAllText(Path.Combine(outputDir, "motion-capture.md"), builder.ToString(), System.Text.Encoding.UTF8);
     }
 
@@ -862,6 +896,23 @@ internal static class Program
         }
 
         target.Save(Path.Combine(outputDir, "motion-strip.png"), System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    /// <summary>2x upscales of the frames humans should eyeball (one per motion family).</summary>
+    private static void BuildKeyFrames(string outputDir, IReadOnlyList<(string Segment, int Frame)> keys)
+    {
+        foreach (var (segment, frame) in keys)
+        {
+            var sourcePath = Path.Combine(outputDir, segment, $"frame-{frame:000}.png");
+            var targetPath = Path.Combine(outputDir, $"{segment}-frame-{frame:000}-2x.png");
+            using var source = System.Drawing.Image.FromFile(sourcePath);
+            using var target = new System.Drawing.Bitmap(source.Width * 2, source.Height * 2);
+            using var graphics = System.Drawing.Graphics.FromImage(target);
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.DrawImage(source, new System.Drawing.Rectangle(0, 0, target.Width, target.Height));
+            target.Save(targetPath, System.Drawing.Imaging.ImageFormat.Png);
+        }
     }
 
     private static ulong SavePng(SKBitmap bitmap, string path, System.Drawing.Rectangle? crop = null)
@@ -955,7 +1006,18 @@ internal static class Program
 
         public string GetCultureDisplayName(string cultureTag) => cultureTag;
 
-        public string Get(string key) => _messages.TryGetValue(key, out var value) ? value : key;
+        public string Get(string key)
+        {
+            if (_messages.TryGetValue(key, out var value))
+            {
+                return value;
+            }
+
+            // Fallback: "Activity.Bluetooth" -> "Bluetooth" so unknown host keys still read
+            // like labels instead of raw resource ids in the evidence frames.
+            var tail = key.Split('.').LastOrDefault();
+            return string.IsNullOrWhiteSpace(tail) ? key : tail;
+        }
 
         public string Format(string key, IReadOnlyDictionary<string, object?> arguments) => Get(key);
 
