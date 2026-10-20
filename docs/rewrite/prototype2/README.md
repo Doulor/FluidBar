@@ -39,6 +39,7 @@ Designed for a **1440 × 900** desktop viewport; it also works at smaller widths
 | **Wheel** | **140 px** per page, at most one commit per **180 ms**. Scrollable page content scrolls first; at an edge, **40 px** overscroll held for **120 ms** chains to the next page. |
 | **Keyboard** | `1`–`6`, `←`/`→`, `Home`, `End`; `Esc` collapses. |
 | **Activity** | Any drag/wheel/key/far-dot activity shows the three preview islands. They fade out **900 ms after the last activity** (settings → island → auto-collapse, 0.4–3.6 s), with a 220 ms opacity fade. |
+| **Neighbour pills** | Only visible with the strip. The previous/next glass pills are real buttons: clicking the left pill turns to the **previous page**, the right pill to the **next page**. Hover lightens the glass, keyboard focus draws an accent ring, and the slot is `disabled` when there is no page in that direction. |
 | **Far dots** | Only visible with the strip. Clicking a dot jumps to the **farthest page in that direction** — left → Home (`01`), right → Widgets (`06`) — locking the strip to the destination while the pager springs. |
 | **Modes** | `float` (top 12 px), `flush` (top 0, square top corners), `dock` (island above a six-app dock that replaces the taskbar). |
 | **Themes** | Dark/light affect the desktop, console and settings. The island itself stays obsidian (or acrylic when selected) so content contrast never changes. |
@@ -56,6 +57,10 @@ During a horizontal drag, a wheel page gesture, keyboard navigation or a far-dot
 | previous | **26 × 26** circle | page icon |
 | current | **64 × 28** capsule base (grows with the label) | page icon + localized page label |
 | next | **26 × 26** circle | page icon |
+
+The two neighbour pills are interactive (see the interaction contract): each is a `<button>` whose
+glass layer is the pointer target, so hovering it keeps the rail revealed and clicking it turns one
+page. The far-page dots stay separate real buttons that jump to the extreme page.
 
 - Glass: `rgba(26,26,31,.72)`, `blur(18px)`, no border, low-contrast icons/label (9 px).
 - **Spring:** `T = 0.32 s`, `ζ = 0.85`, integrated per frame with ≤ 4 ms substeps. Settings → island → motion-strength (0.5–1.5) divides the period, so higher values morph faster.

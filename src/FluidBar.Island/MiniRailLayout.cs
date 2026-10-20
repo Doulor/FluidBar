@@ -19,6 +19,14 @@ namespace FluidBar.Island;
 /// <param name="Next">Next island (26×26; the slot stays reserved on the last page).</param>
 /// <param name="LeftDots">Far-page dots on the left (0..3, nearest first).</param>
 /// <param name="RightDots">Far-page dots on the right (0..3, nearest first).</param>
+/// <param name="PrevAlpha">Previous island opacity (springs to 0 at the first page).</param>
+/// <param name="NextAlpha">Next island opacity (springs to 0 at the last page).</param>
+/// <param name="LeftAlpha">Left dot cluster opacity.</param>
+/// <param name="RightAlpha">Right dot cluster opacity.</param>
+/// <param name="LabelProgress">Label cross-fade progress (1 = settled on the new label).</param>
+/// <param name="PulsePrev">Previous content pulse (1 = settled).</param>
+/// <param name="PulseCurrent">Current content pulse (1 = settled).</param>
+/// <param name="PulseNext">Next content pulse (1 = settled).</param>
 public readonly record struct MiniRailFrame(
     int Page,
     float CapsuleWidth,
@@ -27,7 +35,15 @@ public readonly record struct MiniRailFrame(
     SKRect Current,
     SKRect Next,
     int LeftDots,
-    int RightDots);
+    int RightDots,
+    float PrevAlpha,
+    float NextAlpha,
+    float LeftAlpha,
+    float RightAlpha,
+    float LabelProgress,
+    float PulsePrev,
+    float PulseCurrent,
+    float PulseNext);
 
 /// <summary>
 /// Pure geometry + text metrics for the prototype2 transient preview rail.
@@ -149,13 +165,23 @@ public static class MiniRailLayout
         Span<SKRect> dotsRight)
     {
         var arch = state.Archipelago;
+        var rail = arch.Rail;
         var position = Position(double.IsFinite(arch.PagePosition) ? arch.PagePosition : state.Pager.PagePosition);
-        var page = PageAt(position);
-        var capsule = CapsuleWidthAt(position, state.Pages, state.FontScale);
-        var leftDots = arch.ResolvedFarLeftDots;
-        var rightDots = arch.ResolvedFarRightDots;
-        var leftWide = arch.ResolvedFarLeftOverflow;
-        var rightWide = arch.ResolvedFarRightOverflow;
+        var page = rail.Active ? rail.Page : PageAt(position);
+        var capsule = rail.Active ? rail.CapsuleWidth : CapsuleWidthAt(position, state.Pages, state.FontScale);
+
+        // Dot counts follow the rail page (the page the pills represent), not the pager position: the
+        // prototype rebuilds the clusters the moment the strip retargets.
+        MiniRailTargetsFactory.DotCounts(page, out var leftDots, out var leftWide, out var rightDots, out var rightWide);
+
+        var prevAlpha = rail.Active ? rail.PrevAlpha : (page > 0 ? 1f : 0f);
+        var nextAlpha = rail.Active ? rail.NextAlpha : (page < PagerConstants.PageCount - 1 ? 1f : 0f);
+        var leftAlpha = rail.Active ? rail.LeftAlpha : (leftDots > 0 ? 1f : 0f);
+        var rightAlpha = rail.Active ? rail.RightAlpha : (rightDots > 0 ? 1f : 0f);
+        var labelProgress = rail.Active ? rail.LabelProgress : 1f;
+        var pulsePrev = rail.Active ? rail.PulsePrev : 1f;
+        var pulseCurrent = rail.Active ? rail.PulseCurrent : 1f;
+        var pulseNext = rail.Active ? rail.PulseNext : 1f;
 
         const float neighbour = (float)IslandMetrics.MiniNeighbourWidth;
         const float capsuleHeight = (float)IslandMetrics.MiniCurrentHeight;
@@ -175,8 +201,8 @@ public static class MiniRailLayout
         var leftWidth = ClusterWidth(leftDots, leftWide);
         var rightWidth = ClusterWidth(rightDots, rightWide);
         var half = capsule / 2f;
-        var prevCentre = centreX - half - islandGap - (neighbour / 2f);
-        var nextCentre = centreX + half + islandGap + (neighbour / 2f);
+        var prevCentre = rail.Active ? centreX + rail.PrevX : centreX - half - islandGap - (neighbour / 2f);
+        var nextCentre = rail.Active ? centreX + rail.NextX : centreX + half + islandGap + (neighbour / 2f);
 
         var previous = new SKRect(prevCentre - (neighbour / 2f), midY - (neighbour / 2f),
             prevCentre + (neighbour / 2f), midY + (neighbour / 2f));
@@ -185,8 +211,12 @@ public static class MiniRailLayout
         var next = new SKRect(nextCentre - (neighbour / 2f), midY - (neighbour / 2f),
             nextCentre + (neighbour / 2f), midY + (neighbour / 2f));
 
-        var leftClusterCentre = prevCentre - (neighbour / 2f) - dotIslandGap - (leftWidth / 2f);
-        var rightClusterCentre = nextCentre + (neighbour / 2f) + dotIslandGap + (rightWidth / 2f);
+        var leftClusterCentre = rail.Active
+            ? centreX + rail.LeftX
+            : prevCentre - (neighbour / 2f) - dotIslandGap - (leftWidth / 2f);
+        var rightClusterCentre = rail.Active
+            ? centreX + rail.RightX
+            : nextCentre + (neighbour / 2f) + dotIslandGap + (rightWidth / 2f);
         var dotTop = midY - (dotSize / 2f);
 
         var cursor = leftClusterCentre - (leftWidth / 2f);
@@ -221,14 +251,30 @@ public static class MiniRailLayout
         }
 
         var strip = new SKRect(centreX - halfWidth, railTop, centreX + halfWidth, railTop + RailHeight);
-        return new MiniRailFrame(page, capsule, strip, previous, current, next, leftDots, rightDots);
+        return new MiniRailFrame(
+            page,
+            capsule,
+            strip,
+            previous,
+            current,
+            next,
+            leftDots,
+            rightDots,
+            prevAlpha,
+            nextAlpha,
+            leftAlpha,
+            rightAlpha,
+            labelProgress,
+            pulsePrev,
+            pulseCurrent,
+            pulseNext);
     }
 
     /// <summary>Centre X of the rail: the expanded shell midpoint.</summary>
     public static float CentreX(SKRect shell) => shell.MidX;
 
     /// <summary>Prototype cluster width: n dots, 4 DIP gaps and +4 DIP when the last dot is wide.</summary>
-    internal static float ClusterWidth(int count, bool wide)
+    public static float ClusterWidth(int count, bool wide)
         => count <= 0
             ? 0
             : (count * (float)IslandMetrics.DotSize)

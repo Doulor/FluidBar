@@ -438,6 +438,7 @@
 
       'dots.left': '更早的页面', 'dots.right': '更晚的页面',
       'dots.jump': '跳转到{page}（第 {n} 页）', 'dots.more': '另有 {n} 个更远的页面',
+      'rail.prev': '上一页', 'rail.next': '下一页',
       'console.settings': '设置', 'console.market': '插件市场', 'console.gear': '打开设置',
 
       'cal.weekdays': ['一', '二', '三', '四', '五', '六', '日']
@@ -642,6 +643,7 @@
 
       'dots.left': 'Earlier pages', 'dots.right': 'Later pages',
       'dots.jump': 'Jump to {page} (page {n})', 'dots.more': '{n} more page(s) beyond this side',
+      'rail.prev': 'Previous page', 'rail.next': 'Next page',
       'console.settings': 'Settings', 'console.market': 'Plugin market', 'console.gear': 'Open settings',
 
       'cal.weekdays': ['M', 'T', 'W', 'T', 'F', 'S', 'S']
@@ -1222,16 +1224,18 @@
 
   function buildRail() {
     E.miniRail.innerHTML =
-      '<span class="mini prev" data-slot="prev" aria-hidden="true">' +
-        '<span class="mini-bg"></span><span class="mini-content"><span class="mini-ico"></span></span></span>' +
+      '<span class="mini prev" data-slot="prev">' +
+        '<button class="mini-bg" type="button" data-rail="prev"></button>' +
+        '<span class="mini-content"><span class="mini-ico"></span></span></span>' +
       '<span class="mini current" data-slot="current" aria-hidden="true">' +
         '<span class="mini-bg"></span><span class="mini-content">' +
           '<span class="mini-ico"></span>' +
           '<span class="mini-label"><span class="mini-label-new"></span>' +
           '<span class="mini-label-old"></span></span>' +
         '</span></span>' +
-      '<span class="mini next" data-slot="next" aria-hidden="true">' +
-        '<span class="mini-bg"></span><span class="mini-content"><span class="mini-ico"></span></span></span>' +
+      '<span class="mini next" data-slot="next">' +
+        '<button class="mini-bg" type="button" data-rail="next"></button>' +
+        '<span class="mini-content"><span class="mini-ico"></span></span></span>' +
       '<span class="dot-cluster left" data-dots="left"></span>' +
       '<span class="dot-cluster right" data-dots="right"></span>' +
       '<span class="mini-measure" aria-hidden="true"></span>';
@@ -1239,7 +1243,8 @@
     var q = function (sel) { return E.miniRail.querySelector(sel); };
     RAIL.el = {
       prev: q('.mini.prev'), prevBg: q('.mini.prev .mini-bg'), prevIco: q('.mini.prev .mini-ico'),
-      prevContent: q('.mini.prev .mini-content'),
+      prevContent: q('.mini.prev .mini-content'), prevBtn: q('.mini.prev .mini-bg'),
+      nextBtn: q('.mini.next .mini-bg'),
       current: q('.mini.current'), curBg: q('.mini.current .mini-bg'), curIco: q('.mini.current .mini-ico'),
       curContent: q('.mini.current .mini-content'),
       labelNew: q('.mini-label-new'), labelOld: q('.mini-label-old'),
@@ -1465,6 +1470,16 @@
     RAIL.nextX.to(nextX);
     RAIL.prevA.to(m.hasPrev ? 1 : 0);
     RAIL.nextA.to(m.hasNext ? 1 : 0);
+
+    /* The two neighbour pills are real buttons: a click turns one page. At the
+       first/last page the slot is empty, so the button is disabled (no focus,
+       no pointer target) while the glass springs to opacity 0. */
+    RAIL.el.prevBtn.disabled = !m.hasPrev;
+    RAIL.el.nextBtn.disabled = !m.hasNext;
+    RAIL.el.prevBtn.setAttribute('aria-label', m.hasPrev
+      ? t('rail.prev') + ' · ' + t('short.' + PAGES[index - 1].id) : t('rail.prev'));
+    RAIL.el.nextBtn.setAttribute('aria-label', m.hasNext
+      ? t('rail.next') + ' · ' + t('short.' + PAGES[index + 1].id) : t('rail.next'));
 
     setMiniIcon('prev', m.hasPrev ? PAGES[index - 1] : null, opts.immediate);
     setMiniIcon('current', PAGES[index], opts.immediate);
@@ -2877,6 +2892,22 @@
       E.miniRail.classList.add('is-visible');
       RAIL.visible = true;
       if (!S.forceArch) railTimer = setTimeout(function () { hideRail(); }, 4000);
+    });
+    E.miniRail.addEventListener('click', function (e) {
+      var btn = e.target.closest('.mini-bg[data-rail]');
+      if (!btn || btn.disabled) return;
+      if (!S.expanded) return;
+      e.preventDefault();
+      e.stopPropagation();
+      /* Pill body = adjacent page (far-page jumps stay on the dots). */
+      turnPage(btn.dataset.rail === 'next' ? 1 : -1);
+    });
+    E.miniRail.addEventListener('pointerover', function (e) {
+      /* Hovering the interactive rail keeps it on screen instead of letting the
+         900 ms inactivity timer pull it away under the cursor. */
+      if (!S.expanded || !RAIL.visible) return;
+      if (!e.target.closest('.mini-bg[data-rail], .far-dot')) return;
+      showRail();
     });
     document.addEventListener('input', function (e) {
       var slider = e.target.closest('[data-slider]');

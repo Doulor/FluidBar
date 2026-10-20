@@ -36,6 +36,8 @@ internal sealed class TransientStripRenderer : IDisposable
 
     private MiniRailFrame _frame;
     private string _label = string.Empty;
+    private string _labelFrom = string.Empty;
+    private int _trackedPage = -1;
 
     public TransientStripRenderer(TextEngine text)
     {
@@ -75,8 +77,25 @@ internal sealed class TransientStripRenderer : IDisposable
     public void Update(in IslandRenderState state, SKRect shell)
     {
         _frame = MiniRailLayout.Measure(state, shell, _dotsLeft, _dotsRight);
-        _label = state.Pages?.ShortTitle(_frame.Page)
+        var label = state.Pages?.ShortTitle(_frame.Page)
             ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(_frame.Page, 0, LastPage)];
+        if (_frame.Page != _trackedPage)
+        {
+            // The prototype cross-fades old → new label over 150 ms with a 3 DIP slide; the host's
+            // LabelProgress drives how far that fade has travelled.
+            if (_trackedPage >= 0)
+            {
+                _labelFrom = _label;
+            }
+
+            _trackedPage = _frame.Page;
+        }
+
+        _label = label;
+        if (_labelFrom.Length == 0)
+        {
+            _labelFrom = label;
+        }
     }
 
     /// <summary>
@@ -98,18 +117,21 @@ internal sealed class TransientStripRenderer : IDisposable
         canvas.Save();
 
         // Prototype2 reveals the rail with an opacity fade only (120 ms in / 220 ms out): no slide and
-        // no scale, so the pills never move relative to the shell while they appear.
+        // no scale, so the pills never move relative to the shell while they appear. Every slot then
+        // carries its own spring alpha (neighbours fade at the first/last page) and content pulse.
         DrawShadows(canvas, reveal);
         DrawDots(canvas, reveal);
 
-        if (_frame.Page > 0)
+        var prevAlpha = reveal * _frame.PrevAlpha;
+        if (_frame.Page > 0 && prevAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _frame.Previous, _frame.Page - 1, reveal);
+            DrawNeighbour(canvas, _frame.Previous, _frame.Page - 1, prevAlpha, _frame.PulsePrev);
         }
 
-        if (_frame.Page < LastPage)
+        var nextAlpha = reveal * _frame.NextAlpha;
+        if (_frame.Page < LastPage && nextAlpha > 0.01f)
         {
-            DrawNeighbour(canvas, _frame.Next, _frame.Page + 1, reveal);
+            DrawNeighbour(canvas, _frame.Next, _frame.Page + 1, nextAlpha, _frame.PulseNext);
         }
 
         DrawCurrent(canvas, reveal);
@@ -218,15 +240,27 @@ internal sealed class TransientStripRenderer : IDisposable
     private void DrawDots(SKCanvas canvas, float alpha)
     {
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * alpha);
-        for (var i = 0; i < _frame.LeftDots; i++)
+
+        // Each cluster has its own spring alpha: the prototype fades a side out when it loses its
+        // far pages and fades the other side in, while the positions spring to the new targets.
+        var leftAlpha = alpha * _frame.LeftAlpha;
+        if (leftAlpha > 0.01f)
         {
-            DrawDot(canvas, _dotsLeft[i]);
+            _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * leftAlpha);
+            for (var i = 0; i < _frame.LeftDots; i++)
+            {
+                DrawDot(canvas, _dotsLeft[i]);
+            }
         }
 
-        for (var i = 0; i < _frame.RightDots; i++)
+        var rightAlpha = alpha * _frame.RightAlpha;
+        if (rightAlpha > 0.01f)
         {
-            DrawDot(canvas, _dotsRight[i]);
+            _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * rightAlpha);
+            for (var i = 0; i < _frame.RightDots; i++)
+            {
+                DrawDot(canvas, _dotsRight[i]);
+            }
         }
     }
 
@@ -243,14 +277,16 @@ internal sealed class TransientStripRenderer : IDisposable
         canvas.DrawCircle(dot.MidX, dot.MidY, dot.Height / 2f, _fill);
     }
 
-    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha)
+    private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha, float pulse)
     {
         DrawGlass(canvas, rect, alpha);
         var size = (float)IslandMetrics.MiniNeighbourIconSize;
         var icon = new SKRect(rect.MidX - (size / 2f), rect.MidY - (size / 2f),
             rect.MidX + (size / 2f), rect.MidY + (size / 2f));
-        // `.mini-content` colour rgba(255,255,255,.56) with the 0.9 icon opacity.
-        IconSet.Draw(canvas, IconFor(page), icon, Alpha(SKColors.White, 0.504f * alpha), _icon);
+        // `.mini-content` colour rgba(255,255,255,.56) with the 0.9 icon opacity and the 150 ms
+        // content pulse (0.35 → 1) the prototype plays when the icon changes.
+        var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(pulse));
+        IconSet.Draw(canvas, IconFor(page), icon, Alpha(SKColors.White, 0.504f * content), _icon);
     }
 
     private void DrawCurrent(SKCanvas canvas, float alpha)
@@ -265,16 +301,39 @@ internal sealed class TransientStripRenderer : IDisposable
         var gap = (float)IslandMetrics.MiniContentGap;
         var groupWidth = iconSize + gap + layout.Width;
         var left = rect.MidX - (groupWidth / 2f);
+        var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(_frame.PulseCurrent));
 
         var icon = new SKRect(left, rect.MidY - (iconSize / 2f), left + iconSize, rect.MidY + (iconSize / 2f));
-        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(SKColors.White, 0.576f * alpha), _icon);
+        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(SKColors.White, 0.576f * content), _icon);
 
         var labelRect = new SKRect(
             left + iconSize + gap,
             rect.Top,
             left + iconSize + gap + layout.Width + 2f,
             rect.Bottom);
-        _text.DrawLayout(canvas, layout, labelRect, Alpha(SKColors.White, 0.8f * alpha), TextAlign.Left, alpha);
+
+        var progress = Math.Clamp(_frame.LabelProgress, 0, 1);
+        if (progress >= 0.999f || string.Equals(_labelFrom, _label, StringComparison.Ordinal))
+        {
+            _text.DrawLayout(canvas, layout, labelRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content);
+            return;
+        }
+
+        // 150 ms label cross-fade: the old label slides up 3 DIP while the new one rises into place,
+        // both eased with the prototype's smoothstep (p²(3−2p)).
+        var eased = Ease(progress);
+        var oldLayout = _text.GetLayout(_labelFrom, IslandType.MiniLabel, float.PositiveInfinity);
+        var oldRect = new SKRect(labelRect.Left, labelRect.Top - (3f * eased), labelRect.Right, labelRect.Bottom - (3f * eased));
+        var newRect = new SKRect(labelRect.Left, labelRect.Top + (3f * (1f - eased)), labelRect.Right, labelRect.Bottom + (3f * (1f - eased)));
+        _text.DrawLayout(canvas, oldLayout, oldRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content * (1f - eased));
+        _text.DrawLayout(canvas, layout, newRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content * eased);
+    }
+
+    /// <summary>Prototype smoothstep easing <c>p²(3−2p)</c> shared by the label fade and pulses.</summary>
+    private static float Ease(float progress)
+    {
+        var p = Math.Clamp(progress, 0f, 1f);
+        return p * p * (3f - (2f * p));
     }
 
     private void DrawGlass(SKCanvas canvas, SKRect rect, float alpha)

@@ -48,6 +48,11 @@ public sealed class SkiaIslandController : IDisposable
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
+
+    // Prototype2 rail springs (T 0.32 s / ζ 0.85): driven here so drawing and hit-testing read the
+    // same animated width/positions from the render state.
+    private readonly MiniRailMotion _railMotion = new();
+    private bool _railWasVisible;
     private readonly IIslandPlatformActions? _platformActions;
 
     private ActivitySchedulerState _schedulerState = ActivitySchedulerState.Empty;
@@ -211,7 +216,8 @@ public sealed class SkiaIslandController : IDisposable
     public bool IsSyntheticPeekActive => _syntheticPeek != SyntheticPeekPhase.None;
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
-    public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating || IsWaveActive();
+    public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
+        || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive();
 
     /// <summary>Whether the island is only animating the media waveform (lower frame rate is enough).</summary>
     public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive();
@@ -454,6 +460,7 @@ public sealed class SkiaIslandController : IDisposable
 
         UpdatePointerZones();
         UpdateArchipelago(now);
+        var railWasRunning = SyncRailMotion(dt);
         BuildRenderState();
 
         if (motionWasRunning)
@@ -465,7 +472,7 @@ public sealed class SkiaIslandController : IDisposable
         {
             InvalidateDirty(ContentDamage());
         }
-        else if (archWasRunning)
+        else if (archWasRunning || railWasRunning)
         {
             InvalidateDirty(StripDamage());
         }
@@ -1653,6 +1660,7 @@ public sealed class SkiaIslandController : IDisposable
 
     private void BuildRenderState()
     {
+        SyncRailMotion(0);
         if (ApplyCompactLyricFade() && _hasRenderState)
         {
             // The text column sits outside the wave damage box, so repaint it explicitly while fading.
@@ -1696,7 +1704,7 @@ public sealed class SkiaIslandController : IDisposable
             Pages = _pages,
             Theme = _theme,
             Archipelago = _options.EnableArchipelago
-                ? _archipelago.ToState(_pager.PagePosition)
+                ? _archipelago.ToState(_pager.PagePosition) with { Rail = _railMotion.Values }
                 : ArchipelagoState.HiddenState,
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
@@ -1851,6 +1859,31 @@ public sealed class SkiaIslandController : IDisposable
         var stripTop = HostSurface.ForMode(_renderState.Mode).ArchipelagoTopLocal;
         var strip = new VisualRect(shell.MidX - 200, stripTop, 400, IslandMetrics.StripHeight);
         _pointerOnStrip = _archipelago.IsVisible && _pointerInside && strip.Contains(_pointerX, _pointerY);
+    }
+
+    /// <summary>
+    /// Advances the prototype2 preview-rail springs. The rail snaps whenever it is revealed or the
+    /// motion setting is reduced (prototype <c>showRail</c> + <c>snapRailSprings</c>); otherwise the
+    /// targets follow the pager's committed page and each frame integrates one spring step.
+    /// </summary>
+    /// <param name="deltaSeconds">Frame delta in seconds (0 = targets only, no integration).</param>
+    /// <returns>Whether the rail is still animating.</returns>
+    private bool SyncRailMotion(double deltaSeconds)
+    {
+        var page = _pager.IsDragging ? MiniRailLayout.PageAt(_pager.PagePosition) : _pager.SelectedIndex;
+        var targets = MiniRailTargetsFactory.Create(page, _pages, _settings.Current.FontScale);
+        var visible = _archipelago.IsVisible;
+        var reduced = _motion.ReducedMotion;
+        if (!visible || !_railWasVisible || reduced)
+        {
+            _railMotion.Snap(targets);
+            _railWasVisible = visible;
+            return false;
+        }
+
+        _railMotion.Retarget(targets);
+        _railWasVisible = visible;
+        return deltaSeconds > 0 && _railMotion.Step(deltaSeconds);
     }
 
     private void UpdateArchipelago(DateTimeOffset now)

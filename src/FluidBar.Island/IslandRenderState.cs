@@ -308,6 +308,14 @@ public readonly record struct ArchipelagoState
     /// <summary>Continuous page position used to pick the current/prev/next islands.</summary>
     public double PagePosition { get; init; }
 
+    /// <summary>
+    /// Animated rail channels driven by the host's <see cref="MiniRailMotion"/>: capsule width, pill and
+    /// dot cluster positions/opacities, label cross-fade progress and the three content pulses.
+    /// <c>Active == false</c> means the host does not animate the rail, so the layout falls back to the
+    /// settled geometry derived from the pager position (offscreen renders and goldens).
+    /// </summary>
+    public MiniRailMotionValues Rail { get; init; }
+
     /// <summary>Far-page dots on the left; -1 derives them from the page position.</summary>
     public int FarLeftDotCount { get; init; } = -1;
 

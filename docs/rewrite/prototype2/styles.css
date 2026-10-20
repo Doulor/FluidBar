@@ -1886,6 +1886,38 @@ input[type="range"].fb-range::-webkit-slider-thumb {
   height: 26px;
   margin: -13px 0 0 -13px;
 }
+
+/* The neighbour pills are real buttons (click = adjacent page). The zero-size
+   .mini anchor stays decorative; the glass layer is the button surface, so it
+   owns the pointer target, the hover fill and the focus ring. */
+.mini-bg {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: inherit;
+}
+.mini.prev .mini-bg,
+.mini.next .mini-bg {
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background 120ms var(--ease-out);
+}
+.mini.prev .mini-bg:hover,
+.mini.next .mini-bg:hover { background: rgba(40, 40, 48, 0.88); }
+.mini.prev .mini-bg:active,
+.mini.next .mini-bg:active { background: rgba(52, 52, 62, 0.94); }
+.mini.prev .mini-bg:focus-visible,
+.mini.next .mini-bg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.mini.prev .mini-bg:disabled,
+.mini.next .mini-bg:disabled {
+  pointer-events: none;
+  cursor: default;
+}
 .mini.current .mini-bg {
   width: 64px;
   height: 28px;
