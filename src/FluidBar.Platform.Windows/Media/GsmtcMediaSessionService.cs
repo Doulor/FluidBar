@@ -80,16 +80,54 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Media-key sender used by the window-title fallback (players without SMTC expose no transport
     /// channel through GSMTC). Null uses the Win32 <c>SendInput</c> implementation.
     /// </param>
+    /// <param name="artworkFetcher">
+    /// Active cover lookup used when the player cached nothing (null uses a default one over
+    /// <c>%APPDATA%\FluidBar\artwork</c> with the iTunes catalogue; pass a fetcher with no sources to
+    /// disable network artwork in tests).
+    /// </param>
     public GsmtcMediaSessionService(IPlatformLogger logger, PlatformCounters counters,
         ArtworkCache? artworkCache = null, TimeProvider? timeProvider = null,
-        IMediaKeySender? mediaKeySender = null)
+        IMediaKeySender? mediaKeySender = null, ArtworkFetcher? artworkFetcher = null)
         : base("media", logger, counters, timeProvider ?? TimeProvider.System)
     {
         _logger = logger ?? NullPlatformLogger.Instance;
         _counters = counters ?? new PlatformCounters();
         _artworkCache = artworkCache ?? new ArtworkCache();
         _mediaKeySender = mediaKeySender ?? new SystemMediaKeySender();
+        _artworkFetcher = artworkFetcher;
     }
+
+    private readonly ArtworkFetcher? _artworkFetcher;
+    private ArtworkFetcher? _defaultArtworkFetcher;
+    private int _artworkFetchRunning;
+
+    /// <summary>Active cover lookup (created on first use when the host did not inject one).</summary>
+    private ArtworkFetcher? ActiveArtworkFetcher
+    {
+        get
+        {
+            if (_artworkFetcher is not null)
+            {
+                return _artworkFetcher;
+            }
+
+            return _defaultArtworkFetcher ??= new ArtworkFetcher(
+                new ArtworkDiskCache(new ArtworkDiskCacheOptions
+                {
+                    DirectoryPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "FluidBar", "artwork"),
+                }),
+                [new ItunesArtworkSource(CreateArtworkHttpClient())]);
+        }
+    }
+
+    /// <summary>HTTP client for catalogue lookups (4 s timeout, no keep-alive thrash).</summary>
+    private static HttpClient CreateArtworkHttpClient() => new()
+    {
+        Timeout = TimeSpan.FromSeconds(6),
+        DefaultRequestHeaders = { { "User-Agent", "FluidBar/2.0 (artwork)" } },
+    };
 
     /// <summary>
     /// Channel the next transport command would use. The window-title fallback has no SMTC session, so
@@ -636,18 +674,77 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var bytes = KugouArtworkCache.TryRead(candidate.Title);
-        if (bytes is null)
+        if (bytes is not null)
+        {
+            var entry = _artworkCache.Add(candidate.TrackKey, bytes);
+            if (entry is not null)
+            {
+                PublishArtwork(candidate.TrackKey, entry);
+            }
+
+            return;
+        }
+
+        // The player cached no cover for this song (it only caches what it displayed before), so fetch it
+        // from the catalogue in the background: the island shows the gradient placeholder until then.
+        StartArtworkLookup(candidate);
+    }
+
+    /// <summary>
+    /// Background cover lookup for the fallback player: cache first, then the catalogue sources. Runs at
+    /// most once per track and never blocks the poll.
+    /// </summary>
+    private void StartArtworkLookup(WindowMediaCandidate candidate)
+    {
+        if (Interlocked.CompareExchange(ref _artworkFetchRunning, 1, 0) != 0)
         {
             return;
         }
 
-        var entry = _artworkCache.Add(candidate.TrackKey, bytes);
-        if (entry is null)
+        var fetcher = ActiveArtworkFetcher;
+        if (fetcher is null || !fetcher.HasSources)
         {
+            Interlocked.Exchange(ref _artworkFetchRunning, 0);
             return;
         }
 
-        PublishArtwork(candidate.TrackKey, entry);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var entry = await fetcher.GetAsync(candidate.Artist, candidate.Title, album: null)
+                    .ConfigureAwait(false);
+                if (entry is null || string.IsNullOrEmpty(candidate.TrackKey))
+                {
+                    return;
+                }
+
+                var artwork = _artworkCache.Add(candidate.TrackKey, entry.Bytes);
+                if (artwork is null)
+                {
+                    return;
+                }
+
+                _logger.LogInfo(PlatformLogCategory.Media, "media.artwork-fetched",
+                    "Cover fetched from the catalogue.",
+                    new Dictionary<string, object?>
+                    {
+                        ["source"] = entry.Metadata.SourceKind.ToString(),
+                        ["url"] = entry.Metadata.SourceUrl,
+                        ["score"] = entry.Metadata.Score,
+                    });
+                PublishArtwork(candidate.TrackKey, artwork);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(PlatformLogCategory.Media, "media.artwork-fetch-failed",
+                    "Cover lookup failed: " + ex.Message);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _artworkFetchRunning, 0);
+            }
+        });
     }
 
     private static async Task<byte[]?> ReadThumbnailAsync(IRandomAccessStreamReference thumbnail,
