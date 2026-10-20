@@ -227,6 +227,7 @@ public static class IslandPresenter
             LyricHighlight = fallback?.LyricHighlight ?? -1,
             Karaoke = fallback?.Karaoke,
             PositionMs = fallback?.PositionMs ?? 0,
+            DurationMs = fallback?.DurationMs is > 0 ? fallback.DurationMs : duration.TotalMilliseconds,
             TrackIndex = fallback?.TrackIndex ?? 0,
             TrackCount = fallback?.TrackCount ?? 0,
         };

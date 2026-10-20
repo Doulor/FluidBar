@@ -70,6 +70,9 @@ public sealed record MediaSessionData
     /// <summary>Sampled playback position in milliseconds (the anchor for the island's extrapolation).</summary>
     public double PositionMs { get; init; }
 
+    /// <summary>Track duration in milliseconds, or 0 when the source does not know it.</summary>
+    public double DurationMs { get; init; }
+
     /// <summary>Track index for "n of m" displays, 1-based; 0 when unknown.</summary>
     public int TrackIndex { get; init; }
 

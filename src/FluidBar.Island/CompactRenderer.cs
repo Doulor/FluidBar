@@ -28,8 +28,6 @@ internal sealed class CompactRenderer : IDisposable
     private bool _pressed;
 
     private static readonly CompactModel EmptyModel = new();
-    private static readonly float[] ActiveWave = [0.35f, 0.7f, 1f, 0.6f, 0.4f];
-    private static readonly float[] IdleWave = [0.3f, 0.5f, 0.4f, 0.55f, 0.35f];
 
     public CompactRenderer(TextEngine text, AccentPalette accents, ArtShaderCache art,
         ArtworkImageCache artwork, NumberTextCache numbers)
@@ -188,8 +186,12 @@ internal sealed class CompactRenderer : IDisposable
         canvas.ClipRect(new SKRect(rect.Left - 1, rect.Top - 3, rect.Right + 1, rect.Bottom + 3));
         // Without word timing the line paints exactly as before (primary colour, whole line).
         var baseColor = model.LyricHighlight < 0 ? _theme.Foreground : _theme.ForegroundSecondary;
+        // Content-fit short lines are centred between the artwork and the wave; an over-long line falls
+        // back to left alignment so it ellipsises at the trailing edge instead of losing its beginning.
+        var measured = _text.Measure(model.LyricLine, IslandType.CompactMediaTitle, line.Width);
+        var align = measured <= line.Width - 4 ? TextAlign.Center : TextAlign.Left;
         KaraokeText.Draw(_text, canvas, model.LyricLine, model.LyricHighlight, IslandType.CompactMediaTitle,
-            line, baseColor, accent, TextAlign.Left, alpha);
+            line, baseColor, accent, align, alpha);
         canvas.Restore();
     }
 
@@ -531,25 +533,61 @@ internal sealed class CompactRenderer : IDisposable
         canvas.Restore();
     }
 
+    private static readonly double[] WaveDelaysMs = [-620, -180, -380, -60, -500];
+    private const double WaveIterationMs = 880;
+    private const double WaveCycleMs = WaveIterationMs * 2;
+    private const float WaveMinHeight = 4f;
+    private const float WaveMaxHeight = 13f;
+    private const float WaveEndHeight = 6f;
+
     private void DrawWave(SKCanvas canvas, SKRect area, SKColor accent, bool active)
     {
-        // prototype2 .wave: five 2 DIP bars, 1.6 DIP gaps, fully rounded caps, accent colour.
-        var heights = active ? ActiveWave : IdleWave;
+        // prototype2 .wave: five 2 DIP bars, gap 1.6, animation waveBar 880ms ease-in-out infinite
+        // alternate with per-bar delays -620/-180/-380/-60/-500 ms. Keyframes: 4px → 13px → 6px
+        // (reverse 6px → 13px → 4px); paused is 4px at 45 % opacity, reduced motion is 5px.
         const float gap = 1.6f;
         const float barWidth = 2f;
-        var total = (heights.Length * barWidth) + ((heights.Length - 1) * gap);
+        const int count = 5;
+        var total = (count * barWidth) + ((count - 1) * gap);
         var startX = area.Left + ((area.Width - total) / 2);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(active ? accent : _theme.ForegroundTertiary, _opacity);
-        for (var i = 0; i < heights.Length; i++)
+        _fill.Color = Alpha(active ? accent : _theme.ForegroundTertiary, (active ? 1f : 0.45f) * _opacity);
+        for (var i = 0; i < count; i++)
         {
-            var wobble = active && !_reduced ? 0.85 + (0.15 * Math.Sin((_phase * 3) + i)) : 1.0;
-            var height = area.Height * heights[i] * (float)wobble;
+            var height = !active
+                ? WaveMinHeight
+                : _reduced
+                    ? 5f
+                    : WaveHeightAt(_phase, i);
             var x = startX + (i * (barWidth + gap));
             var y = area.MidY - (height / 2);
             canvas.DrawRoundRect(new SKRect(x, y, x + barWidth, y + height), barWidth / 2, barWidth / 2, _fill);
         }
     }
+
+    /// <summary>Prototype2 wave height for one bar at <paramref name="phaseSeconds"/> (absolute 4..13 DIP).</summary>
+    private static float WaveHeightAt(double phaseSeconds, int index)
+    {
+        var t = ((phaseSeconds * 1000.0) + WaveDelaysMs[index]) % WaveCycleMs;
+        if (t < 0)
+        {
+            t += WaveCycleMs;
+        }
+
+        // Alternate direction: iteration 0 runs 4→13→6, iteration 1 reverses 6→13→4. Each of
+        // the two keyframe segments is eased independently so the height never snaps.
+        var p = t < WaveIterationMs ? t / WaveIterationMs : (t - WaveIterationMs) / WaveIterationMs;
+        var reverse = t >= WaveIterationMs;
+        var rising = p < 0.5;
+        var eased = Smoothstep(rising ? p * 2 : (p - 0.5) * 2);
+        var from = rising ? (reverse ? WaveEndHeight : WaveMinHeight) : WaveMaxHeight;
+        var to = rising ? WaveMaxHeight : (reverse ? WaveMinHeight : WaveEndHeight);
+        return Lerp(from, to, eased);
+    }
+
+    private static float Lerp(float from, float to, double t) => from + ((to - from) * (float)Math.Clamp(t, 0, 1));
+
+    private static double Smoothstep(double t) => t * t * (3 - (2 * t));
 
     private void DrawTrack(SKCanvas canvas, SKRect track, double fraction, SKColor accent, SKColor background)
     {

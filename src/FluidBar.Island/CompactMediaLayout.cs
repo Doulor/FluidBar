@@ -51,6 +51,13 @@ public static class CompactMediaLayout
     /// </summary>
     public const float TextSlack = 2f;
 
+    /// <summary>
+    /// Smallest content-fit width: fixed chrome plus the anti-ellipsis slack. The lyric pill uses this
+    /// instead of the 226 DIP media token, so a short line hugs its text instead of leaving a large
+    /// asymmetric blank on the right.
+    /// </summary>
+    public const float MinContentWidth = FixedWidth + TextSlack;
+
     /// <summary>Artwork rectangle, vertically centred.</summary>
     /// <param name="height">Pill height.</param>
     public static SKRect ArtworkRect(float height)

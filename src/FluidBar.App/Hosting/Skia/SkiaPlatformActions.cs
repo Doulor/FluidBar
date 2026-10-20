@@ -659,6 +659,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             // The island extrapolates this sample with its own frame clock; the sample time is "now" here
             // because the position above was already interpolated to the current instant.
             PositionMs = position.TotalMilliseconds,
+            DurationMs = duration.TotalMilliseconds,
             TrackIndex = 0,
             TrackCount = 0,
         };

@@ -96,6 +96,26 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Whether the karaoke sweep needs frames right now.</summary>
     private bool _karaokeActive;
+
+    // Media progress clock: the player publishes a position sample every poll, and some fallback
+    // sources occasionally omit the position text. Anchoring the last sample and advancing with the
+    // island's frame clock keeps the seek bar and elapsed text moving between samples.
+    private readonly MediaPositionClock _mediaClock = new();
+    private double _mediaDurationMs;
+    private double _mediaLastSampleMs = double.NaN;
+    private string? _mediaTrackIdentity;
+
+    // Track-change transition: shrink/fade the visible shell, then spring it back. Detection lives in
+    // the controller because the Core activity payload is the same key for every track refresh.
+    private const double TrackTransitionCollapseMs = 150;
+    private const double TrackTransitionTotalMs = 470;
+    private const double TrackTransitionCollapseScale = 0.86;
+    private string? _lastTrackTransitionIdentity;
+    private string? _lastTrackTransitionArtwork;
+    private long _trackTransitionStartedMs = -1;
+    private double _trackTransitionScale = 1;
+    private double _trackTransitionOpacity = 1;
+
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -247,7 +267,11 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
-        || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating;
+        || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
+        || IsMediaProgressAnimating || IsTrackTransitionAnimating;
+
+    /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
+    public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
 
     /// <summary>
     /// Whether the agent spinner / indeterminate progress needs continuous 60 fps frames. True only
@@ -302,9 +326,18 @@ public sealed class SkiaIslandController : IDisposable
             ? _renderState.PageIndex == 1
             : _compact.Kind == ActivityKind.Media);
 
+    /// <summary>
+    /// Whether the media progress bar / elapsed text is advancing from the island clock. Only tracks
+    /// with a known timeline and a playing state need continuous frames.
+    /// </summary>
+    public bool IsMediaProgressAnimating => _mediaDurationMs > 0 && _mediaClock.IsAdvancing
+        && (_hasRenderState && _renderState.Form == ShellForm.Expanded
+            ? _renderState.PageIndex == 1
+            : _compact.Kind == ActivityKind.Media);
+
     /// <summary>Whether the island is only animating the media waveform (lower frame rate is enough).</summary>
     public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive()
-        && !IsKaraokeAnimating;
+        && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
     public TimeSpan PreferredFrameInterval => IsWaveOnly
@@ -498,6 +531,103 @@ public sealed class SkiaIslandController : IDisposable
         ApplyInput(IslandInput.PointerEntered());
     }
 
+    /// <summary>
+    /// Detects a real track change (title/artist, or artwork for a metadata-less source) and starts
+    /// the shrink/fade → spring-back transition. A same-track artwork enrichment (null → cover) is
+    /// not a track change, and a paused/resumed track keeps the same identity.
+    /// </summary>
+    private void ObserveTrackTransition(IslandContent content, IslandViewModel viewModel)
+    {
+        var media = content.Media;
+        if (media is null || viewModel.Primary?.Kind != ActivityKind.Media)
+        {
+            _lastTrackTransitionIdentity = null;
+            _lastTrackTransitionArtwork = null;
+            return;
+        }
+
+        var titleArtist = string.Join('|', media.Title?.Trim(), media.Artist?.Trim());
+        var hasMetadata = !string.IsNullOrWhiteSpace(media.Title) || !string.IsNullOrWhiteSpace(media.Artist);
+        var identity = hasMetadata ? titleArtist : media.ArtworkKey;
+        var artwork = media.ArtworkKey;
+        var identityChanged = _lastTrackTransitionIdentity is not null
+            && !string.Equals(identity, _lastTrackTransitionIdentity, StringComparison.Ordinal);
+        var artworkChanged = hasMetadata
+            && string.Equals(titleArtist, _lastTrackTransitionIdentity, StringComparison.Ordinal)
+            && !string.IsNullOrEmpty(_lastTrackTransitionArtwork)
+            && !string.IsNullOrEmpty(artwork)
+            && !string.Equals(artwork, _lastTrackTransitionArtwork, StringComparison.Ordinal);
+        var enrichment = hasMetadata
+            && string.Equals(titleArtist, _lastTrackTransitionIdentity, StringComparison.Ordinal)
+            && string.IsNullOrEmpty(_lastTrackTransitionArtwork)
+            && !string.IsNullOrEmpty(artwork);
+
+        if ((identityChanged || artworkChanged) && !enrichment
+            && _started && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded
+            && !_motion.ReducedMotion)
+        {
+            // A new track always restarts the one timeline; rapid skipping cannot stack animations.
+            _trackTransitionStartedMs = NowMs();
+            FrameRequested?.Invoke();
+        }
+
+        _lastTrackTransitionIdentity = identity;
+        _lastTrackTransitionArtwork = artwork;
+    }
+
+    /// <summary>Steps the track transition and stores the current scale/opacity multipliers.</summary>
+    private void StepTrackTransition()
+    {
+        if (_trackTransitionStartedMs < 0)
+        {
+            _trackTransitionScale = 1;
+            _trackTransitionOpacity = 1;
+            return;
+        }
+
+        var elapsed = NowMs() - _trackTransitionStartedMs;
+        if (elapsed >= TrackTransitionTotalMs)
+        {
+            _trackTransitionStartedMs = -1;
+            _trackTransitionScale = 1;
+            _trackTransitionOpacity = 1;
+            return;
+        }
+
+        if (elapsed < TrackTransitionCollapseMs)
+        {
+            var collapse = elapsed / TrackTransitionCollapseMs;
+            var eased = collapse * collapse;
+            _trackTransitionScale = 1 - ((1 - TrackTransitionCollapseScale) * eased);
+            // Reach zero 30 ms before the scale bottom so at least one full frame is fully hidden
+            // even at 60 fps (a fade that only reaches 0.08 is still visibly grey).
+            var fade = Math.Clamp(elapsed / (TrackTransitionCollapseMs - 30), 0, 1);
+            _trackTransitionOpacity = 1 - (fade * fade);
+            return;
+        }
+
+        var expandSeconds = (elapsed - TrackTransitionCollapseMs) / 1000.0;
+        var response = SpringStep(expandSeconds, MotionTokens.Rail.Spring.PeriodSeconds, MotionTokens.Rail.Spring.DampingRatio);
+        _trackTransitionScale = TrackTransitionCollapseScale
+            + ((1 - TrackTransitionCollapseScale) * response);
+        _trackTransitionOpacity = Math.Clamp(expandSeconds / 0.12, 0, 1);
+    }
+
+    /// <summary>Unit step response of a damped spring (T = period, ζ = damping ratio).</summary>
+    private static double SpringStep(double seconds, double periodSeconds, double dampingRatio)
+    {
+        if (seconds <= 0 || periodSeconds <= 0)
+        {
+            return 0;
+        }
+
+        var omega = 2 * Math.PI / periodSeconds;
+        var zeta = Math.Clamp(dampingRatio, 0.01, 0.999);
+        var damped = omega * Math.Sqrt(1 - (zeta * zeta));
+        var decay = Math.Exp(-zeta * omega * seconds);
+        return 1 - (decay * (Math.Cos(damped * seconds) + ((zeta / Math.Sqrt(1 - (zeta * zeta))) * Math.Sin(damped * seconds))));
+    }
+
     private enum SyntheticPeekPhase
     {
         None,
@@ -530,6 +660,8 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var now = _time.GetLocalNow();
+        var trackTransitionWasRunning = IsTrackTransitionAnimating;
+        StepTrackTransition();
         var motionWasRunning = !_motion.IsAtRest;
         _motion.Step(dt);
 
@@ -553,7 +685,20 @@ public sealed class SkiaIslandController : IDisposable
         UpdatePointerZones();
         UpdateArchipelago(now);
         var railWasRunning = SyncRailMotion(dt);
+        var mediaProgressChanged = ApplyMediaProgress();
         BuildRenderState();
+
+        if (mediaProgressChanged)
+        {
+            // Only the seek bar/elapsed text changed; repaint that strip/page, never the shell.
+            InvalidateDirty(MediaProgressDamage());
+        }
+
+        if (trackTransitionWasRunning || IsTrackTransitionAnimating)
+        {
+            // Scale/opacity affects the whole layered surface; a full frame is cheap for < 0.5 s.
+            InvalidateFull();
+        }
 
         if (agentWasAnimating)
         {
@@ -1414,6 +1559,7 @@ public sealed class SkiaIslandController : IDisposable
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         var settings = _settings.Current;
         ObserveTrackChange(content, settings);
+        ObserveTrackTransition(content, viewModel);
 
         var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
@@ -1448,6 +1594,7 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         SyncKaraoke(content);
+        SyncMediaProgress(content);
 
         var peeked = State.Kind == IslandStateKind.Peek;
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
@@ -1574,7 +1721,7 @@ public sealed class SkiaIslandController : IDisposable
         {
             var measured = MeasureCompactLyric(lyric.LyricLine, settings.FontScale);
             var width = CompactMediaLayout.AdaptiveWidth(
-                measured, (float)compactSize.Width, (float)LayoutTokens.ExpandedWidth);
+                measured, CompactMediaLayout.MinContentWidth, (float)LayoutTokens.ExpandedWidth);
             compactSize = new VisualSize(width, compactSize.Height);
         }
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
@@ -2009,6 +2156,97 @@ public sealed class SkiaIslandController : IDisposable
     private const double KaraokeHighlightTolerance = 1.0 / 255.0;
 
     /// <summary>
+    /// Anchors the local progress clock when a media sample arrives. Repeated samples with the same
+    /// position (fallback sources whose time text occasionally stops updating) must not re-anchor:
+    /// that would freeze the extrapolated seek bar at the stale sample.
+    /// </summary>
+    private void SyncMediaProgress(IslandContent content)
+    {
+        var media = content.Media;
+        if (media is null || !media.HasTimeline || media.DurationMs <= 0)
+        {
+            _mediaClock.Reset();
+            _mediaDurationMs = 0;
+            _mediaLastSampleMs = double.NaN;
+            _mediaTrackIdentity = null;
+            return;
+        }
+
+        var now = NowMs();
+        var identity = string.Join('|', media.Title, media.Artist, media.ArtworkKey);
+        var trackChanged = !string.Equals(identity, _mediaTrackIdentity, StringComparison.Ordinal);
+        var durationChanged = Math.Abs(media.DurationMs - _mediaDurationMs) > 1;
+        var pastSample = !double.IsNaN(_mediaLastSampleMs);
+        var positionChanged = pastSample && Math.Abs(media.PositionMs - _mediaLastSampleMs) > 0.5;
+        if (!_mediaClock.HasAnchor || trackChanged || durationChanged || positionChanged)
+        {
+            _mediaClock.Anchor(media.PositionMs, now, media.IsPlaying);
+        }
+        else
+        {
+            _mediaClock.SetPlaying(media.IsPlaying, now);
+        }
+
+        _mediaTrackIdentity = identity;
+        _mediaDurationMs = media.DurationMs;
+        _mediaLastSampleMs = media.PositionMs;
+    }
+
+    /// <summary>
+    /// Advances the seek bar/time text from the local clock. Returns true when the models changed and
+    /// the media page (or compact progress strip) needs a dirty frame.
+    /// </summary>
+    private bool ApplyMediaProgress()
+    {
+        if (_mediaDurationMs <= 0 || !_mediaClock.HasAnchor)
+        {
+            return false;
+        }
+
+        var position = Math.Clamp(_mediaClock.PositionAt(NowMs()), 0, _mediaDurationMs);
+        var percent = position / _mediaDurationMs * 100;
+        var positionText = FormatMediaTime(position);
+        var changed = false;
+
+        if (_compact.Kind == ActivityKind.Media
+            && Math.Abs(_compact.Model.ProgressPercent - percent) > 0.01)
+        {
+            _compact = _compact with { Model = _compact.Model with { ProgressPercent = percent } };
+            changed = true;
+        }
+
+        if (_pages.Media.HasSession
+            && (Math.Abs(_pages.Media.ProgressPercent - percent) > 0.01
+                || !string.Equals(_pages.Media.PositionText, positionText, StringComparison.Ordinal)))
+        {
+            _pages = _pages with
+            {
+                Media = _pages.Media with { ProgressPercent = percent, PositionText = positionText },
+            };
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static string FormatMediaTime(double milliseconds)
+    {
+        var time = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        return $"{(int)time.TotalMinutes}:{time.Seconds:00}";
+    }
+
+    private VisualRect MediaProgressDamage()
+    {
+        var shell = IslandMetrics.ShellRect(_renderState);
+        if (_renderState.Form == ShellForm.Compact)
+        {
+            return new VisualRect(shell.Left, shell.Bottom - 4, shell.Width, 4);
+        }
+
+        return ContentDamage();
+    }
+
+    /// <summary>
     /// Applies the lyric fade-in to the compact model and keeps the text column repainting while the
     /// line is still fading. Returns true when the pill's lyric text needs a repaint this frame.
     /// </summary>
@@ -2063,7 +2301,8 @@ public sealed class SkiaIslandController : IDisposable
             ShellRadii = _motion.ShellRadii,
             ShellMorphing = !_motion.IsAtRest,
             ShellOrigin = _motion.ShellOrigin,
-            Opacity = _motion.Opacity,
+            Opacity = _motion.Opacity * _trackTransitionOpacity,
+            PressScale = _motion.PressScale * _trackTransitionScale,
             ContentOpacity = expanded ? _motion.ExpandedContentOpacity : _motion.CompactContentOpacity,
             // Prototype2 renders the compact layer and the expanded layer as two siblings with their own
             // CSS transitions; the chrome (title/collapse) fades independently. All three come from the
@@ -2072,7 +2311,6 @@ public sealed class SkiaIslandController : IDisposable
             ExpandedLayerOpacity = _motion.ExpandedContentOpacity,
             ChromeOpacity = _motion.ChromeOpacity,
             NudgeOffsetY = _motion.NudgeOffsetY,
-            PressScale = _motion.PressScale,
             PressedControl = _pressedControl,
             PressedPage = _pressedPage,
             PressedIndex = _pressedIndex,
