@@ -27,6 +27,8 @@ internal sealed partial class PageRenderer : IDisposable
     private FontScaleMetrics _metrics = FontScaleMetrics.One;
     private IslandPageControl _pressedControl;
     private int _pressedPage = -1;
+    private PageSlotKind _pressedKind = PageSlotKind.Plugin;
+    private PageSlotKind _hoverKind = PageSlotKind.Plugin;
     private IslandPageControl _hoverControl;
     private int _hoverPage = -1;
     private double _pointerX = double.NaN;
@@ -85,8 +87,10 @@ internal sealed partial class PageRenderer : IDisposable
         _reduced = state.ReducedMotion;
         _pressedControl = state.PressedControl;
         _pressedPage = state.PressedPage;
+        _pressedKind = state.Pages.PageSlotAt(_pressedPage)?.Kind ?? PageSlotKind.Plugin;
         _hoverControl = state.HoverControl;
         _hoverPage = state.HoverPage;
+        _hoverKind = state.Pages.PageSlotAt(_hoverPage)?.Kind ?? PageSlotKind.Plugin;
         _pointerX = state.PointerX;
         _pointerY = state.PointerY;
         _hasPointer = state.HasPointer;
@@ -240,8 +244,8 @@ internal sealed partial class PageRenderer : IDisposable
         var rect = PageMetricsLayout.HomeSliders(page, m);
         DrawCard(canvas, rect, 11);
         var iconTop = rect.MidY - 6.5f;
-        var volumePressed = _pressedControl == IslandPageControl.VolumeMute && _pressedPage == 0;
-        var volumeHovered = _hoverControl == IslandPageControl.VolumeMute && _hoverPage == 0;
+        var volumePressed = _pressedControl == IslandPageControl.VolumeMute && _pressedKind == PageSlotKind.Home;
+        var volumeHovered = _hoverControl == IslandPageControl.VolumeMute && _hoverKind == PageSlotKind.Home;
         if (home.HasVolume && (volumePressed || volumeHovered))
         {
             _fill.Style = SKPaintStyle.Fill;
@@ -504,12 +508,12 @@ internal sealed partial class PageRenderer : IDisposable
     }
 
     private bool IsPressed(IslandPageControl control)
-        => _pressedControl == control && (_pressedPage < 0 || _pressedPage == 1);
+        => _pressedControl == control && (_pressedPage < 0 || _pressedKind == PageSlotKind.Media);
 
     /// <summary>Whether the given control is hovered (the controller resolves it from the same hit test
     /// the clicks use, so the highlight can never sit on a different rectangle than the click target).</summary>
     private bool IsHovered(IslandPageControl control)
-        => _hasPointer && _hoverControl == control && (_hoverPage < 0 || _hoverPage == 1);
+        => _hasPointer && _hoverControl == control && (_hoverPage < 0 || _hoverKind == PageSlotKind.Media);
 
     // ------------------------------------------------------------- placeholder
 

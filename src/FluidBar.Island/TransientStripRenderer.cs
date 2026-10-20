@@ -21,9 +21,7 @@ internal sealed class TransientStripRenderer : IDisposable
 {
     private const int MaxDots = IslandMetrics.MaxDotsPerSide;
 
-    // The dynamic-page work in flight removed the local const while callers still use it; keep the
-    // classic six-page contract until that refactor lands.
-    private const int LastPage = PagerConstants.PageCount - 1;
+    private int LastPage => Math.Max(0, _frame.PageCount - 1);
 
     /// <summary>Glass fill of the mini islands (prototype contract in <see cref="MiniRailLayout"/>).</summary>
     private static SKColor Glass => MiniRailLayout.Glass;
@@ -434,3 +432,4 @@ internal sealed class TransientStripRenderer : IDisposable
         _shadowNear.Dispose();
     }
 }
+

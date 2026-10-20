@@ -223,7 +223,7 @@ public sealed class ExpandedAndSettingsUiTests
             Assert.Equal(284, panel.DesiredSize.Height);
             Assert.Equal(400, ExpandedPanel.ViewportWidth);
             Assert.Equal(252, ExpandedPanel.ViewportHeight);
-            foreach (var page in Enum.GetValues<CoreIslandPage>())
+            foreach (var page in CoreIslandPage.BuiltinPages)
             {
                 var pageView = panel.PageFor(page);
                 Assert.Equal(IslandPageView.PageWidth, pageView.DesiredSize.Width);

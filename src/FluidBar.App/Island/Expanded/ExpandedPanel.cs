@@ -56,15 +56,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     /// <summary>Incoming-page scale delta.</summary>
     public const double ParallaxScale = 0.015;
 
-    private static readonly CoreIslandPage[] PageOrder =
-    [
-        CoreIslandPage.Home,
-        CoreIslandPage.Media,
-        CoreIslandPage.Notifications,
-        CoreIslandPage.Clipboard,
-        CoreIslandPage.Agent,
-        CoreIslandPage.Widgets,
-    ];
+    private static readonly CoreIslandPage[] PageOrder = [.. CoreIslandPage.BuiltinPages];
 
     private readonly Dictionary<CoreIslandPage, IslandPageView> _pages = new();
     private readonly Panel _strip = new() { ClipToBounds = false };
@@ -664,15 +656,15 @@ public sealed class ExpandedPanel : Panel, ILocalizable
 
     private static int IndexFor(CoreIslandPage page) => Array.IndexOf(PageOrder, page) is var index && index >= 0 ? index : 0;
 
-    private static string PageTitleKey(CoreIslandPage page) => page switch
+    private static string PageTitleKey(CoreIslandPage page)
     {
-        CoreIslandPage.Home => LocKeys.Page.Home.Title,
-        CoreIslandPage.Media => LocKeys.Page.Media.Title,
-        CoreIslandPage.Notifications => LocKeys.Page.Notifications.Title,
-        CoreIslandPage.Clipboard => LocKeys.Page.Clipboard.Title,
-        CoreIslandPage.Agent => LocKeys.Page.Agent.Title,
-        _ => LocKeys.Page.Widgets.Title,
-    };
+        if (page == CoreIslandPage.Home) return LocKeys.Page.Home.Title;
+        if (page == CoreIslandPage.Media) return LocKeys.Page.Media.Title;
+        if (page == CoreIslandPage.Notifications) return LocKeys.Page.Notifications.Title;
+        if (page == CoreIslandPage.Clipboard) return LocKeys.Page.Clipboard.Title;
+        if (page == CoreIslandPage.Agent) return LocKeys.Page.Agent.Title;
+        return LocKeys.Page.Widgets.Title;
+    }
 
     private enum PagerOverlayHit
     {

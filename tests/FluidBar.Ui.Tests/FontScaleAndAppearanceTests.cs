@@ -49,8 +49,7 @@ public sealed class FontScaleAndAppearanceTests
         using var fixture = ControllerFixture.Create(AppSettings.Default with { FontScale = 1.6, AutoCollapseMs = 0 });
         fixture.ExpandAndSettle();
         fixture.GoToPage(0);
-        var page = (int)fixture.Controller.State.Page;
-        Assert.Equal(0, page);
+        Assert.Equal(FluidBar.Core.Activities.PageRef.Home, fixture.Controller.State.Page);
 
         var outcome = fixture.Controller.HandleWheel(PagerConstants.WheelNotchDip, horizontal: false, shift: false);
         Assert.True(outcome.Consumed);

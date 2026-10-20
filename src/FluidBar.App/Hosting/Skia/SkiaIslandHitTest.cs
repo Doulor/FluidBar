@@ -23,7 +23,7 @@ public readonly record struct SkiaStripGeometry(
     float CapsuleWidth,
     SKRect[] DotsLeft,
     SKRect[] DotsRight,
-    int PageCount = PagerConstants.PageCount,
+    int PageCount = 0,
     SKRect OverflowLeft = default,
     SKRect OverflowRight = default)
 {
@@ -72,7 +72,7 @@ public static class SkiaIslandHitTest
                 if (islets[i].Contains(x, y))
                 {
                     return new IslandHitTarget(
-                        IslandHitKind.SplitIslet, (int)state.SplitIslets[i].Page, Index: i);
+                        IslandHitKind.SplitIslet, state.Pages.IndexOfPage(state.SplitIslets[i].Page), Index: i);
                 }
             }
         }
@@ -191,7 +191,6 @@ public static class SkiaIslandHitTest
         }
 
         var kind = pages.PageSlotAt(page)?.Kind ?? PageSlotKind.Home;
-        var layoutPage = LegacyPageIndex(kind);
         var count = kind switch
         {
             PageSlotKind.Home => 4,
@@ -212,7 +211,7 @@ public static class SkiaIslandHitTest
             PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
-        var control = PageMetricsLayout.HitTest(layoutPage, pageRect, x, y, metrics, scroll, count, out index);
+        var control = PageMetricsLayout.HitTest(kind, pageRect, x, y, metrics, scroll, count, out index);
 
         // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable
         // and then do nothing. The renderer greys them and prints the localized reason instead.
@@ -327,6 +326,6 @@ public static class SkiaIslandHitTest
         var offset = state.Pager.PagePosition * pitch;
         var local = x - content.Left + offset;
         var page = (int)Math.Floor(local / pitch);
-        return Math.Clamp(page, 0, PagerConstants.PageCount - 1);
+        return Math.Clamp(page, 0, Math.Max(0, state.Pager.PageCount - 1));
     }
 }

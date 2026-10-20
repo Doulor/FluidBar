@@ -53,30 +53,6 @@ public enum ActivityKind
 }
 
 /// <summary>
-/// The compact surfaces that participate in the stack. Activities map to the closest page.
-/// </summary>
-public enum PageRef
-{
-    /// <summary>Dashboard / idle home page.</summary>
-    Home,
-
-    /// <summary>Media page (rail item 2).</summary>
-    Media,
-
-    /// <summary>Notifications page (rail item 3).</summary>
-    Notifications,
-
-    /// <summary>Clipboard page (rail item 4).</summary>
-    Clipboard,
-
-    /// <summary>Agent page (rail item 5).</summary>
-    Agent,
-
-    /// <summary>Widgets page (rail item 6).</summary>
-    Widgets,
-}
-
-/// <summary>
 /// Stable identity of an activity: its <see cref="ActivityKind"/> plus the producing source.
 /// "Same key again" means in-place replacement (spec 2.3 rule 1) and is also the coalescing
 /// identity of the event bus.

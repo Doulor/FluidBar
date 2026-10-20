@@ -9,6 +9,8 @@ namespace FluidBar.Ui.Tests;
 /// <summary>Press/hover feedback, optimistic play state and the inert output/queue slots.</summary>
 public sealed class MediaFeedbackTests
 {
+    private const int PageCount = 6;
+
     private static SKRect PlayRect(IslandRenderState state)
     {
         var page = IslandMetrics.PageRect(state, 1);
@@ -62,7 +64,7 @@ public sealed class MediaFeedbackTests
             Form = ShellForm.Expanded,
             ShellWidth = LayoutTokens.ExpandedWidth,
             ShellHeight = LayoutTokens.ExpandedHeight,
-            Pager = PagerRenderState.FromPosition(1, false, false),
+            Pager = PagerRenderState.FromPosition(1, PageCount, false, false),
             Pages = new ExpandedPageContent
             {
                 Media = new MediaPageModel { HasSession = true, OutputAvailable = false, QueueAvailable = false },
@@ -86,7 +88,7 @@ public sealed class MediaFeedbackTests
             Form = ShellForm.Expanded,
             ShellWidth = LayoutTokens.ExpandedWidth,
             ShellHeight = LayoutTokens.ExpandedHeight,
-            Pager = PagerRenderState.FromPosition(1, false, false),
+            Pager = PagerRenderState.FromPosition(1, PageCount, false, false),
             Pages = new ExpandedPageContent
             {
                 Home = new HomePageModel { HasVolume = true, Volume = 42, IsMuted = false },
@@ -103,7 +105,7 @@ public sealed class MediaFeedbackTests
             IslandPlatformActionKind.VolumeMute,
             SkiaIslandControlRouter.Map(mediaHit, state, mediaVolume.MidX)!.Value.Kind);
 
-        var homeState = state with { Pager = PagerRenderState.FromPosition(0, false, false) };
+        var homeState = state with { Pager = PagerRenderState.FromPosition(0, PageCount, false, false) };
         var homePage = IslandMetrics.PageRect(homeState, 0);
         var homeVolume = PageMetricsLayout.HomeVolumeIcon(homePage, metrics);
         var homeHit = SkiaIslandHitTest.Hit(homeState, homeVolume.MidX, homeVolume.MidY);

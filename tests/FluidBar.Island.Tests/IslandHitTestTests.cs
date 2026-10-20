@@ -130,7 +130,7 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandHitKind.Collapse, Hit(state, chevron.MidX, chevron.MidY).Kind);
 
         // Every expanded page carries the same entry.
-        for (var page = 0; page < PagerConstants.PageCount; page++)
+        for (var page = 0; page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count; page++)
         {
             var pageState = IslandTestFixtures.Expanded(page);
             Assert.Equal(IslandHitKind.Settings, Hit(pageState, gear.MidX, gear.MidY).Kind);
@@ -283,3 +283,4 @@ public sealed class IslandHitTestTests
         Assert.Empty(last.DotsRight);
     }
 }
+

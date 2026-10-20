@@ -47,7 +47,7 @@ public sealed class SkiaIslandController : IDisposable
     private readonly EventHub _hub;
     private readonly ActivityScheduler _scheduler = new();
     private readonly Func<SystemAppearanceSnapshot> _appearance;
-    private readonly double[] _pageScroll = new double[PagerConstants.PageCount];
+    private readonly double[] _pageScroll = new double[PageRegistry.MaxPages];
     private readonly PageRegistry? _pageRegistry;
     private IReadOnlyList<PluginPageModel> _pluginPages = [];
 
@@ -124,8 +124,8 @@ public sealed class SkiaIslandController : IDisposable
     // Split-strategy previews are snapshotted from the presenter's ghost view models; the snapshot
     // outlives the point where an islet is activated so the merge animation has something to shrink.
     private ActivityViewModel[] _splitPreviews = [];
-    private readonly SplitStackPolicy _splitPolicy = new();
     private readonly Dictionary<string, byte[]?> _splitArtwork = new(StringComparer.Ordinal);
+    private readonly SplitStackPolicy _splitPolicy = new();
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -218,7 +218,7 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
-        _pager = new SkiaPager((int)State.Page, _pages.PageCount);
+        _pager = new SkiaPager(IndexOfPage(State.Page), _pages.PageCount);
         _pager.PageChanged += OnPagerPageChanged;
         _archipelago = new SkiaArchipelago(profile);
 
@@ -319,7 +319,7 @@ public sealed class SkiaIslandController : IDisposable
 
             if (_hasRenderState && _renderState.Form == ShellForm.Expanded)
             {
-                return _renderState.PageIndex == 4 && HasActiveAgentRow(_renderState.Pages.Agent);
+                return CurrentPageIs(PageSlotKind.Agent) && HasActiveAgentRow(_renderState.Pages.Agent);
             }
 
             // An agent preview ball also spins (the split strategy can keep the agent off the pill).
@@ -359,7 +359,7 @@ public sealed class SkiaIslandController : IDisposable
         && _karaokeTrack is not null
         && _karaokeClock.IsAdvancing
         && (_hasRenderState && _renderState.Form == ShellForm.Expanded
-            ? _renderState.PageIndex == 1
+            ? CurrentPageIs(PageSlotKind.Media)
             : _compact.Kind == ActivityKind.Media);
 
     /// <summary>
@@ -368,7 +368,7 @@ public sealed class SkiaIslandController : IDisposable
     /// </summary>
     public bool IsMediaProgressAnimating => _mediaDurationMs > 0 && _mediaClock.IsAdvancing
         && (_hasRenderState && _renderState.Form == ShellForm.Expanded
-            ? _renderState.PageIndex == 1
+            ? CurrentPageIs(PageSlotKind.Media)
             : _compact.Kind == ActivityKind.Media);
 
     /// <summary>Whether the island is only animating the media waveform (lower frame rate is enough).</summary>
@@ -431,7 +431,7 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         _motion.SnapToTarget();
-        _pager.JumpToPage((int)State.Page);
+        _pager.JumpToPage(IndexOfPage(State.Page));
         InvalidateFull();
         BuildRenderState();
         StateChanged?.Invoke();
@@ -882,12 +882,13 @@ public sealed class SkiaIslandController : IDisposable
             }
         }
 
-        if ((int)page == _pager.SelectedIndex)
+        var index = IndexOfPage(page);
+        if (index < 0 || index == _pager.SelectedIndex)
         {
             return;
         }
 
-        _pager.SelectPage((int)page);
+        _pager.SelectPage(index);
     }
 
     /// <summary>
@@ -1331,7 +1332,7 @@ public sealed class SkiaIslandController : IDisposable
             if (isClick && pending >= 0)
             {
                 _archipelago.NoteActivity(_time.GetLocalNow());
-                HandlePageRequest((CoreIslandPage)pending);
+                HandlePageRequest(PageAt(pending));
             }
 
             if (hadPress)
@@ -1516,7 +1517,7 @@ public sealed class SkiaIslandController : IDisposable
                 _motion.PlayStackRotation();
                 SyncContent(full: true);
                 StateChanged?.Invoke();
-                return new SkiaWheelOutcome(true, false, (int)State.Page, false, false);
+                return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
             }
 
             if (_settings.Current.Stacking == StackingStrategySetting.Stacked)
@@ -1525,7 +1526,7 @@ public sealed class SkiaIslandController : IDisposable
                 _motion.PlayStackRotation();
                 SyncContent(full: true);
                 StateChanged?.Invoke();
-                return new SkiaWheelOutcome(true, false, (int)State.Page, false, false);
+                return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
             }
         }
 
@@ -1534,7 +1535,7 @@ public sealed class SkiaIslandController : IDisposable
         // clipboard or notification list scrolls natively and only then flips. Short pages flip at once.
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
-            var page = (int)State.Page;
+            var page = _pager.SelectedIndex;
             var max = MaxScrollForPage(page);
             var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
             var direction = deltaDip < 0 ? PagerScrollDirection.Up : PagerScrollDirection.Down;
@@ -1550,6 +1551,7 @@ public sealed class SkiaIslandController : IDisposable
                 ContentScrollable = max > 0.5,
                 ContentBoundary = boundary,
                 CurrentPage = page,
+                PageCount = _pages.PageCount,
                 Now = now,
                 PageAnimationLocked = locked,
             });
@@ -1590,7 +1592,7 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var outcome = _pager.Wheel(deltaDip, horizontal, shift, now,
-            contentScrollable: MaxScrollForPage((int)State.Page) > 0.5);
+            contentScrollable: MaxScrollForPage(_pager.SelectedIndex) > 0.5);
         if (outcome.Paged || outcome.Consumed)
         {
             _archipelago.Reveal(now);
@@ -1632,7 +1634,7 @@ public sealed class SkiaIslandController : IDisposable
     {
         _motion.SetTarget(BuildTarget(ActivityPresenter.PresentIsland(_schedulerState, State)));
         _motion.SnapToTarget();
-        _pager.JumpToPage((int)State.Page);
+        _pager.JumpToPage(IndexOfPage(State.Page));
         BuildRenderState();
         InvalidateFull();
         PlacementRequested?.Invoke();
@@ -1920,7 +1922,7 @@ public sealed class SkiaIslandController : IDisposable
             return ContentDamage();
         }
 
-        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 4)
+        if (CurrentPageIs(PageSlotKind.Agent))
         {
             // Agent rows stack status over duration in a fixed right column; repaint that strip for
             // every visible row without touching the task text or the shell.
@@ -1945,7 +1947,7 @@ public sealed class SkiaIslandController : IDisposable
             return ContentDamage();
         }
 
-        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 4)
+        if (CurrentPageIs(PageSlotKind.Agent))
         {
             // The indeterminate progress bar spans each row, so repaint the agent page content only
             // (never the whole layered surface).
@@ -2076,10 +2078,6 @@ public sealed class SkiaIslandController : IDisposable
                 label = _localizer.Get("Activity." + view.Kind);
             }
 
-            var badge = view.Badge is { Length: > 0 } candidate
-                && candidate.All(char.IsAsciiDigit)
-                ? candidate
-                : null;
             islets[i] = new IslandSplitIslet(
                 view.Kind,
                 MapSplitIcon(view.Icon),
@@ -2180,8 +2178,8 @@ public sealed class SkiaIslandController : IDisposable
 
     private void SyncPagerFromState()
     {
-        var page = (int)State.Page;
-        if (page == _pager.SelectedIndex)
+        var page = IndexOfPage(State.Page);
+        if (page < 0 || page == _pager.SelectedIndex)
         {
             return;
         }
@@ -2206,7 +2204,7 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
-        ApplyInput(IslandInput.PageRequested((CoreIslandPage)page));
+        ApplyInput(IslandInput.PageRequested(PageAt(page)));
         InvalidateFull();
         FrameRequested?.Invoke();
     }
@@ -2236,6 +2234,17 @@ public sealed class SkiaIslandController : IDisposable
             }
         });
     }
+
+    private int IndexOfPage(CoreIslandPage page) => _pages.IndexOfPage(page);
+
+    private CoreIslandPage PageAt(int index)
+        => _pages.PageSlotAt(index) is { PageId: { Length: > 0 } pageId }
+            ? new CoreIslandPage(pageId)
+            : CoreIslandPage.Home;
+
+    private bool CurrentPageIs(PageSlotKind kind)
+        => _renderState.Form == ShellForm.Expanded
+           && _pages.PageSlotAt(_renderState.PageIndex)?.Kind == kind;
 
     private IReadOnlyList<PageSlot> BuildPageSlots()
     {
@@ -2608,30 +2617,33 @@ public sealed class SkiaIslandController : IDisposable
     /// </summary>
     private ExpandedPageContent ApplyPageScroll(ExpandedPageContent pages)
     {
-        var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
-        var pageRect = MetricPageRect();
-        var max0 = PageMetricsLayout.MaxScroll(pageRect, 0, metrics);
-        var max1 = PageMetricsLayout.MaxScroll(pageRect, 1, metrics);
-        var max2 = ListMaxScroll(pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4);
-        var max3 = ListMaxScroll(pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6);
-        var max4 = ListMaxScroll(pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6);
-        var max5 = PageMetricsLayout.MaxScroll(pageRect, 5, metrics, _pages.Widgets.Tasks?.Count ?? 0);
-        _pageScroll[0] = Math.Clamp(_pageScroll[0], 0, max0);
-        _pageScroll[1] = Math.Clamp(_pageScroll[1], 0, max1);
-        _pageScroll[2] = Math.Clamp(_pageScroll[2], 0, max2);
-        _pageScroll[3] = Math.Clamp(_pageScroll[3], 0, max3);
-        _pageScroll[4] = Math.Clamp(_pageScroll[4], 0, max4);
-        _pageScroll[5] = Math.Clamp(_pageScroll[5], 0, max5);
+        for (var page = 0; page < pages.PageCount && page < _pageScroll.Length; page++)
+        {
+            _pageScroll[page] = Math.Clamp(_pageScroll[page], 0, MaxScrollForPage(page, pages));
+        }
 
         return pages with
         {
-            Home = pages.Home with { ScrollOffset = _pageScroll[0] },
-            Media = pages.Media with { ScrollOffset = _pageScroll[1] },
-            Notifications = pages.Notifications with { ScrollOffset = _pageScroll[2] },
-            Clipboard = pages.Clipboard with { ScrollOffset = _pageScroll[3] },
-            Agent = pages.Agent with { ScrollOffset = _pageScroll[4] },
-            Widgets = pages.Widgets with { ScrollOffset = _pageScroll[5] },
+            Home = pages.Home with { ScrollOffset = ScrollForKind(PageSlotKind.Home) },
+            Media = pages.Media with { ScrollOffset = ScrollForKind(PageSlotKind.Media) },
+            Notifications = pages.Notifications with { ScrollOffset = ScrollForKind(PageSlotKind.Notifications) },
+            Clipboard = pages.Clipboard with { ScrollOffset = ScrollForKind(PageSlotKind.Clipboard) },
+            Agent = pages.Agent with { ScrollOffset = ScrollForKind(PageSlotKind.Agent) },
+            Widgets = pages.Widgets with { ScrollOffset = ScrollForKind(PageSlotKind.Widgets) },
         };
+    }
+
+    private double ScrollForKind(PageSlotKind kind)
+    {
+        for (var i = 0; i < _pages.PageSlots.Count && i < _pageScroll.Length; i++)
+        {
+            if (_pages.PageSlots[i].Kind == kind)
+            {
+                return _pageScroll[i];
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>Scrollable list content height minus the 232 DIP body, 0 when every row fits.</summary>
@@ -2644,18 +2656,19 @@ public sealed class SkiaIslandController : IDisposable
         (float)(IslandMetrics.ContentLeft + IslandMetrics.ContentWidth),
         (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));
 
-    private double MaxScrollForPage(int page)
+    private double MaxScrollForPage(int page, ExpandedPageContent? source = null)
     {
+        source ??= _pages;
         var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
-        var kind = _pages.PageSlotAt(page)?.Kind;
+        var kind = source.PageSlotAt(page)?.Kind;
         return kind switch
         {
-            PageSlotKind.Home => PageMetricsLayout.MaxScroll(MetricPageRect(), 0, metrics),
-            PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), 1, metrics),
-            PageSlotKind.Notifications => ListMaxScroll(_pages.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
-            PageSlotKind.Clipboard => ListMaxScroll(_pages.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
-            PageSlotKind.Agent => ListMaxScroll(_pages.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
-            PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), 5, metrics, _pages.Widgets.Tasks?.Count ?? 0),
+            PageSlotKind.Home => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Home, metrics),
+            PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Media, metrics),
+            PageSlotKind.Notifications => ListMaxScroll(source.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
+            PageSlotKind.Clipboard => ListMaxScroll(source.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
+            PageSlotKind.Agent => ListMaxScroll(source.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
+            PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Widgets, metrics, source.Widgets.Tasks?.Count ?? 0),
             _ => 0,
         };
     }
@@ -2937,7 +2950,7 @@ public sealed class SkiaIslandController : IDisposable
             StackSpin = _motion.StackSpin,
             FontScale = _settings.Current.FontScale,
             Pager = PagerRenderState.FromPosition(
-                _pager.PagePosition, _pager.IsDragging, _pager.IsAnimating, _pages.PageCount),
+                _pager.PagePosition, _pages.PageCount, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,
             Pages = _pages,
             Theme = _theme,
@@ -3020,7 +3033,7 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
-        if (_renderState.Form == ShellForm.Expanded && _renderState.PageIndex == 1)
+        if (CurrentPageIs(PageSlotKind.Media))
         {
             var page = IslandMetrics.PageRect(_renderState, 1);
             var lyric = PageLayout.MediaLyricCard(page);
@@ -3059,7 +3072,7 @@ public sealed class SkiaIslandController : IDisposable
 
         if (_renderState.Form == ShellForm.Expanded)
         {
-            if (_renderState.PageIndex == 1)
+            if (CurrentPageIs(PageSlotKind.Media))
             {
                 var page = IslandMetrics.PageRect(_renderState, 1);
                 // Same geometry the renderer paints (font scale + squeeze applied); the old PageLayout
@@ -3235,4 +3248,5 @@ public sealed class SkiaIslandController : IDisposable
         return new VisualRect(left, top, right - left, bottom - top);
     }
 }
+
 

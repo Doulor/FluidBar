@@ -11,9 +11,6 @@ namespace FluidBar.Core.Interaction;
 /// </summary>
 public static class PagerConstants
 {
-    /// <summary>Number of expanded pages: home / media / notifications / clipboard / agent / widgets.</summary>
-    public const int PageCount = 6;
-
     /// <summary>Horizontal page pitch in DIP (one full page step).</summary>
     public const double PagePitchDip = 400;
 
@@ -83,4 +80,5 @@ public static class PagerConstants
     /// <summary>Default vertical content inset for the no-rail panel.</summary>
     public const double ContentVerticalInsetDip = 16;
 }
+
 

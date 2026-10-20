@@ -143,7 +143,7 @@ public sealed class MiniRailMotionTests
     [InlineData(5, 3, true, 0, false)]
     public void DotCounts_FollowThePrototypeTable(int page, int left, bool leftWide, int right, bool rightWide)
     {
-        MiniRailTargetsFactory.DotCounts(page, out var l, out var lw, out var r, out var rw);
+        MiniRailTargetsFactory.DotCounts(page, out var l, out var lw, out var r, out var rw, IslandTestFixtures.PageCount);
         Assert.Equal(left, l);
         Assert.Equal(leftWide, lw);
         Assert.Equal(right, r);

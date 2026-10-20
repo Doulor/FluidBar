@@ -13,9 +13,7 @@ namespace FluidBar.App.Island.Expanded;
 public sealed class PagerMotion
 {
     /// <summary>Number of pages (Core constant).</summary>
-    public const int DefaultPageCount = PagerConstants.PageCount;
-
-    /// <summary>Page pitch in DIP (Core constant).</summary>
+        /// <summary>Page pitch in DIP (Core constant).</summary>
     public const double PagePitch = PagerConstants.PagePitchDip;
 
     /// <summary>Pointer follow factor (user re-tuning 2026-10-18: 0.85).</summary>
@@ -54,7 +52,7 @@ public sealed class PagerMotion
     private long _lastWheelTimestamp = long.MinValue / 2;
 
     /// <summary>Creates the pager for <paramref name="pageCount"/> pages.</summary>
-    public PagerMotion(int pageCount = PagerConstants.PageCount, double pageWidth = PagerConstants.PagePitchDip, int initialPage = 0)
+    public PagerMotion(int pageCount, double pageWidth = PagerConstants.PagePitchDip, int initialPage = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(pageWidth, 0);
@@ -63,7 +61,7 @@ public sealed class PagerMotion
         SelectedIndex = PagePagerPolicy.ClampPage(initialPage, pageCount);
         _snap = new Spring(
             new SpringParameters(SnapPeriodSeconds, SnapDampingRatio),
-            PagePagerPolicy.PageToOffset(SelectedIndex, pageWidth, pageCount));
+            PagePagerPolicy.PageToOffset(SelectedIndex, pageCount, pageWidth));
     }
 
     /// <summary>Number of pages.</summary>
@@ -94,7 +92,7 @@ public sealed class PagerMotion
     public bool IsWheelBlocked { get; set; }
 
     /// <summary>Maximum content offset in DIP.</summary>
-    public double MaxOffset => PagePagerPolicy.PageToOffset(PageCount - 1, _pageWidth, PageCount);
+    public double MaxOffset => PagePagerPolicy.PageToOffset(PageCount - 1, PageCount, _pageWidth);
 
     /// <summary>Current fractional page position (archipelago lag/parallax source).</summary>
     public double PagePosition => Offset / _pageWidth;
@@ -113,7 +111,7 @@ public sealed class PagerMotion
         _lastDragTimestamp = timestampMs;
         _dragStartOffset = _snap.Value;
         _snap.SnapTo(_dragStartOffset);
-        _dragStartPage = PagePagerPolicy.OffsetToPage(_dragStartOffset, _pageWidth, PageCount);
+        _dragStartPage = PagePagerPolicy.OffsetToPage(_dragStartOffset, PageCount, _pageWidth);
     }
 
     /// <summary>Updates the drag; returns the new visual offset.</summary>
@@ -138,7 +136,7 @@ public sealed class PagerMotion
             PageCount,
             _pageWidth,
             pointerDamping: PointerDamping);
-        var deltaFromPage = state.DisplayOffsetDip - PagePagerPolicy.PageToOffset(_dragStartPage, _pageWidth, PageCount);
+        var deltaFromPage = state.DisplayOffsetDip - PagePagerPolicy.PageToOffset(_dragStartPage, PageCount, _pageWidth);
         var visual = _dragStartOffset + deltaFromPage;
         _snap.SnapTo(visual);
         return visual;
@@ -196,7 +194,7 @@ public sealed class PagerMotion
         if (target != SelectedIndex)
         {
             CommitPage(target);
-            _snap.Retarget(PagePagerPolicy.PageToOffset(target, _pageWidth, PageCount), 1.0 / 120.0);
+            _snap.Retarget(PagePagerPolicy.PageToOffset(target, PageCount, _pageWidth), 1.0 / 120.0);
         }
 
         return target;
@@ -207,7 +205,7 @@ public sealed class PagerMotion
     {
         var target = PagePagerPolicy.ClampPage(index, PageCount);
         CommitPage(target);
-        _snap.Retarget(PagePagerPolicy.PageToOffset(target, _pageWidth, PageCount), 1.0 / 120.0);
+        _snap.Retarget(PagePagerPolicy.PageToOffset(target, PageCount, _pageWidth), 1.0 / 120.0);
     }
 
     /// <summary>One page left/right (keyboard arrows, wheel).</summary>
@@ -220,7 +218,7 @@ public sealed class PagerMotion
     public void SnapToPage(int index)
     {
         var target = PagePagerPolicy.ClampPage(index, PageCount);
-        _snap.SnapTo(PagePagerPolicy.PageToOffset(target, _pageWidth, PageCount));
+        _snap.SnapTo(PagePagerPolicy.PageToOffset(target, PageCount, _pageWidth));
         CommitPage(target);
     }
 
@@ -235,3 +233,4 @@ public sealed class PagerMotion
         PageChanged?.Invoke(target);
     }
 }
+

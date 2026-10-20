@@ -12,6 +12,8 @@ public class PagerScrollChainPolicyTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
 
+    private const int TestPageCount = 6;
+
     private static PagerScrollChainPolicy NewPolicy() => new();
 
     private static PagerScrollChainRequest Request(
@@ -20,7 +22,7 @@ public class PagerScrollChainPolicyTests
         PagerScrollBoundary boundary = PagerScrollBoundary.None,
         DateTimeOffset? now = null,
         int page = 2,
-        int pageCount = PagerConstants.PageCount,
+        int pageCount = TestPageCount,
         bool locked = false,
         bool horizontal = false,
         bool shift = false)
@@ -299,3 +301,4 @@ public class PagerScrollChainPolicyTests
         Assert.Equal(42.5, up.MagnitudeDip, 1e-9);
     }
 }
+

@@ -46,8 +46,8 @@ public sealed class PagerSnapMotion
     /// <summary>Snaps to a page offset (clamped page, production default pitch).</summary>
     /// <param name="page">Target page.</param>
     /// <param name="pageCount">Number of pages.</param>
-    public void SnapToPage(int page, int pageCount = PagerConstants.PageCount)
-        => SnapToOffset(PagePagerPolicy.PageToOffset(page, PagerConstants.PagePitchDip, pageCount));
+    public void SnapToPage(int page, int pageCount)
+        => SnapToOffset(PagePagerPolicy.PageToOffset(page, pageCount, PagerConstants.PagePitchDip));
 
     /// <summary>
     /// Retargets the spring to a content offset (DIP) from rest, matching prototype2's
@@ -111,3 +111,4 @@ public sealed class PagerSnapMotion
     /// <summary>Distance left until the target offset is reached.</summary>
     public double RemainingDistanceDip => Math.Abs(TargetOffsetDip - CurrentOffsetDip);
 }
+

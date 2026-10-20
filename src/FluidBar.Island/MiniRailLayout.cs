@@ -70,7 +70,7 @@ public readonly record struct MiniRailFrame(
     MiniRailSlot Hover,
     MiniRailSlot Pressed,
     MiniRailSlot Focus,
-    int PageCount = PagerConstants.PageCount,
+    int PageCount = 0,
     SKRect OverflowLeft = default,
     SKRect OverflowRight = default);
 
@@ -111,11 +111,11 @@ public static class MiniRailLayout
 
     /// <summary>Nearest page index for a continuous pager position (prototype `Math.round`).</summary>
     /// <param name="pagePosition">Continuous pager position (0..5).</param>
-    public static int PageAt(double pagePosition, int pageCount = PagerConstants.PageCount)
+    public static int PageAt(double pagePosition, int pageCount)
         => PagePagerPolicy.OffsetToPage(
             Position(pagePosition, pageCount) * PagerConstants.PagePitchDip,
-            PagerConstants.PagePitchDip,
-            Math.Max(1, pageCount));
+            Math.Max(1, pageCount),
+            PagerConstants.PagePitchDip);
 
     /// <summary>
     /// Locale label width of a page in DIP, measured with the same 9 DIP semibold face the rail paints
@@ -161,7 +161,7 @@ public static class MiniRailLayout
     /// <param name="fontScale">Island font scale (0.8–1.6).</param>
     public static float CapsuleWidthAt(double pagePosition, ExpandedPageContent? pages, double fontScale)
     {
-        var lastPage = (pages?.PageCount ?? PagerConstants.PageCount) - 1;
+        var lastPage = Math.Max(1, pages?.PageCount ?? 1) - 1;
         var position = Position(pagePosition, lastPage + 1);
         var lower = (int)Math.Floor(position);
         var lowerWidth = CapsuleWidth(Label(pages, lower), fontScale);
@@ -204,8 +204,8 @@ public static class MiniRailLayout
     {
         var arch = state.Archipelago;
         var rail = arch.Rail;
-        var position = Position(double.IsFinite(arch.PagePosition) ? arch.PagePosition : state.Pager.PagePosition);
         var pageCount = state.Pages.PageCount;
+        var position = Position(double.IsFinite(arch.PagePosition) ? arch.PagePosition : state.Pager.PagePosition, pageCount);
         var page = rail.Active ? rail.Page : PageAt(position, pageCount);
         var capsule = rail.Active ? rail.CapsuleWidth : CapsuleWidthAt(position, state.Pages, state.FontScale);
 
@@ -295,7 +295,8 @@ public static class MiniRailLayout
             halfWidth = Math.Max(halfWidth, (rightClusterCentre + (rightWidth / 2f)) - centreX);
         }
 
-        var showOverflow = pageCount > 7;
+        var maxInlinePages = (ArchipelagoState.MaxDotsPerSide * 2) + 1;
+        var showOverflow = pageCount > maxInlinePages;
         var overflowLeft = showOverflow
             ? new SKRect(leftClusterCentre - (leftWidth / 2f) - 24f, dotTop - 3f, leftClusterCentre - (leftWidth / 2f) - 4f, dotTop + dotSize + 3f)
             : SKRect.Empty;
@@ -341,7 +342,7 @@ public static class MiniRailLayout
     /// </summary>
     /// <param name="slot">Slot reported by the host.</param>
     /// <param name="page">Rail page the frame represents.</param>
-    internal static MiniRailSlot ResolveSlot(MiniRailSlot slot, int page, int pageCount = PagerConstants.PageCount) => slot switch
+    internal static MiniRailSlot ResolveSlot(MiniRailSlot slot, int page, int pageCount) => slot switch
     {
         MiniRailSlot.Previous when page <= 0 => MiniRailSlot.None,
         MiniRailSlot.Next when page >= pageCount - 1 => MiniRailSlot.None,
@@ -381,9 +382,9 @@ public static class MiniRailLayout
 
     private static string Label(ExpandedPageContent? pages, int page)
         => pages?.ShortTitle(page)
-           ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(page, 0, PagerConstants.PageCount - 1)];
+           ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(page, 0, ExpandedPageContent.DefaultPageTitles.Length - 1)];
 
-    private static double Position(double pagePosition, int pageCount = PagerConstants.PageCount)
+    private static double Position(double pagePosition, int pageCount)
         => double.IsFinite(pagePosition)
             ? Math.Clamp(pagePosition, 0, Math.Max(1, pageCount) - 1)
             : 0;
@@ -562,3 +563,4 @@ public static class MiniRailText
         public SKFont CjkFont { get; } = cjkFont;
     }
 }
+

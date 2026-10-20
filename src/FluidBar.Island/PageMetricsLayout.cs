@@ -417,19 +417,19 @@ public static class PageMetricsLayout
     // ---------------------------------------------------------------- extents
 
     /// <summary>Scroll extent of a page's body content (DIP below the title gutter).</summary>
-    public static float ContentExtent(SKRect page, int pageIndex, in FontScaleMetrics metrics, int itemCount = 0)
+    public static float ContentExtent(SKRect page, PageSlotKind kind, in FontScaleMetrics metrics, int itemCount = 0)
     {
-        switch (pageIndex)
+        switch (kind)
         {
-            case 0:
+            case PageSlotKind.Home:
                 return HomeContentExtent(page, metrics);
-            case 1:
+            case PageSlotKind.Media:
                 return MediaContentExtent(page, metrics);
-            case 2:
-            case 3:
-            case 4:
+            case PageSlotKind.Notifications:
+            case PageSlotKind.Clipboard:
+            case PageSlotKind.Agent:
                 return BodyHeight; // list pages clamp their own model scroll offset
-            case 5:
+            case PageSlotKind.Widgets:
                 return WidgetsContentExtent(page, metrics, itemCount);
             default:
                 return BodyHeight;
@@ -437,13 +437,13 @@ public static class PageMetricsLayout
     }
 
     /// <summary>Maximum scroll offset for a page (0 when the content fits the body).</summary>
-    public static float MaxScroll(SKRect page, int pageIndex, in FontScaleMetrics metrics, int itemCount = 0)
-        => Math.Max(0, ContentExtent(page, pageIndex, metrics, itemCount) - BodyHeight);
+    public static float MaxScroll(SKRect page, PageSlotKind kind, in FontScaleMetrics metrics, int itemCount = 0)
+        => Math.Max(0, ContentExtent(page, kind, metrics, itemCount) - BodyHeight);
 
     /// <summary>Clamps a page scroll offset.</summary>
-    public static float ClampScroll(SKRect page, int pageIndex, double offset, in FontScaleMetrics metrics, int itemCount = 0)
+    public static float ClampScroll(SKRect page, PageSlotKind kind, double offset, in FontScaleMetrics metrics, int itemCount = 0)
     {
-        var max = MaxScroll(page, pageIndex, metrics, itemCount);
+        var max = MaxScroll(page, kind, metrics, itemCount);
         var value = double.IsFinite(offset) ? (float)offset : 0;
         return Math.Clamp(value, 0, max);
     }
@@ -464,16 +464,16 @@ public static class PageMetricsLayout
     /// offset and the row count, so painted rows and click targets never drift.
     /// </summary>
     public static IslandPageControl HitTest(
-        int page, SKRect pageRect, float x, float y, in FontScaleMetrics metrics, float scrollOffset, int itemCount, out int index)
+        PageSlotKind kind, SKRect pageRect, float x, float y, in FontScaleMetrics metrics, float scrollOffset, int itemCount, out int index)
     {
         index = -1;
-        var scrolled = page is 0 or 1 or 5
+        var scrolled = kind is PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets
             ? new SKRect(pageRect.Left, pageRect.Top - scrollOffset, pageRect.Right, pageRect.Bottom - scrollOffset)
             : pageRect;
 
-        switch (page)
+        switch (kind)
         {
-            case 0:
+            case PageSlotKind.Home:
                 if (HomeMediaPlay(scrolled, metrics).Contains(x, y))
                 {
                     return IslandPageControl.PlayPause;
@@ -509,7 +509,7 @@ public static class PageMetricsLayout
                 }
 
                 return IslandPageControl.None;
-            case 1:
+            case PageSlotKind.Media:
                 if (MediaPlay(scrolled, metrics).Contains(x, y))
                 {
                     return IslandPageControl.PlayPause;
@@ -546,7 +546,7 @@ public static class PageMetricsLayout
                 }
 
                 return IslandPageControl.None;
-            case 2:
+            case PageSlotKind.Notifications:
                 {
                     var body = Body(pageRect);
                     if (!body.Contains(x, y))
@@ -577,7 +577,7 @@ public static class PageMetricsLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 3:
+            case PageSlotKind.Clipboard:
                 {
                     var body = Body(pageRect);
                     if (!body.Contains(x, y))
@@ -614,7 +614,7 @@ public static class PageMetricsLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 4:
+            case PageSlotKind.Agent:
                 {
                     var body = Body(pageRect);
                     if (!body.Contains(x, y))
@@ -636,7 +636,7 @@ public static class PageMetricsLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 5:
+            case PageSlotKind.Widgets:
                 if (PageLayout.WidgetsCalendarNav(scrolled, previous: true).Contains(x, y))
                 {
                     return IslandPageControl.CalendarPrevious;

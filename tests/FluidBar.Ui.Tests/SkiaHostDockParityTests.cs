@@ -12,6 +12,8 @@ namespace FluidBar.Ui.Tests;
 /// </summary>
 public sealed class SkiaHostDockParityTests
 {
+    private const int PageCount = 6;
+
     [Fact]
     public void Dock_CoreHostSurface_LocalRects_ArePanel24To308_Strip316To368_Arch376To408()
     {
@@ -31,7 +33,7 @@ public sealed class SkiaHostDockParityTests
 
         var expanded = IslandRenderState.Expanded(
             IslandMode.Dock,
-            PagerRenderState.At(0),
+            PagerRenderState.At(0, PageCount),
             ExpandedPageContent.Empty,
             IslandTheme.Dark);
         Assert.Equal(dock.ShellLocalOffset, expanded.ShellOrigin);
@@ -63,7 +65,7 @@ public sealed class SkiaHostDockParityTests
 
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
-            PagerRenderState.At(0),
+            PagerRenderState.At(0, PageCount),
             ExpandedPageContent.Empty,
             IslandTheme.Dark) with
         {

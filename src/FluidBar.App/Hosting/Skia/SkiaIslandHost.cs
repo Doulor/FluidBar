@@ -236,6 +236,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Horizontal page pager (diagnostics/page chooser).</summary>
     public SkiaPager Pager => _controller.Pager;
 
+    /// <summary>Current ordered page slots (localized titles used by the page chooser).</summary>
+    public IReadOnlyList<FluidBar.Island.PageSlot> PageSlots
+        => _controller.HasRenderState ? _controller.RenderState.Pages.PageSlots : [];
+
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.State;
 

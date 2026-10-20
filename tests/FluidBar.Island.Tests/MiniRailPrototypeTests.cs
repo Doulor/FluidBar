@@ -168,7 +168,7 @@ public sealed class MiniRailPrototypeTests
     public void EveryDotJumpsToTheFarthestPage_AndNeighboursNeverStealTheClick()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        for (var page = 0; page < PagerConstants.PageCount; page++)
+        for (var page = 0; page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count; page++)
         {
             var state = State(page);
             var layout = renderer.MeasureStrip(state);
@@ -184,7 +184,7 @@ public sealed class MiniRailPrototypeTests
             {
                 var hit = renderer.HitTest(state, dot.MidX, dot.MidY);
                 Assert.Equal(IslandHitKind.DotRight, hit.Kind);
-                Assert.Equal(PagerConstants.PageCount - 1, hit.PageIndex);
+                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, hit.PageIndex);
             }
 
             // The last dot (the prototype's far/wide dot) must jump to 01/06, never to its neighbour.
@@ -198,8 +198,8 @@ public sealed class MiniRailPrototypeTests
             if (layout.DotsRight.Length > 0)
             {
                 var far = layout.DotsRight[^1];
-                Assert.Equal(PagerConstants.PageCount - 1, renderer.HitTest(state, far.MidX, far.MidY).PageIndex);
-                Assert.Equal(PagerConstants.PageCount - 1, layout.RightDotPage(layout.DotsRight.Length - 1));
+                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, renderer.HitTest(state, far.MidX, far.MidY).PageIndex);
+                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, layout.RightDotPage(layout.DotsRight.Length - 1));
             }
 
             // The 8 DIP island gaps and the dot gaps are transparent.
@@ -262,7 +262,7 @@ public sealed class MiniRailPrototypeTests
             Assert.Equal(prevCentre + dx, layout.Previous.MidX, 0.001f);
         }
 
-        if (page < PagerConstants.PageCount - 1)
+        if (page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1)
         {
             Assert.Equal(nextCentre + dx, layout.Next.MidX, 0.001f);
         }
@@ -277,7 +277,7 @@ public sealed class MiniRailPrototypeTests
             Assert.Equal(8f, layout.Current.Left - layout.Previous.Right, 0.001f);
         }
 
-        if (page < PagerConstants.PageCount - 1)
+        if (page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1)
         {
             Assert.Equal(8f, layout.Next.Left - layout.Current.Right, 0.001f);
         }
@@ -290,7 +290,7 @@ public sealed class MiniRailPrototypeTests
 
         if (rightDots > 0)
         {
-            var neighbourRight = page < PagerConstants.PageCount - 1
+            var neighbourRight = page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1
                 ? layout.Next.Right
                 : layout.Current.Right + 8f + 26f;
             Assert.Equal(7f, layout.DotsRight[0].Left - neighbourRight, 0.001f);

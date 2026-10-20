@@ -37,7 +37,7 @@ public sealed class PagerWheelPolicy
     /// <param name="notchDip">DIP accumulated per page step (100 in production).</param>
     /// <param name="cooldownMs">Minimum milliseconds between two page steps (120 in production).</param>
     public PagerWheelPolicy(
-        int pageCount = PagerConstants.PageCount,
+        int pageCount,
         double notchDip = PagerConstants.WheelNotchDip,
         int cooldownMs = PagerConstants.WheelCooldownMs)
     {
@@ -135,7 +135,7 @@ public sealed class PagerWheelPolicy
     }
 
     /// <summary>Applies accumulated wheel deltas to a page index and clamps it.</summary>
-    public static int ApplyPageDelta(int currentPage, int pageDelta, int pageCount = PagerConstants.PageCount)
+    public static int ApplyPageDelta(int currentPage, int pageDelta, int pageCount)
         => PagePagerPolicy.ClampPage(currentPage + pageDelta, pageCount);
 
     /// <summary>Clamps a page index for this policy's <see cref="PageCount"/>.</summary>
@@ -148,3 +148,4 @@ public sealed class PagerWheelPolicy
         _lastPageChangeAt = null;
     }
 }
+

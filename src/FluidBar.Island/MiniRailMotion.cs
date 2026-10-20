@@ -304,7 +304,7 @@ public static class MiniRailTargetsFactory
     /// <param name="leftWide">Whether the last left dot is the 7 DIP overflow pill.</param>
     /// <param name="right">Right dot count (0..3).</param>
     /// <param name="rightWide">Whether the last right dot is the 7 DIP overflow pill.</param>
-    public static void DotCounts(int page, out int left, out bool leftWide, out int right, out bool rightWide, int pageCount = PagerConstants.PageCount)
+    public static void DotCounts(int page, out int left, out bool leftWide, out int right, out bool rightWide, int pageCount)
     {
         var count = Math.Max(1, pageCount);
         var index = Math.Clamp(page, 0, count - 1);
@@ -322,7 +322,7 @@ public static class MiniRailTargetsFactory
     /// <param name="fontScale">Island font scale.</param>
     public static MiniRailTargets Create(int page, ExpandedPageContent? pages, double fontScale)
     {
-        var count = pages?.PageCount ?? PagerConstants.PageCount;
+        var count = Math.Max(1, pages?.PageCount ?? 1);
         var index = Math.Clamp(page, 0, count - 1);
         var label = pages?.ShortTitle(index)
             ?? ExpandedPageContent.DefaultPageTitles[Math.Min(index, ExpandedPageContent.DefaultPageTitles.Length - 1)];
@@ -351,3 +351,4 @@ public static class MiniRailTargetsFactory
             right > 0 ? 1f : 0f);
     }
 }
+

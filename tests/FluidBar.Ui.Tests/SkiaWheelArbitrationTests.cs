@@ -234,5 +234,5 @@ public sealed class SkiaWheelArbitrationTests
         => fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset;
 
     private static int Page(ControllerFixture fixture)
-        => (int)fixture.Controller.State.Page;
+        => fixture.Controller.Pager.SelectedIndex;
 }

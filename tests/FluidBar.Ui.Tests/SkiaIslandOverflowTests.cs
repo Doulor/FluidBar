@@ -48,7 +48,7 @@ public sealed class SkiaIslandOverflowTests
         fixture.Settle();
 
         Assert.Equal(IslandStateKind.Expanded, fixture.Controller.State.Kind);
-        Assert.Equal((int)PageRef.Media, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(fixture.Controller.RenderState.Pages.IndexOfPage(PageRef.Media), fixture.Controller.Pager.SelectedIndex);
         Assert.Equal(0, fixture.Controller.RenderState.OverflowCount);
     }
 

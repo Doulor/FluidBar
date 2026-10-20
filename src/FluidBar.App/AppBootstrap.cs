@@ -572,7 +572,10 @@ internal sealed class AppBootstrap
                 {
                     Title = "Pomodoro", Level = 8, IsActive = true,
                 }, 4, "audit");
-
+                _settings?.Update(settings => settings with
+                {
+                    Stacking = StackingStrategySetting.Stacked,
+                });
                 _skiaHost?.SimulateEscape();
                 await Task.Delay(1200).ConfigureAwait(true);
                 await ShotAsync("stack-before-wheel");
@@ -867,6 +870,17 @@ internal sealed class AppBootstrap
                 "The edited hotkey bindings could not be applied; restart FluidBar to retry.", ex);
         }
     }
+    private static string GlyphFor(string? iconToken) => iconToken switch
+    {
+        "home" => "⌂",
+        "media" => "▶",
+        "bell" => "◉",
+        "clipboard" => "▤",
+        "agent" => "✦",
+        "calendar" => "▦",
+        _ => "•",
+    };
+
     private void ShowPageChooser()
     {
         if (_pageChooser is not null)
@@ -875,25 +889,22 @@ internal sealed class AppBootstrap
             return;
         }
 
+        var slots = _skiaHost?.PageSlots ?? [];
         var descriptors = _pageRegistry.BuildPageDescriptors();
-        var items = descriptors.Select(static descriptor => new PageChooserWindow.Item(
-            descriptor.PageId,
-            descriptor.IconToken switch
-            {
-                "home" => "⌂",
-                "media" => "▶",
-                "bell" => "◉",
-                "clipboard" => "▤",
-                "agent" => "✦",
-                "calendar" => "▦",
-                _ => "•",
-            },
-            descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId)).ToArray();
+        var items = slots.Count > 0
+            ? slots.Select(static slot => new PageChooserWindow.Item(slot.PageId, GlyphFor(slot.IconToken), slot.Title)).ToArray()
+            : descriptors.Select(static descriptor => new PageChooserWindow.Item(
+                descriptor.PageId,
+                GlyphFor(descriptor.IconToken),
+                descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId)).ToArray();
         var current = _skiaHost?.Pager.SelectedIndex ?? 0;
         var chooser = new PageChooserWindow(items, current, index =>
         {
             _pageChooser = null;
-            _skiaHost?.SimulatePageRequested((FluidBar.Core.Activities.PageRef)index);
+            if (index >= 0 && index < items.Length)
+            {
+                _skiaHost?.SimulatePageRequested(new FluidBar.Core.Activities.PageRef(items[index].PageId));
+            }
         });
         chooser.Closed += (_, _) => _pageChooser = null;
         _pageChooser = chooser;

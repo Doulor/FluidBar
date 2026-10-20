@@ -96,21 +96,21 @@ public static class PagePagerPolicy
     /// <summary>Clamps a page index to <c>[0, pageCount-1]</c>.</summary>
     /// <param name="page">Requested page.</param>
     /// <param name="pageCount">Number of pages (&gt;= 1).</param>
-    public static int ClampPage(int page, int pageCount = PagerConstants.PageCount)
+    public static int ClampPage(int page, int pageCount)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
         return Math.Clamp(page, 0, pageCount - 1);
     }
 
     /// <summary>Content offset of a page in DIP (clamped page index).</summary>
-    public static double PageToOffset(int page, double pagePitchDip = PagerConstants.PagePitchDip, int pageCount = PagerConstants.PageCount)
+    public static double PageToOffset(int page, int pageCount, double pagePitchDip = PagerConstants.PagePitchDip)
     {
         ValidatePitch(pagePitchDip);
         return ClampPage(page, pageCount) * pagePitchDip;
     }
 
     /// <summary>Nearest page index for a content offset (rounded, clamped).</summary>
-    public static int OffsetToPage(double offsetDip, double pagePitchDip = PagerConstants.PagePitchDip, int pageCount = PagerConstants.PageCount)
+    public static int OffsetToPage(double offsetDip, int pageCount, double pagePitchDip = PagerConstants.PagePitchDip)
     {
         ValidatePitch(pagePitchDip);
         ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
@@ -136,7 +136,7 @@ public static class PagePagerPolicy
     public static PagerDragState Drag(
         int startPage,
         double accumulatedDragDip,
-        int pageCount = PagerConstants.PageCount,
+        int pageCount,
         double pagePitchDip = PagerConstants.PagePitchDip,
         double pointerDamping = PagerConstants.PointerDamping,
         double edgeResistance = PagerConstants.EdgeResistance)
@@ -209,7 +209,7 @@ public static class PagePagerPolicy
         int startPage,
         double accumulatedDragDip,
         double velocityDipPerMs,
-        int pageCount = PagerConstants.PageCount,
+        int pageCount,
         double pagePitchDip = PagerConstants.PagePitchDip,
         double pageThresholdDip = PagerConstants.PageThresholdDip,
         double flickVelocityDipPerMs = PagerConstants.FlickVelocityDipPerMs,
@@ -286,7 +286,7 @@ public static class PagePagerPolicy
     public static PagerSnapDecision Release(
         in PagerDragState drag,
         double velocityDipPerMs,
-        int pageCount = PagerConstants.PageCount,
+        int pageCount,
         double pagePitchDip = PagerConstants.PagePitchDip)
         => Release(drag.StartPage, drag.RawDragDip, velocityDipPerMs, pageCount, pagePitchDip);
 
@@ -298,7 +298,7 @@ public static class PagePagerPolicy
     public static PagerSnapDecision ReleaseWheel(
         int startPage,
         int pageDelta,
-        int pageCount = PagerConstants.PageCount,
+        int pageCount,
         double pagePitchDip = PagerConstants.PagePitchDip)
     {
         ValidatePitch(pagePitchDip);
@@ -323,3 +323,4 @@ public static class PagePagerPolicy
         }
     }
 }
+

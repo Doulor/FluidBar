@@ -19,7 +19,7 @@ public sealed class PageRegistryTests
         var ok = registry.RegisterPage(Owner, Descriptor("sample-page.metrics"), out var error);
 
         Assert.True(ok, error);
-        Assert.Equal(PageRegistry.BuiltinPageCount + 1, registry.Count);
+        Assert.Equal(PageRegistry.BuiltinDescriptors.Count + 1, registry.Count);
         var page = Assert.Single(registry.BuildPluginPages());
         Assert.Equal("sample-page.metrics", page.PageId);
         Assert.Equal(Owner, page.OwnerPluginId);
@@ -34,7 +34,7 @@ public sealed class PageRegistryTests
 
         Assert.False(registry.RegisterPage(Owner, Descriptor("other-plugin.metrics"), out var error));
         Assert.Contains("prefixed", error, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(PageRegistry.BuiltinPageCount, registry.Count);
+        Assert.Equal(PageRegistry.BuiltinDescriptors.Count, registry.Count);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class PageRegistryTests
 
         Assert.True(registry.UnregisterOwner(Owner));
 
-        Assert.Equal(PageRegistry.BuiltinPageCount, registry.Count);
+        Assert.Equal(PageRegistry.BuiltinDescriptors.Count, registry.Count);
         Assert.Empty(registry.BuildPluginPages());
         Assert.Equal(1, changed);
     }
@@ -105,7 +105,7 @@ public sealed class PageRegistryTests
     public void RegisterPage_StopsAtTwelvePages()
     {
         var registry = new PageRegistry();
-        for (var i = 0; i < PageRegistry.MaxPages - PageRegistry.BuiltinPageCount; i++)
+        for (var i = 0; i < PageRegistry.MaxPages - PageRegistry.BuiltinDescriptors.Count; i++)
         {
             var owner = $"sample-page-{i}";
             Assert.True(registry.RegisterPage(owner, Descriptor($"{owner}.page"), out var error), error);
@@ -155,3 +155,4 @@ public sealed class PageRegistryTests
         TemplateId = PageTemplates.List,
     };
 }
+

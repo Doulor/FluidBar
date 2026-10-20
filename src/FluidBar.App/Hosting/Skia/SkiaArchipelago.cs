@@ -167,13 +167,13 @@ public sealed class SkiaArchipelago : IDisposable
     /// <summary>Projects the current springs onto the renderer's strip state.</summary>
     /// <param name="pagePosition">Continuous pager position.</param>
     /// <param name="pageCount">Number of pages.</param>
-    public ArchipelagoState ToState(double pagePosition, int pageCount = PagerConstants.PageCount)
+    public ArchipelagoState ToState(double pagePosition, int pageCount)
     {
         var count = Math.Max(1, pageCount);
         var position = double.IsFinite(pagePosition)
             ? Math.Clamp(pagePosition, 0, count - 1)
             : 0;
-        var page = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, PagerConstants.PagePitchDip, pageCount);
+        var page = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, pageCount, PagerConstants.PagePitchDip);
         var left = Math.Clamp(page - 1, 0, ArchipelagoState.MaxDotsPerSide);
         var right = Math.Clamp((pageCount - 1) - (page + 1), 0, ArchipelagoState.MaxDotsPerSide);
         return new ArchipelagoState
@@ -184,6 +184,7 @@ public sealed class SkiaArchipelago : IDisposable
             TranslateYDip = TranslateYDip,
             Scale = Scale,
             PagePosition = position,
+            PageCount = count,
             FarLeftDotCount = left,
             FarRightDotCount = right,
         };
@@ -195,3 +196,4 @@ public sealed class SkiaArchipelago : IDisposable
         // Springs hold no unmanaged state; the method exists so the host can dispose uniformly.
     }
 }
+

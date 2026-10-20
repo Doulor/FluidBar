@@ -406,7 +406,7 @@ public sealed class SkiaIslandUiaTests
         Assert.Equal(1, strip.DotsRight.Length); // page 5 is the far-right cluster
 
         var root = source.BuildSnapshot();
-        for (var page = 0; page < PagerConstants.PageCount; page++)
+        for (var page = 0; page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count; page++)
         {
             var tab = root.Find(SkiaIslandUiaElementIds.Page(page));
             Assert.NotNull(tab);
@@ -616,7 +616,7 @@ public sealed class SkiaIslandUiaTests
         fixture.Settle();
 
         Assert.Equal(IslandStateKind.Expanded, controller.State.Kind);
-        Assert.Equal((int)PageRef.Media, controller.Pager.SelectedIndex);
+        Assert.Equal(controller.RenderState.Pages.IndexOfPage(PageRef.Media), controller.Pager.SelectedIndex);
         Assert.Equal(UiaExpandCollapseState.Expanded, source.BuildSnapshot().State.ExpandCollapse);
     }
 
@@ -666,4 +666,5 @@ public sealed class SkiaIslandUiaTests
             ? UiaRect.Empty
             : new UiaRect(rect.Left, rect.Top, rect.Width, rect.Height);
 }
+
 

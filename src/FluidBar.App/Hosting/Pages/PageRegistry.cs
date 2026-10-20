@@ -11,7 +11,6 @@ namespace FluidBar.App.Hosting.Pages;
 /// </summary>
 public sealed class PageRegistry
 {
-    public const int BuiltinPageCount = 6;
     public const int MaxPages = 12;
     public const string BuiltinPrefix = "builtin.";
 
@@ -29,7 +28,7 @@ public sealed class PageRegistry
         {
             lock (_gate)
             {
-                return BuiltinPageCount + _pages.Count;
+                return BuiltinDescriptors.Count + _pages.Count;
             }
         }
     }
@@ -58,7 +57,7 @@ public sealed class PageRegistry
 
         lock (_gate)
         {
-            if (_pages.Count + BuiltinPageCount >= MaxPages)
+            if (_pages.Count + BuiltinDescriptors.Count >= MaxPages)
             {
                 error = $"page limit {MaxPages} reached";
                 return false;

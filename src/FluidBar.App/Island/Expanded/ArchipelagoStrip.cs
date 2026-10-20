@@ -53,6 +53,7 @@ public sealed class ArchipelagoStrip : Control
     public const double StripHeight = 34;
 
     private ExpandedPageContext? _context;
+    private static readonly string[] PreviewPageIds = PageRef.BuiltinPages.Select(static page => page.PageId).ToArray();
     private IReadOnlyList<string> _titles = [];
     private ArchipelagoMotion? _motion;
     private double _previewPhase;
@@ -250,13 +251,14 @@ public sealed class ArchipelagoStrip : Control
         var content = _context!.Content;
         var secondary = new SolidColorBrush(palette.ForegroundSecondary);
         var foreground = new SolidColorBrush(palette.Foreground);
-        switch (index)
+        var pageId = PreviewPageIds[index];
+        switch (pageId)
         {
-            case 0:
+            case "builtin.home":
                 DrawText(context, content.Now.ToString("HH:mm", CultureInfo.CurrentCulture), area,
                     Fonts.MonoSemiBold, 9.5, foreground, TextAlignment.Center);
                 break;
-            case 1:
+            case "builtin.media":
             {
                 var art = new Rect(area.X, area.Y + 2, 16, 16);
                 context.DrawRectangle(new SolidColorBrush(Accents.Track), null, new RoundedRect(art, 4));
@@ -278,17 +280,17 @@ public sealed class ArchipelagoStrip : Control
                 break;
             }
 
-            case 2:
+            case "builtin.notifications":
                 context.DrawEllipse(new SolidColorBrush(Accents.Danger), null, new Point(area.X + 4, area.Y + 4), 2.5, 2.5);
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 9, area.Width, 2), 1));
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 14, area.Width * 0.7, 2), 1));
                 break;
-            case 3:
+            case "builtin.clipboard":
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 2, area.Width, 2), 1));
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 8, area.Width * 0.8, 2), 1));
                 context.DrawRectangle(secondary, null, new RoundedRect(new Rect(area.X, area.Y + 14, area.Width * 0.6, 2), 1));
                 break;
-            case 4:
+            case "builtin.agent":
             {
                 var pulse = 0.55 + (0.45 * Math.Sin(_previewPhase * 3.2));
                 var center = new Point(area.Center.X, area.Center.Y);
@@ -297,7 +299,7 @@ public sealed class ArchipelagoStrip : Control
                 break;
             }
 
-            case 5:
+            case "builtin.widgets":
             {
                 const double cell = 5;
                 for (var row = 0; row < 3; row++)

@@ -12,12 +12,13 @@ namespace FluidBar.Core.Tests;
 public class PagerPolicyTests
 {
     private const double Eps = 1e-9;
+    private const int TestPageCount = 6;
     private static readonly DateTimeOffset T0 = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public void Constants_MatchAcceptedFeedback()
     {
-        Assert.Equal(6, PagerConstants.PageCount);
+        Assert.Equal(6, FluidBar.Core.Activities.PageRef.BuiltinPages.Count);
         Assert.Equal(400, PagerConstants.PagePitchDip, Eps);
         Assert.Equal(0.85, PagerConstants.PointerDamping, Eps);
         Assert.Equal(0.35, PagerConstants.EdgeResistance, Eps);
@@ -41,7 +42,7 @@ public class PagerPolicyTests
     [Fact]
     public void Drag_AppliesPointerDamping()
     {
-        var state = PagePagerPolicy.Drag(startPage: 0, accumulatedDragDip: 100);
+        var state = Drag(startPage: 0, accumulatedDragDip: 100);
 
         Assert.Equal(85, state.DampedDragDip, Eps);
         Assert.Equal(85, state.DisplayOffsetDip, Eps);
@@ -53,7 +54,7 @@ public class PagerPolicyTests
     [Fact]
     public void Drag_RubberBandsPastLastPageAt35Percent()
     {
-        var state = PagePagerPolicy.Drag(startPage: 5, accumulatedDragDip: 100);
+        var state = Drag(startPage: 5, accumulatedDragDip: 100);
 
         // max offset = 2000; damped 90 → raw 2090 → display 2000 + 90*0.35.
         Assert.Equal(2085, state.RawOffsetDip, Eps);
@@ -65,7 +66,7 @@ public class PagerPolicyTests
     [Fact]
     public void Drag_RubberBandsBeforeFirstPageAt35Percent()
     {
-        var state = PagePagerPolicy.Drag(startPage: 0, accumulatedDragDip: -100);
+        var state = Drag(startPage: 0, accumulatedDragDip: -100);
 
         Assert.Equal(-85, state.RawOffsetDip, Eps);
         Assert.Equal(-85 * 0.35, state.DisplayOffsetDip, Eps);
@@ -80,7 +81,7 @@ public class PagerPolicyTests
     [InlineData(23.9)]
     public void Release_BelowThreshold_SnapsBackWithNoPageChange(double drag)
     {
-        var decision = PagePagerPolicy.Release(startPage: 3, accumulatedDragDip: drag, velocityDipPerMs: 10);
+        var decision = Release(startPage: 3, accumulatedDragDip: drag, velocityDipPerMs: 10);
 
         Assert.Equal(PagerSnapKind.None, decision.Kind);
         Assert.Equal(3, decision.StartPage);
@@ -97,7 +98,7 @@ public class PagerPolicyTests
     {
         // prototype2 release: a flick (velocity >= 0.55 DIP/ms, same direction, >= 10 DIP travel)
         // always moves exactly one page, regardless of how large the velocity is.
-        var decision = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
+        var decision = Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
 
         Assert.Equal(PagerSnapKind.Flick, decision.Kind);
         Assert.Equal(2, decision.StartPage);
@@ -113,7 +114,7 @@ public class PagerPolicyTests
     {
         // 150 DIP raw = 0.375 page, 0.31875 page after the 0.85 pointer damping: below the 0.75-page
         // long-drag threshold and not a flick, so prototype2 rounds to the nearest page (0) and snaps back.
-        var decision = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
+        var decision = Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: velocity);
 
         Assert.Equal(PagerSnapKind.None, decision.Kind);
         Assert.Equal(2, decision.TargetPage);
@@ -125,7 +126,7 @@ public class PagerPolicyTests
     public void Release_HugeVelocityNeverSkipsPages()
     {
         // Just under half a page with an absurd flick velocity: still exactly one page.
-        var decision = PagePagerPolicy.Release(
+        var decision = Release(
             startPage: 1,
             accumulatedDragDip: (0.5 * 400) - 0.01,
             velocityDipPerMs: 10_000);
@@ -138,7 +139,7 @@ public class PagerPolicyTests
     [Fact]
     public void Release_FlickNegativeDirection()
     {
-        var decision = PagePagerPolicy.Release(startPage: 3, accumulatedDragDip: -150, velocityDipPerMs: -2.5);
+        var decision = Release(startPage: 3, accumulatedDragDip: -150, velocityDipPerMs: -2.5);
 
         Assert.Equal(PagerSnapKind.Flick, decision.Kind);
         Assert.Equal(2, decision.TargetPage);
@@ -149,7 +150,7 @@ public class PagerPolicyTests
     public void Release_LongDrag27Pages_CrossesTwoDampedPages()
     {
         // prototype2 counts the damped travel (2.7 × 0.85 = 2.295 pages) and rounds it to 2.
-        var decision = PagePagerPolicy.Release(startPage: 1, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 0.2);
+        var decision = Release(startPage: 1, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 0.2);
 
         Assert.Equal(PagerSnapKind.Distance, decision.Kind);
         Assert.Equal(3, decision.TargetPage);
@@ -160,7 +161,7 @@ public class PagerPolicyTests
     [Fact]
     public void Release_LongDragNegative27Pages()
     {
-        var decision = PagePagerPolicy.Release(startPage: 5, accumulatedDragDip: -2.7 * 400, velocityDipPerMs: -0.1);
+        var decision = Release(startPage: 5, accumulatedDragDip: -2.7 * 400, velocityDipPerMs: -0.1);
 
         Assert.Equal(PagerSnapKind.Distance, decision.Kind);
         Assert.Equal(3, decision.TargetPage);
@@ -172,12 +173,12 @@ public class PagerPolicyTests
     {
         // 200 DIP raw is only 0.425 page after pointer damping, so prototype2 settles back rather than
         // flipping a page (a slow half-page drag reads as "not far enough", not an unrequested jump).
-        var forward = PagePagerPolicy.Release(startPage: 1, accumulatedDragDip: 200, velocityDipPerMs: 0);
+        var forward = Release(startPage: 1, accumulatedDragDip: 200, velocityDipPerMs: 0);
         Assert.Equal(PagerSnapKind.None, forward.Kind);
         Assert.Equal(1, forward.TargetPage);
         Assert.Equal(0, forward.PageDelta);
 
-        var backward = PagePagerPolicy.Release(startPage: 3, accumulatedDragDip: -200, velocityDipPerMs: 0);
+        var backward = Release(startPage: 3, accumulatedDragDip: -200, velocityDipPerMs: 0);
         Assert.Equal(PagerSnapKind.None, backward.Kind);
         Assert.Equal(3, backward.TargetPage);
         Assert.Equal(0, backward.PageDelta);
@@ -186,16 +187,16 @@ public class PagerPolicyTests
     [Fact]
     public void Release_ClampsAtBounds()
     {
-        var atEnd = PagePagerPolicy.Release(startPage: 5, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 1);
+        var atEnd = Release(startPage: 5, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 1);
         Assert.Equal(5, atEnd.TargetPage);
         Assert.Equal(PagerSnapKind.None, atEnd.Kind);
         Assert.False(atEnd.ChangesPage);
 
-        var nearEnd = PagePagerPolicy.Release(startPage: 4, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 0.8);
+        var nearEnd = Release(startPage: 4, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 0.8);
         Assert.Equal(5, nearEnd.TargetPage);
         Assert.Equal(1, nearEnd.PageDelta);
 
-        var atStart = PagePagerPolicy.Release(startPage: 0, accumulatedDragDip: -2.7 * 400, velocityDipPerMs: -1);
+        var atStart = Release(startPage: 0, accumulatedDragDip: -2.7 * 400, velocityDipPerMs: -1);
         Assert.Equal(0, atStart.TargetPage);
         Assert.Equal(PagerSnapKind.None, atStart.Kind);
     }
@@ -203,7 +204,7 @@ public class PagerPolicyTests
     [Fact]
     public void Release_CustomPitchScalesDistanceDecision()
     {
-        var decision = PagePagerPolicy.Release(
+        var decision = Release(
             startPage: 0,
             accumulatedDragDip: 2.7 * 300,
             velocityDipPerMs: 0,
@@ -218,20 +219,20 @@ public class PagerPolicyTests
     [Fact]
     public void Release_SinglePageCountAlwaysStaysAtZero()
     {
-        var decision = PagePagerPolicy.Release(startPage: 0, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 5, pageCount: 1);
+        var decision = Release(startPage: 0, accumulatedDragDip: 2.7 * 400, velocityDipPerMs: 5, pageCount: 1);
         Assert.Equal(0, decision.TargetPage);
         Assert.Equal(PagerSnapKind.None, decision.Kind);
-        Assert.Equal(0, PagePagerPolicy.ClampPage(4, 1));
+        Assert.Equal(0, ClampPage(4, 1));
     }
 
     [Fact]
     public void Release_NonFiniteInputsAreTreatedAsNoDrag()
     {
-        var nanDrag = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: double.NaN, velocityDipPerMs: 5);
+        var nanDrag = Release(startPage: 2, accumulatedDragDip: double.NaN, velocityDipPerMs: 5);
         Assert.Equal(2, nanDrag.TargetPage);
         Assert.Equal(PagerSnapKind.None, nanDrag.Kind);
 
-        var nanVelocity = PagePagerPolicy.Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: double.NaN);
+        var nanVelocity = Release(startPage: 2, accumulatedDragDip: 150, velocityDipPerMs: double.NaN);
         Assert.Equal(2, nanVelocity.TargetPage);
         Assert.Equal(PagerSnapKind.None, nanVelocity.Kind);
     }
@@ -239,9 +240,9 @@ public class PagerPolicyTests
     [Fact]
     public void Release_FromDragStateOverload_MatchesDirectCall()
     {
-        var state = PagePagerPolicy.Drag(startPage: 2, accumulatedDragDip: 2.7 * 400);
-        var viaState = PagePagerPolicy.Release(state, velocityDipPerMs: 0);
-        var direct = PagePagerPolicy.Release(2, 2.7 * 400, 0);
+        var state = Drag(startPage: 2, accumulatedDragDip: 2.7 * 400);
+        var viaState = Release(state, velocityDipPerMs: 0);
+        var direct = Release(2, 2.7 * 400, 0);
 
         Assert.Equal(direct, viaState);
     }
@@ -249,11 +250,11 @@ public class PagerPolicyTests
     [Fact]
     public void ReleaseWheel_ClampsAndClassifies()
     {
-        var next = PagePagerPolicy.ReleaseWheel(startPage: 5, pageDelta: 1);
+        var next = ReleaseWheel(startPage: 5, pageDelta: 1);
         Assert.Equal(PagerSnapKind.None, next.Kind);
         Assert.Equal(5, next.TargetPage);
 
-        var previous = PagePagerPolicy.ReleaseWheel(startPage: 2, pageDelta: -2);
+        var previous = ReleaseWheel(startPage: 2, pageDelta: -2);
         Assert.Equal(PagerSnapKind.Wheel, previous.Kind);
         Assert.Equal(0, previous.TargetPage);
         Assert.Equal(0, previous.TargetOffsetDip, Eps);
@@ -262,31 +263,31 @@ public class PagerPolicyTests
     [Fact]
     public void OffsetHelpers_RoundAndClamp()
     {
-        Assert.Equal(1, PagePagerPolicy.OffsetToPage(400));
-        Assert.Equal(1, PagePagerPolicy.OffsetToPage(599));
-        Assert.Equal(2, PagePagerPolicy.OffsetToPage(601));
-        Assert.Equal(5, PagePagerPolicy.OffsetToPage(99_999));
-        Assert.Equal(0, PagePagerPolicy.OffsetToPage(-500));
-        Assert.Equal(800, PagePagerPolicy.PageToOffset(2), Eps);
-        Assert.Equal(1600, PagePagerPolicy.PageToOffset(4), Eps);
+        Assert.Equal(1, OffsetToPage(400));
+        Assert.Equal(1, OffsetToPage(599));
+        Assert.Equal(2, OffsetToPage(601));
+        Assert.Equal(5, OffsetToPage(99_999));
+        Assert.Equal(0, OffsetToPage(-500));
+        Assert.Equal(800, PageToOffset(2), Eps);
+        Assert.Equal(1600, PageToOffset(4), Eps);
     }
 
     [Fact]
     public void RepeatedReleasesAreDeterministic()
     {
-        var expected = PagePagerPolicy.Release(1, 2.7 * 400, 0.75);
+        var expected = Release(1, 2.7 * 400, 0.75);
         for (var i = 0; i < 100; i++)
         {
-            Assert.Equal(expected, PagePagerPolicy.Release(1, 2.7 * 400, 0.75));
-            Assert.Equal(expected, PagePagerPolicy.Release(1, 2.7 * 400, 0.75));
+            Assert.Equal(expected, Release(1, 2.7 * 400, 0.75));
+            Assert.Equal(expected, Release(1, 2.7 * 400, 0.75));
         }
     }
 
     [Fact]
     public void Drag_ClampsStartPageInput()
     {
-        var below = PagePagerPolicy.Drag(startPage: -10, accumulatedDragDip: 0);
-        var above = PagePagerPolicy.Drag(startPage: 99, accumulatedDragDip: 0);
+        var below = Drag(startPage: -10, accumulatedDragDip: 0);
+        var above = Drag(startPage: 99, accumulatedDragDip: 0);
         Assert.Equal(0, below.StartPage);
         Assert.Equal(5, above.StartPage);
     }
@@ -296,27 +297,27 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_OneNotchAdvancesOnePage()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         var result = policy.Accumulate(140, T0);
 
         Assert.Equal(1, result.PageDelta);
         Assert.True(result.Consumed);
         Assert.Equal(0, result.AccumulatedDip, Eps);
         Assert.Equal(T0, policy.LastPageChangeAt);
-        Assert.Equal(3, PagerWheelPolicy.ApplyPageDelta(2, result.PageDelta));
+        Assert.Equal(3, WheelDelta(2, result.PageDelta));
     }
 
     [Fact]
     public void Wheel_OneNotchNegativeGoesBackOnePage()
     {
-        var result = new PagerWheelPolicy().Accumulate(-140, T0);
+        var result = new PagerWheelPolicy(TestPageCount).Accumulate(-140, T0);
         Assert.Equal(-1, result.PageDelta);
     }
 
     [Fact]
     public void Wheel_SubThresholdDeltasAccumulateToOneNotch()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
 
         var first = policy.Accumulate(80, T0);
         Assert.Equal(0, first.PageDelta);
@@ -330,7 +331,7 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_CooldownBlocksResidualInertia()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         Assert.Equal(1, policy.Accumulate(140, T0).PageDelta);
 
         // prototype2 keeps accumulating during the cooldown (a reversal drops the residual); only the
@@ -347,12 +348,12 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_FiveNotchesOverCooldownWindowsAdvanceFivePages()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         var page = 0;
         for (var i = 0; i < 5; i++)
         {
             var result = policy.Accumulate(140, T0.AddMilliseconds(i * 181));
-            page = PagerWheelPolicy.ApplyPageDelta(page, result.PageDelta);
+            page = WheelDelta(page, result.PageDelta);
         }
 
         Assert.Equal(5, page);
@@ -361,11 +362,11 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_RapidNotchesOnlyAdvanceOnePage()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         var page = 0;
         for (var i = 0; i < 5; i++)
         {
-            page = PagerWheelPolicy.ApplyPageDelta(page, policy.Accumulate(140, T0).PageDelta);
+            page = WheelDelta(page, policy.Accumulate(140, T0).PageDelta);
         }
 
         Assert.Equal(1, page);
@@ -375,7 +376,7 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_IgnoresWheelWhenControlOwnsGesture()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         Assert.Equal(0, policy.Accumulate(80, T0).PageDelta);
         policy.Reset();
 
@@ -390,7 +391,7 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_ResetClearsAccumulationAndCooldown()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         policy.Accumulate(80, T0);
         policy.Accumulate(140, T0.AddSeconds(1));
         Assert.NotNull(policy.LastPageChangeAt);
@@ -405,7 +406,7 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_NonFiniteDeltaIsIgnored()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         var result = policy.Accumulate(double.NaN, T0);
         Assert.Equal(0, result.PageDelta);
         Assert.True(result.Consumed);
@@ -428,7 +429,7 @@ public class PagerPolicyTests
     public void SnapMotion_SettlesExactlyOnTargetPage()
     {
         var motion = new PagerSnapMotion();
-        motion.SnapToPage(3);
+        Snap(motion, 3);
 
         Assert.Equal(1200, motion.TargetOffsetDip, Eps);
         Assert.False(motion.IsAtRest);
@@ -449,7 +450,7 @@ public class PagerPolicyTests
     public void SnapMotion_InterruptFreezesAtCurrentVisualOffset()
     {
         var motion = new PagerSnapMotion();
-        motion.SnapToPage(4);
+        Snap(motion, 4);
         for (var i = 0; i < 50; i++)
         {
             motion.Step(1.0 / 300.0);
@@ -468,7 +469,7 @@ public class PagerPolicyTests
     public void SnapMotion_DragHandoffContinuesFromCurrentOffset()
     {
         var motion = new PagerSnapMotion();
-        motion.SnapToPage(4);
+        Snap(motion, 4);
         for (var i = 0; i < 40; i++)
         {
             motion.Step(1.0 / 300.0);
@@ -506,7 +507,7 @@ public class PagerPolicyTests
     public void SnapMotion_RepeatedInterruptsAreIdempotent()
     {
         var motion = new PagerSnapMotion();
-        motion.SnapToPage(2);
+        Snap(motion, 2);
         for (var i = 0; i < 30; i++)
         {
             motion.Step(1.0 / 300.0);
@@ -520,12 +521,12 @@ public class PagerPolicyTests
     [Fact]
     public void SnapMotion_IsIndependentOfWallClock()
     {
-        var policy = new PagerWheelPolicy();
+        var policy = new PagerWheelPolicy(TestPageCount);
         var motionA = new PagerSnapMotion();
         var motionB = new PagerSnapMotion();
-        motionA.SnapToPage(5);
+        Snap(motionA, 5);
         Thread.Sleep(5);
-        motionB.SnapToPage(5);
+        Snap(motionB, 5);
 
         for (var i = 0; i < 200; i++)
         {
@@ -537,6 +538,34 @@ public class PagerPolicyTests
         Assert.Equal(T0, T0);
         _ = policy;
     }
+
+    private static PagerDragState Drag(int startPage, double accumulatedDragDip)
+        => PagePagerPolicy.Drag(startPage, accumulatedDragDip, TestPageCount);
+
+    private static PagerSnapDecision Release(int startPage, double accumulatedDragDip, double velocityDipPerMs, int pageCount = TestPageCount, double pagePitchDip = PagerConstants.PagePitchDip)
+        => PagePagerPolicy.Release(startPage, accumulatedDragDip, velocityDipPerMs, pageCount, pagePitchDip);
+
+    private static PagerSnapDecision Release(in PagerDragState drag, double velocityDipPerMs, int pageCount = TestPageCount)
+        => PagePagerPolicy.Release(drag, velocityDipPerMs, pageCount);
+
+    private static PagerSnapDecision ReleaseWheel(int startPage, int pageDelta, int pageCount = TestPageCount)
+        => PagePagerPolicy.ReleaseWheel(startPage, pageDelta, pageCount);
+
+    private static int OffsetToPage(double offsetDip, int pageCount = TestPageCount)
+        => PagePagerPolicy.OffsetToPage(offsetDip, pageCount);
+
+    private static double PageToOffset(int page, int pageCount = TestPageCount)
+        => PagePagerPolicy.PageToOffset(page, pageCount);
+
+    private static int ClampPage(int page, int pageCount) => PagePagerPolicy.ClampPage(page, pageCount);
+
+    private static int WheelDelta(int currentPage, int pageDelta, int pageCount = TestPageCount)
+        => PagerWheelPolicy.ApplyPageDelta(currentPage, pageDelta, pageCount);
+
+    private static void Snap(PagerSnapMotion motion, int page) => motion.SnapToPage(page, TestPageCount);
+
 }
+
+
 
 

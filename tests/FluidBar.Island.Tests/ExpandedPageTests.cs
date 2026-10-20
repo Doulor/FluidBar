@@ -55,7 +55,7 @@ public sealed class ExpandedPageTests
                 ArtworkKey = "cover-test",
             },
         };
-        var state = IslandRenderState.Expanded(IslandMode.Float, PagerRenderState.At(1), content,
+        var state = IslandRenderState.Expanded(IslandMode.Float, PagerRenderState.At(1, IslandTestFixtures.PageCount), content,
             IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
@@ -269,18 +269,18 @@ public sealed class ExpandedPageTests
         Assert.True(extraRows >= (3 * PageMetricsLayout.WidgetsTaskPitch(metrics)) - 12.5f,
             $"six rows should grow the card: {three.Height} -> {six.Height}");
 
-        Assert.Equal(0, PageMetricsLayout.MaxScroll(page, 5, metrics, 3), 0.01f);
-        var scroll = PageMetricsLayout.MaxScroll(page, 5, metrics, 6);
+        Assert.Equal(0, PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 3), 0.01f);
+        var scroll = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 6);
         Assert.True(scroll > 0, "six task rows must make the widgets page scrollable");
 
         var row = PageMetricsLayout.WidgetsTaskRow(page, 5, metrics);
-        var control = PageMetricsLayout.HitTest(5, page, row.MidX, row.MidY - scroll, metrics, scroll, 6, out var index);
+        var control = PageMetricsLayout.HitTest(PageSlotKind.Widgets, page, row.MidX, row.MidY - scroll, metrics, scroll, 6, out var index);
         Assert.Equal(IslandPageControl.TaskToggle, control);
         Assert.Equal(5, index);
 
         // The "N more" hint row is text, never a toggle target.
         var hint = PageMetricsLayout.WidgetsTaskRow(page, PageMetricsLayout.MaxPaintedTaskRows, metrics);
-        var hintControl = PageMetricsLayout.HitTest(5, page, hint.MidX, hint.MidY - scroll, metrics, scroll, 10, out _);
+        var hintControl = PageMetricsLayout.HitTest(PageSlotKind.Widgets, page, hint.MidX, hint.MidY - scroll, metrics, scroll, 10, out _);
         Assert.Equal(IslandPageControl.None, hintControl);
     }
 
@@ -319,7 +319,7 @@ public sealed class ExpandedPageTests
         var baseState = IslandTestFixtures.Expanded(5);
         var tasks = Enumerable.Range(1, 10).Select(i => new WidgetTaskModel($"Task {i}")).ToList();
         var page = IslandMetrics.PageRect(baseState, 5);
-        var max = PageMetricsLayout.MaxScroll(page, 5, FontScaleMetrics.One, tasks.Count);
+        var max = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, FontScaleMetrics.One, tasks.Count);
         Assert.True(max > 0, "ten task rows must overflow the 232 DIP body");
 
         IslandRenderState State(double scroll) => baseState with
@@ -373,7 +373,7 @@ public sealed class ExpandedPageTests
 
         var metrics = FontScaleMetrics.From(scale);
         var page = IslandMetrics.PageRect(state, 5);
-        Assert.True(PageMetricsLayout.ContentExtent(page, 5, metrics, 6)
+        Assert.True(PageMetricsLayout.ContentExtent(page, PageSlotKind.Widgets, metrics, 6)
             >= PageMetricsLayout.WidgetsContentExtent(page, metrics, 3) - 0.01f);
     }
 

@@ -120,6 +120,42 @@ public sealed class ArchitectureRulesTests
     }
 
     [Fact]
+    public void Pager_constants_have_no_fixed_page_count()
+    {
+        var path = Path.Combine(RepoRoot, "src/FluidBar.Core/Interaction/PagerConstants.cs");
+        Assert.True(File.Exists(path), path);
+        Assert.DoesNotContain("PageCount", File.ReadAllText(path), StringComparison.Ordinal);
+        var violations = ScanSourceFiles(
+            new Regex(@"PagerConstants\.PageCount|PageCount\s*=\s*(?:6|7|12)\b|pageCount\s*>\s*7\b", RegexOptions.CultureInvariant),
+            static path => path.Contains("\\tests\\", StringComparison.OrdinalIgnoreCase));
+        Assert.True(violations.Count == 0,
+            "Fixed page-count constants/defaults are forbidden in product sources:\n"
+            + string.Join("\n", violations.Select(v => $"{v.File}:{v.Line}: {v.Text}")));
+    }
+
+    [Fact]
+    public void Page_references_are_stable_ids_not_an_enum()
+    {
+        var pageRef = Path.Combine(RepoRoot, "src/FluidBar.Core/Activities/PageRef.cs");
+        Assert.True(File.Exists(pageRef), pageRef);
+        var source = File.ReadAllText(pageRef);
+        Assert.Contains("readonly record struct PageRef", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("enum PageRef", source, StringComparison.Ordinal);
+        Assert.Contains("PageId", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void No_page_index_switch_or_zero_to_five_case_branches()
+    {
+        var violations = ScanSourceFiles(
+            new Regex(@"switch\s*\(\s*page\s*\)|case\s+[0-5]\s*:", RegexOptions.CultureInvariant),
+            static _ => false);
+        Assert.True(violations.Count == 0,
+            "Page-index switch/case branches are forbidden; dispatch on PageSlotKind/PageId:\n"
+            + string.Join("\n", violations.Select(v => $"{v.File}:{v.Line}: {v.Text}")));
+    }
+
+    [Fact]
     public void Page_renderer_dispatches_by_template_not_page_index()
     {
         var path = Path.Combine(RepoRoot, "src/FluidBar.Island/PageRenderer.cs");
@@ -150,7 +186,7 @@ public sealed class ArchitectureRulesTests
     {
         var path = Path.Combine(RepoRoot, "src/FluidBar.Island/PageRenderer.cs");
         Assert.True(File.Exists(path), path);
-        Assert.DoesNotContain("PagerConstants.PageCount", File.ReadAllText(path), StringComparison.Ordinal);
+        Assert.DoesNotContain("FluidBar.Core.Activities.PageRef.BuiltinPages.Count", File.ReadAllText(path), StringComparison.Ordinal);
     }
 
     private static List<(string File, int Line, string Text)> ScanSourceFiles(Regex pattern, Func<string, bool> skip)
@@ -211,3 +247,4 @@ public sealed class ArchitectureRulesTests
         return Directory.GetCurrentDirectory();
     }
 }
+

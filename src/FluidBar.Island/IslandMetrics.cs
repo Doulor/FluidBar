@@ -214,6 +214,15 @@ public static class IslandMetrics
         return rects;
     }
 
+    /// <summary>True when the point is inside the circle (not merely its bounding square).</summary>
+    public static bool SplitIsletContains(SKRect circle, float x, float y)
+    {
+        var dx = x - circle.MidX;
+        var dy = y - circle.MidY;
+        var radius = circle.Width / 2;
+        return (dx * dx) + (dy * dy) <= radius * radius;
+    }
+
     /// <summary>Animated circle of islet <paramref name="index"/> (bud at the pill edge → round seat).</summary>
     public static SKRect SplitIsletAnimatedRect(in IslandRenderState state, SKRect[] finals, int index)
     {
@@ -740,14 +749,14 @@ public static class PageLayout
 
     /// <summary>Hit-tests an expanded page's controls; returns the control and page-relative index.</summary>
     public static IslandPageControl HitTest(int page, SKRect pageRect, float x, float y, out int index)
-        => HitTest(page, pageRect, x, y, out index, 0, int.MaxValue);
+        => HitTest((PageSlotKind)page, pageRect, x, y, out index, 0, int.MaxValue);
 
     /// <summary>
     /// Hit-tests an expanded page's controls with the list scroll offset and row count used by the
     /// renderer, so click targets can never drift from the painted rows.
     /// </summary>
     public static IslandPageControl HitTest(
-        int page,
+        PageSlotKind kind,
         SKRect pageRect,
         float x,
         float y,
@@ -756,9 +765,9 @@ public static class PageLayout
         int itemCount)
     {
         index = -1;
-        switch (page)
+        switch (kind)
         {
-            case 0:
+            case PageSlotKind.Home:
                 if (HomeMediaPlay(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.PlayPause;
@@ -789,7 +798,7 @@ public static class PageLayout
                 }
 
                 return IslandPageControl.None;
-            case 1:
+            case PageSlotKind.Media:
                 if (MediaPlay(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.PlayPause;
@@ -821,7 +830,7 @@ public static class PageLayout
                 }
 
                 return IslandPageControl.None;
-            case 2:
+            case PageSlotKind.Notifications:
                 {
                     var body = ListBody(pageRect);
                     if (!body.Contains(x, y))
@@ -852,7 +861,7 @@ public static class PageLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 3:
+            case PageSlotKind.Clipboard:
                 {
                     var body = ListBody(pageRect);
                     if (!body.Contains(x, y))
@@ -889,7 +898,7 @@ public static class PageLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 4:
+            case PageSlotKind.Agent:
                 {
                     var body = ListBody(pageRect);
                     if (!body.Contains(x, y))
@@ -911,7 +920,7 @@ public static class PageLayout
                     return IslandPageControl.Scroll;
                 }
 
-            case 5:
+            case PageSlotKind.Widgets:
                 if (WidgetsCalendarNav(pageRect, previous: true).Contains(x, y))
                 {
                     return IslandPageControl.CalendarPrevious;

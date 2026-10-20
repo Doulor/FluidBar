@@ -29,7 +29,7 @@ public sealed record IslandStripLayout
     public required int Page { get; init; }
 
     /// <summary>Total page count represented by the rail.</summary>
-    public int PageCount { get; init; } = FluidBar.Core.Interaction.PagerConstants.PageCount;
+    public int PageCount { get; init; }
 
     /// <summary>Left overflow ellipsis (empty when every page fits).</summary>
     public SKRect OverflowLeft { get; init; } = SKRect.Empty;
@@ -111,3 +111,4 @@ public sealed record IslandStripLayout
         return new SKRect(dot.Left - dx, dot.Top - dy, dot.Right + dx, dot.Bottom + dy);
     }
 }
+

@@ -308,8 +308,8 @@ public readonly record struct PagerRenderState
     /// <summary>Committed page index (rounded position).</summary>
     public int PageIndex { get; init; }
 
-    /// <summary>Number of pages represented by the pager; defaults to the six built-in pages.</summary>
-    public int PageCount { get; init; } = PagerConstants.PageCount;
+    /// <summary>Number of pages represented by the pager (set by the live page registry).</summary>
+    public int PageCount { get; init; }
 
     /// <summary>Whether the pointer is dragging the pager.</summary>
     public bool IsDragging { get; init; }
@@ -321,7 +321,7 @@ public readonly record struct PagerRenderState
     public bool ControlOwnsGesture { get; init; }
 
     /// <summary>Creates a settled state for a page.</summary>
-    public static PagerRenderState At(int page, int pageCount = PagerConstants.PageCount) => new()
+    public static PagerRenderState At(int page, int pageCount) => new()
     {
         PageIndex = PagePagerPolicy.ClampPage(page, pageCount),
         PagePosition = PagePagerPolicy.ClampPage(page, pageCount),
@@ -331,16 +331,16 @@ public readonly record struct PagerRenderState
     /// <summary>Creates a state from a fractional page position (committed page derived).</summary>
     public static PagerRenderState FromPosition(
         double pagePosition,
+        int pageCount,
         bool isDragging = false,
-        bool isSnapping = false,
-        int pageCount = PagerConstants.PageCount)
+        bool isSnapping = false)
     {
         var count = Math.Max(1, pageCount);
         var position = double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, count - 1) : 0;
         return new PagerRenderState
         {
             PagePosition = position,
-            PageIndex = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, PagerConstants.PagePitchDip, count),
+            PageIndex = PagePagerPolicy.OffsetToPage(position * PagerConstants.PagePitchDip, count, PagerConstants.PagePitchDip),
             PageCount = count,
             IsDragging = isDragging,
             IsSnapping = isSnapping,
@@ -376,6 +376,9 @@ public readonly record struct ArchipelagoState
 
     /// <summary>Continuous page position used to pick the current/prev/next islands.</summary>
     public double PagePosition { get; init; }
+
+    /// <summary>Total page count represented by the strip (resolved from the live registry).</summary>
+    public int PageCount { get; init; }
 
     /// <summary>
     /// Animated rail channels driven by the host's <see cref="MiniRailMotion"/>: capsule width, pill and
@@ -434,21 +437,22 @@ public readonly record struct ArchipelagoState
     /// <summary>Whether the right cluster overflows its three rendered dots (wide last dot).</summary>
     public bool ResolvedFarRightOverflow => AvailableDots(PagePosition, left: false) > MaxDotsPerSide;
 
-    private static int ResolveDots(int requested, double pagePosition, bool left)
+    private int ResolveDots(int requested, double pagePosition, bool left)
     {
         var available = AvailableDots(pagePosition, left);
         var count = requested >= 0 ? requested : available;
         return Math.Clamp(count, 0, Math.Min(MaxDotsPerSide, available));
     }
 
-    private static int AvailableDots(double pagePosition, bool left)
+    private int AvailableDots(double pagePosition, bool left)
     {
+        var count = Math.Max(1, PageCount);
         var page = PagePagerPolicy.OffsetToPage(
-            (double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, PagerConstants.PageCount - 1) : 0)
-            * PagerConstants.PagePitchDip);
+            (double.IsFinite(pagePosition) ? Math.Clamp(pagePosition, 0, count - 1) : 0)
+            * PagerConstants.PagePitchDip, count);
         return left
             ? Math.Max(0, page - 1)
-            : Math.Max(0, (PagerConstants.PageCount - 1) - (page + 1));
+            : Math.Max(0, (count - 1) - (page + 1));
     }
 }
 
@@ -599,6 +603,21 @@ public sealed record ExpandedPageContent
     /// <summary>True when a controller/registry supplied an ordered slot list.</summary>
     public bool HasCustomPageSlots => !ReferenceEquals(PageSlots, DefaultPageSlots);
 
+    /// <summary>Resolves a stable page reference to the current display index, or -1.</summary>
+    public int IndexOfPage(PageRef page)
+    {
+        var slots = PageSlots ?? DefaultPageSlots;
+        for (var i = 0; i < slots.Count; i++)
+        {
+            if (string.Equals(slots[i].PageId, page.PageId, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>Total page count: six built-in pages plus registered plugin pages when slots are default.</summary>
     public int PageCount
     {
@@ -617,14 +636,7 @@ public sealed record ExpandedPageContent
     /// <summary>Returns the plugin page at a total page index, or null for a built-in page.</summary>
     public PluginPageModel? PluginPageAt(int page)
     {
-        if (PageSlotAt(page)?.PluginPage is { } slotPage)
-        {
-            return slotPage;
-        }
-
-        return page >= PagerConstants.PageCount && page - PagerConstants.PageCount < PluginPages.Count
-            ? PluginPages[page - PagerConstants.PageCount]
-            : null;
+        return PageSlotAt(page)?.PluginPage;
     }
 
     /// <summary>Default ordered built-in slots (used by tests/headless fixtures before the registry fills them).</summary>
@@ -668,7 +680,7 @@ public sealed record ExpandedPageContent
             return plugin.Title;
         }
 
-        var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
+        var index = Math.Clamp(page, 0, DefaultPageTitles.Length - 1);
         var titles = PageTitles;
         return titles is not null && index < titles.Count && !string.IsNullOrEmpty(titles[index])
             ? titles[index]!
@@ -688,7 +700,7 @@ public sealed record ExpandedPageContent
             return string.IsNullOrWhiteSpace(plugin.ShortTitle) ? plugin.Title : plugin.ShortTitle;
         }
 
-        var index = Math.Clamp(page, 0, PagerConstants.PageCount - 1);
+        var index = Math.Clamp(page, 0, DefaultPageTitles.Length - 1);
         var titles = ShortTitles;
         return titles is not null && index < titles.Count && !string.IsNullOrEmpty(titles[index])
             ? titles[index]!
@@ -1167,3 +1179,4 @@ public readonly record struct WidgetStatModel(string Label, int Value, WidgetSta
 
 /// <summary>One widget task row.</summary>
 public readonly record struct WidgetTaskModel(string Title, bool Done = false);
+

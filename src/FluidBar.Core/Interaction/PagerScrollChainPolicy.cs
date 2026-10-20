@@ -54,7 +54,7 @@ public readonly record struct PagerScrollChainRequest
     /// <summary>Current page index (used to clamp page steps).</summary>
     public int CurrentPage { get; init; }
 
-    /// <summary>Number of pages (defaults to <see cref="PagerConstants.PageCount"/>).</summary>
+    /// <summary>Number of pages (defaults to <see cref="FluidBar.Core.Activities.PageRef.BuiltinPages.Count"/>).</summary>
     public int PageCount { get; init; }
 
     /// <summary>Injected current time (no ambient clock).</summary>
@@ -156,7 +156,7 @@ public sealed class PagerScrollChainPolicy
     /// <summary>Feeds one wheel event and returns who owns it.</summary>
     public PagerScrollChainDecision Handle(in PagerScrollChainRequest request)
     {
-        var pageCount = request.PageCount > 0 ? request.PageCount : PagerConstants.PageCount;
+        var pageCount = request.PageCount;
         var currentPage = PagePagerPolicy.ClampPage(request.CurrentPage, pageCount);
         var magnitude = request.MagnitudeDip;
         if (!double.IsFinite(magnitude) || magnitude <= 0)
@@ -263,3 +263,4 @@ public sealed class PagerScrollChainPolicy
             AccumulatedOverscrollDip = accumulatedOverscrollDip,
         };
 }
+

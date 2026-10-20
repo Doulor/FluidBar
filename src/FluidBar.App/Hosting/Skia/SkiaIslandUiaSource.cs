@@ -199,7 +199,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             case UiaKeyCommand.End:
                 if (_controller.RenderState.IsExpanded)
                 {
-                    _controller.HandlePageRequest((PageRef)(PagerConstants.PageCount - 1));
+                    RequestPage(_controller.RenderState.Pages.PageCount - 1);
                     return true;
                 }
 
@@ -1275,15 +1275,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
 
     private void RequestPage(int page)
     {
-        var pageCount = _controller.HasRenderState
-            ? _controller.RenderState.Pages.PageCount
-            : PagerConstants.PageCount;
-        if (page < 0 || page >= pageCount)
+        if (!_controller.HasRenderState || page < 0 || page >= _controller.RenderState.Pages.PageCount)
         {
             return;
         }
 
-        _controller.HandlePageRequest((PageRef)page);
+        if (_controller.RenderState.Pages.PageSlotAt(page) is { PageId: { Length: > 0 } pageId })
+        {
+            _controller.HandlePageRequest(new PageRef(pageId));
+        }
     }
 
     private void Activate(in UiaElementSnapshot node)

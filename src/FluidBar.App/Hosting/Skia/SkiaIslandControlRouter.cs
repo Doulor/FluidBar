@@ -96,16 +96,16 @@ public static class SkiaIslandControlRouter
 
     private static IslandPlatformAction? MapRow(in IslandRenderState state, in IslandHitTarget hit)
     {
-        switch (hit.PageIndex)
+        switch (state.Pages.PageSlotAt(hit.PageIndex)?.Kind)
         {
-            case 2:
+            case PageSlotKind.Notifications:
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, hit.Index)
                     : null;
-            case 3:
+            case PageSlotKind.Clipboard:
                 // A clipboard row click copies the row (Windows clipboard-history behaviour).
                 return TryClipboardCopy(state, hit.Index);
-            case 4:
+            case PageSlotKind.Agent:
                 return HasRow(state.Pages.Agent.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.AgentActivate, hit.Index)
                     : null;

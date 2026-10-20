@@ -39,12 +39,12 @@ public sealed class SkiaPager
     /// <summary>Creates the pager at a page.</summary>
     /// <param name="initialPage">Initial committed page.</param>
     /// <param name="pageCount">Number of pages.</param>
-    public SkiaPager(int initialPage = 0, int pageCount = PagerConstants.PageCount)
+    public SkiaPager(int initialPage, int pageCount)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageCount, 1);
         PageCount = pageCount;
         SelectedIndex = PagePagerPolicy.ClampPage(initialPage, pageCount);
-        _snap = new PagerSnapMotion(PagePagerPolicy.PageToOffset(SelectedIndex, PagerConstants.PagePitchDip, pageCount));
+        _snap = new PagerSnapMotion(PagePagerPolicy.PageToOffset(SelectedIndex, pageCount, PagerConstants.PagePitchDip));
         _wheel = new PagerWheelPolicy(pageCount);
     }
 
@@ -69,7 +69,7 @@ public sealed class SkiaPager
         }
 
         SelectedIndex = clamped;
-        _snap.JumpTo(PagePagerPolicy.PageToOffset(clamped, PagerConstants.PagePitchDip, pageCount));
+        _snap.JumpTo(PagePagerPolicy.PageToOffset(clamped, pageCount, PagerConstants.PagePitchDip));
         return true;
     }
 
@@ -109,7 +109,7 @@ public sealed class SkiaPager
         _lastDragX = xDip;
         _lastDragTimestampMs = timestampMs;
         _dragStartOffset = _snap.Interrupt();
-        _dragStartPage = PagePagerPolicy.OffsetToPage(_dragStartOffset);
+        _dragStartPage = PagePagerPolicy.OffsetToPage(_dragStartOffset, PageCount);
     }
 
     /// <summary>Updates the drag from the pointer X; returns the new visual offset.</summary>
@@ -135,8 +135,8 @@ public sealed class SkiaPager
         _velocityDipPerMs = (_velocityDipPerMs * 0.72) + (instantDipPerMs * 0.28);
         _accumulatedDragDip = -(xDip - _dragStartX);
 
-        var drag = PagePagerPolicy.Drag(_dragStartPage, _accumulatedDragDip);
-        var deltaFromPage = drag.DisplayOffsetDip - PagePagerPolicy.PageToOffset(_dragStartPage);
+        var drag = PagePagerPolicy.Drag(_dragStartPage, _accumulatedDragDip, PageCount);
+        var deltaFromPage = drag.DisplayOffsetDip - PagePagerPolicy.PageToOffset(_dragStartPage, PageCount);
         var visual = _dragStartOffset + deltaFromPage;
         _snap.JumpTo(visual);
         return visual;
@@ -153,7 +153,7 @@ public sealed class SkiaPager
         }
 
         _dragging = false;
-        var decision = PagePagerPolicy.Release(_dragStartPage, _accumulatedDragDip, _velocityDipPerMs);
+        var decision = PagePagerPolicy.Release(_dragStartPage, _accumulatedDragDip, _velocityDipPerMs, PageCount);
         CommitPage(decision.TargetPage);
 
         // Momentum handoff (prototype2 seeds its spring with the release velocity, clamped to ±14
@@ -172,7 +172,7 @@ public sealed class SkiaPager
     {
         var target = PagePagerPolicy.ClampPage(page, PageCount);
         CommitPage(target);
-        _snap.SnapToOffset(PagePagerPolicy.PageToOffset(target, PagerConstants.PagePitchDip, PageCount));
+        _snap.SnapToOffset(PagePagerPolicy.PageToOffset(target, PageCount, PagerConstants.PagePitchDip));
     }
 
     /// <summary>Steps one page left/right (keyboard arrows).</summary>
@@ -185,7 +185,7 @@ public sealed class SkiaPager
     {
         var target = PagePagerPolicy.ClampPage(page, PageCount);
         CommitPage(target);
-        _snap.JumpTo(PagePagerPolicy.PageToOffset(target, PagerConstants.PagePitchDip, PageCount));
+        _snap.JumpTo(PagePagerPolicy.PageToOffset(target, PageCount, PagerConstants.PagePitchDip));
     }
 
     /// <summary>
@@ -210,7 +210,7 @@ public sealed class SkiaPager
         // The previous build froze the whole chain while the spring ran, so every notch during the
         // ~0.5 s snap was swallowed and a fast gesture could only ever move one page.
         var basePage = IsAnimating
-            ? PagePagerPolicy.OffsetToPage(_snap.TargetOffsetDip)
+            ? PagePagerPolicy.OffsetToPage(_snap.TargetOffsetDip, PageCount)
             : SelectedIndex;
 
         var chainDelta = deltaDip;
@@ -282,3 +282,4 @@ public sealed class SkiaPager
         PageChanged?.Invoke(target);
     }
 }
+

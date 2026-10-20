@@ -943,7 +943,7 @@ internal sealed partial class PageRenderer
             var hint = PageMetricsLayout.WidgetsTaskRow(page, painted, _metrics);
             var pitch = PageMetricsLayout.WidgetsTaskPitch(_metrics);
             var bodyBottom = PageMetricsLayout.Body(page).Bottom;
-            var maxScroll = PageMetricsLayout.MaxScroll(page, 5, _metrics, total);
+            var maxScroll = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, _metrics, total);
             var scroll = (float)Math.Clamp(
                 double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
             // Page coordinates that render at the bottom of the visible band for the current scroll.

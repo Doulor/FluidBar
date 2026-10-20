@@ -548,13 +548,15 @@ internal static class IslandTestFixtures
     /// </summary>
     /// <param name="page">Committed page index.</param>
     /// <param name="position">Continuous pager position (NaN = settled on <paramref name="page"/>).</param>
+    public const int PageCount = 6;
+
     public static IslandRenderState RailState(int page, double position = double.NaN)
     {
         var settled = double.IsNaN(position) ? page : position;
         var content = Content() with { ShortTitles = ZhShortTitles, PageTitles = ZhShortTitles };
         return IslandRenderState.Expanded(
             IslandMode.Float,
-            PagerRenderState.FromPosition(settled),
+            PagerRenderState.FromPosition(settled, PageCount),
             content,
             Theme,
             ArchipelagoState.Shown(settled));
@@ -569,8 +571,8 @@ internal static class IslandTestFixtures
     {
         var resolvedTheme = theme ?? Theme;
         var pager = double.IsNaN(pagePosition)
-            ? PagerRenderState.At(page)
-            : PagerRenderState.FromPosition(pagePosition);
+            ? PagerRenderState.At(page, PageCount)
+            : PagerRenderState.FromPosition(pagePosition, PageCount);
         return IslandRenderState.Expanded(
             mode,
             pager,

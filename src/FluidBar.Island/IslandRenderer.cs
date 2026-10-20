@@ -266,15 +266,16 @@ public sealed class IslandRenderer : IDisposable
                 var page = PageUnder(state, content, x);
                 var pageRect = IslandMetrics.PageRect(state, page);
                 var metrics = FontScaleMetrics.From(state.FontScale);
-                var pageScroll = PageScrollOffset(state, page, metrics, pageRect);
+                var kind = state.Pages.PageSlotAt(page)?.Kind ?? PageSlotKind.Plugin;
+                var pageScroll = PageScrollOffset(state, kind, metrics, pageRect);
                 var control = PageMetricsLayout.HitTest(
-                    page,
+                    kind,
                     pageRect,
                     x,
                     y,
                     metrics,
                     pageScroll,
-                    PageItemCount(state, page),
+                    PageItemCount(state, kind),
                     out var index);
                 if (control != IslandPageControl.None)
                 {
@@ -629,7 +630,7 @@ public sealed class IslandRenderer : IDisposable
         {
             if (finals[i].Contains(x, y))
             {
-                return new IslandHitTarget(IslandHitKind.SplitIslet, (int)state.SplitIslets[i].Page, Index: i);
+                return new IslandHitTarget(IslandHitKind.SplitIslet, state.Pages.IndexOfPage(state.SplitIslets[i].Page), Index: i);
             }
         }
 
@@ -760,19 +761,20 @@ public sealed class IslandRenderer : IDisposable
 
             canvas.Save();
             canvas.ClipRect(pageRect);
-            if (page is 0 or 1 or 5)
+            var slot = state.Pages.PageSlotAt(page);
+            if (slot is { Kind: PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets })
             {
                 // Home/media/widgets overflow the 232 DIP body at large font scales: the page scrolls
                 // inside that body (the wheel host writes the model offset, clamped by the metric layout).
                 var metrics = FontScaleMetrics.From(state.FontScale);
-                var scroll = page switch
+                var scroll = slot.Kind switch
                 {
-                    0 => state.Pages.Home.ScrollOffset,
-                    1 => state.Pages.Media.ScrollOffset,
+                    PageSlotKind.Home => state.Pages.Home.ScrollOffset,
+                    PageSlotKind.Media => state.Pages.Media.ScrollOffset,
                     _ => state.Pages.Widgets.ScrollOffset,
                 };
-                var itemCount = page == 5 ? state.Pages.Widgets.Tasks?.Count ?? 0 : 0;
-                var clamped = PageMetricsLayout.ClampScroll(pageRect, page, scroll, metrics, itemCount);
+                var itemCount = slot.Kind == PageSlotKind.Widgets ? state.Pages.Widgets.Tasks?.Count ?? 0 : 0;
+                var clamped = PageMetricsLayout.ClampScroll(pageRect, slot.Kind, scroll, metrics, itemCount);
                 var body = PageMetricsLayout.Body(pageRect);
                 canvas.Save();
                 canvas.ClipRect(body);
@@ -822,37 +824,37 @@ public sealed class IslandRenderer : IDisposable
         var offset = state.Pager.PagePosition * pitch;
         var local = x - content.Left + offset;
         var page = (int)Math.Floor(local / pitch);
-        return Math.Clamp(page, 0, FluidBar.Core.Interaction.PagerConstants.PageCount - 1);
+        return Math.Clamp(page, 0, state.Pages.PageCount - 1);
     }
 
-    private static float PageScrollOffset(in IslandRenderState state, int page, in FontScaleMetrics metrics, SKRect pageRect)
+    private static float PageScrollOffset(in IslandRenderState state, PageSlotKind kind, in FontScaleMetrics metrics, SKRect pageRect)
     {
         var pages = state.Pages ?? ExpandedPageContent.Empty;
-        return page switch
+        return kind switch
         {
-            0 => PageMetricsLayout.ClampScroll(pageRect, 0, pages.Home.ScrollOffset, metrics),
-            1 => PageMetricsLayout.ClampScroll(pageRect, 1, pages.Media.ScrollOffset, metrics),
-            2 => (float)pages.Notifications.ScrollOffset,
-            3 => (float)pages.Clipboard.ScrollOffset,
-            4 => (float)pages.Agent.ScrollOffset,
+            PageSlotKind.Home => PageMetricsLayout.ClampScroll(pageRect, PageSlotKind.Home, pages.Home.ScrollOffset, metrics),
+            PageSlotKind.Media => PageMetricsLayout.ClampScroll(pageRect, PageSlotKind.Media, pages.Media.ScrollOffset, metrics),
+            PageSlotKind.Notifications => (float)pages.Notifications.ScrollOffset,
+            PageSlotKind.Clipboard => (float)pages.Clipboard.ScrollOffset,
+            PageSlotKind.Agent => (float)pages.Agent.ScrollOffset,
             // The widgets card grows with the task rows, so the clamp needs the row count.
-            5 => PageMetricsLayout.ClampScroll(pageRect, 5, pages.Widgets.ScrollOffset, metrics,
+            PageSlotKind.Widgets => PageMetricsLayout.ClampScroll(pageRect, PageSlotKind.Widgets, pages.Widgets.ScrollOffset, metrics,
                 pages.Widgets.Tasks?.Count ?? 0),
             _ => 0f,
         };
     }
 
-    private static int PageItemCount(in IslandRenderState state, int page)
+    private static int PageItemCount(in IslandRenderState state, PageSlotKind kind)
     {
         var pages = state.Pages ?? ExpandedPageContent.Empty;
-        return page switch
+        return kind switch
         {
-            0 => 4,
-            1 => 1,
-            2 => pages.Notifications.Items?.Count ?? 0,
-            3 => pages.Clipboard.Items?.Count ?? 0,
-            4 => pages.Agent.Items?.Count ?? 0,
-            5 => pages.Widgets.Tasks?.Count ?? 0,
+            PageSlotKind.Home => 4,
+            PageSlotKind.Media => 1,
+            PageSlotKind.Notifications => pages.Notifications.Items?.Count ?? 0,
+            PageSlotKind.Clipboard => pages.Clipboard.Items?.Count ?? 0,
+            PageSlotKind.Agent => pages.Agent.Items?.Count ?? 0,
+            PageSlotKind.Widgets => pages.Widgets.Tasks?.Count ?? 0,
             _ => int.MaxValue,
         };
     }
@@ -933,3 +935,4 @@ public sealed class IslandRenderer : IDisposable
         long BottomRight,
         long BottomLeft);
 }
+
