@@ -166,7 +166,8 @@ public sealed class SplitSatellitePolishTests
         var state = State(withMedia: true);
         var ball = IslandMetrics.SplitIsletRects(state)[1];
         var frame = IslandMetrics.SplitIsletThumbnailRect(ball);
-        Assert.Equal(ball.Width - 8f, frame.Width, 0.001f);
+        // Round 2: inset 5 DIP per side, so the well is the ball minus 10 (30 DIP on a 40 DIP ball).
+        Assert.Equal(ball.Width - 10f, frame.Width, 0.001f);
         Assert.Equal(frame.Width * 0.225f, IslandMetrics.SplitIsletThumbnailRadius(frame), 0.001f);
 
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);

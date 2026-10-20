@@ -23,9 +23,11 @@ public sealed class SatelliteVisualQualityTests
     }
 
     [Fact]
-    public void Cover_well_keeps_the_hairline_and_eight_dip_inset()
+    public void Cover_well_keeps_the_hairline_and_ten_dip_inset()
     {
-        Assert.Equal(4f, SplitSatelliteStyle.InnerFrameInsetDip);
+        // Round 2 of the satellite polish widened the inset 4 -> 5 DIP (well = 30 DIP on a 40 DIP ball,
+        // 75 %), so the black ring around the cover reads clearly. Spec change, not a relaxed check.
+        Assert.Equal(5f, SplitSatelliteStyle.InnerFrameInsetDip);
         Assert.InRange(SplitSatelliteStyle.InnerFrameRadiusFactor, 0.20f, 0.25f);
         Assert.Equal(1f, SplitSatelliteStyle.InnerFrameStrokeWidthDip);
         var stroke = SplitSatelliteStyle.InnerFrameStrokeAlpha / 255.0;

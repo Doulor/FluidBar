@@ -655,6 +655,21 @@ public sealed class IslandRenderer : IDisposable
         DrawSplitBlurredCircle(canvas, ball.MidX, ball.MidY + SplitSatelliteStyle.BallShadowOffsetYDip,
             radius * 0.98f, SplitSatelliteStyle.BallShadowAlpha, alpha, surface.DpiScale, cover: false);
 
+        // 1b) Hover glow: white 6 % blurred halo just outside the ball. Drawn before the body so only
+        // the outer half of the stroke survives; the ball's size and layout never change.
+        if (surface.Highlight > 0.01f)
+        {
+            _stroke.Style = SKPaintStyle.Stroke;
+            _stroke.StrokeWidth = SplitSatelliteStyle.HoverGlowWidthDip;
+            _stroke.StrokeCap = SKStrokeCap.Butt;
+            _stroke.Shader = null;
+            _stroke.MaskFilter = SplitBlur(surface.DpiScale, cover: false);
+            _stroke.Color = SKColors.White.WithAlpha((byte)Math.Clamp(
+                SplitSatelliteStyle.HoverGlowAlpha * surface.Highlight * alpha, 0, 255));
+            canvas.DrawCircle(ball.MidX, ball.MidY, radius, _stroke);
+            _stroke.MaskFilter = null;
+        }
+
         // 2) Body: byte-identical to the primary pill while split previews are visible (Src).
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
@@ -833,7 +848,7 @@ public sealed class IslandRenderer : IDisposable
             // Recessed inner shade: the top of the cover sits in shadow.
             using var inner = SKShader.CreateLinearGradient(
                 new SKPoint(0, frame.Top),
-                new SKPoint(0, frame.Top + (frame.Height * SplitSatelliteStyle.CoverInnerShadeDepth)),
+                new SKPoint(0, frame.Top + SplitSatelliteStyle.CoverInnerShadeDepthDip),
                 [
                     SKColors.Black.WithAlpha(SplitSatelliteStyle.Alpha(
                         SplitSatelliteStyle.CoverInnerShadeAlpha, alpha)),

@@ -21,8 +21,11 @@ public static class SplitSatelliteStyle
 {
     // ---------------------------------------------------------------- cover well
 
-    /// <summary>Inset of the rounded-square cover well from the ball edge (DIP): side = diameter - 8.</summary>
-    public const float InnerFrameInsetDip = 4f;
+    /// <summary>
+    /// Inset of the rounded-square cover well from the ball edge (DIP): side = diameter - 10, i.e.
+    /// 30 DIP on a 40 DIP ball (75 %), so the black ring around the cover reads clearly.
+    /// </summary>
+    public const float InnerFrameInsetDip = 5f;
 
     /// <summary>Corner radius of the cover well as a fraction of its side (22.5 %, the approved ratio).</summary>
     public const float InnerFrameRadiusFactor = 0.225f;
@@ -33,8 +36,8 @@ public static class SplitSatelliteStyle
     /// <summary>White alpha of that hairline (7 %: a hair lighter than the pure black ball).</summary>
     public const byte InnerFrameStrokeAlpha = 18;
 
-    /// <summary>Black alpha of the recessed shade at the top of the cover (inner shadow).</summary>
-    public const byte CoverInnerShadeAlpha = 30;
+    /// <summary>Black alpha of the recessed shade at the top of the cover (12 %, the "inset" read).</summary>
+    public const byte CoverInnerShadeAlpha = 31;
 
     /// <summary>
     /// Black alpha of the bevel's bottom half. The 1 DIP inner stroke is a vertical gradient (white
@@ -43,8 +46,8 @@ public static class SplitSatelliteStyle
     /// </summary>
     public const byte InnerFrameBevelShadeAlpha = 64;
 
-    /// <summary>How far down the cover the inner shade fades out (fraction of the well side).</summary>
-    public const float CoverInnerShadeDepth = 0.45f;
+    /// <summary>How far down the cover the inner shade fades out (DIP, absolute: top 2 DIP).</summary>
+    public const float CoverInnerShadeDepthDip = 2f;
 
     /// <summary>Blur of the cover's contact shadow (DIP, CSS blur / 2).</summary>
     public const float CoverShadowBlurDip = 2f;
@@ -72,6 +75,15 @@ public static class SplitSatelliteStyle
     /// <summary>Fraction of the ball height where the bottom shade starts.</summary>
     public const float BallShadeStart = 0.5f;
 
+    /// <summary>White alpha of the hover glow around the ball (6 %), size and layout unchanged.</summary>
+    public const byte HoverGlowAlpha = 15;
+
+    /// <summary>Blur of the hover glow (DIP, CSS blur / 2).</summary>
+    public const float HoverGlowBlurDip = 4f;
+
+    /// <summary>Width of the hover glow's ring, just outside the ball edge (DIP).</summary>
+    public const float HoverGlowWidthDip = 1.5f;
+
     /// <summary>Blur of the ball's contact shadow (DIP, CSS blur / 2).</summary>
     public const float BallShadowBlurDip = 4f;
 
@@ -94,6 +106,12 @@ public static class SplitSatelliteStyle
 
     /// <summary>Inset of the ring's centre line from the ball edge (DIP).</summary>
     public const float RingInsetDip = 6f;
+
+    /// <summary>
+    /// Clearance between the ring's outer edge and the ball edge (DIP): inset - width / 2 = 5, so the
+    /// ring never touches the ball silhouette (requirement: >= 4 DIP).
+    /// </summary>
+    public const float RingClearanceDip = RingInsetDip - (RingWidthDip / 2);
 
     /// <summary>Visible sweep of the agent ring (degrees).</summary>
     public const float RingSweepDegrees = 180f;
