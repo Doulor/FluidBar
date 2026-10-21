@@ -3185,11 +3185,11 @@ private void HandlePageControl(in IslandHitTarget hit)
             // path, too large to ignore. Converge by bending the playback rate a few percent — the picture
             // keeps moving forwards, so nothing flickers, and the offset is gone within ~20 s (user
             // request 2026-10-22: "1-2 s off is what breaks the sync").
-            // Rate chasing made the island run 5.3 % fast (measured: island 1.0534x vs truth 0.9944x),
-            // which produced a 2.5 s sawtooth — it chased a gap it could never close because the source
-            // itself advances slightly slower than real time. The clock must simply run at 1.0x and only
-            // jump on a real seek (>2.5 s, handled above).
-            _ = media;
+            var delta = media.PositionMs - _karaokeClock.PositionAt(now);
+            if (Math.Abs(delta) > 250)
+            {
+                _karaokeClock.Nudge(media.PositionMs, now);
+            }
         }
 
         if (!media.IsPlaying)
