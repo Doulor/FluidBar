@@ -490,6 +490,9 @@ public sealed record CompactModel
     /// <summary>Body/preview line (clipboard).</summary>
     public string? Body { get; init; }
 
+    /// <summary>Relative timestamp for the phone-style notification card ("now", "3 min").</summary>
+    public string? TimeText { get; init; }
+
     /// <summary>Trailing badge/chip text.</summary>
     public string? Badge { get; init; }
 

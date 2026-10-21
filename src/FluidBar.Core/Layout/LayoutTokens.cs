@@ -327,7 +327,9 @@ public static class LayoutTokens
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    private static readonly VisualSize NotificationSize = new(248, 36);
+    // Phone-style notification card (2026-10-22): 400×96 DIP with a 56 DIP app tile, title/body,
+    // app name and timestamp column. Wide enough for the user's "比较宽的弹窗" request.
+    private static readonly VisualSize NotificationSize = new(400, 96);
     private static readonly VisualSize ClipboardSize = new(264, 36);
     // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
     private static readonly VisualSize AgentSize = new(236, 36);

@@ -151,10 +151,11 @@ public sealed class IslandGeometryTests
         var body = NotificationCompactSurface.BodyRect(hasChip: true);
         var chip = NotificationCompactSurface.ChipRect;
 
-        Assert.Equal(CompactPillLayout.IconSlot, icon.Width, Eps);
-        Assert.Equal(CompactPillLayout.IconSlot, icon.Height, Eps);
-        Assert.True(icon.Right + CompactPillLayout.IconGap <= title.X + Eps, "icon slot overlaps the title");
-        Assert.True(title.Right + CompactPillLayout.ChipGap <= chip.X + Eps, "text column overlaps the chip");
+        Assert.Equal(56, icon.Width, Eps);
+        Assert.Equal(56, icon.Height, Eps);
+        Assert.True(icon.Right + 14 <= title.X + Eps, "app tile overlaps the title");
+        Assert.True(title.Bottom <= body.Top + Eps, "title overlaps the body");
+        Assert.True(body.Bottom <= chip.Top + Eps, "body overlaps the code chip");
         Assert.True(title.Width > 0 && body.Width > 0);
 
         AssertInsidePill(icon, NotificationCompactSurface.PillWidth, NotificationCompactSurface.PillHeight, "notification icon");
@@ -163,7 +164,7 @@ public sealed class IslandGeometryTests
         AssertInsidePill(chip, NotificationCompactSurface.PillWidth, NotificationCompactSurface.PillHeight, "notification chip");
 
         var noChip = NotificationCompactSurface.TextColumn(hasChip: false);
-        Assert.True(noChip.Width > NotificationCompactSurface.TextColumn(hasChip: true).Width);
+        Assert.Equal(NotificationCompactSurface.TextColumn(hasChip: true).Width, noChip.Width, Eps);
         AssertInsidePill(noChip, NotificationCompactSurface.PillWidth, NotificationCompactSurface.PillHeight, "notification text (no chip)");
     }
 

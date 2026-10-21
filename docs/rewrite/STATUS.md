@@ -228,3 +228,15 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
 
+## 2026-10-22 00:55 — 手机式通知弹窗（已完成）
+
+**用户给的参考**：NetSpeed-Dynamic 的通知卡 + 手机通知（大 app 图标、主副标题、软件名、时间、副图标）。
+
+- 紧凑通知岛从 `248×36` 改为 **`400×96` DIP**（比例约 4.17，接近参考图 4.27），圆角随 `CompactRadiusCap=44` 呈大圆角卡片。
+- 布局：56 DIP app tile（app 名首字母，QQ/微信/Teams/Outlook/GitHub 等映射专属 accent）+ 右下 22 DIP 副图标 badge（app 类型 glyph）；右侧 76 DIP 列放**相对时间**（上）与**软件名**（下）；中间主标题 + 副标题/正文；验证码 chip 放左下。
+- 时间从 `content.Notifications` 的同一 toast 记录取 `TimeText`，取不到回退「刚刚/just now」；app 名/图标/accent 都按来源 app 映射（无公开 logo API，用字母 tile + 类型 glyph 代替真实 logo）。
+- 字号随 FontScale 缩放（0.8/1.0/1.6 golden 都过），Dock 52 DIP 走紧凑变体。
+- 副岛仍显示在主岛下方，主岛不被通知抢占；golden `04/30/31/32/33` 重录。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `11DEAFB38148F17DB90BE594C174A36759B6FFE1A0FA6EBA629DBD016C2E9B8A`。
+- 证据：`build/evidence/notifications-step4-compact-phone/compact-notifications.png`（GitHub 卡片作为副岛显示在 Agent 主岛下方）。
+
