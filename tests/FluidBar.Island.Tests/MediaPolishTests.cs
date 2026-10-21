@@ -153,22 +153,23 @@ public sealed class MediaPolishTests
         // real-machine acceptance shot has to show when a tap toggles the transport.
         var box = PlayButtonGlyphBox(IslandTestFixtures.Scale);
         Assert.True(GlyphPixels(a, box) != GlyphPixels(b, box), "the play/pause glyph must change with IsPlaying");
-        Assert.True(GlyphInk(a, box) > 0, "the playing state must paint a glyph");
-        Assert.True(GlyphInk(b, box) > 0, "the paused state must paint a glyph");
+        // The circle is solid white now, so the glyph itself is the dark ink inside it.
+        Assert.True(GlyphDarkInk(a, box) > 0, "the playing state must paint a glyph");
+        Assert.True(GlyphDarkInk(b, box) > 0, "the paused state must paint a glyph");
     }
 
     private static SKRectI PlayButtonGlyphBox(float scale)
     {
-        // Expanded media page: the play button is the middle transport control (DIP layout × render scale).
+        // Derived from the layout token, not a copied coordinate: the footer was re-laid-out once already
+        // (play moved from page+185 to the 36 DIP centred circle) and a hard-coded box goes stale silently.
         var page = IslandMetrics.PageRect(IslandTestFixtures.Expanded(1), 1);
-        // Media page transport row: the play button is centred at (page + 185,218)..(+215,248).
-        var left = (int)((page.Left + 185) * scale);
-        var top = (int)((page.Top + 218) * scale);
+        var play = PageVisual.MediaPlay(page);
+        var inset = play.Width * 0.35f;
         return new SKRectI(
-            left + (int)(30 * scale * 0.3f),
-            top + (int)(30 * scale * 0.3f),
-            left + (int)(30 * scale * 0.7f),
-            top + (int)(30 * scale * 0.7f));
+            (int)((play.Left + inset) * scale),
+            (int)((play.Top + inset) * scale),
+            (int)((play.Right - inset) * scale),
+            (int)((play.Bottom - inset) * scale));
     }
 
     private static ulong GlyphPixels(SKBitmap bitmap, SKRectI box)
@@ -183,6 +184,25 @@ public sealed class MediaPolishTests
         }
 
         return hash;
+    }
+
+    /// <summary>Dark (glyph) pixels inside the solid white play circle.</summary>
+    private static int GlyphDarkInk(SKBitmap bitmap, SKRectI box)
+    {
+        var ink = 0;
+        for (var y = box.Top; y < box.Bottom && y < bitmap.Height; y++)
+        {
+            for (var x = box.Left; x < box.Right && x < bitmap.Width; x++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.Red + pixel.Green + pixel.Blue < 240)
+                {
+                    ink++;
+                }
+            }
+        }
+
+        return ink;
     }
 
     private static int GlyphInk(SKBitmap bitmap, SKRectI box)

@@ -142,34 +142,32 @@ public sealed class IslandHitTestTests
     {
         var state = IslandTestFixtures.Expanded(1);
         var page = IslandMetrics.PageRect(state, 1);
-        var metrics = FontScaleMetrics.From(state.FontScale);
 
-        var play = Hit(state, PageMetricsLayout.MediaPlay(page, metrics).MidX,
-            PageMetricsLayout.MediaPlay(page, metrics).MidY);
-        Assert.Equal(IslandPageControl.PlayPause, play.Control);
+        // Probe the centres of the rectangles the renderer actually paints (PageVisual), not the legacy
+        // PageLayout geometry that the media page stopped using when the footer was re-laid-out.
+        foreach (var (control, rect) in new (IslandPageControl Control, SKRect Rect)[]
+                 {
+                     (IslandPageControl.PlayPause, PageVisual.MediaPlay(page)),
+                     (IslandPageControl.Previous, PageVisual.MediaPrevious(page)),
+                     (IslandPageControl.Next, PageVisual.MediaNext(page)),
+                     (IslandPageControl.Output, PageVisual.MediaOutput(page)),
+                     (IslandPageControl.Queue, PageVisual.MediaQueue(page)),
+                 })
+        {
+            var hit = Hit(state, rect.MidX, rect.MidY);
+            Assert.Equal(control, hit.Control);
+        }
 
-        var previous = Hit(state, PageMetricsLayout.MediaPrevious(page, metrics).MidX,
-            PageMetricsLayout.MediaPrevious(page, metrics).MidY);
-        Assert.Equal(IslandPageControl.Previous, previous.Control);
+        var seek = PageVisual.MediaSeekRow(page);
+        Assert.Equal(IslandPageControl.Seek, Hit(state, seek.Left + 4, seek.MidY).Control);
 
-        var next = Hit(state, PageMetricsLayout.MediaNext(page, metrics).MidX,
-            PageMetricsLayout.MediaNext(page, metrics).MidY);
-        Assert.Equal(IslandPageControl.Next, next.Control);
+        var volume = PageVisual.MediaVolume(page);
+        Assert.Equal(IslandPageControl.VolumeMute, Hit(state, volume.Left + 4, volume.MidY).Control);
 
-        var seek = Hit(state, PageLayout.MediaSeekRow(page).MidX, PageLayout.MediaSeekRow(page).MidY);
-        Assert.Equal(IslandPageControl.Seek, seek.Control);
-
-        var output = Hit(state, PageMetricsLayout.MediaOutput(page, metrics).MidX,
-            PageMetricsLayout.MediaOutput(page, metrics).MidY);
-        Assert.Equal(IslandPageControl.Output, output.Control);
-
-        var queue = Hit(state, PageMetricsLayout.MediaQueue(page, metrics).MidX,
-            PageMetricsLayout.MediaQueue(page, metrics).MidY);
-        Assert.Equal(IslandPageControl.Queue, queue.Control);
-
-        var art = Hit(state, PageLayout.MediaArt(page).MidX, PageLayout.MediaArt(page).MidY);
-        Assert.Equal(IslandHitKind.Page, art.Kind);
-        Assert.Equal(1, art.PageIndex);
+        var art = PageVisual.MediaArt(page);
+        var artHit = Hit(state, art.MidX, art.MidY);
+        Assert.Equal(IslandHitKind.Page, artHit.Kind);
+        Assert.Equal(1, artHit.PageIndex);
     }
 
     [Fact]

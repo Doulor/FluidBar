@@ -45,10 +45,12 @@ public sealed class MediaEmptyStateTests
         var state0 = IslandTestFixtures.Expanded(1);
         var page = IslandMetrics.PageRect(state0, 1);
         var metrics = FontScaleMetrics.One;
-        var artwork = PageMetricsLayout.MediaArt(page);
-        var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
-        var output = PageMetricsLayout.MediaOutput(page, metrics);
-        var queue = PageMetricsLayout.MediaQueue(page, metrics);
+        // Everything comes from the PageVisual tokens the renderer paints, so a layout change cannot make
+        // this test inspect a rectangle nothing is drawn in.
+        var artwork = PageVisual.MediaArt(page);
+        var lyric = PageVisual.MediaLyricCard(page);
+        var output = PageVisual.MediaOutput(page);
+        var queue = PageVisual.MediaQueue(page);
 
         for (var mask = 0; mask < 16; mask++)
         {
@@ -57,7 +59,10 @@ public sealed class MediaEmptyStateTests
             Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
 
             Assert.True(CountInk(bitmap, artwork) > 200, $"comb {mask}: the artwork slot is blank");
-            Assert.True(CountInk(bitmap, lyric) > 200, $"comb {mask}: the lyric band is blank (half-rendered page)");
+            // Lyrics paint two text lines (no background by design); without them the band holds the soft
+            // L1 empty-state card plus its caption, which is far dimmer than text ink.
+            var lyricsInk = (mask & 4) != 0 ? 200 : 20;
+            Assert.True(CountInk(bitmap, lyric) > lyricsInk, $"comb {mask}: the lyric band is blank (half-rendered page)");
             Assert.True(CountInk(bitmap, output) > 20, $"comb {mask}: the output slot is blank");
             Assert.True(CountInk(bitmap, queue) > 20, $"comb {mask}: the queue slot is blank");
         }
@@ -81,9 +86,9 @@ public sealed class MediaEmptyStateTests
 
         var page = IslandMetrics.PageRect(withPlaceholders, 1);
         var metrics = FontScaleMetrics.One;
-        var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
-        var output = PageMetricsLayout.MediaOutput(page, metrics);
-        var queue = PageMetricsLayout.MediaQueue(page, metrics);
+        var lyric = PageVisual.MediaLyricCard(page);
+        var output = PageVisual.MediaOutput(page);
+        var queue = PageVisual.MediaQueue(page);
 
         // The lyric band gets a real card + caption instead of staying a gap, and both transport slots
         // gain their light caption text next to the icon.
@@ -100,7 +105,7 @@ public sealed class MediaEmptyStateTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         var page = IslandMetrics.PageRect(state, 1);
-        var lyric = PageMetricsLayout.MediaLyricCard(page, FontScaleMetrics.One);
+        var lyric = PageVisual.MediaLyricCard(page);
         var (minX, maxX) = InkBoundsX(bitmap, lyric);
         Assert.True(maxX > minX, "the no-lyrics caption did not paint");
         var inkCenter = (minX + maxX) / 2f;
@@ -121,8 +126,8 @@ public sealed class MediaEmptyStateTests
 
         var page = IslandMetrics.PageRect(withData, 1);
         var metrics = FontScaleMetrics.One;
-        var output = PageMetricsLayout.MediaOutput(page, metrics);
-        var queue = PageMetricsLayout.MediaQueue(page, metrics);
+        var output = PageVisual.MediaOutput(page);
+        var queue = PageVisual.MediaQueue(page);
 
         // Real values ("Speakers", queue count) paint different ink than the placeholder captions.
         Assert.NotEqual(CountInk(dataBitmap, output), CountInk(emptyBitmap, output));

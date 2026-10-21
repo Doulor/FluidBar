@@ -325,7 +325,8 @@ internal sealed partial class PageRenderer : IDisposable
         // Accent from the album cover (extracted upstream) drives the art glow, the progress track and
         // the karaoke sweep; without a cover the theme fallback rules stay in charge.
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
-        DrawArt(canvas, PageVisual.MediaArt(page), 12, accent, large: true, media.Artwork, media.ArtworkKey);
+        DrawArt(canvas, PageVisual.MediaArt(page), PageVisual.MediaArtRadius, accent, large: true, media.Artwork,
+            media.ArtworkKey);
 
         _text.Draw(canvas, media.Eyebrow, IslandType.MediaEyebrow, PageVisual.MediaEyebrow(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
@@ -341,76 +342,71 @@ internal sealed partial class PageRenderer : IDisposable
         // still occupies the approved geometry, so a light caption keeps it intentional instead of a
         // blank gap between the title block and the seek row.
         var hasLyrics = !string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine);
-        var lyricCard = PageVisual.MediaLyricCard(page);
         if (hasLyrics)
         {
-            DrawCard(canvas, lyricCard, 10);
-            var lyricTop = lyricCard.Top + 7;
-            var lyricBottom = lyricTop + 17 + m.LineGrow(IslandType.Lyric);
-            // Karaoke sweep from the KRC word timeline; a line without word timing paints as a plain line
-            // in the primary colour, exactly like before.
+            // iOS Now Playing does not put a coloured block behind the lyrics: the two lines sit on the
+            // page itself (13/20 for the current line, 11.5/16 for the next one) and the karaoke sweep
+            // supplies the only colour.
+            var line1 = PageVisual.MediaLyricLine1(page);
             var baseColor = media.LyricHighlight < 0
                 ? _theme.Foreground
                 : KaraokeText.UnsungColor(_theme.Foreground);
             var sungColor = media.LyricHighlight < 0
                 ? accent
                 : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
-            KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
-                new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
-                baseColor, sungColor, TextAlign.Left, _opacity);
-            var nextTop = lyricBottom + 3;
-            var nextBottom = nextTop + 14 + m.LineGrow(IslandType.LyricNext);
-            // The tag is measured instead of parked in a fixed 30 DIP column: at a 1.6 font scale the old
-            // column clipped it to "NE…" (prototype2 keeps it whole and spaces the text 6 DIP after it).
-            var tagLeft = lyricCard.Left + 10;
+            KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, PageVisual.MediaLyricStyle,
+                line1, baseColor, sungColor, TextAlign.Left, _opacity);
+
+            var line2 = PageVisual.MediaLyricLine2(page);
+            // The tag is measured instead of parked in a fixed column: at a 1.6 font scale the old
+            // column clipped it to "NE…" (the label must stay whole, 6 DIP before the text).
             var tagWidth = Math.Max(0, _text.Measure(media.NextLyricLabel, IslandType.MediaEyebrow));
             _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
-                new SKRect(tagLeft, nextTop, Math.Min(lyricCard.Right - 10, tagLeft + tagWidth + 1), nextBottom),
+                new SKRect(line2.Left, line2.Top, Math.Min(line2.Right, line2.Left + tagWidth + 1), line2.Bottom),
                 _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-            _text.Draw(canvas, media.NextLyricLine, IslandType.LyricNext,
-                new SKRect(tagLeft + tagWidth + 6, nextTop, lyricCard.Right - 10, nextBottom),
+            _text.Draw(canvas, media.NextLyricLine, PageVisual.MediaLyricNextStyle,
+                new SKRect(line2.Left + tagWidth + 6, line2.Top, line2.Right, line2.Bottom),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
         else if (!string.IsNullOrWhiteSpace(media.NoLyricsText))
         {
-            DrawCard(canvas, lyricCard, 10);
-            var captionHeight = 12 + m.LineGrow(IslandType.MediaEyebrow);
-            var captionTop = lyricCard.MidY - (captionHeight / 2);
-            // No lyric to follow: centring the caption inside the full-width band reads as a deliberate
-            // empty state; a left-hugging caption looked like a clipped lyric line (visual audit, task-38).
+            // No lyric to follow: a 40 % L1 card is the only background the media page keeps, and it is
+            // dim enough to read as a quiet empty state rather than a colour block.
+            DrawSoftCard(canvas, PageVisual.MediaLyricCard(page), 0.4f);
+            var caption = PageVisual.MediaLyricLine1(page);
             _text.Draw(canvas, media.NoLyricsText, IslandType.MediaEyebrow,
-                new SKRect(lyricCard.Left + 10, captionTop, lyricCard.Right - 10, captionTop + captionHeight),
+                new SKRect(caption.Left, caption.MidY - 6, caption.Right, caption.MidY + 6),
                 _theme.ForegroundTertiary, TextAlign.Center, 0.8f * _opacity);
         }
 
         // Window-title fallback sources have no track length; the player still reports the position,
         // so the elapsed time is drawn without a progress track instead of hiding the row entirely.
         var seekRow = PageVisual.MediaSeekRow(page);
-        var seekTextHeight = 16 + m.LineGrow(IslandType.SeekTime);
+        var seekTextHeight = 16 + m.LineGrow(PageVisual.MediaSeekTimeStyle);
         var seekTextTop = seekRow.MidY - (seekTextHeight / 2);
-        var seekTimeWidth = PageMetricsLayout.MediaSeekTimeWidth(m);
+        var seekTimeWidth = PageVisual.MediaTimeWidth;
         if (media.HasTimeline)
         {
             var seek = PageVisual.MediaSeekTrack(page);
             var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
-            DrawTrack(canvas, seek, progress, accent, _theme.LineStrong);
+            DrawSeekTrack(canvas, seek, progress, accent);
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(accent, _opacity);
-            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
+            _fill.Color = Alpha(SKColors.White, _opacity);
+            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 3, _fill);
 
-            _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
+            _text.Draw(canvas, media.PositionText, PageVisual.MediaSeekTimeStyle,
                 new SKRect(seekRow.Left, seekTextTop, seekRow.Left + seekTimeWidth, seekTextTop + seekTextHeight),
                 _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-            _text.Draw(canvas, media.DurationText, IslandType.SeekTime,
+            _text.Draw(canvas, media.DurationText, PageVisual.MediaSeekTimeStyle,
                 new SKRect(seekRow.Right - seekTimeWidth, seekTextTop, seekRow.Right, seekTextTop + seekTextHeight),
                 _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
         else if (!string.IsNullOrEmpty(media.PositionText) && media.PositionText != "—")
         {
-            _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
+            _text.Draw(canvas, media.PositionText, PageVisual.MediaSeekTimeStyle,
                 new SKRect(seekRow.Left, seekTextTop, seekRow.Left + seekTimeWidth, seekTextTop + seekTextHeight),
                 _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-            _text.Draw(canvas, "—", IslandType.SeekTime,
+            _text.Draw(canvas, "—", PageVisual.MediaSeekTimeStyle,
                 new SKRect(seekRow.Right - seekTimeWidth, seekTextTop, seekRow.Right, seekTextTop + seekTextHeight),
                 _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
@@ -435,12 +431,13 @@ internal sealed partial class PageRenderer : IDisposable
 
         var volumeColor = media.IsMuted ? _theme.Accent : _theme.ForegroundSecondary;
         IconSet.Draw(canvas, media.IsMuted ? IconKind.VolumeMute : IconKind.Speaker,
-            new SKRect(volume.Left + (volumePressed ? 4.5f : 4f), volume.MidY - 7,
-                volume.Left + (volumePressed ? 15.5f : 15f), volume.MidY + 7),
+            new SKRect(volume.Left + (volumePressed ? 1f : 0f), volume.MidY - (PageVisual.MediaFooterIcon / 2),
+                volume.Left + (volumePressed ? 1f : 0f) + PageVisual.MediaFooterIcon,
+                volume.MidY + (PageVisual.MediaFooterIcon / 2)),
             Alpha(volumeColor, volumeAlpha), _icon);
         _text.Draw(canvas, media.HasVolume ? _numbers.Number(media.VolumePercent ?? 0) + "%" : "—",
-            IslandType.Output,
-            new SKRect(volume.Left + 19, volume.Top, volume.Right, volume.Bottom),
+            PageVisual.MediaFooterStyle,
+            new SKRect(volume.Left + 18, volume.Top, volume.Right, volume.Bottom),
             _theme.ForegroundSecondary, TextAlign.Left, volumeAlpha);
 
         var output = PageVisual.MediaOutput(page);
@@ -452,34 +449,37 @@ internal sealed partial class PageRenderer : IDisposable
         {
             var outputAlpha = (hasOutput ? 1f : 0.5f) * _opacity;
             IconSet.Draw(canvas, IconKind.Speaker,
-                new SKRect(output.Left, output.MidY - 6, output.Left + 12, output.MidY + 6),
+                new SKRect(output.Left, output.MidY - (PageVisual.MediaFooterIcon / 2),
+                    output.Left + PageVisual.MediaFooterIcon, output.MidY + (PageVisual.MediaFooterIcon / 2)),
                 Alpha(_theme.ForegroundTertiary, outputAlpha), _icon);
-            _text.Draw(canvas, outputText, IslandType.Output,
-                new SKRect(output.Left + 16, output.Top, output.Right, output.Bottom),
+            _text.Draw(canvas, outputText, PageVisual.MediaFooterStyle,
+                new SKRect(output.Left + 18, output.Top, output.Right, output.Bottom),
                 _theme.ForegroundTertiary, TextAlign.Left, outputAlpha);
         }
 
         if (hasQueue)
         {
             IconSet.Draw(canvas, IconKind.Queue,
-                new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
+                new SKRect(queue.Right - PageVisual.MediaFooterIcon, queue.MidY - (PageVisual.MediaFooterIcon / 2),
+                    queue.Right, queue.MidY + (PageVisual.MediaFooterIcon / 2)),
                 Alpha(_theme.ForegroundTertiary, _opacity), _icon);
-            _text.Draw(canvas, media.QueueLabel ?? "Queue", IslandType.Output,
-                new SKRect(queue.Left + 20, queue.Top, queue.Left + 56, queue.Bottom), _theme.ForegroundTertiary,
-                TextAlign.Left, _opacity);
-            _text.Draw(canvas, _numbers.Number(media.QueueCount), IslandType.Output,
-                new SKRect(queue.Left + 56, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
-                TextAlign.Right, _opacity);
+            _text.Draw(canvas, media.QueueLabel ?? "Queue", PageVisual.MediaFooterStyle,
+                new SKRect(queue.Left, queue.Top, queue.Right - PageVisual.MediaFooterIcon - 4, queue.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+            _text.Draw(canvas, _numbers.Number(media.QueueCount), PageVisual.MediaFooterStyle,
+                new SKRect(queue.Left, queue.Top, queue.Right - PageVisual.MediaFooterIcon - 4, queue.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
         else if (!string.IsNullOrWhiteSpace(media.QueuePlaceholder))
         {
             var queueAlpha = 0.5f * _opacity;
             IconSet.Draw(canvas, IconKind.Queue,
-                new SKRect(queue.Left + 4, queue.MidY - 6, queue.Left + 16, queue.MidY + 6),
+                new SKRect(queue.Right - PageVisual.MediaFooterIcon, queue.MidY - (PageVisual.MediaFooterIcon / 2),
+                    queue.Right, queue.MidY + (PageVisual.MediaFooterIcon / 2)),
                 Alpha(_theme.ForegroundTertiary, queueAlpha), _icon);
-            _text.Draw(canvas, media.QueuePlaceholder, IslandType.Output,
-                new SKRect(queue.Left + 20, queue.Top, queue.Right, queue.Bottom), _theme.ForegroundTertiary,
-                TextAlign.Left, queueAlpha);
+            _text.Draw(canvas, media.QueuePlaceholder, PageVisual.MediaFooterStyle,
+                new SKRect(queue.Left, queue.Top, queue.Right - PageVisual.MediaFooterIcon - 4, queue.Bottom),
+                _theme.ForegroundTertiary, TextAlign.Right, queueAlpha);
         }
     }
 
@@ -489,29 +489,34 @@ internal sealed partial class PageRenderer : IDisposable
         var play = PageVisual.MediaPlay(page);
         var next = PageVisual.MediaNext(page);
 
-        // Press feedback: the held button shrinks slightly and brightens; hovering lifts it a touch.
-        // (The old code painted three static glyphs, so a tap gave no visual answer at all.)
         DrawSkipIcon(canvas, IconKind.Previous, previous, IslandPageControl.Previous);
         DrawSkipIcon(canvas, IconKind.Next, next, IslandPageControl.Next);
 
+        // iOS Now Playing: one solid white 36 DIP circle with a black glyph. It is the only high-contrast
+        // element on the page, so the primary action reads at a glance.
         var playPressed = IsPressed(IslandPageControl.PlayPause);
         var playHovered = IsHovered(IslandPageControl.PlayPause);
-        var radius = 15f * (playPressed ? 0.9f : playHovered ? 1.04f : 1f);
+        var radius = (PageVisual.MediaPlayDiameter / 2) * (playPressed ? 0.92f : playHovered ? 1.03f : 1f);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.Foreground, (playPressed ? 1f : 0.92f) * _opacity);
+        _fill.Color = Alpha(SKColors.White, (playPressed ? 0.86f : 1f) * _opacity);
         canvas.DrawCircle(play.MidX, play.MidY, radius, _fill);
         IconSet.Draw(canvas, media.IsPlaying ? IconKind.Pause : IconKind.Play,
-            play.Deflate(playPressed ? 9f : 8f), Alpha(_theme.Background, _opacity), _icon);
+            play.Deflate(playPressed ? 11f : 10f), Alpha(SKColors.Black, _opacity), _icon);
     }
 
+    /// <summary>Outlined 28 DIP side button: a thin white ring plus the skip glyph.</summary>
     private void DrawSkipIcon(SKCanvas canvas, IconKind icon, SKRect rect, IslandPageControl control)
     {
         var pressed = IsPressed(control);
         var hovered = IsHovered(control);
-        var inset = pressed ? 8.5f : 7f;
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = 1.5f;
+        _stroke.Color = Alpha(SKColors.White, (pressed ? 0.34f : hovered ? 0.28f : 0.18f) * _opacity);
+        canvas.DrawCircle(rect.MidX, rect.MidY, (rect.Width / 2) - 0.75f, _stroke);
+
         var color = pressed || hovered ? _theme.Foreground : _theme.ForegroundSecondary;
-        IconSet.Draw(canvas, icon, rect.Deflate(inset), Alpha(color, (pressed ? 1f : hovered ? 0.92f : 1f) * _opacity),
-            _icon);
+        IconSet.Draw(canvas, icon, rect.Deflate(pressed ? 8.5f : 7f),
+            Alpha(color, (pressed ? 1f : hovered ? 0.92f : 1f) * _opacity), _icon);
     }
 
     private bool IsPressed(IslandPageControl control)
@@ -569,6 +574,41 @@ internal sealed partial class PageRenderer : IDisposable
         // Home's legacy column starts at 28 with glyphs that clear the 16/16 header; the renderer's
         // page-level body clip handles wheel scroll, so do not clip again here.
         draw();
+    }
+
+    /// <summary>Very light L1 card (the only background the media page keeps, used for empty states).</summary>
+    /// <param name="canvas">Target canvas.</param>
+    /// <param name="rect">Card rectangle.</param>
+    /// <param name="strength">Multiplier on the L1 fill (0.4 = 40 %).</param>
+    private void DrawSoftCard(SKCanvas canvas, SKRect rect, float strength)
+    {
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.Color = Alpha(_theme.BackgroundRaised, 0.60f * strength * _opacity);
+        canvas.DrawRoundRect(rect, PageVisual.CardRadius, PageVisual.CardRadius, _fill);
+    }
+
+    /// <summary>iOS-style progress: 3 DIP round-capped track, accent played part, white 12 % remainder.</summary>
+    /// <param name="canvas">Target canvas.</param>
+    /// <param name="track">Track rectangle (thickness = height).</param>
+    /// <param name="fraction">Played fraction 0..1.</param>
+    /// <param name="accent">Played colour.</param>
+    private void DrawSeekTrack(SKCanvas canvas, SKRect track, double fraction, SKColor accent)
+    {
+        var thickness = Math.Max(2, track.Height);
+        var y = track.MidY;
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = thickness;
+        _stroke.StrokeCap = SKStrokeCap.Round;
+        _stroke.Color = Alpha(SKColors.White, 0.12f * _opacity);
+        canvas.DrawLine(track.Left, y, track.Right, y, _stroke);
+        if (fraction <= 0)
+        {
+            return;
+        }
+
+        _stroke.Color = Alpha(accent, _opacity);
+        canvas.DrawLine(track.Left, y, track.Left + (float)(track.Width * Math.Clamp(fraction, 0, 1)), y, _stroke);
     }
 
     private void DrawCard(SKCanvas canvas, SKRect rect, float radius)

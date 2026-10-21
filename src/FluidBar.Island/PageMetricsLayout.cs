@@ -509,42 +509,55 @@ public static class PageMetricsLayout
 
                 return IslandPageControl.None;
             case PageSlotKind.Media:
-                if (MediaPlay(scrolled, metrics).Contains(x, y))
                 {
-                    return IslandPageControl.PlayPause;
-                }
+                    // Hit regions come from the same PageVisual tokens the renderer paints, so a tap can
+                    // never land on a different rectangle than the button the user sees (the old branch
+                    // used the legacy PageLayout geometry, which after the footer re-layout pointed at
+                    // empty space ~40 DIP above the painted buttons).
+                    var body = Body(scrolled);
+                    if (!body.Contains(x, y))
+                    {
+                        return IslandPageControl.None;
+                    }
 
-                if (MediaPrevious(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.Previous;
-                }
+                    // Fitts' law: the circles are small, so every control gets a slop ring.
+                    if (PageVisual.MediaPlay(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.PlayPause;
+                    }
 
-                if (MediaNext(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.Next;
-                }
+                    if (PageVisual.MediaPrevious(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.Previous;
+                    }
 
-                if (MediaVolume(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.VolumeMute;
-                }
+                    if (PageVisual.MediaNext(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.Next;
+                    }
 
-                if (MediaSeekRow(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.Seek;
-                }
+                    if (PageVisual.MediaSeekRow(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.Seek;
+                    }
 
-                if (MediaOutput(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.Output;
-                }
+                    if (PageVisual.MediaVolume(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.VolumeMute;
+                    }
 
-                if (MediaQueue(scrolled, metrics).Contains(x, y))
-                {
-                    return IslandPageControl.Queue;
-                }
+                    if (PageVisual.MediaOutput(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.Output;
+                    }
 
-                return IslandPageControl.None;
+                    if (PageVisual.MediaQueue(scrolled).Contains(x, y))
+                    {
+                        return IslandPageControl.Queue;
+                    }
+
+                    return IslandPageControl.None;
+                }
             case PageSlotKind.Notifications:
                 {
                     var body = Body(pageRect);
@@ -727,46 +740,152 @@ public static class PageVisual
         return new SKRect(page.Left + PageInset, title.Bottom + 4, page.Right - PageInset, title.Bottom + 20);
     }
 
-    /// <summary>Media artwork on the 8 DIP grid.</summary>
-    public static SKRect MediaArt(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop, page.Left + PageInset + 72, page.Top + BodyTop + 72);
+    // ---------------------------------------------------------------- media (iOS Now Playing)
 
-    /// <summary>Media eyebrow.</summary>
-    public static SKRect MediaEyebrow(SKRect page) => new(page.Left + 112, page.Top + BodyTop, page.Right - PageInset, page.Top + BodyTop + 12);
+    /// <summary>Cover thumbnail: 72 DIP square, 12 DIP radius (iOS Now Playing artwork ratio).</summary>
+    public const float MediaArtSize = 72;
 
-    /// <summary>Media title.</summary>
-    public static SKRect MediaTitle(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 16, page.Right - PageInset, page.Top + BodyTop + 40);
+    /// <summary>Cover corner radius (12 DIP).</summary>
+    public const float MediaArtRadius = 12;
 
-    /// <summary>Media artist.</summary>
-    public static SKRect MediaArtist(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 40, page.Right - PageInset, page.Top + BodyTop + 52);
+    /// <summary>Gap between the cover and the text column (8 DIP).</summary>
+    public const float MediaTextGap = 8;
 
-    /// <summary>Media album.</summary>
-    public static SKRect MediaAlbum(SKRect page) => new(page.Left + 112, page.Top + BodyTop + 56, page.Right - PageInset, page.Top + BodyTop + 68);
+    /// <summary>Height of the first lyric line box (13/20 type = 20 DIP).</summary>
+    public const float MediaLyricLine1Height = 20;
 
-    /// <summary>Media lyric card.</summary>
-    public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 80, page.Right - PageInset, page.Top + BodyTop + 126);
+    /// <summary>Height of the secondary lyric line box (11.5/16 type = 16 DIP).</summary>
+    public const float MediaLyricLine2Height = 16;
 
-    /// <summary>Media seek row.</summary>
-    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 134, page.Right - PageInset, page.Top + BodyTop + 154);
+    /// <summary>Progress track thickness (3 DIP, round caps).</summary>
+    public const float MediaTrackHeight = 3;
 
-    /// <summary>Media seek track.</summary>
-    public static SKRect MediaSeekTrack(SKRect page) => new(page.Left + PageInset + 36, page.Top + BodyTop + 143, page.Right - PageInset - 36, page.Top + BodyTop + 146);
+    /// <summary>Time column width, so both labels sit flush with the track ends (48 DIP).</summary>
+    public const float MediaTimeWidth = 48;
 
-    /// <summary>Media previous-track button.</summary>
-    public static SKRect MediaPrevious(SKRect page) => new(page.Left + 154, page.Top + BodyTop + 162, page.Left + 182, page.Top + BodyTop + 190);
+    /// <summary>Main transport button diameter (36 DIP circle).</summary>
+    public const float MediaPlayDiameter = 36;
 
-    /// <summary>Media play/pause button.</summary>
-    public static SKRect MediaPlay(SKRect page) => new(page.Left + 185, page.Top + BodyTop + 161, page.Left + 215, page.Top + BodyTop + 191);
+    /// <summary>Previous/next button diameter (28 DIP, outlined).</summary>
+    public const float MediaSideDiameter = 28;
 
-    /// <summary>Media next-track button.</summary>
-    public static SKRect MediaNext(SKRect page) => new(page.Left + 218, page.Top + BodyTop + 162, page.Left + 246, page.Top + BodyTop + 190);
+    /// <summary>Gap between transport buttons (16 DIP).</summary>
+    public const float MediaButtonGap = 16;
 
-    /// <summary>Media volume/mute control.</summary>
-    public static SKRect MediaVolume(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 162, page.Left + PageInset + 66, page.Top + BodyTop + 190);
+    /// <summary>Footer info row height (11 DIP type, 16 DIP row).</summary>
+    public const float MediaFooterHeight = 16;
 
-    /// <summary>Media output control.</summary>
-    public static SKRect MediaOutput(SKRect page) => new(page.Left + 88, page.Top + BodyTop + 162, page.Left + 150, page.Top + BodyTop + 190);
+    /// <summary>Footer icon box (14 DIP).</summary>
+    public const float MediaFooterIcon = 14;
 
-    /// <summary>Media queue control.</summary>
-    public static SKRect MediaQueue(SKRect page) => new(page.Right - PageInset - 74, page.Top + BodyTop + 162, page.Right - PageInset, page.Top + BodyTop + 190);
+    /// <summary>Media lyric line: 13 DIP on a 20 DIP line (iOS Now Playing body text).</summary>
+    public static readonly TextStyle MediaLyricStyle = new(FontRole.UiMedium, 13f);
+
+    /// <summary>Media secondary lyric line: 11.5 DIP on a 16 DIP line.</summary>
+    public static readonly TextStyle MediaLyricNextStyle = new(FontRole.Ui, 11.5f);
+
+    /// <summary>Media time labels: 11 DIP tabular (mono keeps the two clocks from jittering).</summary>
+    public static readonly TextStyle MediaSeekTimeStyle = new(FontRole.Mono, 11f);
+
+    /// <summary>Media footer info row: 11 DIP tertiary.</summary>
+    public static readonly TextStyle MediaFooterStyle = new(FontRole.Ui, 11f);
+
+    /// <summary>Media artwork: 72 DIP square at the page inset, top of the body.</summary>
+    public static SKRect MediaArt(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop,
+        page.Left + PageInset + MediaArtSize, page.Top + BodyTop + MediaArtSize);
+
+    /// <summary>Left edge of the text column (cover + 8 DIP gap).</summary>
+    public static float MediaTextLeft(SKRect page) => page.Left + PageInset + MediaArtSize + MediaTextGap;
+
+    /// <summary>Media eyebrow, vertically centred against the cover.</summary>
+    public static SKRect MediaEyebrow(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop,
+        page.Right - PageInset, page.Top + BodyTop + 12);
+
+    /// <summary>Media title (13 DIP on a 20 DIP line).</summary>
+    public static SKRect MediaTitle(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 16,
+        page.Right - PageInset, page.Top + BodyTop + 36);
+
+    /// <summary>Media artist (11.5 DIP on a 16 DIP line).</summary>
+    public static SKRect MediaArtist(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 38,
+        page.Right - PageInset, page.Top + BodyTop + 54);
+
+    /// <summary>Media album (11 DIP on a 16 DIP line). The block ends exactly at the cover bottom.</summary>
+    public static SKRect MediaAlbum(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 56,
+        page.Right - PageInset, page.Top + BodyTop + 72);
+
+    /// <summary>Lyric band: two text lines, no background (40 DIP after the cover row).</summary>
+    public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset,
+        page.Top + BodyTop + 80, page.Right - PageInset,
+        page.Top + BodyTop + 80 + MediaLyricLine1Height + MediaLyricLine2Height);
+
+    /// <summary>First lyric line box (13/20).</summary>
+    public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 80,
+        page.Right - PageInset, page.Top + BodyTop + 80 + MediaLyricLine1Height);
+
+    /// <summary>Second (next) lyric line box (11.5/16).</summary>
+    public static SKRect MediaLyricLine2(SKRect page) => new(page.Left + PageInset,
+        page.Top + BodyTop + 80 + MediaLyricLine1Height, page.Right - PageInset,
+        page.Top + BodyTop + 80 + MediaLyricLine1Height + MediaLyricLine2Height);
+
+    /// <summary>Seek row (time labels + track), 16 DIP after the lyric band.</summary>
+    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 128,
+        page.Right - PageInset, page.Top + BodyTop + 144);
+
+    /// <summary>Seek track: 3 DIP thick, spanning between the two time columns.</summary>
+    public static SKRect MediaSeekTrack(SKRect page)
+    {
+        var row = MediaSeekRow(page);
+        var top = row.MidY - (MediaTrackHeight / 2);
+        return new SKRect(row.Left + MediaTimeWidth, top, row.Right - MediaTimeWidth, top + MediaTrackHeight);
+    }
+
+    /// <summary>Centre of the transport row (the play circle's Y).</summary>
+    public static float MediaTransportCenterY(SKRect page)
+        => page.Top + BodyTop + 136 + (MediaPlayDiameter / 2);
+
+    /// <summary>Previous-track button (28 DIP, outlined), 16 DIP left of the play circle.</summary>
+    public static SKRect MediaPrevious(SKRect page) => new(
+        page.MidX - (MediaPlayDiameter / 2) - MediaButtonGap - MediaSideDiameter,
+        MediaTransportCenterY(page) - (MediaSideDiameter / 2),
+        page.MidX - (MediaPlayDiameter / 2) - MediaButtonGap,
+        MediaTransportCenterY(page) + (MediaSideDiameter / 2));
+
+    /// <summary>Play/pause button: 36 DIP filled circle in the middle of the transport group.</summary>
+    public static SKRect MediaPlay(SKRect page) => new(
+        page.MidX - (MediaPlayDiameter / 2),
+        MediaTransportCenterY(page) - (MediaPlayDiameter / 2),
+        page.MidX + (MediaPlayDiameter / 2),
+        MediaTransportCenterY(page) + (MediaPlayDiameter / 2));
+
+    /// <summary>Next-track button (28 DIP, outlined), 16 DIP right of the play circle.</summary>
+    public static SKRect MediaNext(SKRect page) => new(
+        page.MidX + (MediaPlayDiameter / 2) + MediaButtonGap,
+        MediaTransportCenterY(page) - (MediaSideDiameter / 2),
+        page.MidX + (MediaPlayDiameter / 2) + MediaButtonGap + MediaSideDiameter,
+        MediaTransportCenterY(page) + (MediaSideDiameter / 2));
+
+    /// <summary>Footer info row: aligned with the progress track, 16 DIP below the transport.</summary>
+    public static SKRect MediaFooter(SKRect page) => new(MediaSeekTrack(page).Left,
+        page.Top + BodyTop + 176, MediaSeekTrack(page).Right, page.Top + BodyTop + 176 + MediaFooterHeight);
+
+    /// <summary>Volume/mute control (left third of the footer row).</summary>
+    public static SKRect MediaVolume(SKRect page)
+    {
+        var footer = MediaFooter(page);
+        return new SKRect(footer.Left, footer.Top, footer.Left + (footer.Width * 0.34f), footer.Bottom);
+    }
+
+    /// <summary>Output (audio route) control (middle of the footer row).</summary>
+    public static SKRect MediaOutput(SKRect page)
+    {
+        var footer = MediaFooter(page);
+        return new SKRect(footer.Left + (footer.Width * 0.36f), footer.Top, footer.Left + (footer.Width * 0.68f), footer.Bottom);
+    }
+
+    /// <summary>Queue control (right third of the footer row).</summary>
+    public static SKRect MediaQueue(SKRect page)
+    {
+        var footer = MediaFooter(page);
+        return new SKRect(footer.Right - (footer.Width * 0.30f), footer.Top, footer.Right, footer.Bottom);
+    }
 }
-
