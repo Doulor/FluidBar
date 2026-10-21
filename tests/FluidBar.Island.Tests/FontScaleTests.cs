@@ -26,7 +26,7 @@ public sealed class FontScaleTests
     [MemberData(nameof(Scales))]
     public void Expanded_pages_render_inside_the_shell_at_every_scale(double scale)
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
         for (var page = 0; page < 6; page++)
         {
             var state = IslandTestFixtures.WithFontScale(IslandTestFixtures.Expanded(page), scale);
@@ -42,7 +42,7 @@ public sealed class FontScaleTests
     [MemberData(nameof(Scales))]
     public void Compact_pills_render_inside_the_grown_pill_at_every_scale(double scale)
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
         var states = new[]
         {
             IslandTestFixtures.WithFontScale(IslandTestFixtures.Idle(), scale),
@@ -222,7 +222,6 @@ public sealed class FontScaleTests
     [Fact]
     public void Existing_goldens_are_pixel_identical_at_scale_one()
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var compared = 0;
         foreach (var name in IslandTestFixtures.GoldenNames)
         {
@@ -233,6 +232,9 @@ public sealed class FontScaleTests
 
             var state = IslandTestFixtures.GoldenState(name);
             Assert.Equal(1.0, state.FontScale, 6);
+            // A fresh renderer per case: the renderer keeps caches and a monotonic clock, so reusing
+            // one instance made later goldens depend on what had been drawn before them.
+            using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
             using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
             using var golden = IslandTestFixtures.TryLoadGolden(name + ".png");
             Assert.NotNull(golden);
@@ -262,7 +264,7 @@ public sealed class FontScaleTests
     [InlineData(9.0)]
     public void Extreme_requested_scales_still_render_inside_the_shell(double requested)
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
         var state = IslandTestFixtures.WithFontScale(IslandTestFixtures.Expanded(0), requested);
         Assert.Equal(requested < 1 ? 0.8 : 1.6, FontScaleMetrics.From(state.FontScale).Value, 6);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);

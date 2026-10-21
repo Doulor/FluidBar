@@ -24,7 +24,7 @@ public sealed class GoldenImageTests
     [MemberData(nameof(Cases))]
     public void Golden_surface_matches_the_reference(string name)
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
         var state = IslandTestFixtures.GoldenState(name);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
@@ -45,7 +45,7 @@ public sealed class GoldenImageTests
     [Fact]
     public void Rendering_is_deterministic()
     {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme, null, new IslandRendererOptions { SplitRingAngleDegrees = 0 });
         var state = IslandTestFixtures.Expanded(1);
 
         using var first = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
