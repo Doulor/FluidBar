@@ -66,6 +66,13 @@ public static class PagerConstants
     public const int WheelGestureIdleMs = 120;
 
     /// <summary>
+    /// Minimum gap (ms) before a *new* deliberate gesture may turn the next page. Deliberate repeat
+    /// scrolls (&gt; 150 ms apart) therefore chain pages, while the 260 ms transition lock keeps one
+    /// continuous gesture capped at a single page.
+    /// </summary>
+    public const int WheelNewIntentMs = 150;
+
+    /// <summary>
     /// Hard lock (ms) inside a gesture after a page step: notches arriving within this window of the
     /// step are dropped unqueued (the transition is still running).
     /// </summary>

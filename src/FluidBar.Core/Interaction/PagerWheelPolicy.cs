@@ -133,7 +133,10 @@ public sealed class PagerWheelPolicy
         }
 
         AccumulatedDip += deltaDip;
-        var inCooldown = IsInCooldown(now);
+        // Inside a gesture the full 260 ms transition lock applies; a new deliberate gesture only has
+        // to respect the 150 ms new-intent gap so repeat scrolls can chain pages.
+        var gateMs = sameGesture ? PagerConstants.WheelTransitionLockMs : PagerConstants.WheelNewIntentMs;
+        var inCooldown = _lastPageChangeAt is { } lastStep && now - lastStep < TimeSpan.FromMilliseconds(gateMs);
         if (Math.Abs(AccumulatedDip) >= NotchDip && !inCooldown)
         {
             var sign = AccumulatedDip > 0 ? 1 : -1;
