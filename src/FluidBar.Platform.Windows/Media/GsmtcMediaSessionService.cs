@@ -508,6 +508,23 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         if (state.SampledAtUtc < _stateFileValidFromUtc)
         {
+            // The state file still describes the PREVIOUS track. KuGou starts a new track at zero, so while
+            // the accessibility text agrees with that (a few seconds in), counting from the track change is
+            // far more accurate than a frozen text or the previous song's position (2026-10-22).
+            var sinceStart = _timeProviderNow() - _stateFileValidFromUtc;
+            if (sinceStart >= TimeSpan.Zero
+                && sinceStart < TimeSpan.FromSeconds(40)
+                && candidate.Position >= TimeSpan.Zero
+                && candidate.Position < TimeSpan.FromSeconds(12))
+            {
+                return candidate with
+                {
+                    Position = sinceStart,
+                    PositionSampledAtUtc = _timeProviderNow(),
+                    HasTimeline = true,
+                };
+            }
+
             return candidate;
         }
 
