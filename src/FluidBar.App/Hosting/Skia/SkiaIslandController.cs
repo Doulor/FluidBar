@@ -401,7 +401,7 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>
     /// A resting shell whose only motion is the agent spinner. The spinner is a 20 DIP ambient
-    /// indicator: 30 fps is indistinguishable at this size and avoids running the full 120 fps host
+    /// indicator: 10 fps is indistinguishable at this size and avoids running the full 120 fps host
     /// loop while an agent is merely reporting status.
     /// </summary>
     public bool IsAgentOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating
@@ -3213,7 +3213,13 @@ public sealed class SkiaIslandController : IDisposable
     /// </summary>
     private void ObserveLyricLineChange()
     {
-        var line = _pages.Media.LyricLine ?? _compact.Model?.LyricLine;
+        // Only the expanded media page paints the lyric band transition; the compact pill has its own fade.
+        if (!_hasRenderState || _renderState.Form != ShellForm.Expanded || !CurrentPageIs(PageSlotKind.Media))
+        {
+            return;
+        }
+
+        var line = _pages.Media.LyricLine;
         if (string.Equals(line, _lyricLinePainted, StringComparison.Ordinal))
         {
             return;
