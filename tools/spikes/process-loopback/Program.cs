@@ -40,7 +40,7 @@ return 0;
 internal sealed class ProcessLoopbackCapture : IDisposable
 {
     private AudioInterop.IAudioClient? _client;
-    private AudioInterop.IAudioCaptureClient? _capture;
+    private IntPtr _capturePtr;
     private AudioInterop.IAudioInterfaceCompletionHandler? _handler;
 
     public int SampleRate { get; private set; } = 48000;
@@ -74,13 +74,26 @@ internal sealed class ProcessLoopbackCapture : IDisposable
                 return false;
             }
 
+            Console.WriteLine("client activated, initializing...");
             var format = AudioInterop.CreatePcmFormat(48000, 2, 16);
-            _client.Initialize(
+            var flags = AudioInterop.AudclntStreamFlagsLoopback
+                | AudioInterop.AudclntStreamFlagsAutoConvertPcm
+                | AudioInterop.AudclntStreamFlagsSrcDefaultQuality;
+            var initHr = _client.Initialize(
                 AudioInterop.AudclntShareModeShared,
-                AudioInterop.AudclntStreamFlagsLoopback,
+                flags,
                 2_000_000, 0, format, IntPtr.Zero);
-            _client.GetService(typeof(AudioInterop.IAudioCaptureClient).GUID, out var capture);
-            _capture = (AudioInterop.IAudioCaptureClient)capture;
+            Console.WriteLine($"Initialize(flags=0x{flags:X}) hr=0x{initHr:X8}");
+            var captureIid = typeof(AudioInterop.IAudioCaptureClient).GUID;
+            var serviceHr = _client.GetService(ref captureIid, out var capturePtr);
+            Console.WriteLine($"GetService hr=0x{serviceHr:X8} ptr={capturePtr}");
+            if (serviceHr != 0 || capturePtr == IntPtr.Zero)
+            {
+                error = $"GetService failed hr=0x{serviceHr:X8}";
+                return false;
+            }
+
+            _capturePtr = capturePtr;
             _client.Start();
             SampleRate = 48000;
             FormatDescription = "48000/2ch/16bit";
@@ -95,29 +108,38 @@ internal sealed class ProcessLoopbackCapture : IDisposable
 
     public long DrainFrames()
     {
+        if (_capturePtr == IntPtr.Zero) return 0;
         long total = 0;
-        if (_capture is null) return 0;
+        var vtable = Marshal.ReadIntPtr(_capturePtr);
+        var getBuffer = Marshal.GetDelegateForFunctionPointer<GetBufferDelegate>(Marshal.ReadIntPtr(vtable, 0));
+        var releaseBuffer = Marshal.GetDelegateForFunctionPointer<ReleaseBufferDelegate>(Marshal.ReadIntPtr(vtable, IntPtr.Size));
         while (true)
         {
-            var hr = _capture.GetBuffer(out var data, out var frames, out var flags, out _, out _);
+            var hr = getBuffer(_capturePtr, out _, out var frames, out _, out _, out _);
             if (hr != 0 || frames == 0)
             {
                 break;
             }
 
             total += frames;
-            _capture.ReleaseBuffer(frames);
+            releaseBuffer(_capturePtr, frames);
         }
 
         return total;
     }
 
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetBufferDelegate(IntPtr self, out IntPtr data, out uint frames, out uint flags, out ulong devicePosition, out ulong qpcPosition);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int ReleaseBufferDelegate(IntPtr self, uint frames);
+
     public void Dispose()
     {
         try { _client?.Stop(); } catch { }
-        if (_capture is not null) Marshal.ReleaseComObject(_capture);
+        if (_capturePtr != IntPtr.Zero) Marshal.Release(_capturePtr);
         if (_client is not null) Marshal.ReleaseComObject(_client);
-        if (_handler is not null) Marshal.ReleaseComObject(_handler);
+        // _handler is a managed object implementing the interface; releasing it is not valid.
     }
 }
 
@@ -126,6 +148,8 @@ internal static class AudioInterop
     public const string VirtualDeviceProcessLoopback = @"VAD\Process_Loopback";
     public const int AudclntShareModeShared = 0;
     public const int AudclntStreamFlagsLoopback = 0x00020000;
+    public const int AudclntStreamFlagsAutoConvertPcm = unchecked((int)0x80000000);
+    public const int AudclntStreamFlagsSrcDefaultQuality = 0x08000000;
 
     [DllImport("Mmdevapi.dll", ExactSpelling = true, PreserveSig = false)]
     private static extern void ActivateAudioInterfaceAsync(
@@ -200,7 +224,7 @@ internal static class AudioInterop
         int Stop();
         int Reset();
         int SetEventHandle(IntPtr handle);
-        int GetService(ref Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object service);
+        int GetService(ref Guid riid, out IntPtr service);
     }
 
     [ComImport, Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
