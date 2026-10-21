@@ -49,7 +49,12 @@ public sealed class MediaPlugin : BuiltinPluginBase
         RegisterCommand(BuiltinIds.MediaPrevious, async (_, cancellationToken) =>
             await _media.PreviousAsync(cancellationToken).ConfigureAwait(false));
 
-        PublishSnapshot(_media.Current);
+        // Do not publish an empty snapshot on start: a fresh app has nothing to retract, and a
+        // GSMTC-empty/fallback-pending start must not clear the island before WASAPI finds KuGou.
+        if (_media.Current is { IsEmpty: false } current)
+        {
+            PublishSnapshot(current);
+        }
     }
 
     private void OnSnapshotChanged(object? sender, SnapshotEventArgs<MediaSnapshot> args) => PublishSnapshot(args.Snapshot);
