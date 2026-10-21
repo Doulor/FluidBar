@@ -125,7 +125,7 @@ public sealed class MediaPositionClock
         _anchorAtMs = nowMs;
         _driftMs = 0;
         _driftAtMs = nowMs;
-        _rate = Math.Abs(diff) < 400 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.97, 1.03);
+        _rate = Math.Abs(diff) < 250 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.97, 1.03);
     }
 
     /// <summary>

@@ -3186,7 +3186,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             // keeps moving forwards, so nothing flickers, and the offset is gone within ~20 s (user
             // request 2026-10-22: "1-2 s off is what breaks the sync").
             var delta = media.PositionMs - _karaokeClock.PositionAt(now);
-            if (Math.Abs(delta) > 400)
+            if (Math.Abs(delta) > 250)
             {
                 _karaokeClock.Nudge(media.PositionMs, now);
             }
