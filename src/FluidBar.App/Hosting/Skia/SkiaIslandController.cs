@@ -1504,6 +1504,12 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var now = _time.GetLocalNow();
+        var wheelHit = _pointerInside
+            ? SkiaIslandHitTest.Hit(_renderState, _pointerX, _pointerY).Kind
+            : IslandHitKind.None;
+        PinDiagnostics.Log(
+            $"wheel state={State.Kind} form={_renderState.Form} hit={wheelHit} delta={deltaDip:0.###} " +
+            $"visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind))}] islets={_renderState.SplitIslets.Length}");
 
         // Stacked strategy: the wheel over the compact pill rotates the visible stack, bringing the
         // next ghost to the front and pushing the former primary to the back (cyclic). Split mode and
@@ -1810,6 +1816,9 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
+        PinDiagnostics.Log(
+            $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
+            $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00}");
         ObserveTrackChange(content, settings);
         ObserveTrackTransition(content, viewModel);
 
@@ -2093,6 +2102,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Builds the render-state split-islet snapshots from the cached presenter models.</summary>
     private IslandSplitIslet[] BuildSplitIslets()
     {
+        PinDiagnostics.Log($"build-islets previews={_splitPreviews.Length}");
         if (_splitPreviews.Length == 0)
         {
             return [];
@@ -3000,6 +3010,13 @@ public sealed class SkiaIslandController : IDisposable
             // the generic page-control ring stays off for those slots.
             FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,
         };
+        if (_renderState.SplitIslets.Length > 0)
+        {
+            var isletRects = IslandMetrics.SplitIsletRects(_renderState);
+            PinDiagnostics.Log(
+                $"split-rects shell={IslandMetrics.ShellRect(_renderState)} islets=[{string.Join(",", isletRects.Select(r => r.ToString()))}]");
+        }
+
         _hasRenderState = true;
 
         // The agent page can become visible without a content change (page switch / expand): start
