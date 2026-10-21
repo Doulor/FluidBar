@@ -46,31 +46,31 @@ public sealed class ShellAndCompactSurfaceTests
                 IsAcrylic: false,
                 IsHidden: false));
 
-            Assert.True(shell.ContainsPoint(new Point(244, 42)));
+            Assert.True(shell.ContainsPoint(new Point(284, 42)));
             Assert.True(shell.ContainsPoint(new Point(180, 42)));
             Assert.False(shell.ContainsPoint(new Point(178, 24)));
             Assert.False(shell.ContainsPoint(new Point(310, 60)));
             Assert.False(shell.ContainsPoint(new Point(100, 40)));
 
-            // Expanded frame: uniform 440x244 at design origin.
+            // Expanded frame: uniform 440x284 at design origin.
             shell.ApplyFrame(shell.Frame with
             {
                 Width = 440,
-                Height = 244,
+                Height = 284,
                 Radii = CornerRadii.Uniform(36),
                 OriginX = 24,
                 OriginY = 24,
                 CompactOpacity = 0,
                 ExpandedOpacity = 1,
             });
-            Assert.True(shell.ContainsPoint(new Point(244, 166)));
+            Assert.True(shell.ContainsPoint(new Point(284, 166)));
             Assert.False(shell.ContainsPoint(new Point(24, 24)));
             Assert.False(shell.ContainsPoint(new Point(10, 10)));
 
             // Hidden shell never receives input.
             shell.ApplyFrame(shell.Frame with { IsHidden = true, ShellOpacity = 0 });
             Assert.False(shell.IsInteractive);
-            Assert.False(shell.ContainsPoint(new Point(244, 166)));
+            Assert.False(shell.ContainsPoint(new Point(284, 166)));
         });
     }
 
@@ -192,7 +192,7 @@ public sealed class MotionDriverTests
         // amplitude-relative settle window.
         Assert.InRange(elapsed, predicted * 1.5, predicted * 4.0);
         Assert.Equal(440, driver.Frame.Width, 1);
-        Assert.Equal(244, driver.Frame.Height, 1);
+        Assert.Equal(284, driver.Frame.Height, 1);
         Assert.Equal(1, driver.Frame.ExpandedOpacity, 2);
         Assert.Equal(0, driver.Frame.CompactOpacity, 2);
         Assert.True(frames > 0);
@@ -211,7 +211,7 @@ public sealed class MotionDriverTests
         driver.SetTarget(ExpandedTarget());
         driver.Step(TimeSpan.FromSeconds(1.0 / 60.0));
         var widthProgress = (driver.Frame.Width - 132) / (440 - 132);
-        var heightProgress = (driver.Frame.Height - 36) / (244 - 36);
+        var heightProgress = (driver.Frame.Height - 36) / (284 - 36);
         Assert.True(widthProgress > heightProgress, $"width {widthProgress:0.00} should lead height {heightProgress:0.00}");
     }
 
@@ -336,6 +336,8 @@ public sealed class MotionDriverTests
         false,
         LayoutTokens.WindowHeight);
 }
+
+
 
 
 

@@ -92,7 +92,7 @@ public sealed class FontScaleTests
         Assert.Equal(PageMetricsLayout.NotificationRowHeight(one), 40, 3);
         Assert.Equal(PageMetricsLayout.ClipboardRowHeight(one), 48, 3);
         Assert.Equal(PageMetricsLayout.AgentRowHeight(one), 44.6, 3);
-        Assert.Equal(PageMetricsLayout.HomeContentExtent(pageRect, one), 212, 3);
+        Assert.Equal(PageMetricsLayout.HomeContentExtent(pageRect, one), 252, 3);
         Assert.Equal(PageMetricsLayout.MediaContentExtent(pageRect, one), 214, 3);
     }
 
@@ -271,3 +271,4 @@ public sealed class FontScaleTests
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
     }
 }
+

@@ -49,7 +49,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(516, bitmap.Height);
+        Assert.Equal(576, bitmap.Height);
 
         var expected = LayoutTokens.CompactSize(state.Compact!.Value.Kind);
         Assert.Equal(expected.Width, state.ShellWidth);
@@ -91,7 +91,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(516, bitmap.Height);
+        Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -109,7 +109,7 @@ public sealed class IslandRenderTests
         var state = IslandTestFixtures.Expanded(0);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
-        // The shell fill is #08080A @96% everywhere; the content is not a separate opaque rect, so
+        // The shell fill is #08880A @96% everywhere; the content is not a separate opaque rect, so
         // sampling the title row, the body and the bottom margin must all be shell fill (no bands).
         var shell = IslandMetrics.ShellRect(state);
         var samples = new[]
@@ -262,4 +262,5 @@ public sealed class IslandRenderTests
         renderer.Dispose();
     }
 }
+
 

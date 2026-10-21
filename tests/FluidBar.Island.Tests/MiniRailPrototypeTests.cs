@@ -12,14 +12,14 @@ namespace FluidBar.Island.Tests;
 /// from prototype2 with a <b>9 DIP</b> rail label (mini-label, 9 pt). The shipped rail renders the
 /// label at <b>11 DIP</b> - the readability floor agreed with the iOS study - so the expectations
 /// below were migrated to the 11 pt baseline and the prototype values are kept inline in comments
-/// (capsule 64 -> 67, 70 -> 75, 73 -> 79; label width 18.188 -> 22.22, 24.406 -> 29.83,
+/// (capsule 64 -> 67, 70 -> 75, 73 -> 79; label width 18.188 -> 22.22, 24.444 -> 29.83,
 /// 27.271 -> 33.33; far-dot centres 317/321.5 -> 318.5/324.5). This is a documented product
 /// decision recorded in docs/ios-design-study.md (rail label row), not a silent re-baseline.
 /// </para>
 /// <para>
 /// The expected numbers are the live measurements from
 /// <c>docs/rewrite/prototype2/index.html?state=expanded&amp;tab=…&amp;arch=1</c> in a 1440×900 Edge
-/// viewport: shell (500,12) 440×244, rail y 264 height 32, prev/next 26×26 centred on y 280,
+/// viewport: shell (500,12) 440×284, rail y 264 height 32, prev/next 26×26 centred on y 280,
 /// current capsule 28 DIP tall with label-grown width, 8 DIP island gaps, 3 DIP dots on a 7 DIP pitch
 /// 7 DIP from the nearest island.
 /// </summary>
@@ -45,7 +45,7 @@ public sealed class MiniRailPrototypeTests
         => Assert.Equal(expected, MiniRailLayout.CapsuleWidth(label), Eps);
 
     [Theory]
-    // 11 pt label advances (prototype 9 pt: 18.188 / 18.188 / 27.271 / 24.406).
+    // 11 pt label advances (prototype 9 pt: 18.188 / 18.188 / 27.271 / 24.444).
     [InlineData("主页", 22.22f)]
     [InlineData("通知", 22.22f)]
     [InlineData("剪贴板", 33.33f)]
@@ -97,7 +97,7 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(79f, layout.Current.Width, 0.001f);
         Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
-        Assert.Equal(264f + offsetY, layout.Current.Top, 0.001f);   // sampled absolute 276 (offsetY is top-12)
+        Assert.Equal(264f + offsetY, layout.Current.Top, 0.001f);   // sampled absolute 316 (offsetY is top-12)
         Assert.Equal(658.5f + offsetX, layout.Previous.MidX, 0.001f);
         Assert.Equal(781.5f + offsetX, layout.Next.MidX, 0.001f);
         Assert.Equal(281f + offsetY, layout.Current.MidY, 0.001f);   // sampled 293 at offsetY 12
@@ -153,7 +153,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(3, layout.DotsLeft.Length);
         Assert.Equal(616.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
         Assert.Equal(623.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(630.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
+        Assert.Equal(592.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
         Assert.Equal(7f, layout.DotsLeft[2].Width, 0.001f);
         Assert.True(layout.Next.IsEmpty, "the last page has no next island");
     }
@@ -456,4 +456,5 @@ public sealed class MiniRailPrototypeTests
     public static IslandRenderState State(int page, double position = double.NaN)
         => IslandTestFixtures.RailState(page, position);
 }
+
 

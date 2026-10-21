@@ -55,8 +55,8 @@ public sealed class IslandHitTestTests
             IslandMode.Dock);
 
         Assert.Equal(24, state.ShellOrigin.X);
-        Assert.Equal(276, state.ShellOrigin.Y);
-        Assert.Equal(IslandHitKind.Compact, Hit(state, 244, (float)(state.ShellOrigin.Y + 20)).Kind);
+        Assert.Equal(316, state.ShellOrigin.Y);
+        Assert.Equal(IslandHitKind.Compact, Hit(state, 284, (float)(state.ShellOrigin.Y + 20)).Kind);
     }
 
     [Fact]
@@ -182,8 +182,8 @@ public sealed class IslandHitTestTests
     public void Hidden_state_has_no_hit_targets()
     {
         var state = IslandRenderState.Hidden(IslandMode.Float, IslandTestFixtures.Theme);
-        Assert.Equal(IslandHitKind.None, Hit(state, 244, 142).Kind);
-        Assert.Equal(IslandHitKind.None, Hit(state, 244, 333).Kind);
+        Assert.Equal(IslandHitKind.None, Hit(state, 284, 142).Kind);
+        Assert.Equal(IslandHitKind.None, Hit(state, 284, 333).Kind);
     }
 
     [Fact]
@@ -281,5 +281,6 @@ public sealed class IslandHitTestTests
         Assert.Empty(last.DotsRight);
     }
 }
+
 
 

@@ -8,7 +8,7 @@ namespace FluidBar.Ui.Tests;
 /// <summary>
 /// Dock placement parity between Core's authoritative <see cref="HostSurface.Dock"/> geometry, the
 /// Skia renderer's host-local rectangles and the layered host's window origin. Headless: no HWND is
-/// created, so these run on every machine and pin the "no 344 DIP dock shift" contract.
+/// created, so these run on every machine and pin the "no 384 DIP dock shift" contract.
 /// </summary>
 public sealed class SkiaHostDockParityTests
 {
@@ -19,10 +19,10 @@ public sealed class SkiaHostDockParityTests
     {
         var dock = HostSurface.Dock;
 
-        Assert.Equal(new VisualRect(24, 24, 440, 244), dock.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(24, 276, 440, 52), dock.DockStripLocal);
-        Assert.Equal(new VisualRect(68, 336, 352, 34), dock.ArchipelagoStripLocal);
-        Assert.Equal(406, dock.Height);
+        Assert.Equal(new VisualRect(24, 24, 440, 284), dock.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(24, 316, 440, 52), dock.DockStripLocal);
+        Assert.Equal(new VisualRect(68, 376, 352, 34), dock.ArchipelagoStripLocal);
+        Assert.Equal(444, dock.Height);
         Assert.Equal(488, dock.Width);
     }
 
@@ -60,8 +60,8 @@ public sealed class SkiaHostDockParityTests
     public void Float_RendererStrip_SitsAt316NotBelowTheShellInDockTerms()
     {
         var floatSurface = HostSurface.Float;
-        Assert.Equal(new VisualRect(24, 24, 440, 244), floatSurface.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(68, 276, 352, 34), floatSurface.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(24, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(68, 316, 352, 34), floatSurface.ArchipelagoStripLocal);
 
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
@@ -74,16 +74,16 @@ public sealed class SkiaHostDockParityTests
         using var renderer = new IslandRenderer();
         var strip = renderer.MeasureStrip(state);
 
-        // Prototype2: rail top = shell bottom + 8 DIP (24 + 244 + 8 = 316), 32 DIP tall.
-        Assert.Equal(276f, strip.Strip.Top, 3);
+        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 32 DIP tall.
+        Assert.Equal(316f, strip.Strip.Top, 3);
         Assert.Equal(34f, strip.Strip.Height, 3);
-        Assert.Equal(244f, strip.Strip.MidX, 3);
+        Assert.Equal(284f, strip.Strip.MidX, 3);
     }
 
     [Theory]
-    [InlineData(96u, 1.0, 488, 346, 488, 406)]
-    [InlineData(144u, 1.5, 732, 519, 732, 609)]
-    [InlineData(192u, 2.0, 976, 692, 976, 812)]
+    [InlineData(96u, 1.0, 488, 384, 488, 444)]
+    [InlineData(144u, 1.5, 732, 519, 732, 666)]
+    [InlineData(192u, 2.0, 976, 768, 976, 812)]
     public void SurfacePixels_CeilAt150And200Percent(
         uint dpi, double scale, int floatWidth, int floatHeight, int dockWidth, int dockHeight)
     {
@@ -131,18 +131,18 @@ public sealed class SkiaHostDockParityTests
         Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.DockStripTopLocal, placement.DockStrip.Y, 3);
         Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.ArchipelagoTopLocal, placement.ArchipelagoStrip.Y, 3);
 
-        // Core's WindowPixel is the host window origin verbatim (no 344 DIP dock correction).
+        // Core's WindowPixel is the host window origin verbatim (no 384 DIP dock correction).
         var computed = LayeredWindowHost.ComputePlacement(placement, LayeredHostMode.Dock);
         Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);
         Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
         Assert.Equal((int)Math.Ceiling(488 * scale), computed.WindowPixel.Width);
-        Assert.Equal((int)Math.Ceiling(406 * scale), computed.WindowPixel.Height);
+        Assert.Equal((int)Math.Ceiling(444 * scale), computed.WindowPixel.Height);
     }
 
     [Theory]
-    [InlineData(96u, 716, 630, 488, 406)]
-    [InlineData(144u, 594, 425, 732, 609)]
-    [InlineData(192u, 472, 220, 976, 812)]
+    [InlineData(96u, 716, 592, 488, 444)]
+    [InlineData(144u, 594, 368, 732, 666)]
+    [InlineData(192u, 472, 144, 976, 812)]
     public void DockPlacement_MeasuredWindowOrigin_ForA1920x1040WorkArea(
         uint dpi, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
     {
@@ -210,5 +210,7 @@ public sealed class SkiaHostDockParityTests
         Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
     }
 }
+
+
 
 

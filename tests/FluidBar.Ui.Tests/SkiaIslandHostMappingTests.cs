@@ -133,7 +133,7 @@ public sealed class SkiaIslandHostMappingTests
     }
 
     [Fact]
-    public void ClickCompact_ExpandsToTheFixed440x244Shell()
+    public void ClickCompact_ExpandsToTheFixed440x284Shell()
     {
         using var fixture = ControllerFixture.Create();
         var compactShell = IslandMetrics.ShellRect(fixture.Controller.RenderState);
@@ -433,5 +433,6 @@ public sealed class SkiaIslandHostMappingTests
     /// <summary>One physical wheel notch (70 DIP; two notches make the 140 DIP page step).</summary>
     private const double PerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
 }
+
 
 

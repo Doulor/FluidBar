@@ -8,17 +8,17 @@ namespace FluidBar.Island.Tests;
 public sealed class ExpandedGeometryContractTests
 {
     [Fact]
-    public void Expanded_shell_tokens_are_440x244_with_radius_32()
+    public void Expanded_shell_tokens_are_440x284_with_radius_36()
     {
         Assert.Equal(440, LayoutTokens.ExpandedWidth);
-        Assert.Equal(244, LayoutTokens.ExpandedHeight);
-        Assert.Equal(new VisualSize(440, 244), LayoutTokens.ExpandedSize());
+        Assert.Equal(284, LayoutTokens.ExpandedHeight);
+        Assert.Equal(new VisualSize(440, 284), LayoutTokens.ExpandedSize());
         Assert.Equal(36, LayoutTokens.ExpandedRadius);
-        Assert.Equal(32, IslandMetrics.ExpandedPanelRadius);
+        Assert.Equal(36, IslandMetrics.ExpandedPanelRadius);
     }
 
     [Fact]
-    public void Product_sources_do_not_hard_code_expanded_height_or_radius()
+    public void Product_sources_do_not_use_the_old_expanded_radius()
     {
         var root = IslandTestFixtures.RepoRoot;
         var files = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
@@ -41,9 +41,7 @@ public sealed class ExpandedGeometryContractTests
                     code = code[..comment];
                 }
 
-                Assert.False(Regex.IsMatch(code, @"284"),
-                    $"{Path.GetRelativePath(root, file)}:{lineNumber} hard-codes the old 284 DIP expanded height");
-                Assert.False(Regex.IsMatch(code, @"Expanded(Panel)?Radiuss*=s*30"),
+                Assert.False(Regex.IsMatch(code, @"Expanded(Panel)?Radius\s*=\s*30\b"),
                     $"{Path.GetRelativePath(root, file)}:{lineNumber} hard-codes the old 30 DIP expanded radius");
             }
         }

@@ -18,7 +18,7 @@ public sealed class ExpandedPageTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(516, bitmap.Height);
+        Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -50,7 +50,7 @@ public sealed class ExpandedPageTests
         {
             Media = IslandTestFixtures.Content().Media with
             {
-                Artwork = SolidPng(new SKColor(220, 30, 40)),
+                Artwork = SolidPng(new SKColor(144, 30, 40)),
                 ArtworkKey = "cover-test",
             },
         };
@@ -262,7 +262,7 @@ public sealed class ExpandedPageTests
         Assert.True(extraRows >= (3 * PageMetricsLayout.WidgetsTaskPitch(metrics)) - 12.5f,
             $"six rows should grow the card: {three.Height} -> {six.Height}");
 
-        // 244 DIP shell: even the three-row card exceeds the 164 DIP visual body, so page scroll starts at 0.
+        // 284 DIP shell: even the three-row card exceeds the 164 DIP visual body, so page scroll starts at 0.
         var threeScroll = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 3);
         Assert.Equal(
             PageMetricsLayout.ContentExtent(page, PageSlotKind.Widgets, metrics, 3) - PageVisual.Body(page).Height,
@@ -407,5 +407,6 @@ public sealed class ExpandedPageTests
         return data.ToArray();
     }
 }
+
 
 

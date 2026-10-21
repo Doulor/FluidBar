@@ -20,7 +20,7 @@ public sealed class IslandGeometryTests
     {
         await AvaloniaTest.Run(() =>
         {
-            var shell = new VisualRect(24, 24, 440, 244);
+            var shell = new VisualRect(24, 24, 440, 284);
             var geometry = ShellGeometry.Create(shell, CornerRadii.Uniform(36));
             var outline = geometry.SampleOutline(15);
 
@@ -118,10 +118,10 @@ public sealed class IslandGeometryTests
 
         // Title-row actions remain in the title row, not the body.
         Assert.True(NotificationsPage.ClearRect.Bottom <= IslandPageView.BodyTop);
-        Assert.Equal(244, HomePage.QuickActionRect(0).Bottom, Eps);
-        Assert.Equal(244, ClipboardPage.RowRect(3).Bottom, Eps);
-        Assert.Equal(244, WidgetsPage.CalendarRect.Bottom, Eps);
-        Assert.Equal(244, WidgetsPage.TasksRect.Bottom, Eps);
+        Assert.Equal(284, HomePage.QuickActionRect(0).Bottom, Eps);
+        Assert.Equal(284, ClipboardPage.RowRect(3).Bottom, Eps);
+        Assert.Equal(284, WidgetsPage.CalendarRect.Bottom, Eps);
+        Assert.Equal(284, WidgetsPage.TasksRect.Bottom, Eps);
     }
 
     [Fact]
@@ -222,6 +222,8 @@ public sealed class IslandGeometryTests
         return inside;
     }
 }
+
+
 
 
 

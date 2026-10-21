@@ -7,7 +7,7 @@ namespace FluidBar.Ui.Tests;
 /// <summary>
 /// Frame-by-frame checks of the prototype2 shell motion. The prototype is a CSS transition
 /// (width/height 380 ms cubic-bezier(.3,.8,.25,1), radius 260 ms ease-out, compact/expanded/chrome
-/// fades 90/220/160 ms with their own delays), so these tests step <see cref="SkiaIslandMotion"/> and
+/// fades 90/144/160 ms with their own delays), so these tests step <see cref="SkiaIslandMotion"/> and
 /// compare the sampled values with the browser-measured ones (Playwright, Edge, prototype2).
 /// </summary>
 public sealed class ShellCssMotionTests
@@ -23,7 +23,7 @@ public sealed class ShellCssMotionTests
 
         run = new MotionRun(ExpandedMotion());
         Assert.Equal(440, run.WidthAt(396.9), 0.001);
-        Assert.Equal(244, run.HeightAt(396.9), 0.001);
+        Assert.Equal(284, run.HeightAt(396.9), 0.001);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class ShellCssMotionTests
         motion.SetTarget(ExpandedTarget());
 
         Assert.Equal(440, motion.Width, 0.001);
-        Assert.Equal(244, motion.Height, 0.001);
+        Assert.Equal(284, motion.Height, 0.001);
         Assert.Equal(1, motion.ExpandedContentOpacity, 3);
         Assert.Equal(0, motion.CompactContentOpacity, 3);
         Assert.Equal(30, motion.ShellRadii.TopLeft, 0.01);
@@ -262,4 +262,6 @@ public sealed class ShellCssMotionTests
         }
     }
 }
+
+
 

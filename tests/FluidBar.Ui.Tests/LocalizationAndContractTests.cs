@@ -229,21 +229,21 @@ public sealed class TokenAndGeometryTests
         Assert.Equal(new VisualSize(180, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.LockKeys));
         Assert.Equal(new VisualSize(240, 44), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Device));
         Assert.Equal(new VisualSize(280, 44), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Bluetooth));
-        Assert.Equal(new VisualSize(220, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Focus));
+        Assert.Equal(new VisualSize(144, 36), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Focus));
         Assert.Equal(new VisualSize(480, 44), LayoutTokens.CompactSize(FluidBar.Core.Activities.ActivityKind.Lookup));
     }
 
     [Fact]
-    public void ExpandedShellIsUniform440x244_AndWindowIs488x292()
+    public void ExpandedShellIsUniform440x284_AndWindowIs488x292()
     {
         Assert.Equal(440, LayoutTokens.ExpandedWidth);
-        Assert.Equal(244, LayoutTokens.ExpandedHeight);
-        Assert.Equal(new VisualSize(440, 244), LayoutTokens.ExpandedSize());
+        Assert.Equal(284, LayoutTokens.ExpandedHeight);
+        Assert.Equal(new VisualSize(440, 284), LayoutTokens.ExpandedSize());
         Assert.Equal(488, LayoutTokens.WindowWidth);
         Assert.Equal(292, LayoutTokens.WindowHeight);
-        // Expanded shell 440×244 with a 20/12 DIP inset and a 400×220 pager viewport.
+        // Expanded shell 440×284 with a 20/12 DIP inset and a 400×144 pager viewport.
         Assert.Equal(400, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportWidth);
-        Assert.Equal(212, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportHeight);
+        Assert.Equal(252, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportHeight);
         Assert.Equal(20, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportInset);
         Assert.Equal(16, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportInsetY);
     }
@@ -268,11 +268,11 @@ public sealed class TokenAndGeometryTests
     [Fact]
     public void SquircleExponent_MatchesTheSpecAtTheExpandedShell()
     {
-        var (_, _, _, _, power) = SquircleGeometryFactory.Resolve(440, 244, CornerRadii.Uniform(36));
+        var (_, _, _, _, power) = SquircleGeometryFactory.Resolve(440, 284, CornerRadii.Uniform(36));
         var exponent = 2.0 / power;
         // The renderer must use exactly the same superellipse exponent as Core hit-testing (spec 3.2),
         // and the shell must read as a squircle, not a stadium (k < 2.5) or a rounded box (k > 3.3).
-        var core = ShellGeometry.Create(new VisualRect(0, 0, 440, 244), CornerRadii.Uniform(36));
+        var core = ShellGeometry.Create(new VisualRect(0, 0, 440, 284), CornerRadii.Uniform(36));
         Assert.Equal(core.ExponentK, exponent, 3);
         Assert.InRange(exponent, 2.7, 3.3);
     }
@@ -283,8 +283,8 @@ public sealed class TokenAndGeometryTests
         await AvaloniaTest.Run(() =>
         {
             SquircleGeometryFactory.ClearCache();
-            var first = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(36));
-            var second = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(36));
+            var first = SquircleGeometryFactory.GetOrCreate(440, 284, CornerRadii.Uniform(36));
+            var second = SquircleGeometryFactory.GetOrCreate(440, 284, CornerRadii.Uniform(36));
             Assert.Same(first, second);
             for (var i = 0; i < SquircleGeometryFactory.MaxCacheEntries + 10; i++)
             {
@@ -298,11 +298,11 @@ public sealed class TokenAndGeometryTests
     [Fact]
     public void ContentOpacityPolicy_KeepsTextOutOfTinyShells()
     {
-        Assert.Equal(1, FluidBar.Core.Motion.ContentOpacityPolicy.ForCompactContent(36, 244));
-        Assert.Equal(0, FluidBar.Core.Motion.ContentOpacityPolicy.ForCompactContent(244, 244));
-        Assert.Equal(0, FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(36, 244));
-        Assert.Equal(1, FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(244, 244));
-        Assert.True(FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(220, 244) is > 0 and < 1);
+        Assert.Equal(1, FluidBar.Core.Motion.ContentOpacityPolicy.ForCompactContent(36, 284));
+        Assert.Equal(0, FluidBar.Core.Motion.ContentOpacityPolicy.ForCompactContent(284, 284));
+        Assert.Equal(0, FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(36, 284));
+        Assert.Equal(1, FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(284, 284));
+        Assert.True(FluidBar.Core.Motion.ContentOpacityPolicy.ForExpandedContent(144, 284) is > 0 and < 1);
     }
 }
 
@@ -446,5 +446,7 @@ public sealed class SettingsAndMarketTests
         Assert.Contains("code-pulse", controller.Current.Plugins.Enabled);
     }
 }
+
+
 
 
