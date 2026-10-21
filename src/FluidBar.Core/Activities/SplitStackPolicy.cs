@@ -154,14 +154,16 @@ public sealed class SplitStackPolicy
                 var pinnedRecord = _pinnedKey is { } pk ? Find(visible, pk) : null;
                 if (pinnedRecord is not null)
                 {
-                    SetPrimary(pinnedRecord, now);
-                    return Arrange(pinnedRecord, visible);
+                    var preferred372 = PreferMediaOverAgent(pinnedRecord, visible);
+                    SetPrimary(preferred372, now);
+                    return Arrange(preferred372, visible);
                 }
             }
             else
             {
-                SetPrimary(overrideRecord, now);
-                return Arrange(overrideRecord, visible);
+                var preferred434 = PreferMediaOverAgent(overrideRecord, visible);
+                SetPrimary(preferred434, now);
+                return Arrange(preferred434, visible);
             }
         }
 
@@ -214,8 +216,9 @@ public sealed class SplitStackPolicy
             // Primary ended (TTL/retract): restore the persistent primary that a short event displaced.
             var restored = _restoreKey is { } restoreKey ? Find(visible, restoreKey) : null;
             var chosen = restored ?? best;
-            SetPrimary(chosen, now);
-            return Arrange(chosen, visible);
+            var preferred186 = PreferMediaOverAgent(chosen, visible);
+            SetPrimary(preferred186, now);
+            return Arrange(preferred186, visible);
         }
 
         var dwellElapsed = now - _primarySince >= MinDwell;
@@ -229,8 +232,9 @@ public sealed class SplitStackPolicy
         if (userWants || higherUser)
         {
             var chosen = bestLayer == Layer.User ? best : Find(visible, _userKey!.Value) ?? best;
-            SetPrimary(chosen, now);
-            return Arrange(chosen, visible);
+            var preferred186 = PreferMediaOverAgent(chosen, visible);
+            SetPrimary(preferred186, now);
+            return Arrange(preferred186, visible);
         }
 
         if (_pinnedKey == current.Key && dwellElapsed)
@@ -250,8 +254,9 @@ public sealed class SplitStackPolicy
             if (actionable is not null)
             {
                 _pinOverrideKey = actionable.Key;
-                SetPrimary(actionable, now);
-                return Arrange(actionable, visible);
+                var preferred310 = PreferMediaOverAgent(actionable, visible);
+                SetPrimary(preferred310, now);
+                return Arrange(preferred310, visible);
             }
         }
 
@@ -260,12 +265,20 @@ public sealed class SplitStackPolicy
             // Remember the persistent primary so the pill returns to it when the short event expires.
             _restoreKey = currentLayer == Layer.Persistent ? current.Key : _restoreKey;
             var preferred = PreferMediaOverAgent(best, visible);
-            SetPrimary(preferred, now);
-            return Arrange(preferred, visible);
+            var preferred279 = PreferMediaOverAgent(preferred, visible);
+            SetPrimary(preferred279, now);
+            return Arrange(preferred279, visible);
         }
 
-        // Stability: keep the current primary. Passive re-sorting must never flip the main pill.
-        return Arrange(current, visible);
+        // Stability: keep the current primary, EXCEPT when a track started playing — media then takes the
+        // pill back from an agent that grabbed it earlier (user report 2026-10-22: "还是 agent 优先").
+        var stablePrimary = PreferMediaOverAgent(current, visible);
+        if (stablePrimary.Key != current.Key)
+        {
+            SetPrimary(stablePrimary, now);
+        }
+
+        return Arrange(stablePrimary, visible);
     }
 
     /// <summary>Primary first; the remaining preview balls follow by importance (rank, then arrival).</summary>
