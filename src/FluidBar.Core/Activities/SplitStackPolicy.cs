@@ -56,6 +56,22 @@ public sealed class SplitStackPolicy
     /// <summary>The wheel-pinned primary; survives the short user-lock window until the activity ends.</summary>
     public ActivityKey? PinnedKey => _pinnedKey;
 
+    /// <summary>Pins a user-selected primary without opening the short user-lock window.</summary>
+    public void Pin(ActivityKey key)
+    {
+        _pinnedKey = key;
+        _pinOverrideKey = null;
+        _restoreKey = null;
+    }
+
+    /// <summary>Clears the user pin; the next order falls back to normal priority.</summary>
+    public void Unpin()
+    {
+        _pinnedKey = null;
+        _pinOverrideKey = null;
+        _restoreKey = null;
+    }
+
     /// <summary>Whether an activity is an actionable short-lived event (notification/copy/waiting agent).</summary>
     public static bool IsActionable(ActivityRecord record)
     {

@@ -168,6 +168,42 @@ public sealed class SplitIslandTests
     }
 
     [Fact]
+    public void Stacked_wheel_pin_survives_heartbeats_and_new_ordinary_activity()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            Stacking = StackingStrategySetting.Stacked,
+        });
+        fixture.Settle();
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload { Title = "Agent", Badge = "running", IsActive = true }, 1, "agent");
+        Settle(fixture);
+        Publish(fixture, ActivityKind.Media, new ActivityPayload { Title = "Song", IsActive = true }, 2, "media");
+        Settle(fixture);
+
+        Assert.True(fixture.Controller.HandleWheel(-100, horizontal: false, shift: false).Consumed);
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        for (var beat = 0; beat < 8; beat++)
+        {
+            fixture.Time.Advance(TimeSpan.FromSeconds(2));
+            Publish(fixture, ActivityKind.Agent, new ActivityPayload
+            {
+                Title = "Agent", Badge = "running", IsActive = true, Body = "heartbeat " + beat,
+            }, 10 + beat, "agent");
+            Settle(fixture);
+        }
+
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        Publish(fixture, ActivityKind.Timer, new ActivityPayload { Title = "Pomodoro", Level = 8 }, 30, "timer");
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+    }
+
+    [Fact]
     public void Wheel_pin_survives_activity_heartbeats_through_the_controller()
     {
         using var fixture = ControllerFixture.Create(AppSettings.Default with

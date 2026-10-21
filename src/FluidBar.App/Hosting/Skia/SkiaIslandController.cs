@@ -965,20 +965,20 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
-        if (direction >= 0)
+        var rotated = direction >= 0
+            ? visible.RemoveAt(0).Add(visible[0])
+            : visible.Insert(0, visible[^1]).RemoveAt(visible.Length);
+        _schedulerState = _schedulerState with { Visible = rotated };
+
+        PinTo(rotated[0].Key, "stack-rotate");
+
+        // SetPinned normalizes the scheduler snapshot; restore the cyclic stack order so the next
+        // wheel step continues from the visual position instead of jumping.
+        var updatedByKey = _schedulerState.Visible.ToDictionary(record => record.Key);
+        _schedulerState = _schedulerState with
         {
-            _schedulerState = _schedulerState with
-            {
-                Visible = visible.RemoveAt(0).Add(visible[0]),
-            };
-        }
-        else
-        {
-            _schedulerState = _schedulerState with
-            {
-                Visible = visible.Insert(0, visible[^1]).RemoveAt(visible.Length),
-            };
-        }
+            Visible = rotated.Select(record => updatedByKey[record.Key]).ToImmutableArray(),
+        };
     }
 
     /// <summary>Moves one page left/right (keyboard arrows).</summary>
@@ -1808,6 +1808,13 @@ public sealed class SkiaIslandController : IDisposable
     {
         var content = _data.Snapshot();
         var settings = _settings.Current;
+        if (_splitPinnedKey is { } pinned
+            && !_schedulerState.Visible.Any(r => r.Key.Equals(pinned))
+            && !_schedulerState.Background.Any(r => r.Key.Equals(pinned)))
+        {
+            ReleasePin();
+        }
+
         if (settings.Stacking == StackingStrategySetting.Split)
         {
             // The split strategy owns the "who is the main island" decision; the scheduler order is a
@@ -2056,36 +2063,52 @@ public sealed class SkiaIslandController : IDisposable
 
         // The scheduler is the real consumer of the activity snapshot on the next heartbeat: its
         // preemption path removes a non-pinned primary before SplitStackPolicy gets a chance to
-        // re-order. Mirror the wheel pin into ActivityRecord.IsPinned as well, otherwise the
-        // controller test (and the policy test) can pass while the heartbeat still drops the pin.
+        // re-order. PinTo mirrors the wheel pin into ActivityRecord.IsPinned as well.
         if (wheelSteps != 0)
         {
-            if (_splitPinnedKey is { } oldPin && !oldPin.Equals(ordered[0].Key))
-            {
-                _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
-            }
-
-            var newPin = ordered[0].Key;
-            var pinUpdate = _scheduler.SetPinned(_schedulerState, newPin, true);
-            if (pinUpdate.Kind != ActivityUpdateKind.None)
-            {
-                _schedulerState = pinUpdate.State;
-            }
-
-            _splitPinnedKey = newPin;
-            PinDiagnostics.Log($"pin set to {newPin} (wheel)");
+            PinTo(ordered[0].Key, "wheel");
         }
         else if (_splitPinnedKey is { } oldPin && _splitPolicy.PinnedKey is null)
         {
-            _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
-            PinDiagnostics.Log($"pin released {oldPin}");
-            _splitPinnedKey = null;
+            ReleasePin();
         }
 
         if (!ordered.SequenceEqual(_schedulerState.Visible))
         {
             _schedulerState = _schedulerState with { Visible = ordered };
         }
+    }
+
+    /// <summary>Pins the user-selected primary in both the policy and the scheduler snapshot.</summary>
+    private void PinTo(ActivityKey key, string reason)
+    {
+        if (_splitPinnedKey is { } oldPin && !oldPin.Equals(key))
+        {
+            _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
+        }
+
+        _splitPolicy.Pin(key);
+        var pinUpdate = _scheduler.SetPinned(_schedulerState, key, true);
+        if (pinUpdate.Kind != ActivityUpdateKind.None)
+        {
+            _schedulerState = pinUpdate.State;
+        }
+
+        _splitPinnedKey = key;
+        PinDiagnostics.Log($"pin set to {key} ({reason})");
+    }
+
+    private void ReleasePin()
+    {
+        if (_splitPinnedKey is not { } oldPin)
+        {
+            return;
+        }
+
+        _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
+        _splitPolicy.Unpin();
+        _splitPinnedKey = null;
+        PinDiagnostics.Log($"pin released {oldPin}");
     }
 
     /// <summary>Snapshots the split previews for the current strategy (kept while the merge animates).</summary>
