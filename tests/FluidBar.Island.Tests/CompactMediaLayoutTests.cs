@@ -16,17 +16,17 @@ public sealed class CompactMediaLayoutTests
         // Spec arithmetic re-derived for the new chrome (left 10 + artwork 22 + gap 9 = 41; wave 18 +
         // gap 9 + right 8 = 35). These are spec values, not relaxed thresholds.
         Assert.Equal(41, CompactMediaLayout.TextLeft, 0.001);
-        Assert.Equal(35, CompactMediaLayout.TextToTrailingEdge, 0.001);
-        Assert.Equal(76, CompactMediaLayout.FixedWidth, 0.001);
+        Assert.Equal(37, CompactMediaLayout.TextToTrailingEdge, 0.001);   // v3: right padding 8 -> 10
+        Assert.Equal(78, CompactMediaLayout.FixedWidth, 0.001);
     }
 
     [Fact]
     public void Width_for_text_adds_the_measured_line_to_the_fixed_chrome()
     {
         // Fixed chrome + slack so the shaper never ellipsises a line that "exactly" fits.
-        Assert.Equal(76 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(0), 0.001);
-        Assert.Equal(198, CompactMediaLayout.WidthForText(120), 0.001);
-        Assert.Equal(76 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(float.NaN), 0.001);
+        Assert.Equal(78 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(0), 0.001);
+        Assert.Equal(200, CompactMediaLayout.WidthForText(120), 0.001);
+        Assert.Equal(78 + CompactMediaLayout.TextSlack, CompactMediaLayout.WidthForText(float.NaN), 0.001);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class CompactMediaLayoutTests
     {
         var width = CompactMediaLayout.AdaptiveWidth(200, TokenWidth, SurfaceWidth);
 
-        Assert.Equal(278, width, 0.001);
+        Assert.Equal(280, width, 0.001);   // v3: right padding 8 -> 10
         Assert.True(width > TokenWidth);
         // The measured text still fits between the artwork and the wave, with the slack on top.
         Assert.True(CompactMediaLayout.TextRight(width) - CompactMediaLayout.TextLeft > 200);

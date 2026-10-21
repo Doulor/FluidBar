@@ -24,14 +24,14 @@ public sealed class MiniRailMotionTests
     public static TheoryData<int, float, float, float> PrototypeCurve => new()
     {
         // 11 pt re-sampled from the current springs; prototype 9 pt in the trailing comment.
-        { 16, 67.66f, 665.17f, 774.83f },   // prototype 64.28 / 666.86 / 773.14
-        { 33, 68.99f, 664.51f, 775.49f },   // prototype 65.02 / 666.49 / 773.51
-        { 50, 70.58f, 663.71f, 776.29f },   // prototype 66.42 / 665.80 / 774.20
-        { 100, 74.91f, 661.55f, 778.45f },  // prototype 69.59 / 664.21 / 775.79
-        { 150, 77.45f, 660.27f, 779.73f },  // prototype 71.66 / 663.17 / 776.83
-        { 200, 78.57f, 659.72f, 780.29f },  // prototype 72.61 / 662.69 / 777.31
-        { 250, 78.95f, 659.52f, 780.48f },  // prototype 72.95 / 662.53 / 777.47
-        { 300, 79.04f, 659.48f, 780.52f },  // prototype 73.02 / 662.49 / 777.51
+        { 16, 67.66f, 664.17f, 775.83f },   // v3 sampled (28 DIP neighbours); prototype 64.28 / 666.86 / 773.14
+        { 33, 68.99f, 663.51f, 776.49f },   // prototype 65.02 / 666.49 / 773.51
+        { 50, 70.58f, 662.71f, 777.29f },   // prototype 66.42 / 665.80 / 774.20
+        { 100, 74.91f, 660.55f, 779.45f },  // prototype 69.59 / 664.21 / 775.79
+        { 150, 77.45f, 659.27f, 780.73f },  // prototype 71.66 / 663.17 / 776.83
+        { 200, 78.57f, 658.72f, 781.29f },  // prototype 72.61 / 662.69 / 777.31
+        { 250, 78.95f, 658.52f, 781.48f },  // prototype 72.95 / 662.53 / 777.47
+        { 300, 79.04f, 658.48f, 781.52f },  // prototype 73.02 / 662.49 / 777.51
     };
 
     [Theory]
@@ -82,8 +82,8 @@ public sealed class MiniRailMotionTests
         Assert.False(motion.IsAnimating);
         Assert.InRange(frames, 20, 40);
         Assert.Equal(79f, motion.Values.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
-        Assert.Equal(-85.5f, motion.Values.LeftX, 0.05f);       // prototype -82.5f
-        Assert.Equal(82f, motion.Values.RightX, 0.05f);         // prototype 79f
+        Assert.Equal(-87.5f, motion.Values.LeftX, 0.05f);       // v3 sampled (prototype -82.5f)
+        Assert.Equal(84f, motion.Values.RightX, 0.05f);         // v3 sampled (prototype 79f)
     }
 
     [Fact]
@@ -128,8 +128,8 @@ public sealed class MiniRailMotionTests
         Assert.Equal(79f, frame.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
         Assert.Equal(2, frame.LeftDots);
         Assert.Equal(1, frame.RightDots);
-        Assert.Equal(shell.MidX - 60.5f, frame.Previous.MidX, 0.01f);   // prototype 57.5
-        Assert.Equal(shell.MidX + 60.5f, frame.Next.MidX, 0.01f);
+        Assert.Equal(shell.MidX - 61.5f, frame.Previous.MidX, 0.01f);   // v3 sampled (prototype 57.5)
+        Assert.Equal(shell.MidX + 61.5f, frame.Next.MidX, 0.01f);
         Assert.Equal(1f, frame.PrevAlpha, 0.001f);
         Assert.Equal(1f, frame.NextAlpha, 0.001f);
 
@@ -165,12 +165,12 @@ public sealed class MiniRailMotionTests
     {
         var targets = MiniRailTargetsFactory.Create(3, Pages(), 1.0);
         Assert.Equal(79f, targets.CapsuleWidth, 0.01f);   // 11 pt (prototype 73f)
-        Assert.Equal(-60.5f, targets.PrevX, 0.01f);       // prototype -57.5
-        Assert.Equal(60.5f, targets.NextX, 0.01f);
+        Assert.Equal(-61.5f, targets.PrevX, 0.01f);       // v3 sampled (prototype -57.5)
+        Assert.Equal(61.5f, targets.NextX, 0.01f);
         Assert.Equal(1f, targets.PrevAlpha, 0.001f);
         Assert.Equal(1f, targets.NextAlpha, 0.001f);
-        Assert.Equal(-85.5f, targets.LeftX, 0.01f);   // 2-dot cluster, centre 634.5 → 720 − 85.5 (prototype 637.5 / -82.5)
-        Assert.Equal(82f, targets.RightX, 0.01f);     // 1-dot cluster, centre 802 → 720 + 82 (prototype 799 / 79)
+        Assert.Equal(-87.5f, targets.LeftX, 0.01f);   // v3 sampled: 2-dot cluster centre 632.5 -> 720 - 87.5
+        Assert.Equal(84f, targets.RightX, 0.01f);     // v3 sampled: 1-dot cluster centre 804 -> 720 + 84
 
         var first = MiniRailTargetsFactory.Create(0, Pages(), 1.0);
         Assert.Equal(0f, first.PrevAlpha, 0.001f);

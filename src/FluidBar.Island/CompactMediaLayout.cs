@@ -33,8 +33,8 @@ public static class CompactMediaLayout
     /// <summary>Gap between the text column and the wave.</summary>
     public const float GapBeforeWave = 9f;
 
-    /// <summary>Right padding after the wave (8: tightened, was 10).</summary>
-    public const float RightPadding = 8f;
+    /// <summary>Right padding after the wave (10: the iOS inset, restored in the v3 audit).</summary>
+    public const float RightPadding = 10f;
 
     /// <summary>Left edge of the text column (10 + 22 + 9 = 41).</summary>
     public const float TextLeft = LeftPadding + ArtworkSize + ArtworkGap;

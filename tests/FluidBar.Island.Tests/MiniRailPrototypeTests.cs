@@ -73,14 +73,14 @@ public sealed class MiniRailPrototypeTests
         var layout = renderer.MeasureStrip(state);
 
         Assert.Equal(shell.Bottom + 8f, layout.Strip.Top, 0.001f);
-        Assert.Equal(32f, layout.Strip.Height, 0.001f);
+        Assert.Equal(34f, layout.Strip.Height, 0.001f);   // v3: strip 32 -> 34
         Assert.Equal(shell.MidX, layout.Current.MidX, 0.001f);
         Assert.Equal(CentreX + (shell.Left - 500f), layout.Current.MidX, 0.001f);
-        Assert.Equal(32f, layout.Current.Height, 0.001f);   // 11 pt pass: height 28 -> 32 (rail strip height)
-        Assert.Equal(26f, layout.Previous.Width, 0.001f);
-        Assert.Equal(26f, layout.Previous.Height, 0.001f);
-        Assert.Equal(26f, layout.Next.Width, 0.001f);
-        Assert.Equal(26f, layout.Next.Height, 0.001f);
+        Assert.Equal(34f, layout.Current.Height, 0.001f);   // v3: height 32 -> 34 (matches the 34 DIP strip)
+        Assert.Equal(28f, layout.Previous.Width, 0.001f);   // v3: 26 -> 28
+        Assert.Equal(28f, layout.Previous.Height, 0.001f);   // v3: 26 -> 28
+        Assert.Equal(28f, layout.Next.Width, 0.001f);
+        Assert.Equal(28f, layout.Next.Height, 0.001f);
     }
 
     [Fact]
@@ -97,18 +97,18 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(79f, layout.Current.Width, 0.001f);
         Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
-        Assert.Equal(264f + offsetY, layout.Current.Top, 0.001f);   // midY 320 - 32/2
-        Assert.Equal(659.5f + offsetX, layout.Previous.MidX, 0.001f);
-        Assert.Equal(780.5f + offsetX, layout.Next.MidX, 0.001f);
-        Assert.Equal(280f + offsetY, layout.Current.MidY, 0.001f);
+        Assert.Equal(264f + offsetY, layout.Current.Top, 0.001f);   // sampled absolute 276 (offsetY is top-12)
+        Assert.Equal(658.5f + offsetX, layout.Previous.MidX, 0.001f);
+        Assert.Equal(781.5f + offsetX, layout.Next.MidX, 0.001f);
+        Assert.Equal(281f + offsetY, layout.Current.MidY, 0.001f);   // sampled 293 at offsetY 12
 
         Assert.Equal(2, layout.DotsLeft.Length);
         Assert.Equal(1, layout.DotsRight.Length);
-        Assert.Equal(629.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
-        Assert.Equal(636.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(800.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
+        Assert.Equal(627.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
+        Assert.Equal(634.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
+        Assert.Equal(802.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
         Assert.Equal(3f, layout.DotsLeft[0].Width, 0.001f);
-        Assert.Equal(278.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
+        Assert.Equal(279.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
 
         // Island gaps are 8 DIP and the dot cluster keeps 7 DIP from the nearest island edge.
         Assert.Equal(8f, layout.Current.Left - layout.Previous.Right, 0.001f);
@@ -127,14 +127,14 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Empty(layout.DotsLeft);
         Assert.Equal(3, layout.DotsRight.Length);
-        // 11 pt: 794.5 / 801.5 / 808.5 (prototype 9 pt: 793 / 800 / 807).
-        Assert.Equal(794.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
-        Assert.Equal(801.5f + offsetX, layout.DotsRight[1].Left, 0.001f);
-        Assert.Equal(808.5f + offsetX, layout.DotsRight[2].Left, 0.001f);
+        // v3 sampled: 796.5 / 803.5 / 810.5 (prototype 9 pt: 793 / 800 / 807).
+        Assert.Equal(796.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
+        Assert.Equal(803.5f + offsetX, layout.DotsRight[1].Left, 0.001f);
+        Assert.Equal(810.5f + offsetX, layout.DotsRight[2].Left, 0.001f);
         Assert.Equal(3f, layout.DotsRight[1].Width, 0.001f);
         Assert.Equal(7f, layout.DotsRight[2].Width, 0.001f);
         var offsetY = IslandMetrics.ShellRect(State(0)).Top - 12f;
-        Assert.Equal(280f + offsetY, layout.DotsRight[2].MidY, 0.001f);
+        Assert.Equal(281f + offsetY, layout.DotsRight[2].MidY, 0.001f);
 
         Assert.True(layout.Previous.IsEmpty, "page 0 has no previous island");
         Assert.False(layout.Next.IsEmpty);
@@ -151,9 +151,9 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Empty(layout.DotsRight);
         Assert.Equal(3, layout.DotsLeft.Length);
-        Assert.Equal(618.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
-        Assert.Equal(625.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(632.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
+        Assert.Equal(616.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
+        Assert.Equal(623.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
+        Assert.Equal(630.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
         Assert.Equal(7f, layout.DotsLeft[2].Width, 0.001f);
         Assert.True(layout.Next.IsEmpty, "the last page has no next island");
     }
@@ -251,12 +251,12 @@ public sealed class MiniRailPrototypeTests
 
     [Theory]
     // 11 pt: capsule 64->67 / 70->75 / 73->79, neighbour centres move by half the width delta.
-    [InlineData(0, 67f, 665.5f, 774.5f, 0, 3)]   // prototype 64f, 667, 773
-    [InlineData(1, 67f, 665.5f, 774.5f, 0, 3)]
-    [InlineData(2, 67f, 665.5f, 774.5f, 1, 2)]
-    [InlineData(3, 79f, 659.5f, 780.5f, 2, 1)]   // prototype 73f, 662.5, 777.5
-    [InlineData(4, 75f, 661.5f, 778.5f, 3, 0)]   // prototype 70f, 664, 776
-    [InlineData(5, 79f, 659.5f, 780.5f, 3, 0)]
+    [InlineData(0, 67f, 664.5f, 775.5f, 0, 3)]   // v3 sampled (28 DIP neighbours)
+    [InlineData(1, 67f, 664.5f, 775.5f, 0, 3)]
+    [InlineData(2, 67f, 664.5f, 775.5f, 1, 2)]
+    [InlineData(3, 79f, 658.5f, 781.5f, 2, 1)]
+    [InlineData(4, 75f, 660.5f, 779.5f, 3, 0)]
+    [InlineData(5, 79f, 658.5f, 781.5f, 3, 0)]
     public void PrototypePageTable_IsReproduced(
         int page, float capsule, float prevCentre, float nextCentre, int leftDots, int rightDots)
     {
@@ -271,7 +271,7 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(capsule, layout.Current.Width, 0.001f);
         Assert.Equal(capsule, layout.CapsuleWidth, 0.001f);
-        Assert.Equal(280f + dy, layout.Current.MidY, 0.001f);
+        Assert.Equal(281f + dy, layout.Current.MidY, 0.001f);   // sampled 293
 
         if (page > 0)
         {
@@ -337,11 +337,11 @@ public sealed class MiniRailPrototypeTests
     }
 
     [Theory]
-    // 11 pt: +1.5 DIP on the 64-wide pages, +3 on the 73-wide page (prototype 9 pt: 793/800/807/797.5).
-    [InlineData(0, new[] { 794.5f, 801.5f, 808.5f })]
-    [InlineData(1, new[] { 794.5f, 801.5f, 808.5f })]
-    [InlineData(2, new[] { 794.5f, 801.5f })]
-    [InlineData(3, new[] { 800.5f })]
+    // v3 sampled with 28 DIP neighbours and the 34 DIP strip.
+    [InlineData(0, new[] { 796.5f, 803.5f, 810.5f })]
+    [InlineData(1, new[] { 796.5f, 803.5f, 810.5f })]
+    [InlineData(2, new[] { 796.5f, 803.5f })]
+    [InlineData(3, new[] { 802.5f })]
     [InlineData(4, new float[0])]
     [InlineData(5, new float[0])]
     public void RightDotCluster_MatchesThePrototypeRects(int page, float[] expected)
