@@ -570,7 +570,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
             // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
-            var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.00005;
+            var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
             if (audible)
             {
                 _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
