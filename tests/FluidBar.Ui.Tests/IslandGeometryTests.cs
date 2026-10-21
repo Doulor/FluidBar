@@ -21,7 +21,7 @@ public sealed class IslandGeometryTests
         await AvaloniaTest.Run(() =>
         {
             var shell = new VisualRect(24, 24, 440, 244);
-            var geometry = ShellGeometry.Create(shell, CornerRadii.Uniform(32));
+            var geometry = ShellGeometry.Create(shell, CornerRadii.Uniform(36));
             var outline = geometry.SampleOutline(15);
 
             var path = new StreamGeometry();
@@ -222,4 +222,5 @@ public sealed class IslandGeometryTests
         return inside;
     }
 }
+
 

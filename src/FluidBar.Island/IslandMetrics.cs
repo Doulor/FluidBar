@@ -43,7 +43,7 @@ public static class IslandMetrics
     public const double ContentHeight = LayoutTokens.ExpandedHeight - (2 * ContentTop);
 
     /// <summary>Prototype2 expanded panel radius default (32 DIP; setting range 16–36).</summary>
-    public const double ExpandedPanelRadius = 32;
+    public const double ExpandedPanelRadius = 36;
 
     /// <summary>Page body top inside the content rect (28 DIP; the title overlay owns the first row).</summary>
     public const double PageBodyTop = 28;
@@ -69,11 +69,11 @@ public static class IslandMetrics
     /// <summary>Compact trailing chip height (20 DIP).</summary>
     public const double CompactChipHeight = 20;
 
-    /// <summary>Detached previous/next mini-island diameter (26 DIP, prototype `RAIL_SLOT`).</summary>
-    public const double MiniNeighbourWidth = 26;
+    /// <summary>Detached previous/next mini-island diameter (28 DIP, was 26 with the 32 DIP strip).</summary>
+    public const double MiniNeighbourWidth = 28;
 
-    /// <summary>Detached previous/next mini-island height (26 DIP, prototype).</summary>
-    public const double MiniNeighbourHeight = 26;
+    /// <summary>Detached previous/next mini-island height (28 DIP, was 26).</summary>
+    public const double MiniNeighbourHeight = 28;
 
     /// <summary>
     /// Detached current capsule base width (64 DIP, prototype `RAIL_CUR_BASE`). The painted capsule
@@ -89,8 +89,8 @@ public static class IslandMetrics
     public const double MiniCurrentMaxWidth = 104;
 
     /// <summary>Detached current mini-island height (28 DIP, prototype).</summary>
-    /// <summary>Current capsule height (32: matches the 32 DIP rail strip, was 28).</summary>
-    public const double MiniCurrentHeight = 32;
+    /// <summary>Current capsule height (34: matches the 34 DIP rail strip, was 32).</summary>
+    public const double MiniCurrentHeight = 34;
 
     /// <summary>Gap between detached islands (8 DIP, prototype `RAIL_GAP`).</summary>
     public const double MiniGap = 8;

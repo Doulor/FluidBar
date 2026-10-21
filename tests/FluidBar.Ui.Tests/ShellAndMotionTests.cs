@@ -57,7 +57,7 @@ public sealed class ShellAndCompactSurfaceTests
             {
                 Width = 440,
                 Height = 244,
-                Radii = CornerRadii.Uniform(32),
+                Radii = CornerRadii.Uniform(36),
                 OriginX = 24,
                 OriginY = 24,
                 CompactOpacity = 0,
@@ -336,4 +336,5 @@ public sealed class MotionDriverTests
         false,
         LayoutTokens.WindowHeight);
 }
+
 

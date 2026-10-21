@@ -1,0 +1,260 @@
+{
+  "compact": [
+    {
+      "name": "media",
+      "shellWidth": 200,
+      "shellHeight": 40,
+      "radius": 20,
+      "pixelWidth4x": 1952,
+      "pixelHeight4x": 1376,
+      "bboxWidthDip": 208.25,
+      "bboxHeightDip": 47.75
+    },
+    {
+      "name": "notification",
+      "shellWidth": 194,
+      "shellHeight": 36,
+      "radius": 18,
+      "pixelWidth4x": 1952,
+      "pixelHeight4x": 1376,
+      "bboxWidthDip": 201,
+      "bboxHeightDip": 41.25
+    },
+    {
+      "name": "agent",
+      "shellWidth": 194,
+      "shellHeight": 36,
+      "radius": 18,
+      "pixelWidth4x": 1952,
+      "pixelHeight4x": 1376,
+      "bboxWidthDip": 201,
+      "bboxHeightDip": 41.25
+    },
+    {
+      "name": "clipboard",
+      "shellWidth": 194,
+      "shellHeight": 36,
+      "radius": 18,
+      "pixelWidth4x": 1952,
+      "pixelHeight4x": 1376,
+      "bboxWidthDip": 201,
+      "bboxHeightDip": 41.25
+    }
+  ],
+  "expanded": [
+    {
+      "page": 0,
+      "name": "home",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    },
+    {
+      "page": 1,
+      "name": "media",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    },
+    {
+      "page": 2,
+      "name": "notifications",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    },
+    {
+      "page": 3,
+      "name": "clipboard",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    },
+    {
+      "page": 4,
+      "name": "agent",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    },
+    {
+      "page": 5,
+      "name": "widgets",
+      "shellWidth": 440,
+      "shellHeight": 244,
+      "radius": 32,
+      "pixelWidth": 732,
+      "pixelHeight": 516
+    }
+  ],
+  "split": {
+    "ballDiameter": 40,
+    "gap": 8,
+    "thumbnailSide": 24,
+    "thumbnailRadius": 5.4,
+    "overflowCount": 2,
+    "ballCount": 2,
+    "ringWidth": 2,
+    "ringInset": 6,
+    "ringSweepDegrees": 180,
+    "ringDegreesPerSecond": 120,
+    "ringDiameter": 28
+  },
+  "mediaPage": {
+    "page": {
+      "x": 44,
+      "y": 36,
+      "w": 400,
+      "h": 220
+    },
+    "art": {
+      "x": 60,
+      "y": 76,
+      "w": 64,
+      "h": 64
+    },
+    "lyricCard": {
+      "x": 60,
+      "y": 140,
+      "w": 368,
+      "h": 32
+    },
+    "lyric1": {
+      "x": 60,
+      "y": 140,
+      "w": 368,
+      "h": 18
+    },
+    "lyric2": {
+      "x": 60,
+      "y": 158,
+      "w": 368,
+      "h": 14
+    },
+    "seekRow": {
+      "x": 60,
+      "y": 180,
+      "w": 368,
+      "h": 14
+    },
+    "seekTrack": {
+      "x": 104,
+      "y": 185.5,
+      "w": 280,
+      "h": 3
+    },
+    "play": {
+      "x": 228,
+      "y": 204,
+      "w": 32,
+      "h": 32
+    },
+    "previous": {
+      "x": 190,
+      "y": 207,
+      "w": 26,
+      "h": 26
+    },
+    "next": {
+      "x": 272,
+      "y": 207,
+      "w": 26,
+      "h": 26
+    },
+    "footer": {
+      "x": 104,
+      "y": 244,
+      "w": 280,
+      "h": 14
+    }
+  },
+  "rail": {
+    "strip": {
+      "x": 153.5,
+      "y": 276,
+      "w": 181,
+      "h": 32
+    },
+    "previous": {
+      "x": 170.5,
+      "y": 279,
+      "w": 26,
+      "h": 26
+    },
+    "current": {
+      "x": 204.5,
+      "y": 276,
+      "w": 79,
+      "h": 32
+    },
+    "next": {
+      "x": 291.5,
+      "y": 279,
+      "w": 26,
+      "h": 26
+    },
+    "capsuleWidth": 79
+  },
+  "typography": {
+    "compactTitle": 14,
+    "compactMediaTitle": 14,
+    "compactMediaSub": 11,
+    "compactNotice": 11.5,
+    "compactClipLabel": 11,
+    "compactAgentTask": 11.5,
+    "pageTitle": 13,
+    "pageNumber": 10,
+    "rowTitle": 13,
+    "rowBody": 11.5,
+    "rowMeta": 10,
+    "mediaTitle": 20,
+    "mediaArtist": 11.5,
+    "mediaAlbum": 11.5,
+    "miniLabel": 11,
+    "overflowBadge": 11
+  },
+  "iconSystem": {
+    "grid": 20,
+    "stroke": 1.5,
+    "opticalCenter": "10,10"
+  },
+  "list": {
+    "rowHeight": 44,
+    "rowGap": 4
+  },
+  "material": {
+    "L0": "#FF08080A",
+    "L1": {
+      "hex": "#99141418",
+      "opacity": 0.6,
+      "radius": 12
+    },
+    "L2": {
+      "hex": "#17FFFFFF",
+      "opacity": 0.09019607843137255,
+      "stroke": 1
+    },
+    "L3": {
+      "hex": "#0DFFFFFF",
+      "opacity": 0.050980392156862744,
+      "height": 1.5,
+      "gradient": true
+    },
+    "L4": {
+      "hex": "#2E000000",
+      "opacity": 0.1803921568627451,
+      "height": 8,
+      "blur": 4
+    }
+  }
+}

@@ -26,7 +26,7 @@ MioIsland 是 macOS notch（物理 notch + wings），只作为黑底活动/交�
 | FluidBar 紧凑 notification | 248 × 36 | 6.89 | 18（h/2） | 文本列约从 x=40 起 |
 | FluidBar 紧凑 agent | 236 × 36 | 6.56 | 18（h/2） | 同 notification 体系 |
 | FluidBar 紧凑 clipboard | 264 × 36 | 7.33 | 18（h/2） | 同上 |
-| FluidBar expanded | 440 × 284 | 1.55 | 28（0.099h） | 内容 inset 20/16；page body top 28 |
+| FluidBar expanded | 440 × 244 | 1.80 | 36（0.147h） | 内容 inset 16；page body top 40 |
 
 结论：
 - 紧凑态高度 36–40 与 iPhone 37.33 对齐，保持。

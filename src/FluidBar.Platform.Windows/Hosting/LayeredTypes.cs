@@ -69,22 +69,22 @@ public readonly record struct LayeredPixelSize(int Width, int Height)
 public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightDip)
 {
     /// <summary>Host surface width for both modes (DIP).</summary>
-    public const double Width = 488;
+    public const double Width = LayoutTokens.HostSurfaceWidth;
 
-    /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 8 gap + 32 strip + 36 bleed.</summary>
-    public const double FloatHeight = 384;
+    /// <summary>Float surface height (DIP), derived from Core geometry.</summary>
+    public const double FloatHeight = LayoutTokens.HostSurfaceFloatHeight;
 
-    /// <summary>Dock surface height (DIP): 24 + 284 panel + 8 gap + 52 strip + 8 gap + 32 strip + 36 bleed.</summary>
-    public const double DockHeight = 444;
+    /// <summary>Dock surface height (DIP), derived from Core geometry.</summary>
+    public const double DockHeight = LayoutTokens.HostSurfaceDockHeight;
 
     /// <summary>Bleed around the shell for the soft shadow/antialiasing (DIP).</summary>
-    public const double Padding = 24;
+    public const double Padding = LayoutTokens.WindowPadding;
 
     /// <summary>Expanded panel width (DIP).</summary>
-    public const double PanelWidth = 440;
+    public const double PanelWidth = LayoutTokens.ExpandedWidth;
 
     /// <summary>Expanded panel height (DIP).</summary>
-    public const double PanelHeight = 284;
+    public const double PanelHeight = LayoutTokens.ExpandedHeight;
 
     /// <summary>Dock strip height (DIP).</summary>
     public const double DockStripHeight = 52;

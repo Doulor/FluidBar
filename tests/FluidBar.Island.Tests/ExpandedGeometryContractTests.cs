@@ -13,7 +13,7 @@ public sealed class ExpandedGeometryContractTests
         Assert.Equal(440, LayoutTokens.ExpandedWidth);
         Assert.Equal(244, LayoutTokens.ExpandedHeight);
         Assert.Equal(new VisualSize(440, 244), LayoutTokens.ExpandedSize());
-        Assert.Equal(32, LayoutTokens.ExpandedRadius);
+        Assert.Equal(36, LayoutTokens.ExpandedRadius);
         Assert.Equal(32, IslandMetrics.ExpandedPanelRadius);
     }
 
@@ -49,3 +49,4 @@ public sealed class ExpandedGeometryContractTests
         }
     }
 }
+

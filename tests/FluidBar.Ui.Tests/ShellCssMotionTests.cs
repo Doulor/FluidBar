@@ -19,7 +19,7 @@ public sealed class ShellCssMotionTests
     {
         var run = new MotionRun(ExpandedMotion());
         Assert.Equal(419.141, run.WidthAt(191.2), 0.75);
-        Assert.Equal(267.172, run.HeightAt(191.1), 0.75);
+        Assert.Equal(229.920, run.HeightAt(191.1), 0.75);
 
         run = new MotionRun(ExpandedMotion());
         Assert.Equal(440, run.WidthAt(396.9), 0.001);

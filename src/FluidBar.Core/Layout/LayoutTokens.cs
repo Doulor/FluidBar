@@ -96,7 +96,7 @@ public static class LayoutTokens
     /// Detached archipelago strip height (32 DIP; the prototype2 <c>.mini-rail</c> height that
     /// centres the 26 DIP neighbour circles and the 28 DIP current capsule).
     /// </summary>
-    public const double ArchipelagoStripHeight = 32;
+    public const double ArchipelagoStripHeight = 34;
 
     /// <summary>
     /// Total bottom allowance of the float/flush host surface below the expanded shell
@@ -235,7 +235,7 @@ public static class LayoutTokens
     public const double DockShadowOpacity = 0.28;
 
     /// <summary>Expanded shell radius (spec: 28).</summary>
-    public const double ExpandedRadius = 32;
+    public const double ExpandedRadius = 36;
 
     /// <summary>Compact radius cap (spec: 44).</summary>
     public const double CompactRadiusCap = 44;
@@ -329,12 +329,12 @@ public static class LayoutTokens
     // as a wide banner rather than an island. Widths now keep 14 DIP more text room than the first
     // pass so a truncated title still shows >= 12 characters (CJK counted as 2):
     // media 200, the text pills 194; still far narrower than the old 226-264.
-    private static readonly VisualSize MediaSize = new(200, 40);
+    private static readonly VisualSize MediaSize = new(192, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    private static readonly VisualSize NotificationSize = new(194, 36);
-    private static readonly VisualSize ClipboardSize = new(194, 36);
+    private static readonly VisualSize NotificationSize = new(180, 36);
+    private static readonly VisualSize ClipboardSize = new(180, 36);
     // Prototype2 .island[data-view="agent"]: action/session title, not the brand name.
-    private static readonly VisualSize AgentSize = new(194, 36);
+    private static readonly VisualSize AgentSize = new(180, 36);
     private static readonly VisualSize TimerSize = new(190, 36);
     private static readonly VisualSize BatterySize = new(208, 36);
     private static readonly VisualSize LookupSize = new(480, 44);

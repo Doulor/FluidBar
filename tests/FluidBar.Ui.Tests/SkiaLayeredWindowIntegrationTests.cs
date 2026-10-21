@@ -149,7 +149,7 @@ public sealed class SkiaLayeredWindowIntegrationTests
         Assert.Equal(LayeredSurfaceSize.Width, dock.SurfaceSizeDip.WidthDip, 1);
         Assert.Equal(LayeredSurfaceSize.DockHeight, dock.SurfaceSizeDip.HeightDip, 1);
         Assert.Equal(488, dock.SurfaceSizePx.Width);
-        Assert.Equal(444, dock.SurfaceSizePx.Height);
+        Assert.Equal(406, dock.SurfaceSizePx.Height);
 
         var coreMonitor = FluidBar.Core.Layout.MonitorInfo.Create(
             "test",
@@ -167,7 +167,7 @@ public sealed class SkiaLayeredWindowIntegrationTests
         Assert.Equal(placement.WindowPixel.X, dock.Placement.WindowPixel.X);
         Assert.Equal(placement.WindowPixel.Y, dock.Placement.WindowPixel.Y);
         Assert.Equal(488, dock.Placement.SurfaceSizePx.Width);
-        Assert.Equal(444, dock.Placement.SurfaceSizePx.Height);
+        Assert.Equal(406, dock.Placement.SurfaceSizePx.Height);
 
         var state = IslandRenderState.ForCompact(
             IslandMode.Dock,
@@ -194,3 +194,5 @@ public sealed class SkiaLayeredWindowIntegrationTests
         dock.Hide();
     }
 }
+
+

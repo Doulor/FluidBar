@@ -260,7 +260,7 @@ public sealed class TokenAndGeometryTests
         Assert.Equal(8, UiMetrics.RailItemGap);
         Assert.Equal(6, UiMetrics.RailItemCount);
         Assert.Equal(18, UiMetrics.RailIconSize);
-        Assert.Equal(32, LayoutTokens.ExpandedRadius);
+        Assert.Equal(36, LayoutTokens.ExpandedRadius);
         Assert.Equal(52, UiMetrics.DockStripHeight);
         Assert.Equal(40, UiMetrics.HudHeight);
     }
@@ -268,11 +268,11 @@ public sealed class TokenAndGeometryTests
     [Fact]
     public void SquircleExponent_MatchesTheSpecAtTheExpandedShell()
     {
-        var (_, _, _, _, power) = SquircleGeometryFactory.Resolve(440, 244, CornerRadii.Uniform(32));
+        var (_, _, _, _, power) = SquircleGeometryFactory.Resolve(440, 244, CornerRadii.Uniform(36));
         var exponent = 2.0 / power;
         // The renderer must use exactly the same superellipse exponent as Core hit-testing (spec 3.2),
         // and the shell must read as a squircle, not a stadium (k < 2.5) or a rounded box (k > 3.3).
-        var core = ShellGeometry.Create(new VisualRect(0, 0, 440, 244), CornerRadii.Uniform(32));
+        var core = ShellGeometry.Create(new VisualRect(0, 0, 440, 244), CornerRadii.Uniform(36));
         Assert.Equal(core.ExponentK, exponent, 3);
         Assert.InRange(exponent, 2.7, 3.3);
     }
@@ -283,8 +283,8 @@ public sealed class TokenAndGeometryTests
         await AvaloniaTest.Run(() =>
         {
             SquircleGeometryFactory.ClearCache();
-            var first = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(32));
-            var second = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(32));
+            var first = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(36));
+            var second = SquircleGeometryFactory.GetOrCreate(440, 244, CornerRadii.Uniform(36));
             Assert.Same(first, second);
             for (var i = 0; i < SquircleGeometryFactory.MaxCacheEntries + 10; i++)
             {
@@ -446,3 +446,4 @@ public sealed class SettingsAndMarketTests
         Assert.Contains("code-pulse", controller.Current.Plugins.Enabled);
     }
 }
+
