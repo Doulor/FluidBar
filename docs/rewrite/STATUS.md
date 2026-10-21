@@ -232,7 +232,7 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 
 **最终用户指令**：直接照抄 `https://github.com/GEORGEWWWU/NetSpeed-Dynamic` 里的通知样式。
 
-- 对齐参考仓库 `src/views/WidgetIsland.vue` 的 `.msg-box`：**360×70 DIP**、100px CSS 圆角裁剪成 **35 DIP 胶囊**。
+- 按参考截图 `screenshot4.png` 实测：**360×64 DIP**，圆角 **21 DIP**（比 35 DIP 胶囊方，贴近参考）。
 - **35 DIP 圆形头像**（30 DIP 图片，`object-fit: cover`）；真实 app logo 由 `AppInfo.DisplayInfo.GetLogo(64×64)` 读取，无 logo 时画一个通用铃铛。
 - 标题 **14/700** + app 名 **10.5/600** 灰色圆角 chip（padding 2/6、radius 6、`rgba(150,150,150,.25)`）。
 - 正文 **12.5/400**、75% opacity、单行省略；右侧 padding 45 DIP；**不显示时间列**（参考仓库没有）。
@@ -240,6 +240,6 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
 - FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
 - 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛，通知为主时隐藏 split 预览球。golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `97AE5AEC5C7EE1581920808A6527C188D0BB1294023CDF7B2A93724981B2AEC9`。
-- 证据：`build/evidence/notifications-netspeed-only/split-settled.png`（360×70，GitHub demo toast：圆形铃铛头像 + 标题 + app chip + 正文）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `24350DEE44A5FDF4544DD046D8CD939782C6D191CFDA1E96A29B13B524C1CF64`。
+- 证据：`build/evidence/notifications-final-match2/split-settled.png`（360×70，GitHub demo toast：圆形铃铛头像 + 标题 + app chip + 正文）。
 
