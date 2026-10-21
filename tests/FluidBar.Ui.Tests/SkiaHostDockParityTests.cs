@@ -61,7 +61,7 @@ public sealed class SkiaHostDockParityTests
     {
         var floatSurface = HostSurface.Float;
         Assert.Equal(new VisualRect(24, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(68, 316, 352, 34), floatSurface.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 276, 352, 34), floatSurface.ArchipelagoStripLocal);
 
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
@@ -74,16 +74,16 @@ public sealed class SkiaHostDockParityTests
         using var renderer = new IslandRenderer();
         var strip = renderer.MeasureStrip(state);
 
-        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 32 DIP tall.
-        Assert.Equal(316f, strip.Strip.Top, 3);
+        // Prototype2: rail top = shell bottom + 8 DIP (24 + 244 + 8 = 276), 32 DIP tall (sampled).
+        Assert.Equal(276f, strip.Strip.Top, 3);
         Assert.Equal(34f, strip.Strip.Height, 3);
         Assert.Equal(284f, strip.Strip.MidX, 3);
     }
 
     [Theory]
     [InlineData(96u, 1.0, 488, 386, 488, 446)]
-    [InlineData(144u, 1.5, 732, 579, 732, 666)]
-    [InlineData(192u, 2.0, 976, 772, 976, 812)]
+    [InlineData(144u, 1.5, 732, 579, 732, 669)]
+    [InlineData(192u, 2.0, 976, 772, 976, 892)]
     public void SurfacePixels_CeilAt150And200Percent(
         uint dpi, double scale, int floatWidth, int floatHeight, int dockWidth, int dockHeight)
     {
@@ -141,8 +141,8 @@ public sealed class SkiaHostDockParityTests
 
     [Theory]
     [InlineData(96u, 716, 590, 488, 446)]
-    [InlineData(144u, 594, 365, 732, 666)]
-    [InlineData(192u, 472, 140, 976, 812)]
+    [InlineData(144u, 594, 365, 732, 669)]
+    [InlineData(192u, 472, 140, 976, 892)]
     public void DockPlacement_MeasuredWindowOrigin_ForA1920x1040WorkArea(
         uint dpi, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
     {
