@@ -98,6 +98,24 @@ public class ActivitySchedulerTests
     }
 
     [Fact]
+    public void CompletedAgentExpiresAfterThreeSecondCompletionBeat()
+    {
+        var key = TestData.Key(ActivityKind.Agent, "agent:test");
+        var running = IslandEvent.New(key, TestData.Payload("working") with { IsActive = true, Badge = "running" }, 1);
+        var state = TestData.BuildState(_scheduler, running);
+        Assert.True(state.Primary!.IsPersistent);
+
+        var completed = IslandEvent.New(key, TestData.Payload("done") with { IsActive = false, Badge = "completed" }, 2);
+        var update = _scheduler.Update(state, completed, TestData.Now.AddSeconds(1));
+        Assert.False(update.State.Primary!.IsPersistent);
+        Assert.NotNull(update.State.Primary.ExpiresAt);
+
+        var expired = _scheduler.Tick(update.State, TestData.Now.AddSeconds(4.1));
+        Assert.Empty(expired.State.Visible);
+        Assert.Null(expired.State.Primary);
+    }
+
+    [Fact]
     public void IdenticalIncremental_ReportsNoContentChange()
     {
         var payload = TestData.Payload("same") with { ProgressPercent = 40 };

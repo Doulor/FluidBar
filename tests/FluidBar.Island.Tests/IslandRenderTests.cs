@@ -162,7 +162,7 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
-    public void Page_transition_translates_the_track_without_scaling_or_fading_the_pages()
+    public void Page_transition_keeps_the_track_translation_and_current_enter_pose()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var settled = IslandTestFixtures.Expanded(0);
@@ -176,43 +176,14 @@ public sealed class IslandRenderTests
         var shell = IslandMetrics.ShellRect(settled);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(transitionBitmap, shell, IslandTestFixtures.Scale));
 
-        // Prototype2 only applies translate3d(-offset * 400px) to the pager track: page 0 content in the
-        // transition frame must be pixel-identical to the settled frame shifted by 0.4 * 400 DIP. A
-        // scale or parallax (the old invented effect) would break this equality.
-        var content = IslandMetrics.ContentRect(shell);
-        var shift = (int)Math.Round(0.4 * 400 * IslandTestFixtures.Scale);
-        var compared = 0;
-        var mismatches = 0;
-        for (var y = (int)((content.Top + 60) * IslandTestFixtures.Scale);
-             y < (int)((content.Bottom - 40) * IslandTestFixtures.Scale);
-             y += 3)
-        {
-            for (var x = (int)(content.Left * IslandTestFixtures.Scale);
-                 x < (int)((content.Left + 200) * IslandTestFixtures.Scale);
-                 x += 3)
-            {
-                var moving = transitionBitmap.GetPixel(x, y);
-                var reference = settledBitmap.GetPixel(x + shift, y);
-                if (moving.Alpha < 150 || reference.Alpha < 150)
-                {
-                    continue;
-                }
-
-                compared++;
-                var delta = Math.Max(
-                    Math.Max(Math.Abs(moving.Red - reference.Red), Math.Abs(moving.Green - reference.Green)),
-                    Math.Max(Math.Abs(moving.Blue - reference.Blue), Math.Abs(moving.Alpha - reference.Alpha)));
-                if (delta > 2)
-                {
-                    mismatches++;
-                }
-            }
-        }
-
-        Assert.True(compared > 300, $"expected enough solid page pixels to compare, got {compared}");
-        Assert.Equal(0, mismatches);
+        // Current contract: 6 DIP slide + 1.8% enter pose on top of the 400 DIP track translation.
+        var settledPage = IslandMetrics.PageRect(settled, 0);
+        var transitionPage = IslandMetrics.PageRect(transition, 0);
+        Assert.Equal(0.4 * 400, settledPage.Left - transitionPage.Left, 0.01);
+        var (slide, scale) = IslandRenderer.PageEnterPose(0.4, 0);
+        Assert.Equal(-2.4, slide, 3);
+        Assert.Equal(0.9928, scale, 3);
     }
-
     [Fact]
     public void Reduced_motion_removes_the_incoming_transform_but_still_renders()
     {

@@ -648,7 +648,8 @@ public sealed class SkiaIslandController : IDisposable
             && !string.IsNullOrEmpty(artwork);
 
         if ((identityChanged || artworkChanged) && !enrichment
-            && _started && (_pointerInside || State.Kind is IslandStateKind.Peek or IslandStateKind.Expanded)
+            && _started
+            && (_pointerInside || State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded)
             && !_motion.ReducedMotion)
         {
             // A new track always restarts the one timeline; rapid skipping cannot stack animations.

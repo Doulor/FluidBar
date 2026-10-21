@@ -296,6 +296,36 @@ public sealed class SplitIslandTests
         Assert.True(fixture.Controller.Pager.SelectedIndex >= 0);
         Assert.InRange(fixture.Controller.RenderState.SplitProgress, 0, 0.02);
     }
+    [Fact]
+    public void Completed_agent_leaves_visible_and_clears_satellite_after_three_seconds()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            Stacking = StackingStrategySetting.Split,
+        });
+        fixture.Settle();
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Agent", Badge = "running", IsActive = true,
+        }, 1, "agent");
+        Settle(fixture);
+
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Agent", Badge = "completed", IsActive = false,
+        }, 2, "agent");
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Agent, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        fixture.Time.Advance(TimeSpan.FromSeconds(3.1));
+        Settle(fixture);
+        Assert.Empty(fixture.Controller.SchedulerState.Visible);
+        Assert.Empty(fixture.Controller.RenderState.SplitIslets);
+        Assert.Null(fixture.Controller.RenderState.Compact.Value.Model.Title);
+    }
 }
+
 
 

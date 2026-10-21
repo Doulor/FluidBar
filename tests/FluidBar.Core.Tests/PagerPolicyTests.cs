@@ -335,17 +335,18 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_CooldownBlocksResidualInertia()
     {
-        var policy = new PagerWheelPolicy(TestPageCount);
+        var policy = new PagerWheelPolicy(TestPageCount, cooldownMs: PagerConstants.WheelCooldownMs);
         Assert.Equal(1, policy.Accumulate(PagerConstants.WheelDipPerNotch, T0).PageDelta);
 
         // prototype2 keeps accumulating during the cooldown (a reversal drops the residual); only the
         // page commit is paced, so the event is consumed with CooldownBlocked and no page delta.
-        var blocked = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0.AddMilliseconds(PagerConstants.WheelCooldownMs - 1));
+        var blocked = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0.AddMilliseconds(PagerConstants.WheelNewIntentMs - 1));
         Assert.Equal(0, blocked.PageDelta);
         Assert.True(blocked.CooldownBlocked);
         Assert.True(blocked.Consumed);
 
-        var allowed = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0.AddMilliseconds(PagerConstants.WheelCooldownMs));
+        var allowed = policy.Accumulate(PagerConstants.WheelDipPerNotch,
+            T0.AddMilliseconds(PagerConstants.WheelNewIntentMs + PagerConstants.WheelGestureIdleMs + 1));
         Assert.Equal(1, allowed.PageDelta);
     }
 

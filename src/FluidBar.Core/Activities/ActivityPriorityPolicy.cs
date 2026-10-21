@@ -109,7 +109,8 @@ public static class ActivityPriorityPolicy
         ActivityKind.Volume => TimeSpan.FromSeconds(1.6),
         ActivityKind.Brightness => TimeSpan.FromSeconds(1.6),
         ActivityKind.Notification => TimeSpan.FromSeconds(5),
-        ActivityKind.Agent => TimeSpan.FromSeconds(5),
+        // Completed/failed Agent rows stay visible for a 3 s completion beat, then expire.
+        ActivityKind.Agent => TimeSpan.FromSeconds(3),
         ActivityKind.BatteryLow => null,
         ActivityKind.Progress => null,
         ActivityKind.Timer => null,
