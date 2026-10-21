@@ -49,7 +49,7 @@ public sealed record ActivityRecord
     {
         ArgumentNullException.ThrowIfNull(payload);
         var kind = key.Kind;
-        var persistent = ActivityPriorityPolicy.IsPersistent(kind);
+        var persistent = ActivityPriorityPolicy.IsPersistent(kind, payload);
         var ttl = persistent ? null : ttlOverride ?? payload.Ttl ?? ActivityPriorityPolicy.DefaultTtl(kind);
         var pinned = payload.IsPinned;
         return new ActivityRecord

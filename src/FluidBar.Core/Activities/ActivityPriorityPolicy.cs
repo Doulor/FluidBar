@@ -80,13 +80,17 @@ public static class ActivityPriorityPolicy
     /// "Persistent" kinds (spec 2.3 rule 2): when preempted they stay live in the background
     /// layer instead of being discarded.
     /// </summary>
-    public static bool IsPersistent(ActivityKind kind) => kind switch
+    public static bool IsPersistent(ActivityKind kind, ActivityPayload? payload = null) => kind switch
     {
         ActivityKind.Focus => true,
         ActivityKind.BatteryLow => true,
         ActivityKind.Progress => true,
         ActivityKind.Timer => true,
-        ActivityKind.Media => true,
+        // Only an actively playing media session reserves a visible slot; a paused session is
+        // ordinary content and may be displaced by live feedback.
+        ActivityKind.Media => payload is null || payload.IsActive == true,
+        // A running Agent session is persistent content; a waiting/idle agent is a short event.
+        ActivityKind.Agent => payload?.IsActive == true,
         _ => false,
     };
 

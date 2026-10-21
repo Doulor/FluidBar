@@ -487,8 +487,27 @@ public sealed class ActivityScheduler
         });
 
         var capacity = _policy.VisibleCapacity;
-        var newVisible = live.Count <= capacity ? live : live.GetRange(0, capacity);
-        var newBackground = live.Count <= capacity ? [] : live.GetRange(capacity, live.Count - capacity);
+
+        // Persistent content (playing media, running agent, timers, focus, progress, low battery)
+        // reserves visible slots first. Transient feedback may never push persistent content into
+        // the background just because its rank is numerically lower. Within each group the normal
+        // pinned > rank > ReceivedAt order still applies because live is already sorted.
+        var persistentRecords = live.Where(r => r.IsPersistent).ToList();
+        var transientRecords = live.Where(r => !r.IsPersistent).ToList();
+        var selectedKeys = new HashSet<ActivityKey>();
+        foreach (var record in persistentRecords.Take(capacity))
+        {
+            selectedKeys.Add(record.Key);
+        }
+
+        var remaining = capacity - selectedKeys.Count;
+        foreach (var record in transientRecords.Take(remaining))
+        {
+            selectedKeys.Add(record.Key);
+        }
+
+        var newVisible = live.Where(r => selectedKeys.Contains(r.Key)).ToList();
+        var newBackground = live.Where(r => !selectedKeys.Contains(r.Key)).ToList();
 
         var dropped = 0;
         if (!_policy.KeepPreemptedPersistent)

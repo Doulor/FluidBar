@@ -65,7 +65,7 @@ public sealed record ActivityStackPolicy
     public TimeSpan? ResolveTtl(ActivityKind kind, ActivityPayload payload)
     {
         ArgumentNullException.ThrowIfNull(payload);
-        if (ActivityPriorityPolicy.IsPersistent(kind))
+        if (ActivityPriorityPolicy.IsPersistent(kind, payload))
         {
             return null;
         }

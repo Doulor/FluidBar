@@ -314,4 +314,47 @@ public class ActivitySchedulerTests
         Assert.True(update.State.Primary!.IsPinned);
         Assert.Equal(key, update.State.Primary.Key);
     }
+    [Fact]
+    public void PlayingMedia_ReservesVisibleSlotAgainstThreeTransientActivities()
+    {
+        var state = TestData.BuildState(_scheduler,
+            TestData.Media(),
+            TestData.NewEvent(ActivityKind.Notification, "notif", "notice", 2),
+            TestData.NewEvent(ActivityKind.Clipboard, "clip", "copy", 3),
+            TestData.NewEvent(ActivityKind.LockKeys, "lock", "caps", 4));
+
+        Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+        Assert.Equal(3, state.Visible.Length);
+    }
+
+    [Fact]
+    public void PausedMedia_DoesNotReserveVisibleSlot()
+    {
+        var paused = IslandEvent.New(
+            TestData.Key(ActivityKind.Media, "media:paused"),
+            TestData.Payload("paused") with { IsActive = false }, 1);
+        var state = TestData.BuildState(_scheduler,
+            paused,
+            TestData.NewEvent(ActivityKind.Notification, "notif", "notice", 2),
+            TestData.NewEvent(ActivityKind.Clipboard, "clip", "copy", 3),
+            TestData.NewEvent(ActivityKind.LockKeys, "lock", "caps", 4));
+
+        Assert.DoesNotContain(state.Visible, r => r.Kind == ActivityKind.Media);
+    }
+
+    [Fact]
+    public void PersistentOverflow_UsesPinnedThenRankThenArrival()
+    {
+        var pinnedTimer = IslandEvent.New(
+            TestData.Key(ActivityKind.Timer, "timer"),
+            TestData.Payload("timer").Pinned(), 1);
+        var media = TestData.Media("media:one", "song", 2);
+        var progress = TestData.NewEvent(ActivityKind.Progress, "progress", "export", 3);
+        var focus = TestData.NewEvent(ActivityKind.Focus, "focus", "focus", 4);
+
+        var state = TestData.BuildState(_scheduler, pinnedTimer, media, progress, focus);
+        Assert.Equal(ActivityKind.Timer, state.Visible[0].Kind);
+        Assert.True(state.Visible[0].IsPinned);
+        Assert.Equal(3, state.Visible.Length);
+    }
 }
