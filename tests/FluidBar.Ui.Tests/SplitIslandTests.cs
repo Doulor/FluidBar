@@ -197,8 +197,8 @@ public sealed class SplitIslandTests
         Assert.True(mediaPinned, "the wheel must be able to put media in the primary slot");
         var order = fixture.Controller.RenderState.SplitIslets.Select(i => i.Kind).ToArray();
 
-        // Two heartbeat re-publishes of the same agent key: policy must keep the wheel pin.
-        for (var beat = 0; beat < 3; beat++)
+        // Eight heartbeat re-publishes (16 s) of the same agent key: policy must keep the wheel pin.
+        for (var beat = 0; beat < 8; beat++)
         {
             fixture.Time.Advance(TimeSpan.FromSeconds(2));
             Publish(fixture, ActivityKind.Agent, new ActivityPayload

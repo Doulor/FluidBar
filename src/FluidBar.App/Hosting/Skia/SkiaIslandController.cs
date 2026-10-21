@@ -1818,7 +1818,8 @@ public sealed class SkiaIslandController : IDisposable
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         PinDiagnostics.Log(
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
-            $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00}");
+            $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
+            $"primary={viewModel.Primary?.Kind}:{viewModel.Primary?.Title}");
         ObserveTrackChange(content, settings);
         ObserveTrackTransition(content, viewModel);
 
