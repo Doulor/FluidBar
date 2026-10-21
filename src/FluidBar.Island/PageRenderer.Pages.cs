@@ -470,20 +470,14 @@ internal sealed partial class PageRenderer
             // prototype2 .agent-state .spinner-ring: an 11×11 border ring (1.5px) whose top+right
             // seams spin 900ms linear, exactly like the compact capsule ring.
             const float spinnerRadius = (11f - AgentMotion.RingStrokeWidth) / 2f;
+            // Track ring (the 25 % base border) then the arc, both through the shared primitive.
             _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeCap = SKStrokeCap.Butt;
-            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
+            _stroke.StrokeCap = AgentSpinner.Cap;
+            _stroke.StrokeWidth = AgentSpinner.StrokeForRadius(spinnerRadius);
             _stroke.Color = Alpha(_theme.Accent, AgentMotion.SpinnerBaseAlpha * _opacity);
             canvas.DrawCircle(stateCenter.X, stateCenter.Y, spinnerRadius, _stroke);
-            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentAnimationSeconds);
-            _stroke.Color = Alpha(tone, _opacity);
-            canvas.DrawArc(
-                new SKRect(stateCenter.X - spinnerRadius, stateCenter.Y - spinnerRadius,
-                    stateCenter.X + spinnerRadius, stateCenter.Y + spinnerRadius),
-                AgentMotion.ArcStartDegrees + (float)rotation,
-                AgentMotion.ArcSweepDegrees,
-                false,
-                _stroke);
+            var rotation = _reduced ? 0 : AgentSpinner.RotationDegrees(_agentAnimationSeconds);
+            AgentSpinner.Draw(canvas, _stroke, stateCenter, spinnerRadius, rotation, Alpha(tone, _opacity));
         }
         else if (item.Tone == CompactStatus.Success)
         {

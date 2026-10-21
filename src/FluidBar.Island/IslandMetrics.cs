@@ -183,18 +183,20 @@ public static class IslandMetrics
     /// Agent ring stroke width (DIP). Thickened from 2 to 2.75 on request: the ring reads clearly at
     /// 40 DIP without muddying the 24 DIP cover well (outer edge 12.9, corner arc 14.7 -> 1.8 DIP).
     /// </summary>
-    public const float SplitRingStrokeDip = 2.75f;
+    public const float SplitRingRadiusDip = 11f;
+
+    /// <summary>Ring stroke width, derived from the shared spinner ratio (radius x 0.3158 = 3.47 DIP).</summary>
+    public const float SplitRingStrokeDip = SplitRingRadiusDip * AgentSpinner.StrokeToRadiusRatio;
 
     /// <summary>Stroke of the static Completed/Failed marks (2.25 DIP: same visual weight as the ring).</summary>
     public const float SplitRingEndMarkStrokeDip = 2.25f;
 
     /// <summary>Agent ring period in seconds (3 s = 120 deg/s, inside the frozen 110-130 deg/s gate).</summary>
-    public const double SplitRingPeriodSeconds = 3.0;
+    public const double SplitRingPeriodSeconds = AgentSpinner.PeriodSeconds;
 
     /// <summary>Agent ring rotation in degrees for an elapsed animation time (monotonic, 120 deg/s).</summary>
     /// <param name="seconds">Elapsed animation seconds.</param>
-    public static double SplitRingDegrees(double seconds)
-        => double.IsFinite(seconds) ? (seconds / SplitRingPeriodSeconds) * 360.0 % 360.0 : 0;
+    public static double SplitRingDegrees(double seconds) => AgentSpinner.RotationDegrees(seconds);
 
     /// <summary>
     /// True only while a visible split satellite is an agent in Running/Waiting (Info). Completed,

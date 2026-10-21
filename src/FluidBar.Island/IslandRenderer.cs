@@ -634,23 +634,13 @@ public sealed class IslandRenderer : IDisposable
             {
                 if (islet.Status == CompactStatus.Info)
                 {
-                    // Running/Waiting: 2 DIP, 180° arc at 120 deg/s, centred at 0.575 x radius.
-                    var phase = (float)((state.AgentRingFrozenDegrees
-                        ?? IslandMetrics.SplitRingDegrees(state.AgentAnimationSeconds)) / 360.0);
-                    if (phase < 0) { phase += 1f; }
-                    var ringInset = Math.Max(1f, radius * (1f - IslandMetrics.SplitRingRadiusFactor));
-                    var ringRect = new SKRect(
-                        rect.Left + ringInset,
-                        rect.Top + ringInset,
-                        rect.Right - ringInset,
-                        rect.Bottom - ringInset);
-                    _stroke.Style = SKPaintStyle.Stroke;
-                    _stroke.StrokeWidth = IslandMetrics.SplitRingStrokeDip;
-                    _stroke.StrokeCap = SKStrokeCap.Round;
-                    _stroke.Shader = null;
-                    _stroke.Color = Alpha(_theme.Info, alpha);
-                    canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
-                    _stroke.StrokeCap = SKStrokeCap.Butt;
+                    // Running/Waiting: exactly the same primitive the expanded agent row uses, only
+                    // scaled down (same sweep, same stroke:radius ratio, same speed, same colour).
+                    var rotation = state.AgentRingFrozenDegrees
+                        ?? AgentSpinner.RotationDegrees(state.AgentAnimationSeconds);
+                    var centreRadius = radius * IslandMetrics.SplitRingRadiusFactor;
+                    AgentSpinner.Draw(canvas, _stroke, new SKPoint(rect.MidX, rect.MidY), centreRadius, rotation,
+                        Alpha(_theme.Info, alpha));
                 }
                 else
                 {
