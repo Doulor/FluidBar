@@ -104,6 +104,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Line the monotonic sweep is locked to (a different value means "take the new value").</summary>
     private double _karaokeSweepLineStartMs = double.NaN;
 
+    /// <summary>Page remembered from the previous session; applied once the pager knows the page count.</summary>
+    private int _pendingRestoredPage = -1;
+
     /// <summary>Line currently committed for painting (flip-backs are suppressed).</summary>
     private string? _lyricLineCommitted;
 
@@ -233,10 +236,12 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
-        // Restore the page the user last scrolled to (clamped in case the page count changed).
-        var restoredPage = Math.Clamp(PageSelectionStore.Load(), 0, Math.Max(0, _pages.PageCount - 1));
-        _pager = new SkiaPager(restoredPage == 0 ? IndexOfPage(State.Page) : restoredPage, _pages.PageCount);
+        // The page count is not final at construction time, so the restored index is remembered here and
+        // applied on the first frame where the pager knows how many pages exist (see ApplyRestoredPage).
+        _pendingRestoredPage = PageSelectionStore.Load();
+        _pager = new SkiaPager(IndexOfPage(State.Page), Math.Max(1, _pages.PageCount));
         _pager.PageChanged += OnPagerPageChanged;
+        ApplyRestoredPage();
         _archipelago = new SkiaArchipelago(profile);
 
         _settings.Changed += OnSettingsChanged;
@@ -2519,6 +2524,22 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         InvalidateFull();
+    }
+
+    /// <summary>Applies the remembered page once, as soon as the pager knows the real page count.</summary>
+    private void ApplyRestoredPage()
+    {
+        if (_pendingRestoredPage < 0 || _pages.PageCount <= 0)
+        {
+            return;
+        }
+
+        var page = Math.Clamp(_pendingRestoredPage, 0, _pages.PageCount - 1);
+        _pendingRestoredPage = -1;
+        if (page != _pager.SelectedIndex)
+        {
+            _pager.SelectPage(page);
+        }
     }
 
     private void OnPagerPageChanged(int page)

@@ -259,8 +259,9 @@ public sealed class SplitStackPolicy
         {
             // Remember the persistent primary so the pill returns to it when the short event expires.
             _restoreKey = currentLayer == Layer.Persistent ? current.Key : _restoreKey;
-            SetPrimary(best, now);
-            return Arrange(best, visible);
+            var preferred = PreferMediaOverAgent(best, visible);
+            SetPrimary(preferred, now);
+            return Arrange(preferred, visible);
         }
 
         // Stability: keep the current primary. Passive re-sorting must never flip the main pill.
@@ -284,6 +285,28 @@ public sealed class SplitStackPolicy
             .ThenBy(record => record.ReceivedAt)
             .ToImmutableArray();
         return rest.Insert(0, primary);
+    }
+
+    /// <summary>
+    /// Gives the media record the primary slot when an agent is the only thing that would otherwise win.
+    /// A playing track is what the user watches; the agent is background work (user request 2026-10-22).
+    /// </summary>
+    private static ActivityRecord PreferMediaOverAgent(ActivityRecord best, ImmutableArray<ActivityRecord> visible)
+    {
+        if (best.Kind != ActivityKind.Agent)
+        {
+            return best;
+        }
+
+        foreach (var record in visible)
+        {
+            if (record.Kind == ActivityKind.Media)
+            {
+                return record;
+            }
+        }
+
+        return best;
     }
 
     private void SetPrimary(ActivityRecord record, DateTimeOffset now)
