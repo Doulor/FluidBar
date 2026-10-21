@@ -50,7 +50,7 @@ public sealed class SplitIslandTests
     }
 
     [Fact]
-    public void Waiting_agent_takes_primary_then_media_restores_when_it_resolves()
+    public void Waiting_agent_stays_in_the_preview_ball_while_media_plays()
     {
         using var fixture = Create();
         fixture.Settle();
@@ -64,7 +64,9 @@ public sealed class SplitIslandTests
             Title = "Agent", Badge = "waiting", IsActive = true,
         }, 2);
         Settle(fixture);
-        Assert.Equal(ActivityKind.Agent, fixture.Controller.RenderState.Compact.Value.Kind);
+        // Contract changed 2026-10-22 (user decision, option B): a playing track keeps the pill and the
+        // waiting agent only appears as a preview ball; the user's explicit pin still outranks media.
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
 
         fixture.Controller.RetractActivity(ActivityKind.Agent, 3, "test");
         Settle(fixture);

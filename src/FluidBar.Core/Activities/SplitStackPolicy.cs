@@ -304,8 +304,14 @@ public sealed class SplitStackPolicy
     /// Gives the media record the primary slot when an agent is the only thing that would otherwise win.
     /// A playing track is what the user watches; the agent is background work (user request 2026-10-22).
     /// </summary>
-    private static ActivityRecord PreferMediaOverAgent(ActivityRecord best, ImmutableArray<ActivityRecord> visible)
+    private ActivityRecord PreferMediaOverAgent(ActivityRecord best, ImmutableArray<ActivityRecord> visible)
     {
+        // A pin is an explicit user choice and outranks the media preference (user decision 2026-10-22, option B).
+        if (_pinnedKey is not null || _pinOverrideKey is not null)
+        {
+            return best;
+        }
+
         if (best.Kind != ActivityKind.Agent)
         {
             return best;
