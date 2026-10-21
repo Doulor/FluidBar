@@ -104,6 +104,15 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Line the monotonic sweep is locked to (a different value means "take the new value").</summary>
     private double _karaokeSweepLineStartMs = double.NaN;
 
+    /// <summary>Line currently committed for painting (flip-backs are suppressed).</summary>
+    private string? _lyricLineCommitted;
+
+    /// <summary>The line before it, kept to recognise a flip-back.</summary>
+    private string? _lyricLinePrevious;
+
+    /// <summary>When the committed line changed (used for the flip-back debounce).</summary>
+    private long _lyricLineChangedAtMs;
+
     /// <summary>Whether the karaoke sweep needs frames right now.</summary>
     private bool _karaokeActive;
 
@@ -3587,6 +3596,31 @@ private void HandlePageControl(in IslandHitTarget hit)
         {
             return;
         }
+
+        // Near a line boundary the sampled position wobbles across it, so the selector hands line N+1 and
+        // then line N again. Every flip restarted the fade and the WHOLE line blinked (user report
+        // 2026-10-22). A flip-back within a second is ignored and the committed line is restored.
+        var nowForLineMs = NowMs();
+        var flipBack = _lyricLinePrevious is { } previousLine
+            && string.Equals(line, previousLine, StringComparison.Ordinal)
+            && nowForLineMs - _lyricLineChangedAtMs < 900;
+        if (flipBack)
+        {
+            if (!string.IsNullOrEmpty(_lyricLineCommitted))
+            {
+                _pages = _pages with { Media = _pages.Media with { LyricLine = _lyricLineCommitted } };
+                if (_compact.Model is { ShowLyrics: true } compactModel)
+                {
+                    _compact = _compact with { Model = compactModel with { LyricLine = _lyricLineCommitted } };
+                }
+            }
+
+            return;
+        }
+
+        _lyricLinePrevious = _lyricLineCommitted;
+        _lyricLineCommitted = line;
+        _lyricLineChangedAtMs = nowForLineMs;
 
         var firstObservation = _lyricLinePainted is null;
         _lyricLinePainted = line;
