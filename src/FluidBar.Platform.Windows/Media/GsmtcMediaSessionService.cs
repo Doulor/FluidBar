@@ -109,6 +109,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>State-file samples older than this belong to the previous track.</summary>
     private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
 
+    /// <summary>Last accessibility position and when it changed (freshness of the player's clock text).</summary>
+    private TimeSpan _lastMsaaPosition = TimeSpan.MinValue;
+    private long _lastMsaaChangeMs;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -491,6 +495,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (candidate.Position <= TimeSpan.Zero)
         {
             return candidate; // no accessibility reading at all (player minimised): cross-check is mute
+        }
+
+        var nowCheck = _timeProviderNow().ToUnixTimeMilliseconds();
+        if (candidate.Position != _lastMsaaPosition)
+        {
+            _lastMsaaPosition = candidate.Position;
+            _lastMsaaChangeMs = nowCheck;
+        }
+
+        // Fusion: whichever clock moved most recently is the fresher one. A text that repainted within the
+        // last two seconds is better than a state file that may be half a minute old; when the text is
+        // frozen (KuGou stops repainting) the state file takes over.
+        if (nowCheck - _lastMsaaChangeMs < 2000)
+        {
+            return candidate;
         }
 
         var age = _timeProviderNow() - state.SampledAtUtc;
