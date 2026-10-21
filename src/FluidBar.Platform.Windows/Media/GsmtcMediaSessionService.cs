@@ -324,6 +324,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
         candidate = EnrichWithAccessibility(candidate);
+        // Cross-check the two independent clocks. The MSAA time text has no timestamp, so a frozen text
+        // is re-stamped as "now" and every later sample agrees with our own extrapolation — an offset of
+        // ten seconds then never looks like a seek and is never corrected (user report 2026-10-22).
+        // The state file, on the other hand, carries its own write time: when it is fresh it is the more
+        // trustworthy absolute value, so a large disagreement is resolved in its favour.
+        candidate = CrossCheckTimeline(candidate);
         // Experimental: KuGou keeps a millisecond position counter in its own memory; see
         // KugouMemoryPosition. No-op unless FLUIDBAR_KUGOU_MEM_POSITION=1 and always falls back.
         candidate = KugouMemoryPosition.Apply(candidate, _timeProviderNow());
@@ -446,6 +452,48 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// accessibility tree carries the live "mm:ss/mm:ss" text, which is both finer-grained (updated
     /// every second) and more accurate (real duration) than the position it persists every 30 s.
     /// </summary>
+    /// <summary>
+    /// Resolves a disagreement between the accessibility clock and the player's state file in favour of the
+    /// one that can prove when it was sampled.
+    /// </summary>
+    private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
+    {
+        if (!string.Equals(candidate.ProcessName, "KuGou", StringComparison.OrdinalIgnoreCase))
+        {
+            return candidate;
+        }
+
+        if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
+        {
+            return candidate;
+        }
+
+        var statePosition = state.Position;
+
+        var age = _timeProviderNow() - state.SampledAtUtc;
+        if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
+        {
+            return candidate; // too old to arbitrate
+        }
+
+        // The state file is written while playing, so extrapolate it to now.
+        var expected = statePosition + (candidate.IsPlayingHint == false ? TimeSpan.Zero : age);
+        var difference = (candidate.Position - expected).Duration();
+        if (difference <= TimeSpan.FromSeconds(3))
+        {
+            return candidate;
+        }
+
+        MediaDiagnostics.LogAlways($"timeline.crosscheck resolved=state-file delta={difference.TotalSeconds:0.0}s " +
+            $"msaa={candidate.Position.TotalSeconds:0.0}s state={expected.TotalSeconds:0.0}s age={age.TotalSeconds:0.0}s");
+        return candidate with
+        {
+            Position = expected,
+            PositionSampledAtUtc = _timeProviderNow(),
+            TimelineSource = PlayerTimelineSource.StateFile,
+        };
+    }
+
     private WindowMediaCandidate EnrichWithAccessibility(WindowMediaCandidate candidate)
     {
         if (candidate.ProcessId <= 0 || !MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
