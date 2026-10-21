@@ -3138,11 +3138,17 @@ private void HandlePageControl(in IslandHitTarget hit)
             _karaokeClock.Anchor(media.PositionMs, now, media.IsPlaying);
             _karaokeHighlight = track.Progress(media.PositionMs);
         }
-        else if (media.PositionMs > _karaokeClock.PositionAt(now)
-                 && _karaokeClock.Reconcile(media.PositionMs, now, media.IsPlaying))
+        else
         {
-            // Forward-only easing. A lagging sample is ignored instead of pulling the clock backwards.
-            _karaokeHighlight = track.Progress(media.PositionMs);
+            // Half a second off is exactly the range that used to hang forever: too small for the seek
+            // path, too large to ignore. Converge by bending the playback rate a few percent — the picture
+            // keeps moving forwards, so nothing flickers, and the offset is gone within ~20 s (user
+            // request 2026-10-22: "1-2 s off is what breaks the sync").
+            var delta = media.PositionMs - _karaokeClock.PositionAt(now);
+            if (Math.Abs(delta) > 250)
+            {
+                _karaokeClock.Nudge(media.PositionMs, now);
+            }
         }
 
         if (!media.IsPlaying)

@@ -38,6 +38,12 @@ public sealed class MediaPositionClock
     private double _driftAtMs;
     private double _limitMs;
 
+    /// <summary>
+    /// Playback rate of the extrapolation (1.0 normally). Small deviations from the source are absorbed by
+    /// running slightly faster/slower instead of jumping, which keeps the picture monotonic.
+    /// </summary>
+    private double _rate = 1.0;
+
     /// <summary>Whether the clock has a usable anchor.</summary>
     public bool HasAnchor => _hasAnchor;
 
@@ -80,7 +86,7 @@ public sealed class MediaPositionClock
             return Clamp(_anchorPositionMs);
         }
 
-        return Clamp(_anchorPositionMs + elapsed + DriftAt(nowMs));
+        return Clamp(_anchorPositionMs + (elapsed * _rate) + DriftAt(nowMs));
     }
 
     /// <summary>(Re)anchors the clock on a source sample.</summary>
@@ -95,6 +101,31 @@ public sealed class MediaPositionClock
         _hasAnchor = true;
         _driftMs = 0;
         _driftAtMs = nowMs;
+        _rate = 1.0;
+    }
+
+    /// <summary>
+    /// Converges the clock onto a sample WITHOUT jumping: the current position is kept and the playback
+    /// rate is bent by up to ±10 % until the difference is gone (about <paramref name="windowMs"/>).
+    /// </summary>
+    /// <param name="positionMs">Sampled position to converge on.</param>
+    /// <param name="nowMs">Monotonic "now" (milliseconds).</param>
+    /// <param name="windowMs">Time over which the difference should be absorbed.</param>
+    public void Nudge(double positionMs, double nowMs, double windowMs = 20000)
+    {
+        if (!_hasAnchor)
+        {
+            Anchor(positionMs, nowMs, _playing);
+            return;
+        }
+
+        var current = PositionAt(nowMs);
+        var diff = Math.Max(0, positionMs) - current;
+        _anchorPositionMs = Math.Max(0, current);
+        _anchorAtMs = nowMs;
+        _driftMs = 0;
+        _driftAtMs = nowMs;
+        _rate = Math.Abs(diff) < 250 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.9, 1.1);
     }
 
     /// <summary>
