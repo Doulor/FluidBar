@@ -16,7 +16,7 @@ public static class LayoutTokens
     public const double ExpandedWidth = 440;
 
     /// <summary>Uniform expanded shell height for all pages (440:244 = 1.80 ratio).</summary>
-    public const double ExpandedHeight = 244;
+    public const double ExpandedHeight = 284;
 
     /// <summary>
     /// Left vertical navigation rail width. <b>Superseded</b> by the horizontal pager
