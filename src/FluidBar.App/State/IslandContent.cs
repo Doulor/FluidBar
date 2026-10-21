@@ -103,6 +103,12 @@ public sealed record NotificationItemData
 
     /// <summary>Source application name.</summary>
     public string Source { get; init; } = string.Empty;
+
+    /// <summary>Real app logo bytes supplied by the platform (null when the toast exposes none).</summary>
+    public byte[]? AppIconPng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="AppIconPng"/>.</summary>
+    public string? AppIconKey { get; init; }
 }
 
 /// <summary>One clipboard history row.</summary>

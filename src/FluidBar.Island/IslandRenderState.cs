@@ -499,6 +499,12 @@ public sealed record CompactModel
     /// <summary>Notification source app name.</summary>
     public string? AppName { get; init; }
 
+    /// <summary>Real app logo bytes for the phone-style notification tile (null = generic icon).</summary>
+    public byte[]? AppIconPng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="AppIconPng"/>.</summary>
+    public string? AppIconKey { get; init; }
+
     /// <summary>Idle clock text (HH:mm).</summary>
     public string? ClockText { get; init; }
 

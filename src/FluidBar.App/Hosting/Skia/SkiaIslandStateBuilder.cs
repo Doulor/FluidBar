@@ -56,11 +56,10 @@ public static class SkiaIslandStateBuilder
             : model.ProgressPercent ?? -1;
         var unread = kind == ActivityKind.Notification ? Math.Max(0, content.UnreadCount) : 0;
         var isNotification = kind == ActivityKind.Notification;
-        var notificationAccent = isNotification ? NotificationAccent(model.SourceName) : null;
+        var notification = isNotification ? FindNotification(content, model.SourceName, model.Title) : null;
         var notificationTime = isNotification
-            ? NotificationTime(content, model.SourceName, model.Title, localizer)
+            ? notification?.TimeText ?? localizer.Get(LocKeys.Notifications.JustNow)
             : null;
-        var icon = isNotification ? NotificationGlyph(model.SourceName) : MapIcon(model.Icon);
         // Lyric mode only replaces the two text rows; artwork/progress/wave stay exactly the same, and an
         // empty lyric falls back to the title form (never a blank line).
         var lyricLine = compactLyrics && kind == ActivityKind.Media && media is not null
@@ -90,13 +89,13 @@ public static class SkiaIslandStateBuilder
             ProgressPercent = progress,
             // The cover's own accent drives the compact wave/highlight too; without a cover the accent
             // rule from the source/theme stays in charge.
-            AccentHex = isNotification
-                ? notificationAccent ?? model.AccentHex
-                : ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? model.AccentHex ?? media?.AccentHex,
+            AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? model.AccentHex ?? media?.AccentHex,
             LyricHighlight = media?.LyricHighlight ?? -1,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
-            Icon = icon,
+            AppIconPng = notification?.AppIconPng,
+            AppIconKey = notification?.AppIconKey,
+            Icon = MapIcon(model.Icon),
             Status = MapTone(model.Tone),
             TimeText = notificationTime,
         });
@@ -573,60 +572,15 @@ public static class SkiaIslandStateBuilder
         return builder.ToString();
     }
 
-    /// <summary>Maps well-known notification sources to a recognisable app glyph (no logo API exists).</summary>
-    private static IslandIcon NotificationGlyph(string? app)
-    {
-        var name = app ?? string.Empty;
-        if (Contains(name, "qq") || Contains(name, "wechat") || Contains(name, "微信")
-            || Contains(name, "teams") || Contains(name, "telegram") || Contains(name, "discord")
-            || Contains(name, "slack") || Contains(name, "message"))
-        {
-            return IslandIcon.Chat;
-        }
-
-        if (Contains(name, "outlook") || Contains(name, "mail") || Contains(name, "gmail")
-            || Contains(name, "github") || Contains(name, "gitlab"))
-        {
-            return IslandIcon.Document;
-        }
-
-        if (Contains(name, "calendar") || Contains(name, "日历"))
-        {
-            return IslandIcon.Calendar;
-        }
-
-        if (Contains(name, "store") || Contains(name, "商店"))
-        {
-            return IslandIcon.Store;
-        }
-
-        if (Contains(name, "update") || Contains(name, "system") || Contains(name, "windows"))
-        {
-            return IslandIcon.Settings;
-        }
-
-        return IslandIcon.Bell;
-    }
-
-    /// <summary>Per-app accent for the notification tile; null keeps the theme accent.</summary>
-    private static string? NotificationAccent(string? app)
-    {
-        var name = app ?? string.Empty;
-        if (Contains(name, "qq")) return "#12B7F5";
-        if (Contains(name, "wechat") || Contains(name, "微信")) return "#07C160";
-        if (Contains(name, "teams")) return "#6264A7";
-        if (Contains(name, "outlook")) return "#0078D4";
-        if (Contains(name, "github")) return "#8B949E";
-        if (Contains(name, "edge") || Contains(name, "chrome") || Contains(name, "browser")) return "#0A84FF";
-        if (Contains(name, "store") || Contains(name, "商店")) return "#4CC9F0";
-        return null;
-    }
-
-    private static string NotificationTime(
+    /// <summary>
+    /// Finds the toast record that produced the current notification activity, so the compact card can
+    /// reuse its relative time and real app logo bytes. Matching is deliberately source-first; the title
+    /// is only a tie-breaker because plugins may prefix/rewrite it.
+    /// </summary>
+    private static NotificationItemData? FindNotification(
         IslandContent content,
         string? source,
-        string? title,
-        ILocalizer localizer)
+        string? title)
     {
         foreach (var item in content.Notifications)
         {
@@ -643,17 +597,11 @@ public static class SkiaIslandStateBuilder
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(item.TimeText))
-            {
-                return item.TimeText;
-            }
+            return item;
         }
 
-        return localizer.Get(LocKeys.Notifications.JustNow);
+        return null;
     }
-
-    private static bool Contains(string value, string token)
-        => value.Contains(token, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Maps the App vector icon identity onto the renderer's path icon set.</summary>
     /// <param name="icon">App icon kind.</param>

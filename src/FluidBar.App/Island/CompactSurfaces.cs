@@ -191,44 +191,44 @@ public sealed class HudCompactSurface : CompactSurface
     }
 }
 
-/// <summary>Phone-style notification card: app tile + title/body + app name/time (400×96).</summary>
+/// <summary>Phone-style notification card: app tile + title/body + app name/time (340×76).</summary>
 public sealed class NotificationCompactSurface : CompactSurface
 {
     /// <summary>Card width token (DIP).</summary>
-    public const double PillWidth = 400;
+    public const double PillWidth = 340;
 
     /// <summary>Card height token (DIP).</summary>
-    public const double PillHeight = 96;
+    public const double PillHeight = 76;
 
     /// <summary>Verification-code chip width (DIP).</summary>
-    public const double ChipWidth = 76;
+    public const double ChipWidth = 64;
 
-    /// <summary>Fixed 56 DIP app tile.</summary>
-    public static Rect IconRect => new(16, 20, 56, 56);
+    /// <summary>Fixed 44 DIP app tile.</summary>
+    public static Rect IconRect => new(14, 16, 44, 44);
 
     /// <summary>Text column (zero-width safe) for a card with or without a code chip.</summary>
     public static Rect TextColumn(bool hasChip)
     {
         _ = hasChip;
-        return new Rect(86, 0, PillWidth - 86 - 78, PillHeight);
+        return new Rect(70, 0, PillWidth - 70 - 64, PillHeight);
     }
 
     /// <summary>Title line inside the text column.</summary>
     public static Rect TitleRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 16, column.Width, 24);
+        return new Rect(column.X, 12, column.Width, 20);
     }
 
     /// <summary>Body line inside the text column.</summary>
     public static Rect BodyRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 40, column.Width, 20);
+        return new Rect(column.X, 34, column.Width, 18);
     }
 
     /// <summary>Bottom-left verification-code chip.</summary>
-    public static Rect ChipRect => new(86, 68, ChipWidth, 18);
+    public static Rect ChipRect => new(70, 54, ChipWidth, 16);
 
     /// <inheritdoc />
     public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;

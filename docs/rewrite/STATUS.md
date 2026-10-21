@@ -228,15 +228,16 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
 
-## 2026-10-22 00:55 — 手机式通知弹窗（已完成）
+## 2026-10-22 01:10 — 手机式通知弹窗（最终版）
 
-**用户给的参考**：NetSpeed-Dynamic 的通知卡 + 手机通知（大 app 图标、主副标题、软件名、时间、副图标）。
+**用户两次反馈**：先要 NetSpeed-Dynamic / 手机通知卡的结构；随后要求「不要 app 名首字母 + 映射颜色，只保留真实可获取图片，不行就一个图标」并且「现在太大，变小」。
 
-- 紧凑通知岛从 `248×36` 改为 **`400×96` DIP**（比例约 4.17，接近参考图 4.27），圆角随 `CompactRadiusCap=44` 呈大圆角卡片。
-- 布局：56 DIP app tile（app 名首字母，QQ/微信/Teams/Outlook/GitHub 等映射专属 accent）+ 右下 22 DIP 副图标 badge（app 类型 glyph）；右侧 76 DIP 列放**相对时间**（上）与**软件名**（下）；中间主标题 + 副标题/正文；验证码 chip 放左下。
-- 时间从 `content.Notifications` 的同一 toast 记录取 `TimeText`，取不到回退「刚刚/just now」；app 名/图标/accent 都按来源 app 映射（无公开 logo API，用字母 tile + 类型 glyph 代替真实 logo）。
-- 字号随 FontScale 缩放（0.8/1.0/1.6 golden 都过），Dock 52 DIP 走紧凑变体。
+- 紧凑通知岛 `248×36` → **`340×76` DIP**（比例 4.47；第一版 400×96 已被用户否掉为太大）。
+- **真实 app 图标**：`NotificationService` 读取 `AppInfo.DisplayInfo.GetLogo(64×64)`，PNG 字节随 `NotificationEntry → NotificationItemData → CompactModel` 下行；`CompactRenderer` 用 `ArtworkImageCache` 解码并按 44 DIP 圆角 tile 绘制。
+- 读不到 logo 时只画**一个通用铃铛图标**（中性 tile），不再生成 app 首字母、不再按 app 映射颜色、不再画假副图标。
+- 右侧列保留相对时间（上）与软件名（下）；中间主标题 + 正文；验证码 chip 左下；时间优先取同一 toast 的 `TimeText`，缺失回退「刚刚」。
+- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 紧凑变体都适配；`notifications.seeded` / `notifications.received` 日志新增 `icons` 计数，便于确认真实 logo 是否读到。
 - 副岛仍显示在主岛下方，主岛不被通知抢占；golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `BC4E58726D6C9B546626AF5F0B6F45F2C8A1370D6312F4E9F72C590364800423`。
-- 证据：`build/evidence/notifications-step6-current/compact-notifications.png`（GitHub 卡片作为副岛显示在 Agent 主岛下方）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `C318CA612D37806E4DB9A7A7366A93A249BBB2130277CCEEBBCDF6D361E52438`。
+- 证据：`build/evidence/notifications-step8-final-small/compact-notifications.png`（340×76，demo toast 无真实 logo，故显示单个通用铃铛）。
 

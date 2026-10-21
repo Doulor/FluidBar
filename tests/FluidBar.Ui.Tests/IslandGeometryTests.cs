@@ -151,9 +151,9 @@ public sealed class IslandGeometryTests
         var body = NotificationCompactSurface.BodyRect(hasChip: true);
         var chip = NotificationCompactSurface.ChipRect;
 
-        Assert.Equal(56, icon.Width, Eps);
-        Assert.Equal(56, icon.Height, Eps);
-        Assert.True(icon.Right + 14 <= title.X + Eps, "app tile overlaps the title");
+        Assert.Equal(44, icon.Width, Eps);
+        Assert.Equal(44, icon.Height, Eps);
+        Assert.True(icon.Right + 12 <= title.X + Eps, "app tile overlaps the title");
         Assert.True(title.Bottom <= body.Top + Eps, "title overlaps the body");
         Assert.True(body.Bottom <= chip.Top + Eps, "body overlaps the code chip");
         Assert.True(title.Width > 0 && body.Width > 0);

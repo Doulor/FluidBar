@@ -413,9 +413,6 @@ public static class IslandType
     /// <summary>Compact title (13.5 DIP).</summary>
     public static readonly TextStyle CompactTitle = new(FontRole.UiSemiBold, 13.5f);
 
-    /// <summary>App-initial letter inside the phone-style notification icon tile (22 DIP).</summary>
-    public static readonly TextStyle CompactAppInitial = new(FontRole.DisplaySemiBold, 22f);
-
     /// <summary>Compact media title (prototype2 13 DIP / 600).</summary>
     public static readonly TextStyle CompactMediaTitle = new(FontRole.UiSemiBold, 13f);
 

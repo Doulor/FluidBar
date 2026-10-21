@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
+using Windows.Foundation;
+using Windows.Storage.Streams;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
@@ -229,7 +231,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
         if (_options.SeedRecentFromExisting && notifications.Count > 0)
         {
-            SeedRecent(notifications);
+            await SeedRecentAsync(notifications).ConfigureAwait(false);
         }
 
         if (_pollingFallback)
@@ -312,18 +314,33 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     }
 
     /// <summary>Fills the recent list from the toasts already present when the page opens.</summary>
-    private void SeedRecent(IReadOnlyList<UserNotification> notifications)
+    private async Task SeedRecentAsync(IReadOnlyList<UserNotification> notifications)
     {
         var max = Math.Max(1, _options.MaxRecentNotifications);
-        var entries = notifications
+        var candidates = notifications
             .Select(CreateCandidate)
             .Where(candidate => candidate is not null)
             .Select(candidate => candidate!)
             .OrderByDescending(candidate => candidate.CreatedAt)
             .Take(max)
+            .ToList();
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var source = notifications.FirstOrDefault(notification => notification.Id == candidates[i].Id);
+            if (source is not null)
+            {
+                candidates[i] = candidates[i] with
+                {
+                    AppIconPng = await TryLoadAppIconAsync(source).ConfigureAwait(false),
+                };
+            }
+        }
+
+        var entries = candidates
             .Select(candidate => new NotificationEntry(candidate.Id, candidate.AppName, candidate.Title,
                 candidate.Body, candidate.CreatedAt,
-                VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}")))
+                VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}"),
+                candidate.AppIconPng))
             .ToImmutableArray();
 
         var seeded = NotificationListReducer.Bounded(entries, max);
@@ -342,6 +359,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             "Notification page seeded with the existing toast list.", new Dictionary<string, object?>
             {
                 ["count"] = seeded.Length,
+                ["icons"] = seeded.Count(entry => entry.AppIconPng is { Length: > 0 }),
             });
     }
 
@@ -377,6 +395,23 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                 .ConfigureAwait(false);
             var candidates = notifications.Select(CreateCandidate).Where(candidate => candidate is not null)
                 .Select(candidate => candidate!).ToList();
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (!_history.IsNew(candidates[i].Id))
+                {
+                    continue;
+                }
+
+                var source = notifications.FirstOrDefault(notification => notification.Id == candidates[i].Id);
+                if (source is not null)
+                {
+                    candidates[i] = candidates[i] with
+                    {
+                        AppIconPng = await TryLoadAppIconAsync(source).ConfigureAwait(false),
+                    };
+                }
+            }
+
             var added = _history.Process(candidates);
 
             // Close sync: toasts the user removed from Action Center are no longer returned by the
@@ -405,6 +440,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                     ["removed"] = Math.Max(0, previousCount + added.Count - _recent.Length),
                     ["latestApp"] = added.Count > 0 ? added[^1].AppName : null,
                     ["verificationCode"] = added.Count > 0 && added[^1].VerificationCode is not null,
+                    ["icons"] = added.Count(entry => entry.AppIconPng is { Length: > 0 }),
                 });
         }
         catch (Exception ex)
@@ -416,6 +452,39 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         finally
         {
             Volatile.Write(ref _processing, 0);
+        }
+    }
+
+    /// <summary>
+    /// Reads the source app's logo from its <c>AppDisplayInfo</c>. Win32 toasts often expose no logo or
+    /// return a protected ms-resource URI; every failure degrades to null so the island draws one
+    /// generic notification glyph instead of pretending a wrong icon is the app's.
+    /// </summary>
+    private static async Task<byte[]?> TryLoadAppIconAsync(UserNotification notification)
+    {
+        try
+        {
+            var display = notification.AppInfo?.DisplayInfo;
+            if (display is null)
+            {
+                return null;
+            }
+
+            var logo = display.GetLogo(new Size(64, 64));
+            using var stream = await logo.OpenReadAsync().AsTask().ConfigureAwait(false);
+            if (stream.Size is 0 or > 1024 * 1024)
+            {
+                return null;
+            }
+
+            using var managed = stream.AsStreamForRead();
+            using var buffer = new MemoryStream((int)stream.Size);
+            await managed.CopyToAsync(buffer).ConfigureAwait(false);
+            return buffer.ToArray();
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 

@@ -241,48 +241,47 @@ internal sealed class CompactRenderer : IDisposable
     private void DrawNotification(SKCanvas canvas, CompactModel model, float width, float height)
     {
         // Phone-style notification card (2026-10-22, user reference: NetSpeed-Dynamic / iOS):
-        // a 56 DIP app tile with the app initial, a 20 DIP secondary glyph badge, bold title,
-        // secondary body, and a right column with the relative time above the app name.
+        // real app logo when the platform supplied one, otherwise one generic bell. No invented
+        // initials or per-app colours. Layout: logo/tile, title, body, time (top-right) and app name.
         var s = (float)_text.Scale;
-        var compact = height < 90f * s;
-        var accent = _accents.Get(model.AccentHex, _theme.Accent);
+        var compact = height < 70f * s;
         var app = model.AppName ?? model.Subtitle;
-        var initial = NotificationInitial(app);
 
-        var iconSize = compact ? Math.Max(30f * s, height - (16f * s)) : 56f * s;
-        var iconLeft = (compact ? 10f : 16f) * s;
+        var iconSize = compact ? Math.Max(26f * s, height - (12f * s)) : 44f * s;
+        var iconLeft = (compact ? 8f : 14f) * s;
         var icon = new SKRect(iconLeft, (height - iconSize) / 2, iconLeft + iconSize, (height + iconSize) / 2);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(accent, _opacity);
-        canvas.DrawRoundRect(icon, iconSize * 0.24f, iconSize * 0.24f, _fill);
-        if (initial.Length > 0)
+        _fill.Shader = null;
+        var image = _artwork.Get(model.AppIconKey, model.AppIconPng);
+        if (image is not null && image.Width > 0 && image.Height > 0)
         {
-            _text.Draw(canvas, initial, IslandType.CompactAppInitial, icon, SKColors.White,
-                TextAlign.Center, _opacity);
+            var coverScale = Math.Max(icon.Width / image.Width, icon.Height / image.Height);
+            var drawWidth = image.Width * coverScale;
+            var drawHeight = image.Height * coverScale;
+            var destination = new SKRect(
+                icon.MidX - (drawWidth / 2), icon.MidY - (drawHeight / 2),
+                icon.MidX + (drawWidth / 2), icon.MidY + (drawHeight / 2));
+            canvas.Save();
+            canvas.ClipRoundRect(new SKRoundRect(icon, iconSize * 0.24f, iconSize * 0.24f),
+                SKClipOperation.Intersect, antialias: true);
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(image, destination, _fill);
+            canvas.Restore();
         }
         else
         {
-            DrawIcon(canvas, model.Icon ?? IconKind.Bell, icon.Deflate((compact ? 8f : 14f) * s), SKColors.White);
+            // "实在不行就一个图标" — one neutral generic glyph, no fake app identity.
+            _fill.Color = Alpha(_theme.Foreground, 0.10f * _opacity);
+            canvas.DrawRoundRect(icon, iconSize * 0.24f, iconSize * 0.24f, _fill);
+            DrawIcon(canvas, IconKind.Bell, icon.Deflate(iconSize * 0.26f),
+                Alpha(_theme.ForegroundSecondary, _opacity));
         }
 
-        // Secondary glyph badge, bottom-right of the app tile (the phone screenshot's avatar slot).
-        var badgeSize = (compact ? 16f : 22f) * s;
-        var badge = new SKRect(
-            icon.Right - badgeSize + (2f * s),
-            icon.Bottom - badgeSize + (2f * s),
-            icon.Right + (2f * s),
-            icon.Bottom + (2f * s));
-        _fill.Color = Alpha(_theme.Background, _opacity);
-        canvas.DrawCircle(badge.MidX, badge.MidY, (badgeSize / 2) + (2f * s), _fill);
-        _fill.Color = Alpha(accent, _opacity);
-        canvas.DrawCircle(badge.MidX, badge.MidY, badgeSize / 2, _fill);
-        DrawIcon(canvas, model.Icon ?? IconKind.Bell, badge.Deflate(badgeSize * 0.28f), SKColors.White);
-
-        var textLeft = icon.Right + (compact ? 9f : 14f) * s;
-        var rightColumn = (compact ? 54f : 76f) * s;
-        var textRight = width - (16f * s) - rightColumn;
-        var titleTop = (compact ? 4f : 16f) * s;
-        var titleHeight = compact ? Math.Max(16f * s, (height / 2) - (6f * s)) : 22f * s;
+        var textLeft = icon.Right + (compact ? 8f : 12f) * s;
+        var rightColumn = (compact ? 56f : 64f) * s;
+        var textRight = width - (compact ? 8f : 14f) * s - rightColumn;
+        var titleTop = (compact ? 3f : 12f) * s;
+        var titleHeight = compact ? Math.Max(14f * s, (height / 2) - (4f * s)) : 20f * s;
         _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactTitle,
             new SKRect(textLeft, titleTop, textRight, titleTop + titleHeight),
             _theme.Foreground, TextAlign.Left, _opacity);
@@ -291,7 +290,7 @@ internal sealed class CompactRenderer : IDisposable
         if (!string.IsNullOrEmpty(body))
         {
             var bodyBottom = !compact && !string.IsNullOrEmpty(model.VerificationCode)
-                ? height - (34f * s)
+                ? height - (24f * s)
                 : height - (8f * s);
             _text.Draw(canvas, body, IslandType.CompactNotice,
                 new SKRect(textLeft, titleTop + titleHeight + (2f * s), textRight, bodyBottom),
@@ -300,26 +299,26 @@ internal sealed class CompactRenderer : IDisposable
 
         if (!compact)
         {
-            var right = new SKRect(width - (16f * s) - rightColumn, 0, width - (16f * s), height);
+            var right = new SKRect(width - (14f * s) - rightColumn, 0, width - (14f * s), height);
             _text.Draw(canvas, model.TimeText, IslandType.CompactTiny,
-                new SKRect(right.Left, 16f * s, right.Right, 34f * s), _theme.ForegroundTertiary,
+                new SKRect(right.Left, 10f * s, right.Right, 26f * s), _theme.ForegroundTertiary,
                 TextAlign.Right, _opacity);
             if (!string.IsNullOrEmpty(app))
             {
                 _text.Draw(canvas, app, IslandType.CompactSmallSemiBold,
-                    new SKRect(right.Left, 36f * s, right.Right, 54f * s), _theme.ForegroundSecondary,
+                    new SKRect(right.Left, 28f * s, right.Right, 44f * s), _theme.ForegroundSecondary,
                     TextAlign.Right, _opacity);
             }
 
             if (!string.IsNullOrEmpty(model.VerificationCode))
             {
-                var chip = new SKRect(textLeft, height - (28f * s), textLeft + (76f * s), height - (10f * s));
+                var chip = new SKRect(textLeft, height - (22f * s), textLeft + (64f * s), height - (6f * s));
                 DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
             }
         }
         else if (!string.IsNullOrEmpty(model.VerificationCode))
         {
-            var chip = new SKRect(width - (16f * s) - (46f * s), height - (22f * s), width - (16f * s), height - (6f * s));
+            var chip = new SKRect(width - (8f * s) - (40f * s), height - (20f * s), width - (8f * s), height - (4f * s));
             DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
         }
 
@@ -329,18 +328,6 @@ internal sealed class CompactRenderer : IDisposable
             _fill.Color = Alpha(SKColors.White.WithAlpha(16), _opacity);
             canvas.DrawRoundRect(new SKRect(0, 0, width, height), height / 2, height / 2, _fill);
         }
-    }
-
-    private static string NotificationInitial(string? app)
-    {
-        if (string.IsNullOrWhiteSpace(app))
-        {
-            return string.Empty;
-        }
-
-        var value = app.Trim();
-        var length = char.IsHighSurrogate(value[0]) && value.Length > 1 ? 2 : 1;
-        return value[..length].ToUpperInvariant();
     }
 
     // -------------------------------------------------------------- clipboard
