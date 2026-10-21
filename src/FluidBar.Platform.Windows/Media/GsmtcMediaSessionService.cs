@@ -103,6 +103,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Master switch for the state-file arbitration. Off while the two clocks fight.</summary>
     private const bool CrossCheckEnabled = true;
 
+    /// <summary>Title the playing-time accumulator belongs to.</summary>
+    private string? _lastStateTitle;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -489,14 +492,28 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         var age = _timeProviderNow() - state.SampledAtUtc;
         var nowForAccumulation = _timeProviderNow();
+        if (_lastStateTitle != candidate.Title)
+        {
+            // New track: the old accumulator belongs to the previous song.
+            _lastStateTitle = candidate.Title;
+            _stateFilePlayingMs = 0;
+            _stateFileWrittenAt = null;
+        }
+
         if (_stateFileWrittenAt != state.SampledAtUtc.UtcDateTime)
         {
             _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
             _stateFilePlayingMs = 0;
         }
-        else if (candidate.IsPlayingHint != false && _lastPollAt is { } previous)
+        else if (_lastPollAt is { } previous)
         {
-            _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
+            // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
+            // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
+            var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
+            if (audible)
+            {
+                _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
+            }
         }
 
         _lastPollAt = nowForAccumulation;
