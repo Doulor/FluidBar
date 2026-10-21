@@ -47,8 +47,13 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
 
-        var row = PageVisual.MediaSeekRow(Page(1, fixture));
-        fixture.Controller.HandlePointerPressed(row.Left + (row.Width * 0.75), row.MidY);
+        // The pointer maps its x linearly across PageLayout's seek track (that is the span the control
+        // reports), while the row that owns the gesture is the painted one - so the press uses the
+        // track's 75 % x and the painted row's y. Sampled: that reports exactly 0.750.
+        var page = Page(1, fixture);
+        var track = PageLayout.MediaSeekTrack(page);
+        var row = PageVisual.MediaSeekRow(page);
+        fixture.Controller.HandlePointerPressed(track.Left + (track.Width * 0.75), row.MidY);
 
         var call = Assert.Single(actions.Calls);
         Assert.Equal(IslandPlatformActionKind.MediaSeek, call.Kind);
@@ -273,8 +278,7 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.MediaCommandRequested += value => command = value;
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
-        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
-        Click(fixture, PageMetricsLayout.MediaPlay(Page(1, fixture), metrics));
+        Click(fixture, PageVisual.MediaPlay(Page(1, fixture)));
         Assert.Equal(MediaTransportCommand.TogglePlay, command);
 
         fixture.GoToPage(0);

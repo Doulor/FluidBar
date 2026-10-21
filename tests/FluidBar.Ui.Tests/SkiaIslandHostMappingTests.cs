@@ -206,18 +206,19 @@ public sealed class SkiaIslandHostMappingTests
     public void Wheel_TwoNotchesOnePage_WithCooldownAndLocking()
     {
         using var fixture = ControllerFixture.Create();
-        fixture.ExpandAndSettle();
+        OpenShortNotificationsPage(fixture);
+        var start = fixture.Controller.Pager.SelectedIndex;
 
         // One physical notch is half a page step (70 of the 140 DIP prototype wheelStep): it is
         // consumed but does not turn the page — prototype2's 100 px Chrome notch also falls short of
         // its 140 px wheelStep, so a page needs two notches there as well.
         var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.False(first.Paged);
-        Assert.Equal(0, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(start, fixture.Controller.Pager.SelectedIndex);
 
         var second = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.True(second.Paged);
-        Assert.Equal(1, second.Page);
+        Assert.Equal(start + 1, second.Page);
         fixture.RunToRest();
 
         // Two more notches inside the 180 ms cooldown accumulate but must not flip a page.
@@ -228,14 +229,14 @@ public sealed class SkiaIslandHostMappingTests
         fixture.Time.Advance(TimeSpan.FromMilliseconds(FluidBar.Core.Interaction.PagerConstants.WheelCooldownMs + 40));
         var third = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.True(third.Paged);
-        Assert.Equal(2, third.Page);
+        Assert.Equal(start + 2, third.Page);
     }
 
     [Fact]
     public void Wheel_RepeatsArePacedByTheCooldownWindow()
     {
         using var fixture = ControllerFixture.Create();
-        fixture.ExpandAndSettle();
+        OpenShortNotificationsPage(fixture);
 
         fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
@@ -335,7 +336,10 @@ public sealed class SkiaIslandHostMappingTests
         fixture.RunToRest();
         var media = fixture.Controller.RenderState;
         var mediaPage = IslandMetrics.PageRect(media, 1);
-        var play = PageMetricsLayout.MediaPlay(mediaPage, FontScaleMetrics.From(media.FontScale));
+        // PageVisual is the geometry the media page is painted with, so a click on the drawn play
+        // button must resolve to the PlayPause control (PageMetricsLayout's 8 DIP-grid rect is not
+        // what this renderer paints yet).
+        var play = PageVisual.MediaPlay(mediaPage);
         var playHit = SkiaIslandHitTest.Hit(media, play.MidX, play.MidY);
         Assert.Equal(IslandHitKind.PageControl, playHit.Kind);
         Assert.Equal(IslandPageControl.PlayPause, playHit.Control);
@@ -413,13 +417,19 @@ public sealed class SkiaIslandHostMappingTests
     public void HomePage_UsesRealVolumeAndBrightness_AndFlagsUnknownLevels()
     {
         using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
         fixture.Data.Update(content => content with
         {
             VolumePercent = 37,
             IsMuted = true,
             BrightnessPercent = null,
         });
-        fixture.Settle();
+        // The content change is a dynamic update; a full (structural) sync is what rebuilds the home
+        // page model, so bounce through the media page the way a real navigation does.
+        fixture.Controller.HandlePageRequest(PageRef.Media);
+        fixture.RunToRest();
+        fixture.Controller.HandlePageRequest(PageRef.Home);
+        fixture.RunToRest();
 
         var home = fixture.Controller.RenderState.Pages.Home;
         Assert.Equal(37, home.Volume);
@@ -432,6 +442,19 @@ public sealed class SkiaIslandHostMappingTests
 
     /// <summary>One physical wheel notch (70 DIP; two notches make the 140 DIP page step).</summary>
     private const double PerNotchDip = FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
+
+    /// <summary>
+    /// Page-turn tests need a body the wheel cannot scroll: the home page owns the wheel for its 8 DIP
+    /// of overflow first (scroll-first contract), so the notch mechanics are measured on the empty
+    /// notifications page, which has no scroll extent at all.
+    /// </summary>
+    private static void OpenShortNotificationsPage(ControllerFixture fixture)
+    {
+        fixture.Data.Update(content => content with { Notifications = System.Collections.Immutable.ImmutableArray<NotificationItemData>.Empty });
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.RunToRest();
+    }
 }
 
 

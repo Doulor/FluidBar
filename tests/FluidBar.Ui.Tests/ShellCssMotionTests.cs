@@ -19,7 +19,9 @@ public sealed class ShellCssMotionTests
     {
         var run = new MotionRun(ExpandedMotion());
         Assert.Equal(419.141, run.WidthAt(191.2), 0.75);
-        Assert.Equal(229.920, run.HeightAt(191.1), 0.75);
+        // Re-sampled 2026-10-21 after the compact-pill/shell rebaseline (200/194 widths, taller
+        // expanded shell): the same 191.1 ms frame now measures 267.212 DIP instead of 229.920.
+        Assert.Equal(267.212, run.HeightAt(191.1), 0.75);
 
         run = new MotionRun(ExpandedMotion());
         Assert.Equal(440, run.WidthAt(396.9), 0.001);

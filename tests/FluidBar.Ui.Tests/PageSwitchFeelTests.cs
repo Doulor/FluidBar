@@ -1,6 +1,9 @@
+using System.Collections.Immutable;
 using FluidBar.App.Hosting.Skia;
+using FluidBar.App.State;
 using FluidBar.Core;
 using FluidBar.Core.Interaction;
+using FluidBar.Island;
 
 namespace FluidBar.Ui.Tests;
 
@@ -35,11 +38,28 @@ public sealed class PageSwitchFeelTests
 
     private static double Position(SkiaIslandController controller) => controller.RenderState.Pager.PagePosition;
 
+    /// <summary>
+    /// Opens the expanded island on the notifications page with an empty list. A short page has nothing
+    /// to scroll, so the wheel belongs to the pager from the first notch - the prototype2 contract the
+    /// page-turn tests below are written against (the home page deliberately scrolls its 8 DIP of
+    /// overflow first, see <see cref="HomeWheelScrollsBeforeItTurnsThePage"/>).
+    /// </summary>
+    private static (ControllerFixture Fixture, SkiaIslandController Controller) CreateOnShortPage()
+    {
+        var fixture = ControllerFixture.Create();
+        fixture.Data.Update(content => content with { Notifications = ImmutableArray<NotificationItemData>.Empty });
+        fixture.ExpandAndSettle();
+        fixture.GoToPage(2);
+        fixture.RunToRest();
+        return (fixture, fixture.Controller);
+    }
+
     [Fact]
     public void TwoWheelNotchesTurnExactlyOnePageAndSettleWithoutOvershoot()
     {
-        var (fixture, controller) = Create();
+        var (fixture, controller) = CreateOnShortPage();
         using var _fixture = fixture;
+        var start = controller.Pager.SelectedIndex;
         var positions = new List<double> { Position(controller) };
 
         // One physical notch is 70 DIP (half a page step, like prototype2's 100 px notch vs its
@@ -52,18 +72,19 @@ public sealed class PageSwitchFeelTests
             positions.Add(Position(controller));
         }
 
-        Assert.Equal(1, controller.Pager.SelectedIndex);
-        Assert.Equal(1.0, positions[^1], 3);
+        Assert.Equal(start + 1, controller.Pager.SelectedIndex);
+        Assert.Equal(start + 1.0, positions[^1], 3);
         Assert.All(positions.Zip(positions.Skip(1)), pair => Assert.True(pair.Second >= pair.First - 1e-9,
             "the snap must never move backwards (no rebound)"));
-        Assert.True(positions.Max() <= 1.0001, "the snap must never overshoot the target page");
+        Assert.True(positions.Max() <= start + 1.0001, "the snap must never overshoot the target page");
     }
 
     [Fact]
     public void ContinuousWheelGestureQueuesPagesInsteadOfSwallowingThem()
     {
-        var (fixture, controller) = Create();
+        var (fixture, controller) = CreateOnShortPage();
         using var _fixture = fixture;
+        var start = controller.Pager.SelectedIndex;
 
         // Six notches at ~15 Hz (a real wheel spin), 70 DIP each. The prototype commits a page at most
         // once per 180 ms window and keeps the residual; the previous build froze the whole chain for
@@ -79,16 +100,18 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.True(controller.Pager.SelectedIndex >= 2,
-            "a continuous six-notch gesture must queue at least two pages, got " + controller.Pager.SelectedIndex);
+        Assert.True(controller.Pager.SelectedIndex >= start + 2,
+            "a continuous six-notch gesture must queue at least two pages, got "
+            + (controller.Pager.SelectedIndex - start));
         Assert.Equal(controller.Pager.SelectedIndex, (int)Math.Round(Position(controller)));
     }
 
     [Fact]
     public void ContinuousWheelAtTenHertzTurnsThreePagesForSixNotches()
     {
-        var (fixture, controller) = Create();
+        var (fixture, controller) = CreateOnShortPage();
         using var _fixture = fixture;
+        var start = controller.Pager.SelectedIndex;
 
         // Six notches at 10 Hz = 420 DIP of wheel = three page steps; the 180 ms cooldown still paces
         // them (prototype2 measured 2-3 pages for the same gesture).
@@ -103,15 +126,16 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.Equal(3, controller.Pager.SelectedIndex);
-        Assert.Equal(3.0, Position(controller), 3);
+        Assert.Equal(start + 3, controller.Pager.SelectedIndex);
+        Assert.Equal(start + 3.0, Position(controller), 3);
     }
 
     [Fact]
     public void WheelDuringTheSnapQueuesFromTheTargetPage()
     {
-        var (fixture, controller) = Create();
+        var (fixture, controller) = CreateOnShortPage();
         using var _fixture = fixture;
+        var start = controller.Pager.SelectedIndex;
 
         controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
         controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
@@ -126,8 +150,27 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.Equal(2, controller.Pager.SelectedIndex);
-        Assert.Equal(2.0, Position(controller), 3);
+        Assert.Equal(start + 2, controller.Pager.SelectedIndex);
+        Assert.Equal(start + 2.0, Position(controller), 3);
+    }
+
+    [Fact]
+    public void HomeWheelScrollsBeforeItTurnsThePage()
+    {
+        var (fixture, controller) = Create();
+        using var _fixture = fixture;
+        var page = IslandMetrics.PageRect(controller.RenderState, 0);
+        var max = PageMetricsLayout.MaxScroll(page, PageSlotKind.Home, FontScaleMetrics.From(controller.RenderState.FontScale));
+        Assert.True(max > 0, "the home body must overflow so the wheel has something to scroll");
+
+        var first = controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+
+        // Scroll-first contract: the home body owns the wheel and the page does not turn while it has room.
+        Assert.True(first.Consumed);
+        Assert.True(first.ContentScroll);
+        Assert.False(first.Paged);
+        Assert.Equal(0, controller.Pager.SelectedIndex);
+        Assert.Equal(Math.Min(max, PagerConstants.WheelDipPerNotch), controller.RenderState.Pages.Home.ScrollOffset, 2);
     }
 
     [Fact]
