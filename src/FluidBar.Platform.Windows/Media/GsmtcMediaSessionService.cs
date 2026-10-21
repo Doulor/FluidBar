@@ -94,6 +94,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private long _lastCrossCheckLogMs;
 
+    /// <summary>Throttles the verification line.</summary>
+    private long _lastSyncCheckMs;
+
+    private double _accessibilityLeadMs() => _accessibility?.MeasuredLeadMs ?? 0;
+
     /// <summary>Write time of the state file we are currently extrapolating.</summary>
     /// <summary>Master switch for the state-file arbitration. Off while the two clocks fight.</summary>
     private const bool CrossCheckEnabled = false;
@@ -332,6 +337,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
         candidate = EnrichWithAccessibility(candidate);
+        if (candidate.HasTimeline && _timeProviderNow().ToUnixTimeMilliseconds() - _lastSyncCheckMs > 5000)
+        {
+            _lastSyncCheckMs = _timeProviderNow().ToUnixTimeMilliseconds();
+            MediaDiagnostics.LogAlways($"sync.sample {candidate.Position.TotalSeconds,7:0.0}s lead={( _accessibilityLeadMs()):0}ms title='{candidate.Title}'");
+        }
         // Cross-check the two independent clocks. The MSAA time text has no timestamp, so a frozen text
         // is re-stamped as "now" and every later sample agrees with our own extrapolation — an offset of
         // ten seconds then never looks like a seek and is never corrected (user report 2026-10-22).
@@ -594,7 +604,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // 2026-10-22: "还是比真实歌曲慢大概 1s").
         return enriched with
         {
-            Position = timeline.Position + AccessibilityLead,
+            Position = timeline.Position,
             Duration = timeline.Duration,
             // Back-dated by the reading's age: a one-second-resolution clock is stale by up to half a
             // poll window the moment it is seen (see PlayerTimeline.Age).

@@ -44,6 +44,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly ILocalizer? _localizer;
     private readonly TimeProvider _time;
     private readonly IAppLogger _logger;
+
+    private long _lastSyncTextLogMs;
     private readonly IPlatformLogger _platformLogger;
     private readonly PlatformCounters _counters;
     private readonly PlatformMessageHost _messageHost;
@@ -772,6 +774,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         // Anchor provenance: what the platform sampled and what we published. One line per poll makes a
         // "the time is off" report attributable without guesswork.
+        if (Environment.TickCount64 - _lastSyncTextLogMs > 5000)
+        {
+            _lastSyncTextLogMs = Environment.TickCount64;
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
+                $"sync.island {position.TotalSeconds,7:0.0}s text='{(int)(position.TotalSeconds / 60)}:{(int)(position.TotalSeconds % 60):00}' title='{media.Title}'");
+        }
+
         _logger.Information(LogCategories.Platform, "position.anchor",
             $"sampled={media.Position.TotalMilliseconds:0}ms published={position.TotalMilliseconds:0}ms " +
             $"duration={duration.TotalMilliseconds:0}ms playing={isPlaying} title='{media.Title}'");

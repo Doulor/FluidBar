@@ -62,6 +62,16 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
     /// <summary>When the clock text last changed (its last trustworthy moment).</summary>
     private long _lastTimelineChangeMs;
+
+    /// <summary>Measured lateness of the player's clock text, in milliseconds (0..3000).</summary>
+    private double _measuredLeadMs = 500;
+
+    /// <summary>Current self-calibrated display latency of the player's clock text.</summary>
+    public double MeasuredLeadMs => _measuredLeadMs;
+
+    /// <summary>Monotonic time and value of the previous observed flip.</summary>
+    private long _lastFlipMs;
+    private TimeSpan _lastFlipPosition;
     private const string PreviousButtonName = "上一首";
     private const string NextButtonName = "下一首";
     private const string PlayButtonName = "播放";
@@ -259,6 +269,25 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                         MarkReadSuccess();
                         var age = TimeSpan.Zero;
                         var previousRead = _lastTimelineReadMs;
+                        // Self-calibration: each flip of the text ("S" -> "S+1") happens when the real
+                        // position crosses that second, so the excess delay against our own expectation is
+                        // this player's display latency. Feeding it back removes the constant lag without
+                        // any per-machine tuning (user request 2026-10-22).
+                        if (_lastFlipMs > 0 && position != _lastFlipPosition)
+                        {
+                            var expectedFlipMs = _lastFlipMs + (position - _lastFlipPosition).TotalMilliseconds;
+                            var lateness = nowMs - expectedFlipMs;
+                            if (lateness is > -500 and < 5000)
+                            {
+                                _measuredLeadMs = Math.Clamp((_measuredLeadMs * 0.7) + (lateness * 0.3), 0, 3000);
+                            }
+                        }
+
+                        if (position != _lastFlipPosition)
+                        {
+                            _lastFlipMs = nowMs;
+                            _lastFlipPosition = position;
+                        }
                         if (previousRead > 0 && _lastTimelinePosition != position)
                         {
                             // The flip happened somewhere inside this window: its midpoint is the best
@@ -287,11 +316,11 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                             // moment it last changed. Back-date the sample instead of dropping the whole
                             // timeline — dropping it also lost the track length (user report 2026-10-21).
                             age = TimeSpan.FromMilliseconds(Math.Max(0, nowMs - _lastTimelineChangeMs));
-                            timeline = new PlayerTimeline(position, duration) { Age = age };
+                            timeline = new PlayerTimeline(position + TimeSpan.FromMilliseconds(_measuredLeadMs), duration) { Age = age };
                             return true;
                         }
 
-                        timeline = new PlayerTimeline(position, duration) { Age = age };
+                        timeline = new PlayerTimeline(position + TimeSpan.FromMilliseconds(_measuredLeadMs), duration) { Age = age };
                         return true;
                     }
                 }
