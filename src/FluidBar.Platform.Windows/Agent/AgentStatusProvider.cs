@@ -60,7 +60,7 @@ public sealed record AgentProviderEvent(
 public sealed class AgentProviderRegistryOptions
 {
     /// <summary>How often every available provider is polled.</summary>
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(2);
+    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(60);
 
     /// <summary>Maximum rows kept in the merged snapshot.</summary>
     public int MaxRows { get; init; } = 32;
@@ -114,7 +114,7 @@ public sealed class AgentProviderRegistry : PlatformMonitor<AgentEventSnapshot>,
         await RefreshAsync(cancellationToken).ConfigureAwait(false);
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-        var interval = _options.PollInterval <= TimeSpan.Zero ? TimeSpan.FromSeconds(2) : _options.PollInterval;
+        var interval = _options.PollInterval <= TimeSpan.Zero ? TimeSpan.FromSeconds(60) : _options.PollInterval;
         _pollTask = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(interval, TimeProvider);

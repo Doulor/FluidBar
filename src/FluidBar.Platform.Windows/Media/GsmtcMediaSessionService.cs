@@ -1,3 +1,4 @@
+using FluidBar.Core.Configuration;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Media.Lyrics;
 using FluidBar.Platform.Windows.Threading;
@@ -87,7 +88,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </param>
     public GsmtcMediaSessionService(IPlatformLogger logger, PlatformCounters counters,
         ArtworkCache? artworkCache = null, TimeProvider? timeProvider = null,
-        IMediaKeySender? mediaKeySender = null, ArtworkFetcher? artworkFetcher = null)
+        IMediaKeySender? mediaKeySender = null, ArtworkFetcher? artworkFetcher = null,
+        Func<IslandPowerMode>? powerModeProvider = null)
         : base("media", logger, counters, timeProvider ?? TimeProvider.System)
     {
         _logger = logger ?? NullPlatformLogger.Instance;
@@ -95,7 +97,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         _artworkCache = artworkCache ?? new ArtworkCache();
         _mediaKeySender = mediaKeySender ?? new SystemMediaKeySender();
         _artworkFetcher = artworkFetcher;
+        _powerModeProvider = powerModeProvider ?? (() => IslandPowerMode.Performance);
     }
+
+    private readonly Func<IslandPowerMode> _powerModeProvider;
 
     private readonly ArtworkFetcher? _artworkFetcher;
     private ArtworkFetcher? _defaultArtworkFetcher;
@@ -219,6 +224,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return;
             }
 
+            _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
+                ? TimeSpan.FromSeconds(5)
+                : TimeSpan.FromSeconds(1));
             ResetFallbackPlayback();
             if (_fallbackActive)
             {
@@ -233,6 +241,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         candidate = EnrichWithAccessibility(candidate);
         var playing = candidate.IsPlayingHint ?? DetermineFallbackPlaying(candidate);
+        _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
+            ? (playing ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(5))
+            : TimeSpan.FromSeconds(1));
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,

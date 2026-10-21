@@ -14,6 +14,7 @@ using FluidBar.App.Settings;
 using FluidBar.App.Theme;
 using FluidBar.App.Views.Market;
 using FluidBar.App.Views.Plugins;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Layout;
 using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Update;
@@ -155,6 +156,14 @@ public static class SettingsSectionBuilder
             ActiveForeground = palette.ActiveForegroundBrush,
             InactiveForeground = palette.SecondaryBrush,
         };
+        // Accessibility: the segmented control carries the row label as its name and the description as
+        // help text; Tab focuses it and Left/Right switch the selection.
+        Avalonia.Automation.AutomationProperties.SetName(segmented, label);
+        if (description is not null)
+        {
+            Avalonia.Automation.AutomationProperties.SetHelpText(segmented, description);
+        }
+
         segmented.SetItems(options, current);
         segmented.Changed += changed;
         return SettingsWidgets.Row(label, description, segmented, palette);
@@ -435,6 +444,17 @@ public static class SettingsSectionBuilder
                     })),
                 // Palette moved here from the advanced pane: it is a 1:1 island token (the preview
                 // repaints on every switch) and belongs next to the material.
+                SegmentedRow(ctx, ctx.Localizer.Get("Settings.Appearance.PowerMode.Title"),
+                    ctx.Localizer.Get("Settings.Appearance.PowerMode.Desc"),
+                    [
+                        (ctx.Localizer.Get("Settings.Appearance.PowerMode.Performance"), "performance"),
+                        (ctx.Localizer.Get("Settings.Appearance.PowerMode.Saver"), "saver"),
+                    ],
+                    settings.PowerMode == IslandPowerMode.Saver ? "saver" : "performance",
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        PowerMode = value == "saver" ? IslandPowerMode.Saver : IslandPowerMode.Performance,
+                    })),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabel),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PaletteLabelHint),
                     [

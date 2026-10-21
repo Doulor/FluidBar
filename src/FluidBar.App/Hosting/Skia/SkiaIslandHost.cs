@@ -401,6 +401,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _emptyFrameStreak = 0;
         _probeAdvanceAlloc = 0;
         _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
@@ -803,7 +804,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             new LayeredHostOptions
             {
                 Pacing = LayeredPacingMode.TargetFrameRate,
-                TargetFramesPerSecond = _options.ResolvedFrameRate,
+                TargetFramesPerSecond = _controller.PowerProfile.FrameRate,
                 MergeDirtyRects = true,
                 WindowTitle = "FluidBar Island",
             },
@@ -813,7 +814,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _time);
 
         host.Create(monitor.ToPlatform(), layeredMode);
-        host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _options.ResolvedFrameRate);
+        host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _controller.PowerProfile.FrameRate);
         host.AttachAccessibility(_uiaSource, _uiaSource);
 
         var entry = new WindowEntry(host, monitor);
@@ -1241,7 +1242,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             return;
         }
 
-        if (!_controller.IsAnimating && !_controller.IsAgentAnimating)
+        var profile = _controller.PowerProfile;
+        // The power table's idle-frame allowance applies only while a split-agent ring is actually
+        // painted. With no ring the island must not keep a timer alive even in Performance mode.
+        var keepIdleFrames = profile.KeepIdleFrames && _controller.RenderState.IsVisible
+            && _controller.HasSpinningSplitRing;
+        if ((!_controller.IsAnimating && !_controller.IsAgentAnimating && !keepIdleFrames)
+            || (!_lastRenderHappened && !keepIdleFrames))
         {
             if (_frameClock.IsRunning)
             {
@@ -1266,10 +1273,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         if (!_frameClock.IsRunning)
         {
             _frameClock.Start(OnFrame);
-        }    }
+        }
+    }
 
     private SkiaIslandRenderChange _lastChange;
     private bool _lastRenderHappened;
+    private int _emptyFrameStreak;
+    private TimeSpan _lastLoggedFrameInterval;
+    private long _frameNumber;
+    private readonly bool _frameLogEnabled = Environment.GetEnvironmentVariable("FLUIDBAR_FRAME_LOG") == "1";
 
     private void OnFrame(TimeSpan delta)
     {
@@ -1282,18 +1294,81 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var perfStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
         {
+            if (_frameClock is SkiaFrameClock liveClock)
+            {
+                // Re-read every tick: a settings switch must apply without waiting for a restart.
+                var interval = _controller.PreferredFrameInterval;
+                liveClock.SetInterval(interval);
+                if (interval != _lastLoggedFrameInterval)
+                {
+                    _lastLoggedFrameInterval = interval;
+                    _logger.Information(LogCategories.Render, "island.skia.frame-policy",
+                        "Frame interval changed.",
+                        data: new Dictionary<string, object?>
+                        {
+                            ["powerMode"] = _controller.PowerMode.ToString(),
+                            ["intervalMs"] = interval.TotalMilliseconds,
+                            ["ring"] = _controller.HasSpinningSplitRing,
+                            ["hover"] = _controller.IsPointerInside,
+                        });
+                }
+            }
+
             _controller.PumpTimers();
             _controller.Advance(delta);
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
             RenderAllLocked(forceFull: false);
+            var profile = _controller.PowerProfile;
+            var stopThreshold = _controller.HasSpinningSplitRing
+                ? profile.EmptyFrameStopThreshold
+                : 2;
+            if (stopThreshold > 0)
+            {
+                if (!_lastRenderHappened)
+                {
+                    _emptyFrameStreak++;
+                }
+                else
+                {
+                    _emptyFrameStreak = 0;
+                }
+
+                if (_emptyFrameStreak >= stopThreshold)
+                {
+                    _frameClock.Stop();
+                    _emptyFrameStreak = 0;
+                }
+            }
+            else
+            {
+                _emptyFrameStreak = 0;
+            }
+
+            if (_frameLogEnabled)
+            {
+                _logger.Information(LogCategories.Render, "island.skia.frame",
+                    "Frame tick.",
+                    data: new Dictionary<string, object?>
+                    {
+                        ["frameNo"] = _frameNumber,
+                        ["timestamp"] = Stopwatch.GetTimestamp(),
+                        ["ring"] = _controller.HasSpinningSplitRing,
+                        ["powerMode"] = _controller.PowerMode.ToString(),
+                        ["intervalMs"] = _controller.PreferredFrameInterval.TotalMilliseconds,
+                    });
+            }
+
             if (SkiaFrameTrace.Enabled && _windows.Count > 0)
             {
                 SkiaFrameTrace.Frame(
+                    ++_frameNumber,
+                    _controller.PowerMode,
                     _lastRenderHappened ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
                     _controller.RenderState,
                     _controller.Motion,
                     _controller.IsAgentAnimating,
+                    _controller.HasSpinningSplitRing,
                     _lastChange);
             }
 
@@ -1307,7 +1382,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     RebuildHookRects(state);
                 }
             }
-            else
+            else if (!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
             {
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
@@ -1333,6 +1408,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _emptyFrameStreak = 0;
         _probeAdvanceAlloc = 0;
         _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
@@ -2130,6 +2206,23 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // Frame statistics is an opt-in render-path recorder (spec §9.3); toggling it takes effect
         // immediately instead of waiting for the next restart.
         _frameStats.SetEnabled(current.Advanced.FrameStats);
+        if (previous.PowerMode != current.PowerMode)
+        {
+            // Next tick reads the new table; applying immediately also starts/stops the idle clock.
+            if (_frameClock is SkiaFrameClock clock)
+            {
+                clock.SetInterval(_controller.PreferredFrameInterval);
+            }
+
+            var fps = _controller.PowerProfile.FrameRate;
+            foreach (var entry in _windows)
+            {
+                entry.Host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, fps);
+            }
+
+            EnsureFrameLoop();
+        }
+
         if (previous.DisplayOn == current.DisplayOn)
         {
             return;

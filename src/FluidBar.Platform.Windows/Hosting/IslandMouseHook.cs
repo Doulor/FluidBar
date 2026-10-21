@@ -104,7 +104,7 @@ public sealed class IslandMouseHook : IDisposable
         _cursorX = cursor.X;
         _cursorY = cursor.Y;
         _watchdog = new Timer(static state => ((IslandMouseHook)state!).CheckHealth(), this,
-            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
     }
 
     private void CheckHealth()

@@ -10,7 +10,7 @@ namespace FluidBar.Platform.Windows.Threading;
 internal sealed class BackgroundPoller : IDisposable
 {
     private readonly string _name;
-    private readonly TimeSpan _interval;
+    private volatile int _intervalMs;
     private readonly Action _onTick;
     private readonly Action? _onStarted;
     private readonly Action? _onStopped;
@@ -35,7 +35,7 @@ internal sealed class BackgroundPoller : IDisposable
         }
 
         _name = name;
-        _interval = interval;
+        _intervalMs = (int)interval.TotalMilliseconds;
         _onTick = onTick ?? throw new ArgumentNullException(nameof(onTick));
         _onStarted = onStarted;
         _onStopped = onStopped;
@@ -43,6 +43,26 @@ internal sealed class BackgroundPoller : IDisposable
     }
 
     public bool IsRunning => _thread is { IsAlive: true };
+
+    /// <summary>Current poll interval (diagnostics).</summary>
+    public TimeSpan Interval => TimeSpan.FromMilliseconds(Volatile.Read(ref _intervalMs));
+
+    /// <summary>Changes the cadence immediately; the poll thread wakes and uses the new interval.</summary>
+    public void SetInterval(TimeSpan interval)
+    {
+        if (interval < TimeSpan.FromMilliseconds(200))
+        {
+            interval = TimeSpan.FromMilliseconds(200);
+        }
+
+        var milliseconds = (int)interval.TotalMilliseconds;
+        if (Interlocked.Exchange(ref _intervalMs, milliseconds) == milliseconds)
+        {
+            return;
+        }
+
+        _signal.Set();
+    }
 
     public void Start()
     {
@@ -108,7 +128,7 @@ internal sealed class BackgroundPoller : IDisposable
                     break;
                 }
 
-                _signal.Wait(_interval);
+                _signal.Wait(TimeSpan.FromMilliseconds(Volatile.Read(ref _intervalMs)));
                 _signal.Reset();
             }
         }

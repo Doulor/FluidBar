@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluidBar.App.Theme;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 
@@ -173,6 +174,9 @@ public sealed record AppSettings
 
     /// <summary>Island material tier.</summary>
     public IslandMaterial Material { get; init; } = IslandMaterial.Obsidian;
+
+    /// <summary>Island scheduling policy (<c>performance</c> by default, <c>saver</c> for low power).</summary>
+    public IslandPowerMode PowerMode { get; init; } = IslandPowerMode.Performance;
 
     /// <summary>Island palette token.</summary>
     public string Palette { get; init; } = "obsidian";
@@ -428,6 +432,14 @@ public sealed record AppSettings
         Dock = Dock with { Height = Math.Clamp(Dock.Height, 40, 72) },
     };
 
+    private static IslandPowerMode ParsePowerMode(string? token, IslandPowerMode fallback)
+        => token?.Trim().ToLowerInvariant() switch
+        {
+            "saver" => IslandPowerMode.Saver,
+            "performance" => IslandPowerMode.Performance,
+            _ => fallback,
+        };
+
     /// <summary>Serializes settings to the spec-compatible JSON shape.</summary>
     public string ToJson()
     {
@@ -457,6 +469,7 @@ public sealed record AppSettings
                 ReducedMotion = ReducedMotion.ToString().ToLowerInvariant(),
                 MotionStrength = MotionStrength,
             },
+            PowerMode = PowerMode.ToString().ToLowerInvariant(),
             Island = new IslandJson
             {
                 Mode = Mode,
@@ -533,6 +546,7 @@ public sealed record AppSettings
                 FontScale = document.Appearance?.FontScale ?? defaults.FontScale,
                 ReducedMotion = ParseReducedMotion(document.Appearance?.ReducedMotion),
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
+                PowerMode = ParsePowerMode(document.PowerMode, defaults.PowerMode),
                 Mode = document.Island?.Mode ?? defaults.Mode,
                 Anchor = document.Island?.Anchor ?? defaults.Anchor,
                 Stacking = document.Island?.Stacking switch
@@ -701,6 +715,9 @@ internal sealed class SettingsJson
     public DockJson? Dock { get; set; }
     public PluginsJson? Plugins { get; set; }
     public AdvancedJson? Advanced { get; set; }
+
+    /// <summary>Island scheduling policy token (<c>performance</c>/<c>saver</c>).</summary>
+    public string? PowerMode { get; set; }
 }
 
 internal sealed class GeneralJson

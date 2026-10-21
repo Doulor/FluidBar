@@ -32,7 +32,7 @@ public sealed class NotificationServiceOptions
     /// Poll interval used when <c>UserNotificationListener.NotificationChanged</c> cannot be subscribed
     /// on this machine (0x80070490); the same read path still returns the current toast list.
     /// </summary>
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(1500);
+    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>Whether to fall back to polling when the change event is unavailable.</summary>
     public bool EnablePollingFallback { get; init; } = true;
@@ -276,7 +276,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             return;
         }
 
-        var interval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.FromMilliseconds(1500);
+        var interval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.FromSeconds(30);
         _pollTimer = TimeProvider.CreateTimer(
             static state => ((NotificationService)state!).OnPollTick(),
             this,

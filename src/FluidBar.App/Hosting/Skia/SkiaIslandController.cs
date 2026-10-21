@@ -5,6 +5,7 @@ using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.Core;
 using FluidBar.Core.Activities;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Events;
 using FluidBar.Core.Interaction;
@@ -290,16 +291,22 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Whether a compact press is waiting to resolve into a click or a window drag.</summary>
     public bool HasPendingClick => _clickPending;
 
+    /// <summary>Whether the pointer is currently over the island surface.</summary>
+    public bool IsPointerInside => _pointerInside;
+
     /// <summary>Whether the pointer is currently moving the island window (drag-to-move).</summary>
     public bool IsWindowDragging => _windowDragActive;
 
     /// <summary>Whether a peek triggered by a media track change is in flight (diagnostics/tests).</summary>
     public bool IsSyntheticPeekActive => _syntheticPeek != SyntheticPeekPhase.None;
 
+    /// <summary>Whether a split satellite currently paints the rotating agent ring.</summary>
+    public bool HasSpinningSplitRing => _hasRenderState && IslandMetrics.HasSpinningSplitRing(_renderState);
+
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
-        || IsLyricTransitionAnimating
+        || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
@@ -324,11 +331,9 @@ public sealed class SkiaIslandController : IDisposable
                 return CurrentPageIs(PageSlotKind.Agent) && HasActiveAgentRow(_renderState.Pages.Agent);
             }
 
-            // An agent preview ball spins only while the pointer is over the island. A compact pill
-            // with the pointer elsewhere is ambient status, not an interaction surface: freezing its
-            // 20 DIP ring removes the last full-rate frame loop from an idle desktop without changing
-            // the expand/pager/wheel path (a pointer entry restarts the frame loop immediately).
-            if (!_pointerInside)
+            // Compact ambient animation never keeps the host alive without a split-agent ring. A
+            // pointer entry or an actual split ring restores the animation immediately.
+            if (!_pointerInside && !HasSpinningSplitRing)
             {
                 return false;
             }
@@ -392,12 +397,22 @@ public sealed class SkiaIslandController : IDisposable
     public bool IsWaveOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating && IsWaveActive()
         && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
-    /// <summary>Frame interval the host should use for the current activity.</summary>
-    public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
-        ? TimeSpan.FromMilliseconds(33)
-        : IsAgentOnly
-            ? TimeSpan.FromMilliseconds(100)
-            : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+    /// <summary>Live power mode read from the settings store; switching applies on the next frame tick.</summary>
+    public IslandPowerMode PowerMode => _settings.Current.PowerMode;
+
+    /// <summary>Current frame/media/ambient parameter table.</summary>
+    public IslandPowerProfile PowerProfile => IslandPowerPolicy.For(PowerMode);
+
+    /// <summary>
+    /// Frame interval the host should use for the current activity. The split-agent ring has one extra
+    /// rule: Saver runs it at 60 fps while hovered and 30 fps when the pointer is away; Performance
+    /// always runs it at 60 fps. No other change to the mode table is made here.
+    /// </summary>
+    public TimeSpan PreferredFrameInterval => HasSpinningSplitRing
+        ? (PowerMode == IslandPowerMode.Saver && !_pointerInside
+            ? TimeSpan.FromMilliseconds(1000.0 / 30)
+            : TimeSpan.FromMilliseconds(1000.0 / 60))
+        : PowerProfile.FrameInterval;
 
     /// <summary>
     /// A resting shell whose only motion is the agent spinner. The spinner is a 20 DIP ambient
@@ -649,7 +664,8 @@ public sealed class SkiaIslandController : IDisposable
 
         if ((identityChanged || artworkChanged) && !enrichment
             && _started
-            && (_pointerInside || State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded)
+            && (HasSpinningSplitRing || _pointerInside
+                || State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded)
             && !_motion.ReducedMotion)
         {
             // A new track always restarts the one timeline; rapid skipping cannot stack animations.
@@ -744,7 +760,8 @@ public sealed class SkiaIslandController : IDisposable
         // Agent spinner / progress pulse use their own clock; it only advances while an agent is
         // actually running, so the host's frame loop stops (and CPU drops) as soon as it finishes.
         var agentWasAnimating = IsAgentAnimating;
-        if (agentWasAnimating)
+        var ringWasAnimating = HasSpinningSplitRing;
+        if (agentWasAnimating || ringWasAnimating)
         {
             _agentAnimationSeconds += dt;
         }
@@ -797,6 +814,13 @@ public sealed class SkiaIslandController : IDisposable
             // full-row progress bar) so the host actually paints a new frame instead of freezing
             // between one-second content updates.
             InvalidateDirty(AgentFrameDamage());
+        }
+
+        if (ringWasAnimating)
+        {
+            // The split-agent ring is outside the compact shell. Without this dirty rect the
+            // frame clock can run while RenderAllLocked sees no damage, leaving the ring frozen.
+            InvalidateDirty(SplitRingDamage());
         }
 
         if (motionWasRunning)
@@ -1820,10 +1844,10 @@ public sealed class SkiaIslandController : IDisposable
                 case IslandEffectKind.Retarget:
                     break;
                 case IslandEffectKind.PlayNudge:
-                    // A background activity update must not kick the full-rate shell animation while
-                    // the pointer is elsewhere; the nudge is a hover-visible cue. Pointer entry or an
-                    // expanded surface still plays the exact same spring.
-                    if (_pointerInside || State.Kind is IslandStateKind.Expanded or IslandStateKind.Peek)
+                    // Saver suppresses background nudges while the pointer is elsewhere; Performance
+                    // (ambient always) and any pointer/expanded surface keep the original spring.
+                    if (HasSpinningSplitRing || _pointerInside
+                        || State.Kind is IslandStateKind.Expanded or IslandStateKind.Peek)
                     {
                         _motion.PlayNudge();
                         InvalidateFull();
@@ -1966,9 +1990,9 @@ public sealed class SkiaIslandController : IDisposable
 
         // A content change may have started an agent run: ask the host for a frame loop now so the
         // spinner starts immediately (the loop keeps itself alive while IsAgentAnimating is true).
-        if (IsAgentAnimating)
+        if (IsAgentAnimating || HasSpinningSplitRing)
         {
-            InvalidateDirty(ContentDamage());
+            InvalidateDirty(IsAgentAnimating ? ContentDamage() : SplitRingDamage());
             FrameRequested?.Invoke();
         }
 
@@ -2019,6 +2043,34 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Damage of the per-frame spinner/progress glyphs.</summary>
+    private VisualRect SplitRingDamage()
+    {
+        if (!_hasRenderState || !IslandMetrics.HasSpinningSplitRing(_renderState))
+        {
+            return VisualRect.Empty;
+        }
+
+        var rects = IslandMetrics.SplitIsletRects(_renderState);
+        if (rects.Length == 0)
+        {
+            return VisualRect.Empty;
+        }
+
+        var left = double.PositiveInfinity;
+        var top = double.PositiveInfinity;
+        var right = double.NegativeInfinity;
+        var bottom = double.NegativeInfinity;
+        foreach (var rect in rects)
+        {
+            left = Math.Min(left, rect.Left);
+            top = Math.Min(top, rect.Top);
+            right = Math.Max(right, rect.Right);
+            bottom = Math.Max(bottom, rect.Bottom);
+        }
+
+        return new VisualRect(left, top, right - left, bottom - top).Inflate(2);
+    }
+
     private VisualRect AgentFrameDamage()
     {
         if (!_hasRenderState)

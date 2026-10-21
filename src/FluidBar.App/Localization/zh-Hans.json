@@ -41,7 +41,6 @@
     "Common.Connected": "已连接",
     "Common.Disconnected": "已断开",
     "Common.Unknown": "未知",
-
     "Island.Idle.Hint": "点击展开",
     "Island.Idle.Battery": "{level}%",
     "Island.Peek.Hint": "点击展开",
@@ -75,14 +74,12 @@
     "Island.Accessibility.SplitIsletHelp": "按 Enter 让这个预览小球与主岛融合并打开对应页面。",
     "Island.Accessibility.MoreActivities": "还有 {0} 个活动",
     "Island.Accessibility.MoreActivitiesHelp": "按 Enter 打开最早的后台活动所在的页面。",
-
     "Rail.Home": "主页",
     "Rail.Media": "媒体",
     "Rail.Notifications": "通知",
     "Rail.Clipboard": "剪贴板",
     "Rail.Agent": "Agent",
     "Rail.Widgets": "小组件",
-
     "Activity.Lookup": "取词",
     "Activity.Clipboard": "剪贴板",
     "Activity.LockKeys": "锁定键",
@@ -98,12 +95,10 @@
     "Activity.Timer": "计时器",
     "Activity.Media": "正在播放",
     "Activity.Idle": "FluidBar",
-
     "Hud.Volume": "音量",
     "Hud.Brightness": "亮度",
     "Hud.Muted": "静音",
     "Hud.Value": "{value}%",
-
     "Media.Play": "播放",
     "Media.Pause": "暂停",
     "Media.Next": "下一首",
@@ -118,7 +113,6 @@
     "Media.Lyrics": "歌词",
     "Media.TrackCount": "{count, plural, other {# 首曲目}}",
     "Media.Seek": "跳转进度",
-
     "Notifications.Title": "通知",
     "Notifications.ClearAll": "全部清除",
     "Notifications.Empty": "暂无通知",
@@ -128,7 +122,6 @@
     "Notifications.JustNow": "刚刚",
     "Notifications.MinutesAgo": "{count, plural, other {# 分钟前}}",
     "Notifications.HoursAgo": "{count, plural, other {# 小时前}}",
-
     "Clipboard.Title": "剪贴板",
     "Clipboard.History": "历史记录",
     "Clipboard.Empty": "剪贴板为空",
@@ -136,7 +129,6 @@
     "Clipboard.Text": "文本",
     "Clipboard.Image": "图片",
     "Clipboard.Pinned": "已固定",
-
     "Agent.Title": "Agent",
     "Agent.Running": "运行中",
     "Agent.Completed": "已完成",
@@ -147,20 +139,17 @@
     "Agent.Session": "会话 {id}",
     "Agent.DurationRunning": "已运行 {minutes} 分 {seconds} 秒",
     "Agent.DurationDone": "耗时 {minutes} 分 {seconds} 秒",
-
     "Timer.Title": "计时器",
     "Timer.Pomodoro": "番茄钟",
     "Timer.Start": "开始",
     "Timer.Pause": "暂停",
     "Timer.Done": "完成",
     "Timer.Remaining": "剩余 {time}",
-
     "Battery.Title": "电池",
     "Battery.Low": "电量低",
     "Battery.LowDetail": "剩余 {level}%——请连接电源。",
     "Battery.Full": "已充满",
     "Battery.Remaining": "剩余 {time}",
-
     "Page.Home.Title": "控制中心",
     "Page.Home.GreetingMorning": "早上好",
     "Page.Home.GreetingAfternoon": "下午好",
@@ -173,7 +162,6 @@
     "Page.Home.FocusTime": "专注",
     "Page.Home.FocusOff": "专注已关闭",
     "Page.Home.System": "系统",
-
     "Page.Media.Title": "正在播放",
     "Page.Media.Source": "来源",
     "Page.Media.NoSession": "播放内容后会显示在这里。",
@@ -208,7 +196,6 @@
     "Page.Widgets.Weather.Snow": "雪",
     "Page.Widgets.Weather.Thunderstorm": "雷暴",
     "Page.Widgets.Weather.Unknown": "天气",
-
     "Settings.Title": "设置",
     "Settings.NavKicker": "偏好设置",
     "Settings.VersionLine": "交互原型 · 非发行版本",
@@ -220,6 +207,10 @@
     "Settings.Island.Motion.Desc": "减弱模式会强制临界阻尼，并跳过弹簧过渡。",
     "Settings.Island.MotionStrength": "动效强度",
     "Settings.Island.MotionStrengthHint": "调节预览岛弹簧节奏与位移幅度。",
+    "Settings.Island.PowerMode": "性能模式",
+    "Settings.Island.PowerModeHint": "性能模式保持 60fps 与常驻帧循环；省电模式使用 30fps 并停止空闲帧。",
+    "Settings.Island.PowerPerformance": "性能",
+    "Settings.Island.PowerSaver": "省电",
     "Settings.Island.PeekOnTrackChangeHint": "切歌时让灵动岛轻弹一下。",
     "Settings.Island.Mode.Desc": "浮岛常驻顶部；贴边更像 Windows 通知中心；Dock 替换任务栏。",
     "Settings.Island.Anchor.Desc": "浮岛模式下沿屏幕顶部对齐，仍可拖拽微调。",
@@ -236,7 +227,6 @@
     "Settings.About.Title": "关于 FluidBar",
     "Settings.About.NavLabel": "关于",
     "Settings.About.Description": "一个为 Windows 打造的动态岛。由社区驱动，使用 .NET 10 构建。",
-
     "Settings.Support.Title": "Agent 支持",
     "Settings.Support.Subtitle": "FluidBar 只读取每个Agent本来就在写的本地状态：不装插件、不配 hook、不改任何配置；文件存在时岛上自动出现状态行。",
     "Settings.Support.Status.Native": "原生支持",
@@ -320,7 +310,6 @@
     "Settings.General.Hotkey.HoldToHide": "按住临时隐藏",
     "Settings.General.Hotkey.Unassigned": "未分配",
     "Settings.General.Hotkey.Conflict": "已被其他应用占用——请换一个快捷键。",
-
     "Settings.Appearance.Theme.Title": "桌面主题",
     "Settings.Appearance.Theme.Dark": "深色",
     "Settings.Appearance.Theme.Light": "浅色",
@@ -360,7 +349,6 @@
     "Settings.Appearance.PanelRadiusHint": "小胶囊始终保持 stadium 半径。",
     "Settings.Appearance.PreviewLabel": "灵动岛预览",
     "Settings.Appearance.LiveHint": "预览实时反映调色板、材质、强调色、圆角、填充与字号；桌面主题只影响窗口与桌面，动效设置只影响动画，都不会改变预览。",
-
     "Settings.Island.Mode.Title": "模式",
     "Settings.Island.Mode.Float": "浮岛",
     "Settings.Island.Mode.Flush": "贴边",
@@ -391,7 +379,6 @@
     "Settings.Island.DisplayOn.All": "所有显示器",
     "Settings.Island.DisplayOn.FollowMouse": "指针所在显示器",
     "Settings.Island.DisplayOn.Specific": "指定显示器",
-
     "Settings.Plugins.Installed": "已安装插件",
     "Settings.Plugins.Builtin": "内置",
     "Settings.Plugins.Community": "社区",
@@ -408,7 +395,6 @@
     "Settings.Plugins.ErrorPlatformServiceUnavailable": "此插件需要的系统服务在当前设备上不可用。",
     "Settings.Plugins.RestartRequired": "请重启 FluidBar 以完成卸载。",
     "Settings.Plugins.ConsentRequired": "此插件需要你的同意才能运行。",
-
     "Settings.Market.Featured": "本周精选",
     "Settings.Market.Categories": "分类",
     "Settings.Market.Category.All": "全部",
@@ -441,7 +427,6 @@
     "Market.Stage.Extract": "正在解压…",
     "Market.Stage.Activate": "正在激活插件…",
     "Market.Stage.Prepare": "正在暂存版本…",
-
     "Settings.Marketplace.Community.Title": "本地社区市场",
     "Settings.Marketplace.Community.Subtitle": "提交插件包、审核、安装并评分；所有状态都保存在本机 {root}。",
     "Settings.Marketplace.Community.Submit": "提交 .fbp…",
@@ -477,7 +462,6 @@
     "Settings.Marketplace.Community.Installing": "正在安装 {pluginId}：{stage}",
     "Settings.Marketplace.Community.Installed": "已安装 {pluginId} {version}，重启 FluidBar 后生效。",
     "Settings.Marketplace.Community.InstallFailed": "安装失败：{message}",
-
     "Settings.Marketplace.Community.InstallCount": "{count, plural, other {# 次安装}}",
     "Settings.Advanced.DataFolder": "数据目录",
     "Settings.Advanced.OpenFolder": "打开数据目录",
@@ -506,7 +490,6 @@
     "Settings.Advanced.ResetDone": "设置已重置。",
     "Settings.Advanced.PluginApiVersion": "插件 API",
     "Settings.Advanced.CrashGuard": "崩溃保护",
-
     "Settings.About.Version": "版本 {version}",
     "Settings.About.Build": "构建 {build}",
     "Settings.About.License": "MIT License · 源代码开放",
@@ -531,7 +514,6 @@
     "Settings.About.Website": "网站",
     "Settings.About.SourceCode": "源代码",
     "Settings.About.Acknowledgments": "致谢",
-
     "Market.Consent.Title": "安装 {plugin}？",
     "Market.Consent.CapabilitiesTitle": "此插件可以：",
     "Market.Consent.Body": "此插件可以：{capabilities}。插件与 FluidBar 拥有相同的权限。请只安装你信任的插件。",
@@ -539,7 +521,6 @@
     "Market.Consent.Accept": "安装插件",
     "Market.Consent.Decline": "取消",
     "Market.Consent.MachineTranslated": "机器翻译",
-
     "Capability.Network.Internet": "访问互联网",
     "Capability.Network.Domains": "访问互联网（{domains}）",
     "Capability.Media": "读取当前媒体会话",
@@ -547,7 +528,7 @@
     "Capability.Clipboard": "读取剪贴板",
     "Capability.Notifications": "读取通知",
     "Capability.Settings": "添加设置项",
-    "Capability.Commands": "注册命令与快捷键",
+    "Capability.Commands": "注册命令",
     "Capability.Storage": "在自己的目录中存储数据",
     "Capability.FilesWrite": "写入自己目录之外的文件",
     "Capability.ProcessSpawn": "启动其他进程",
@@ -557,7 +538,6 @@
     "Capability.UiHoverCard": "添加悬停卡片",
     "Capability.UiSettings": "添加设置页面",
     "Capability.UiWidgets": "添加小组件",
-
     "Tray.Tooltip": "FluidBar — {status}",
     "Tray.Open": "打开 FluidBar",
     "Tray.Settings": "设置…",
@@ -567,20 +547,16 @@
     "Tray.Pause": "暂停活动",
     "Tray.Resume": "恢复活动",
     "Tray.Exit": "退出 FluidBar",
-
     "Mode.Float": "悬浮",
     "Mode.Flush": "贴顶",
     "Mode.Dock": "任务栏",
-
     "Locale.System": "跟随系统",
     "Locale.English": "English",
     "Locale.Chinese": "中文",
     "Locale.Pseudo": "伪本地化（测试）",
-
     "Dock.Apps": "应用",
     "Dock.Tray": "系统托盘",
     "Dock.ShowDesktop": "显示桌面",
-
     "Error.Network.Timeout": "网络超时，请稍后重试。",
     "Error.Network.Offline": "你已离线。",
     "Error.Signature.Invalid": "无法验证包签名，因此未安装。",
@@ -589,8 +565,7 @@
     "Error.Plugin.LoadFailed": "插件加载失败，已被禁用。",
     "Error.Install.Failed": "安装未完成，旧版本仍可用。",
     "Error.Download.Failed": "下载失败。",
-    "Error.Generic": "出错了，详情见日志。"
-,
+    "Error.Generic": "出错了，详情见日志。",
     "Settings.Plugins.SettingsButton": "设置",
     "Settings.Plugins.Commands": "命令",
     "Settings.Plugins.Detail.Empty": "这个插件没有可配置项。",
@@ -649,21 +624,13 @@
     "command.agent.uninstall-hooks.description": "移除已安装的Agent钩子。",
     "command.devices.retract.title": "关闭设备提示",
     "command.devices.retract.description": "收回设备活动浮层。",
-    "Capability.Media": "读取当前媒体会话",
-    "Capability.MediaControl": "控制媒体播放",
-    "Capability.Clipboard": "读取剪贴板",
-    "Capability.Notifications": "读取通知",
     "Capability.Network": "访问互联网",
     "Capability.Files": "读写文件",
     "Capability.Background": "在后台运行",
-    "Capability.Storage": "在自己的目录中存储数据",
-    "Capability.Commands": "注册命令",
-    "Capability.UiIsland": "添加灵动岛布局",
-    "Capability.UiSettings": "添加设置页面",
-    "Capability.UiWidgets": "添加小组件",
-    "Capability.Registry": "写入注册表",
-    "Capability.ProcessSpawn": "启动其他进程",
-    "Capability.ShellExecute": "打开链接与文件"
+    "Settings.Appearance.PowerMode.Title": "性能模式",
+    "Settings.Appearance.PowerMode.Desc": "性能模式更顺滑，省电模式占用更低。",
+    "Settings.Appearance.PowerMode.Performance": "性能",
+    "Settings.Appearance.PowerMode.Saver": "省电"
   },
   "_meta": {
     "comments": {

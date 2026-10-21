@@ -790,6 +790,19 @@ public static partial class LocKeys
                 /// <summary><c>Settings.Appearance.Material.Desc</c></summary>
                 public const string Desc = "Settings.Appearance.Material.Desc";
             }
+            /// <summary>Keys for the island power mode selector.</summary>
+            public static class PowerMode
+            {
+                /// <summary><c>Settings.Appearance.PowerMode.Title</c></summary>
+                public const string Title = "Settings.Appearance.PowerMode.Title";
+                /// <summary><c>Settings.Appearance.PowerMode.Desc</c></summary>
+                public const string Desc = "Settings.Appearance.PowerMode.Desc";
+                /// <summary><c>Settings.Appearance.PowerMode.Performance</c></summary>
+                public const string Performance = "Settings.Appearance.PowerMode.Performance";
+                /// <summary><c>Settings.Appearance.PowerMode.Saver</c></summary>
+                public const string Saver = "Settings.Appearance.PowerMode.Saver";
+            }
+
             /// <summary>Keys in the 'Palette' area.</summary>
             public static class Palette
             {
@@ -840,6 +853,14 @@ public static partial class LocKeys
             public const string MotionStrength = "Settings.Island.MotionStrength";
             /// <summary><c>Settings.Island.MotionStrengthHint</c></summary>
             public const string MotionStrengthHint = "Settings.Island.MotionStrengthHint";
+            /// <summary><c>Settings.Island.PowerMode</c></summary>
+            public const string PowerMode = "Settings.Island.PowerMode";
+            /// <summary><c>Settings.Island.PowerModeHint</c></summary>
+            public const string PowerModeHint = "Settings.Island.PowerModeHint";
+            /// <summary><c>Settings.Island.PowerPerformance</c></summary>
+            public const string PowerPerformance = "Settings.Island.PowerPerformance";
+            /// <summary><c>Settings.Island.PowerSaver</c></summary>
+            public const string PowerSaver = "Settings.Island.PowerSaver";
             /// <summary><c>Settings.Island.PeekOnTrackChangeHint</c></summary>
             public const string PeekOnTrackChangeHint = "Settings.Island.PeekOnTrackChangeHint";
             /// <summary><c>Settings.Island.Title</c></summary>

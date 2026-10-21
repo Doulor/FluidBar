@@ -3,6 +3,7 @@ using FluidBar.App.Island;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Diagnostics;
 using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Agent;
@@ -74,6 +75,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
     private ITimer? _mediaTick;
+    private TimeSpan _mediaTickInterval;
     private LyricsDocument? _lyricsDocument;
     private string _lyricsTrackKey = string.Empty;
     private int _started;
@@ -126,7 +128,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             new ArtworkTempStoreOptions { DirectoryPath = Path.Combine(Path.GetTempPath(), "FluidBar", "art") },
             _platformLogger,
             time);
-        _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
+        _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time,
+            powerModeProvider: () => _settings.Current.PowerMode);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
 
         // Agent inbox: hook scripts drop one JSON file per Claude Code / Codex event here. Read-only
@@ -396,6 +399,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// </summary>
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.PowerMode != current.PowerMode)
+        {
+            EnsureMediaTick();
+        }
+
         if (previous.Theme != current.Theme)
         {
             Changed?.Invoke(this, EventArgs.Empty);
@@ -449,18 +457,29 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var media = _media.Current;
         var playing = media is { IsEmpty: false, IsPlaying: true };
+        var interval = _settings.Current.PowerMode == IslandPowerMode.Saver
+            ? TimeSpan.FromSeconds(2)
+            : TimeSpan.FromSeconds(1);
         if (playing)
         {
-            _mediaTick ??= _time.CreateTimer(
+            if (_mediaTick is not null && _mediaTickInterval == interval)
+            {
+                return;
+            }
+
+            _mediaTick?.Dispose();
+            _mediaTickInterval = interval;
+            _mediaTick = _time.CreateTimer(
                 static state => ((SkiaPlatformActions)state!).OnMediaTick(),
                 this,
-                TimeSpan.FromSeconds(1),
-                TimeSpan.FromSeconds(1));
+                interval,
+                interval);
             return;
         }
 
         _mediaTick?.Dispose();
         _mediaTick = null;
+        _mediaTickInterval = TimeSpan.Zero;
     }
 
     private void OnMediaTick()

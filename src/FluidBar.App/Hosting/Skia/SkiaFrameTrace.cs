@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using FluidBar.Core.Configuration;
 using FluidBar.Island;
 
 namespace FluidBar.App.Hosting.Skia;
@@ -17,14 +18,18 @@ internal static class SkiaFrameTrace
 
     public static bool Enabled => Writer is not null;
 
-    public static void Frame(string kind, in IslandRenderState state, SkiaIslandMotion motion, bool agentAnimating, in SkiaIslandRenderChange change)
+    public static void Frame(long frameNumber, IslandPowerMode powerMode, string kind, in IslandRenderState state, SkiaIslandMotion motion, bool agentAnimating, bool ringAnimating, in SkiaIslandRenderChange change)
     {
         if (Writer is null)
         {
             return;
         }
 
+        Writer.Write(frameNumber);
+        Writer.Write(',');
         Writer.Write(Math.Round(Clock.Elapsed.TotalMilliseconds, 3).ToString(CultureInfo.InvariantCulture));
+        Writer.Write(',');
+        Writer.Write(powerMode.ToString());
         Writer.Write(',');
         Writer.Write(kind);
         Writer.Write(',');
@@ -50,6 +55,10 @@ internal static class SkiaFrameTrace
         Writer.Write(',');
         Writer.Write(agentAnimating ? '1' : '0');
         Writer.Write(',');
+        Writer.Write(ringAnimating ? '1' : '0');
+        Writer.Write(',');
+        Writer.Write(IslandMetrics.SplitRingDegrees(state.AgentAnimationSeconds).ToString("0.###", CultureInfo.InvariantCulture));
+        Writer.Write(',');
         Writer.Write(change.FullFrame ? '1' : '0');
         Writer.Write(',');
         Writer.Write(change.DamageDip.IsEmpty ? "0;0;0;0" : string.Create(CultureInfo.InvariantCulture,
@@ -69,7 +78,7 @@ internal static class SkiaFrameTrace
             ? Path.Combine(Path.GetTempPath(), "fluidbar-frame-trace.csv")
             : value;
         var writer = new StreamWriter(path, append: false);
-        writer.WriteLine("ms,kind,shellW,shellH,originX,originY,nudgeY,motionW,motionH,motionRest,form,page,agent,full,damage");
+        writer.WriteLine("frameNo,ms,powerMode,kind,shellW,shellH,originX,originY,nudgeY,motionW,motionH,motionRest,form,page,agent,ring,ringDeg,full,damage");
         writer.Flush();
         return writer;
     }
