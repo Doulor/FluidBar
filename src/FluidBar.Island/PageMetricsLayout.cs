@@ -437,7 +437,7 @@ public static class PageMetricsLayout
 
     /// <summary>Maximum scroll offset for a page (0 when the content fits the body).</summary>
     public static float MaxScroll(SKRect page, PageSlotKind kind, in FontScaleMetrics metrics, int itemCount = 0)
-        => Math.Max(0, ContentExtent(page, kind, metrics, itemCount) - BodyHeight);
+        => Math.Max(0, ContentExtent(page, kind, metrics, itemCount) - PageVisual.Body(page).Height);
 
     /// <summary>Clamps a page scroll offset.</summary>
     public static float ClampScroll(SKRect page, PageSlotKind kind, double offset, in FontScaleMetrics metrics, int itemCount = 0)
@@ -742,8 +742,8 @@ public static class PageVisual
 
     // ---------------------------------------------------------------- media (iOS Now Playing)
 
-    /// <summary>Cover thumbnail: 72 DIP square, 12 DIP radius (iOS Now Playing artwork ratio).</summary>
-    public const float MediaArtSize = 72;
+    /// <summary>Cover thumbnail: 56 DIP square, 12 DIP radius (iOS Now Playing artwork ratio).</summary>
+    public const float MediaArtSize = 56;
 
     /// <summary>Cover corner radius (12 DIP).</summary>
     public const float MediaArtRadius = 12;
@@ -815,21 +815,21 @@ public static class PageVisual
 
     /// <summary>Lyric band: two text lines, no background (40 DIP after the cover row).</summary>
     public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset,
-        page.Top + BodyTop + 72, page.Right - PageInset,
-        page.Top + BodyTop + 72 + MediaLyricLine1Height + MediaLyricLine2Height);
+        page.Top + BodyTop + 64, page.Right - PageInset,
+        page.Top + BodyTop + 64 + MediaLyricLine1Height + MediaLyricLine2Height);
 
     /// <summary>First lyric line box (13/20).</summary>
-    public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 72,
-        page.Right - PageInset, page.Top + BodyTop + 72 + MediaLyricLine1Height);
+    public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 64,
+        page.Right - PageInset, page.Top + BodyTop + 64 + MediaLyricLine1Height);
 
     /// <summary>Second (next) lyric line box (11.5/16).</summary>
     public static SKRect MediaLyricLine2(SKRect page) => new(page.Left + PageInset,
-        page.Top + BodyTop + 72 + MediaLyricLine1Height, page.Right - PageInset,
-        page.Top + BodyTop + 72 + MediaLyricLine1Height + MediaLyricLine2Height);
+        page.Top + BodyTop + 64 + MediaLyricLine1Height, page.Right - PageInset,
+        page.Top + BodyTop + 64 + MediaLyricLine1Height + MediaLyricLine2Height);
 
-    /// <summary>Seek row (time labels + track), 16 DIP after the lyric band.</summary>
-    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 112,
-        page.Right - PageInset, page.Top + BodyTop + 128);
+    /// <summary>Seek row (time labels + track), 8 DIP after the lyric band.</summary>
+    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 104,
+        page.Right - PageInset, page.Top + BodyTop + 120);
 
     /// <summary>Seek track: 3 DIP thick, spanning between the two time columns.</summary>
     public static SKRect MediaSeekTrack(SKRect page)
@@ -841,7 +841,7 @@ public static class PageVisual
 
     /// <summary>Centre of the transport row (the play circle's Y).</summary>
     public static float MediaTransportCenterY(SKRect page)
-        => page.Top + BodyTop + 136 + (MediaPlayDiameter / 2);
+        => page.Top + BodyTop + 124 + (MediaPlayDiameter / 2);
 
     /// <summary>Previous-track button (28 DIP, outlined), 16 DIP left of the play circle.</summary>
     public static SKRect MediaPrevious(SKRect page) => new(
@@ -866,7 +866,7 @@ public static class PageVisual
 
     /// <summary>Footer info row: aligned with the progress track, 16 DIP below the transport.</summary>
     public static SKRect MediaFooter(SKRect page) => new(MediaSeekTrack(page).Left,
-        page.Top + BodyTop + 184, MediaSeekTrack(page).Right, page.Top + BodyTop + 184 + MediaFooterHeight);
+        page.Top + BodyTop + 160, MediaSeekTrack(page).Right, page.Top + BodyTop + 160 + MediaFooterHeight);
 
     /// <summary>Volume/mute control (left third of the footer row).</summary>
     public static SKRect MediaVolume(SKRect page)

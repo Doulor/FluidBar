@@ -15,8 +15,8 @@ public static class LayoutTokens
     /// <summary>Expanded shell width (content 400 DIP + 2 × 20 DIP horizontal inset).</summary>
     public const double ExpandedWidth = 440;
 
-    /// <summary>Uniform expanded shell height for all pages.</summary>
-    public const double ExpandedHeight = 284;
+    /// <summary>Uniform expanded shell height for all pages (440:244 = 1.80 ratio).</summary>
+    public const double ExpandedHeight = 244;
 
     /// <summary>
     /// Left vertical navigation rail width. <b>Superseded</b> by the horizontal pager
@@ -235,7 +235,7 @@ public static class LayoutTokens
     public const double DockShadowOpacity = 0.28;
 
     /// <summary>Expanded shell radius (spec: 28).</summary>
-    public const double ExpandedRadius = 28;
+    public const double ExpandedRadius = 32;
 
     /// <summary>Compact radius cap (spec: 44).</summary>
     public const double CompactRadiusCap = 44;

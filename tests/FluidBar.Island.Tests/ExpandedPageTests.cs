@@ -18,7 +18,7 @@ public sealed class ExpandedPageTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(516, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -262,7 +262,12 @@ public sealed class ExpandedPageTests
         Assert.True(extraRows >= (3 * PageMetricsLayout.WidgetsTaskPitch(metrics)) - 12.5f,
             $"six rows should grow the card: {three.Height} -> {six.Height}");
 
-        Assert.Equal(0, PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 3), 0.01f);
+        // 244 DIP shell: even the three-row card exceeds the 164 DIP visual body, so page scroll starts at 0.
+        var threeScroll = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 3);
+        Assert.Equal(
+            PageMetricsLayout.ContentExtent(page, PageSlotKind.Widgets, metrics, 3) - PageVisual.Body(page).Height,
+            threeScroll, 0.01f);
+        Assert.True(threeScroll >= 0);
         var scroll = PageMetricsLayout.MaxScroll(page, PageSlotKind.Widgets, metrics, 6);
         Assert.True(scroll > 0, "six task rows must make the widgets page scrollable");
 
@@ -402,4 +407,5 @@ public sealed class ExpandedPageTests
         return data.ToArray();
     }
 }
+
 

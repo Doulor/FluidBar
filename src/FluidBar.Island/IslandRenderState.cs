@@ -285,7 +285,7 @@ public readonly record struct IslandRenderState
         };
     }
 
-    /// <summary>Creates an expanded state (uniform 440x284 shell) with the given page content.</summary>
+    /// <summary>Creates an expanded state (uniform 440x244 shell) with the given page content.</summary>
     public static IslandRenderState Expanded(
         IslandMode mode,
         PagerRenderState pager,

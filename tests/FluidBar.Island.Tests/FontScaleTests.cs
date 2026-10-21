@@ -93,7 +93,7 @@ public sealed class FontScaleTests
         Assert.Equal(PageMetricsLayout.ClipboardRowHeight(one), 48, 3);
         Assert.Equal(PageMetricsLayout.AgentRowHeight(one), 44.6, 3);
         Assert.Equal(PageMetricsLayout.HomeContentExtent(pageRect, one), 212, 3);
-        Assert.Equal(PageMetricsLayout.MediaContentExtent(pageRect, one), 232, 3);
+        Assert.Equal(PageMetricsLayout.MediaContentExtent(pageRect, one), 214, 3);
     }
 
     [Fact]

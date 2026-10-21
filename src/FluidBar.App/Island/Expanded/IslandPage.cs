@@ -64,7 +64,7 @@ public enum IslandPageAction
 public readonly record struct IslandPageActionRequest(IslandPageAction Action, int Index);
 
 /// <summary>
-/// Base class for the six expanded pages. Pages draw imperatively at the uniform 392×284 content size
+/// Base class for the six expanded pages. Pages draw imperatively at the uniform 392×244 content size
 /// (440 shell − 48 rail), so switching pages never changes the shell size and never triggers layout of
 /// the content beyond the fixed page root (spec 2.7 / lead decision).
 /// </summary>

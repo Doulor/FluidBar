@@ -19,7 +19,7 @@ namespace FluidBar.Island.Tests;
 /// <para>
 /// The expected numbers are the live measurements from
 /// <c>docs/rewrite/prototype2/index.html?state=expanded&amp;tab=…&amp;arch=1</c> in a 1440×900 Edge
-/// viewport: shell (500,12) 440×284, rail y 304 height 32, prev/next 26×26 centred on y 320,
+/// viewport: shell (500,12) 440×244, rail y 264 height 32, prev/next 26×26 centred on y 280,
 /// current capsule 28 DIP tall with label-grown width, 8 DIP island gaps, 3 DIP dots on a 7 DIP pitch
 /// 7 DIP from the nearest island.
 /// </summary>
@@ -87,7 +87,7 @@ public sealed class MiniRailPrototypeTests
     public void ClipboardPage_MatchesThePrototypeRects()
     {
         // Prototype (page index 3, 剪贴板): prev centre 662.5, current 73×28 at 683.5/306,
-        // next centre 777.5; left dots 632.5 and 639.5, right dot 797.5, all 3×3 at y 318.5.
+        // next centre 777.5; left dots 632.5 and 639.5, right dot 797.5, all 3×3 at y 278.5.
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = State(3);
         var shell = IslandMetrics.ShellRect(state);
@@ -97,10 +97,10 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(79f, layout.Current.Width, 0.001f);
         Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
-        Assert.Equal(304f + offsetY, layout.Current.Top, 0.001f);   // midY 320 - 32/2
+        Assert.Equal(264f + offsetY, layout.Current.Top, 0.001f);   // midY 320 - 32/2
         Assert.Equal(659.5f + offsetX, layout.Previous.MidX, 0.001f);
         Assert.Equal(780.5f + offsetX, layout.Next.MidX, 0.001f);
-        Assert.Equal(320f + offsetY, layout.Current.MidY, 0.001f);
+        Assert.Equal(280f + offsetY, layout.Current.MidY, 0.001f);
 
         Assert.Equal(2, layout.DotsLeft.Length);
         Assert.Equal(1, layout.DotsRight.Length);
@@ -108,7 +108,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(636.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
         Assert.Equal(800.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
         Assert.Equal(3f, layout.DotsLeft[0].Width, 0.001f);
-        Assert.Equal(318.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
+        Assert.Equal(278.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
 
         // Island gaps are 8 DIP and the dot cluster keeps 7 DIP from the nearest island edge.
         Assert.Equal(8f, layout.Current.Left - layout.Previous.Right, 0.001f);
@@ -134,7 +134,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(3f, layout.DotsRight[1].Width, 0.001f);
         Assert.Equal(7f, layout.DotsRight[2].Width, 0.001f);
         var offsetY = IslandMetrics.ShellRect(State(0)).Top - 12f;
-        Assert.Equal(320f + offsetY, layout.DotsRight[2].MidY, 0.001f);
+        Assert.Equal(280f + offsetY, layout.DotsRight[2].MidY, 0.001f);
 
         Assert.True(layout.Previous.IsEmpty, "page 0 has no previous island");
         Assert.False(layout.Next.IsEmpty);
@@ -271,7 +271,7 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(capsule, layout.Current.Width, 0.001f);
         Assert.Equal(capsule, layout.CapsuleWidth, 0.001f);
-        Assert.Equal(320f + dy, layout.Current.MidY, 0.001f);
+        Assert.Equal(280f + dy, layout.Current.MidY, 0.001f);
 
         if (page > 0)
         {
@@ -456,3 +456,4 @@ public sealed class MiniRailPrototypeTests
     public static IslandRenderState State(int page, double position = double.NaN)
         => IslandTestFixtures.RailState(page, position);
 }
+

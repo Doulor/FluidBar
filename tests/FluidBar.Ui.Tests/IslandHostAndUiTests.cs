@@ -83,13 +83,13 @@ public sealed class IslandHostTests
             fixture.PumpFramesToRest();
             Assert.Equal(IslandStateKind.Expanded, fixture.Host.State.Kind);
             Assert.Equal(440, fixture.Host.Motion!.Frame.Width, 1);
-            Assert.Equal(284, fixture.Host.Motion.Frame.Height, 1);
+            Assert.Equal(244, fixture.Host.Motion.Frame.Height, 1);
 
             fixture.Host.SimulatePageRequested(CoreIslandPage.Media);
             fixture.PumpFramesToRest();
             Assert.Equal(CoreIslandPage.Media, fixture.Host.State.Page);
             Assert.Equal(440, fixture.Host.Motion.Frame.Width, 1);
-            Assert.Equal(284, fixture.Host.Motion.Frame.Height, 1);
+            Assert.Equal(244, fixture.Host.Motion.Frame.Height, 1);
             Assert.Same(mediaPageBefore, window.Panel.PageFor(CoreIslandPage.Media));
             Assert.Equal(placementsBefore, fixture.Backend.Placements.Count);
 
@@ -199,7 +199,7 @@ public sealed class IslandHostTests
 public sealed class ExpandedAndSettingsUiTests
 {
     [Fact]
-    public async Task ExpandedPanel_IsUniform440x284_WithFiveCachedPagesInOneStrip()
+    public async Task ExpandedPanel_IsUniform440x244_WithFiveCachedPagesInOneStrip()
     {
         await AvaloniaTest.Run(() =>
         {
@@ -216,11 +216,11 @@ public sealed class ExpandedAndSettingsUiTests
                 Localizer = localizer,
                 SelectedPage = CoreIslandPage.Home,
             });
-            panel.Measure(new Size(440, 284));
-            panel.Arrange(new Rect(0, 0, 440, 284));
+            panel.Measure(new Size(440, 244));
+            panel.Arrange(new Rect(0, 0, 440, 244));
 
             Assert.Equal(440, panel.DesiredSize.Width);
-            Assert.Equal(284, panel.DesiredSize.Height);
+            Assert.Equal(244, panel.DesiredSize.Height);
             Assert.Equal(400, ExpandedPanel.ViewportWidth);
             Assert.Equal(252, ExpandedPanel.ViewportHeight);
             foreach (var page in CoreIslandPage.BuiltinPages.Where(page => page != CoreIslandPage.Agent))
@@ -236,7 +236,7 @@ public sealed class ExpandedAndSettingsUiTests
             Assert.Equal(CoreIslandPage.Clipboard, panel.CurrentPage);
             Assert.Equal([CoreIslandPage.Clipboard], requested);
             Assert.Equal(440, panel.DesiredSize.Width);
-            Assert.Equal(284, panel.DesiredSize.Height);
+            Assert.Equal(244, panel.DesiredSize.Height);
 
             // Page roots are stable across page changes (transform-only paging, no rebuild).
             var clipboardPage = panel.PageFor(CoreIslandPage.Clipboard);
@@ -249,11 +249,11 @@ public sealed class ExpandedAndSettingsUiTests
 
     private static Point RailItemCenter(int index)
     {
-        // Mirrors the rail geometry: 34 px visual, 8 px gap, vertically centred in 48x284.
+        // Mirrors the rail geometry: 34 px visual, 8 px gap, vertically centred in 48x244.
         const double itemSize = 34;
         const double gap = 8;
         var block = (6 * itemSize) + (5 * gap);
-        var top = (284 - block) / 2;
+        var top = (244 - block) / 2;
         var x = 48 / 2.0;
         var y = top + (index * (itemSize + gap)) + (itemSize / 2);
         return new Point(x, y);
@@ -412,4 +412,5 @@ internal sealed class HostFixture : IDisposable
 
     public void Dispose() => Host.Dispose();
 }
+
 

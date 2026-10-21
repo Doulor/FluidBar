@@ -83,7 +83,7 @@ public readonly record struct MiniRailFrame(
 /// </para>
 /// <para>
 /// Source of truth: <c>docs/rewrite/prototype2/{styles.css,app.js}</c> — measured live in a
-/// 1440×900 Edge viewport (shell 440×284 at (500,12), rail y = 304, height 32).
+/// 1440×900 Edge viewport (shell 440×244 at (500,12), rail y = 264, height 32).
 /// </para>
 /// </summary>
 public static class MiniRailLayout

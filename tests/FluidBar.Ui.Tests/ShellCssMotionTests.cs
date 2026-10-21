@@ -23,7 +23,7 @@ public sealed class ShellCssMotionTests
 
         run = new MotionRun(ExpandedMotion());
         Assert.Equal(440, run.WidthAt(396.9), 0.001);
-        Assert.Equal(284, run.HeightAt(396.9), 0.001);
+        Assert.Equal(244, run.HeightAt(396.9), 0.001);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class ShellCssMotionTests
         motion.SetTarget(ExpandedTarget());
 
         Assert.Equal(440, motion.Width, 0.001);
-        Assert.Equal(284, motion.Height, 0.001);
+        Assert.Equal(244, motion.Height, 0.001);
         Assert.Equal(1, motion.ExpandedContentOpacity, 3);
         Assert.Equal(0, motion.CompactContentOpacity, 3);
         Assert.Equal(30, motion.ShellRadii.TopLeft, 0.01);
@@ -262,3 +262,4 @@ public sealed class ShellCssMotionTests
         }
     }
 }
+

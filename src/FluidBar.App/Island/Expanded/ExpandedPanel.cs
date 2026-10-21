@@ -8,6 +8,7 @@ using FluidBar.App.Localization;
 using FluidBar.App.State;
 using FluidBar.App.Theme;
 using FluidBar.Core.Activities;
+using FluidBar.Core.Layout;
 using AppTheme = FluidBar.App.Theme;
 using CoreIslandPage = FluidBar.Core.Activities.PageRef;
 
@@ -15,7 +16,7 @@ namespace FluidBar.App.Island.Expanded;
 
 /// <summary>
 /// Expanded shell pager + detached Page Archipelago (user-chosen variant A, revised 2026-10-18).
-/// The shell itself stays 440×284 with a 20/16 viewport; six page controls live in a translated strip
+/// The shell itself is 440×244 (token-derived) with a 20/16 viewport; six page controls live in a translated strip
 /// (transform only). The mini-island archipelago floats BELOW the panel, outside the shell, over the
 /// desktop (440×336 content layer inside a 488×384 host window; see <see cref="HostLayout"/>).
 /// Its reveal/hide/active morph are Core springs driven by a render frame loop; no layout runs during
@@ -24,10 +25,10 @@ namespace FluidBar.App.Island.Expanded;
 public sealed class ExpandedPanel : Panel, ILocalizable
 {
     /// <summary>Expanded shell width.</summary>
-    public const double PanelWidth = 440;
+    public const double PanelWidth = LayoutTokens.ExpandedWidth;
 
     /// <summary>Expanded shell height (the island itself).</summary>
-    public const double PanelHeight = 284;
+    public const double PanelHeight = LayoutTokens.ExpandedHeight;
 
     /// <summary>Expanded content layer height including the detached archipelago band (440×336).</summary>
     public const double TotalHeight = HostLayout.ExpandedLayerHeight;

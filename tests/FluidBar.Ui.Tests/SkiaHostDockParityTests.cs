@@ -19,7 +19,7 @@ public sealed class SkiaHostDockParityTests
     {
         var dock = HostSurface.Dock;
 
-        Assert.Equal(new VisualRect(24, 24, 440, 284), dock.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(24, 24, 440, 244), dock.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(24, 316, 440, 52), dock.DockStripLocal);
         Assert.Equal(new VisualRect(68, 376, 352, 32), dock.ArchipelagoStripLocal);
         Assert.Equal(444, dock.Height);
@@ -60,7 +60,7 @@ public sealed class SkiaHostDockParityTests
     public void Float_RendererStrip_SitsAt316NotBelowTheShellInDockTerms()
     {
         var floatSurface = HostSurface.Float;
-        Assert.Equal(new VisualRect(24, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(24, 24, 440, 244), floatSurface.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(68, 316, 352, 32), floatSurface.ArchipelagoStripLocal);
 
         var state = IslandRenderState.Expanded(
@@ -74,7 +74,7 @@ public sealed class SkiaHostDockParityTests
         using var renderer = new IslandRenderer();
         var strip = renderer.MeasureStrip(state);
 
-        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 32 DIP tall.
+        // Prototype2: rail top = shell bottom + 8 DIP (24 + 244 + 8 = 316), 32 DIP tall.
         Assert.Equal(316f, strip.Strip.Top, 3);
         Assert.Equal(32f, strip.Strip.Height, 3);
         Assert.Equal(244f, strip.Strip.MidX, 3);
@@ -210,3 +210,4 @@ public sealed class SkiaHostDockParityTests
         Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
     }
 }
+

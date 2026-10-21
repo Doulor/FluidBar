@@ -49,7 +49,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(516, bitmap.Height);
 
         var expected = LayoutTokens.CompactSize(state.Compact!.Value.Kind);
         Assert.Equal(expected.Width, state.ShellWidth);
@@ -91,7 +91,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(516, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -262,3 +262,4 @@ public sealed class IslandRenderTests
         renderer.Dispose();
     }
 }
+

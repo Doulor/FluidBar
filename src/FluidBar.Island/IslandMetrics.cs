@@ -24,7 +24,7 @@ public static class IslandMetrics
     /// <summary>Expanded shell width (440 DIP).</summary>
     public const double ShellWidth = LayoutTokens.ExpandedWidth;
 
-    /// <summary>Expanded shell height (284 DIP).</summary>
+    /// <summary>Expanded shell height (244 DIP).</summary>
     public const double ShellHeight = LayoutTokens.ExpandedHeight;
 
     /// <summary>Expanded content left inset inside the shell (20 DIP).</summary>
@@ -38,12 +38,12 @@ public static class IslandMetrics
 
     /// <summary>
     /// Expanded content height (260 DIP): prototype2's <c>.expanded-layer { inset: 12px 20px }</c> inside
-    /// the 440 × 284 shell. (Core's legacy 16 DIP vertical inset is superseded by the prototype.)
+    /// the 440 × 244 shell. (Core's legacy 16 DIP vertical inset is superseded by the prototype.)
     /// </summary>
     public const double ContentHeight = LayoutTokens.ExpandedHeight - (2 * ContentTop);
 
-    /// <summary>Prototype2 expanded panel radius default (30 DIP; setting range 16–36).</summary>
-    public const double ExpandedPanelRadius = 30;
+    /// <summary>Prototype2 expanded panel radius default (32 DIP; setting range 16–36).</summary>
+    public const double ExpandedPanelRadius = 32;
 
     /// <summary>Page body top inside the content rect (28 DIP; the title overlay owns the first row).</summary>
     public const double PageBodyTop = 28;

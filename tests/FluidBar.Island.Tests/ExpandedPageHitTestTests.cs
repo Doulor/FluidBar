@@ -40,7 +40,7 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(IslandPageControl.Dismiss, dismissHit.Control);
         Assert.Equal(1, dismissHit.Index);
 
-        var scroll = PageLayout.ListBody(page);
+        var scroll = PageVisual.ListBody(page);
         var scrollHit = Hit(state, scroll.MidX, scroll.Bottom - 2);
         Assert.Equal(IslandPageControl.Scroll, scrollHit.Control);
     }
@@ -93,8 +93,9 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(IslandPageControl.Copy, copyHit.Control);
         Assert.Equal(3, copyHit.Index);
 
-        var body = PageLayout.ListBody(page);
-        var scrollHit = Hit(state, body.MidX, body.Bottom - 2);
+        var body = PageVisual.ListBody(page);
+        // Use the empty 16 DIP gutter left of the rows: the visual body itself is a scroll target.
+        var scrollHit = Hit(state, page.Left + 2, body.MidY);
         Assert.Equal(IslandPageControl.Scroll, scrollHit.Control);
     }
 
@@ -174,10 +175,11 @@ public sealed class ExpandedPageHitTestTests
         };
 
         var page = IslandMetrics.PageRect(state, 2);
-        var body = PageLayout.ListBody(page);
+        var body = PageVisual.ListBody(page);
         var hit = Hit(state, body.MidX, body.MidY);
         Assert.Equal(IslandPageControl.Scroll, hit.Control);
         Assert.Equal(-1, hit.Index);
     }
 }
+
 

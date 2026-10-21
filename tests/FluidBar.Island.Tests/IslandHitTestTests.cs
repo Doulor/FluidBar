@@ -55,8 +55,8 @@ public sealed class IslandHitTestTests
             IslandMode.Dock);
 
         Assert.Equal(24, state.ShellOrigin.X);
-        Assert.Equal(316, state.ShellOrigin.Y);
-        Assert.Equal(IslandHitKind.Compact, Hit(state, 244, 342).Kind);
+        Assert.Equal(276, state.ShellOrigin.Y);
+        Assert.Equal(IslandHitKind.Compact, Hit(state, 244, (float)(state.ShellOrigin.Y + 20)).Kind);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandHitKind.Title, title.Kind);
         Assert.False(title.IsInteractive);
 
-        var background = Hit(state, 250, 300);
+        var background = Hit(state, 250, shell.Bottom - 8);
         Assert.Equal(IslandHitKind.Shell, background.Kind);
 
         Assert.Equal(IslandHitKind.None, Hit(state, 10, 10).Kind);
@@ -281,4 +281,5 @@ public sealed class IslandHitTestTests
         Assert.Empty(last.DotsRight);
     }
 }
+
 
