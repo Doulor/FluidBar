@@ -36,6 +36,8 @@ public sealed class SplitStackPolicy
     private ActivityKey? _restoreKey;
     private ActivityKey? _userKey;
     private DateTimeOffset _userUntil;
+    private ActivityKey? _pinnedKey;
+    private ActivityKey? _pinOverrideKey;
 
     /// <summary>Current primary key (diagnostics/tests).</summary>
     public ActivityKey? PrimaryKey => _primaryKey;
@@ -50,6 +52,9 @@ public sealed class SplitStackPolicy
     /// <summary>Whether <paramref name="key"/> is currently user-locked into the main pill.</summary>
     public bool IsUserLocked(ActivityKey key, DateTimeOffset now)
         => _userKey == key && now < _userUntil;
+
+    /// <summary>The wheel-pinned primary; survives the short user-lock window until the activity ends.</summary>
+    public ActivityKey? PinnedKey => _pinnedKey;
 
     /// <summary>Whether an activity is an actionable short-lived event (notification/copy/waiting agent).</summary>
     public static bool IsActionable(ActivityRecord record)
@@ -93,7 +98,7 @@ public sealed class SplitStackPolicy
 
     private Layer Classify(ActivityRecord record, DateTimeOffset now)
     {
-        if (IsUserLocked(record.Key, now))
+        if (IsUserLocked(record.Key, now) || _pinnedKey == record.Key)
         {
             return Layer.User;
         }
@@ -117,6 +122,33 @@ public sealed class SplitStackPolicy
         DateTimeOffset now,
         int wheelSteps = 0)
     {
+        // A pin is owned by the user, not by a TTL. Release it only when the target disappears.
+        if (_pinnedKey is { } pinned && Find(visible, pinned) is null)
+        {
+            _pinnedKey = null;
+            _pinOverrideKey = null;
+        }
+
+        if (_pinOverrideKey is { } overrideKey)
+        {
+            var overrideRecord = Find(visible, overrideKey);
+            if (overrideRecord is null || !IsActionable(overrideRecord))
+            {
+                _pinOverrideKey = null;
+                var pinnedRecord = _pinnedKey is { } pk ? Find(visible, pk) : null;
+                if (pinnedRecord is not null)
+                {
+                    SetPrimary(pinnedRecord, now);
+                    return Arrange(pinnedRecord, visible);
+                }
+            }
+            else
+            {
+                SetPrimary(overrideRecord, now);
+                return Arrange(overrideRecord, visible);
+            }
+        }
+
         if (visible.Length <= 1)
         {
             if (visible.Length == 1)
@@ -138,6 +170,8 @@ public sealed class SplitStackPolicy
             var next = ((currentIndex - wheelSteps) % visible.Length + visible.Length) % visible.Length;
             var rotated = Rotate(visible, next);
             SetPrimary(rotated[0], now);
+            _pinnedKey = rotated[0].Key;
+            _pinOverrideKey = null;
             _restoreKey = null;
             return rotated;
         }
@@ -181,6 +215,28 @@ public sealed class SplitStackPolicy
             var chosen = bestLayer == Layer.User ? best : Find(visible, _userKey!.Value) ?? best;
             SetPrimary(chosen, now);
             return Arrange(chosen, visible);
+        }
+
+        if (_pinnedKey == current.Key && dwellElapsed)
+        {
+            // The pinned item is classified as User, so the normal "best" search would pick the pin
+            // again. Look explicitly for an actionable event that may borrow the pill; the pin stays
+            // as the restore target until that event disappears.
+            ActivityRecord? actionable = null;
+            foreach (var record in visible)
+            {
+                if (IsActionable(record) && (actionable is null || record.ReceivedAt < actionable.ReceivedAt))
+                {
+                    actionable = record;
+                }
+            }
+
+            if (actionable is not null)
+            {
+                _pinOverrideKey = actionable.Key;
+                SetPrimary(actionable, now);
+                return Arrange(actionable, visible);
+            }
         }
 
         if (shortEventCanPreempt)

@@ -47,11 +47,10 @@ public static class PagerConstants
     public const double WheelNotchDip = 140;
 
     /// <summary>
-    /// DIP produced by ONE physical wheel notch (70). The host maps a notch's raw 120 to this value,
-    /// so two notches make one <see cref="WheelNotchDip"/> page step — the same cadence as
-    /// prototype2, whose 100 px Chrome notch needs 1.4 notches per 140 px step.
+    /// DIP produced by ONE physical wheel notch (140). One notch is one page step; the host maps
+    /// the raw 120 delta directly to this value so scrolling feels immediate, not accumulated.
     /// </summary>
-    public const double WheelDipPerNotch = WheelNotchDip / 2;
+    public const double WheelDipPerNotch = WheelNotchDip;
 
     /// <summary>Minimum time between two wheel-driven page changes (pager v2).</summary>
     public const int WheelCooldownMs = 180;
