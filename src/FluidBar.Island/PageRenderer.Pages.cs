@@ -63,29 +63,44 @@ internal sealed partial class PageRenderer
         canvas.DrawRoundRect(glyph, 6, 6, _fill);
         IconSet.Draw(canvas, IconForPluginToken(item.IconToken), glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
 
-        var valueWidth = string.IsNullOrWhiteSpace(item.Value) ? 0f : 78f;
+        var hasStatus = !string.IsNullOrWhiteSpace(item.Badge);
+        var valueWidth = string.IsNullOrWhiteSpace(item.Value) ? 0f : 92f;
         var titleRight = row.Right - 12 - trailingWidth - valueWidth - 8;
         var lineTop = row.Top + 8;
         var lineBottom = row.Top + 24;
         _text.Draw(canvas, item.Title, IslandType.RowTitle,
             new SKRect(row.Left + 40, lineTop, titleRight, lineBottom),
             _theme.Foreground, TextAlign.Left, _opacity);
-        if (!string.IsNullOrWhiteSpace(item.Subtitle))
+        if (hasStatus)
+        {
+            // Agent status stays on the left (dot + label); the duration owns the right edge.
+            var tone = PluginStatusTone(item.Badge!);
+            var dot = new SKRect(row.Left + 40, row.Top + 29, row.Left + 46, row.Top + 35);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(tone, 0.9f * _opacity);
+            canvas.DrawOval(dot, _fill);
+            _text.Draw(canvas, item.Badge!, IslandType.RowMeta,
+                new SKRect(row.Left + 50, row.Top + 24, titleRight, row.Top + 40),
+                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+        }
+        else if (!string.IsNullOrWhiteSpace(item.Subtitle))
         {
             _text.Draw(canvas, item.Subtitle, IslandType.RowBody,
                 new SKRect(row.Left + 40, row.Top + 24, titleRight, row.Top + 40),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
-        else if (!string.IsNullOrWhiteSpace(item.Value))
-        {
-            _text.Draw(canvas, item.Value, IslandType.RowMeta,
-                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
-                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
-        }
 
         if (!string.IsNullOrWhiteSpace(item.Value))
         {
-            _text.Draw(canvas, item.Value!, IslandType.CompactValue,
+            // Agent audit/plugin rows carry "status duration" in Value for legacy compact rendering.
+            // Once the status moves to the left dot line, the right column must show the duration only.
+            var valueText = item.Value!;
+            if (hasStatus && valueText.StartsWith(item.Badge! + " ", StringComparison.Ordinal))
+            {
+                valueText = valueText[(item.Badge!.Length + 1)..];
+            }
+
+            _text.Draw(canvas, valueText, IslandType.RowBody,
                 new SKRect(row.Right - 14 - trailingWidth - valueWidth, lineTop, row.Right - 14 - trailingWidth, lineBottom),
                 _theme.ForegroundTertiary, TextAlign.Right, _opacity);
         }
@@ -218,7 +233,7 @@ internal sealed partial class PageRenderer
         // boundary with it so neither line overlaps the dismiss button.
         var timeWidth = string.IsNullOrEmpty(item.TimeText)
             ? 0
-            : Math.Min(104, _text.Measure(item.TimeText, IslandType.CompactValue) + 2f);
+            : Math.Min(104, _text.Measure(item.TimeText, IslandType.RowBody) + 2f);
         var timeRight = row.Right - 36;
         var timeLeft = timeRight - timeWidth;
         var titleLeft = row.Left + 44 + (appWidth > 0 ? appWidth + 6 : 0);
@@ -235,7 +250,7 @@ internal sealed partial class PageRenderer
             _text.Draw(
                 canvas,
                 item.TimeText,
-                IslandType.CompactValue,
+                IslandType.RowBody,
                 new SKRect(timeLeft, lineTop, timeRight, lineBottom),
                 _theme.ForegroundTertiary,
                 TextAlign.Right,
@@ -254,9 +269,11 @@ internal sealed partial class PageRenderer
 
         if (hasCode)
         {
-            _fill.Color = Alpha(_theme.Info, 0.16f * _opacity);
+            // Count-like badges are neutral: white 12 % fill + primary text. Accent is reserved for
+            // actions that need attention, not for every unread/code number.
+            _fill.Color = Alpha(SKColors.White, 0.12f * _opacity);
             canvas.DrawRoundRect(chip, 8, 8, _fill);
-            _text.Draw(canvas, item.VerificationCode, IslandType.Chip, chip, _theme.Info, TextAlign.Center, _opacity);
+            _text.Draw(canvas, item.VerificationCode, IslandType.Chip, chip, _theme.Foreground, TextAlign.Center, _opacity);
         }
 
         canvas.Restore();
@@ -415,6 +432,26 @@ internal sealed partial class PageRenderer
             _icon);
 
         canvas.Restore();
+    }
+
+    private SKColor PluginStatusTone(string badge)
+    {
+        if (badge.Contains("完成", StringComparison.Ordinal) || badge.Contains("Done", StringComparison.OrdinalIgnoreCase))
+        {
+            return _theme.Success;
+        }
+
+        if (badge.Contains("等待", StringComparison.Ordinal) || badge.Contains("Wait", StringComparison.OrdinalIgnoreCase))
+        {
+            return _theme.Warning;
+        }
+
+        if (badge.Contains("失败", StringComparison.Ordinal) || badge.Contains("Fail", StringComparison.OrdinalIgnoreCase))
+        {
+            return _theme.Danger;
+        }
+
+        return _theme.Info;
     }
 
     private SKColor ClipboardTone(ClipboardContentKind kind) => kind switch
