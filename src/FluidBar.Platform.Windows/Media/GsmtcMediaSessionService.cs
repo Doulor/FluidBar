@@ -106,6 +106,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Title the playing-time accumulator belongs to.</summary>
     private string? _lastStateTitle;
 
+    /// <summary>Duration of the track the accumulator belongs to; a real track change alters it.</summary>
+    private TimeSpan _lastStateDuration;
+
     /// <summary>State-file samples older than this belong to the previous track.</summary>
     private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
 
@@ -507,7 +510,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         var age = _timeProviderNow() - state.SampledAtUtc;
         var nowForAccumulation = _timeProviderNow();
-        if (_lastStateTitle != candidate.Title)
+        // A title that changes while the duration stays identical is a metadata refresh, not a new track
+        // (KuGou rewrites the title during a switch). Treating it as a new track threw the position back to
+        // zero for several seconds (measured +3 s, 2026-10-22).
+        var newTrack = _lastStateTitle != candidate.Title
+            && (candidate.Duration <= TimeSpan.Zero || _lastStateDuration <= TimeSpan.Zero
+                || candidate.Duration != _lastStateDuration);
+        _lastStateDuration = candidate.Duration;
+        if (newTrack)
         {
             // New track: the old accumulator AND the old state-file position belong to the previous song,
             // so the estimate is unusable until the player writes the new one (measured 3 s error at every
