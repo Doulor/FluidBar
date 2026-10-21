@@ -12,6 +12,9 @@ public enum IslandHitKind
     /// <summary>Compact pill (the whole pill expands; <see cref="IslandHitTarget.Control"/> refines it).</summary>
     Compact,
 
+    /// <summary>Secondary notification pill below the primary compact pill (expands the notifications page).</summary>
+    SecondaryCompact,
+
     /// <summary>Compact "+N" overflow chip (opens the page of the oldest background activity).</summary>
     OverflowBadge,
 

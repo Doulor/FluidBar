@@ -74,6 +74,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Last play/pause state confirmed by the player accessibility glyph (null until read).</summary>
     private bool? _fallbackPlayingHint;
 
+    /// <summary>When the current pause started (0 = playing). Drives the fast resume cadence and the hide delay.</summary>
+    private long _fallbackPausedSinceMs;
+
+    /// <summary>True while the paused track has been hidden from the island (5 s after the pause).</summary>
+    private bool _fallbackPausedHidden;
+
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
@@ -297,9 +303,24 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
         // 500 ms while playing: the user sees their own pause/play in KuGou within half a second instead
         // of waiting for the next one-second tick (user report 2026-10-21).
+        var nowMs = _timeProviderNow().ToUnixTimeMilliseconds();
+        if (playing)
+        {
+            _fallbackPausedSinceMs = 0;
+            _fallbackPausedHidden = false;
+        }
+        else if (_fallbackPausedSinceMs == 0)
+        {
+            _fallbackPausedSinceMs = nowMs;
+        }
+
+        var pausedForMs = _fallbackPausedSinceMs == 0 ? 0 : nowMs - _fallbackPausedSinceMs;
+        // While a pause is fresh keep the 250 ms cadence: that is what makes the icon flip back within half
+        // a second and what makes resume instant. Only a long pause may slow down.
+        var fastPause = pausedForMs < 5000;
         _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
             ? (playing ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(5))
-            : (playing ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(1)));
+            : (playing || fastPause ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(1)));
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
@@ -345,7 +366,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (changed || positionMoved)
         {
             MediaDiagnostics.Log($"publish source=fallback app={snapshot.SourceAppUserModelId} title={snapshot.Title} playing={snapshot.IsPlaying}");
-            Publish(snapshot);
+            // Paused for 5 s: hide the media pill entirely (user request 2026-10-22) but keep polling fast
+        // enough that pressing play brings it straight back.
+        if (!playing && pausedForMs >= 5000)
+        {
+            if (!_fallbackPausedHidden)
+            {
+                _fallbackPausedHidden = true;
+                MediaDiagnostics.Log($"fallback paused-for={pausedForMs}ms -> hide media");
+                Publish(MediaSnapshot.Empty);
+            }
+
+            return;
+        }
+
+        Publish(snapshot);
         }
     }
 

@@ -770,6 +770,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         var position = ResolvePosition(media, duration, isPlaying);
 
+        // Anchor provenance: what the platform sampled and what we published. One line per poll makes a
+        // "the time is off" report attributable without guesswork.
+        _logger.Information(LogCategories.Platform, "position.anchor",
+            $"sampled={media.Position.TotalMilliseconds:0}ms published={position.TotalMilliseconds:0}ms " +
+            $"duration={duration.TotalMilliseconds:0}ms playing={isPlaying} title='{media.Title}'");
+
         var progress = duration.TotalMilliseconds > 0
             ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
             : 0;
@@ -1163,6 +1169,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationActivate => Defer(
                 action, "no public Windows API activates another app's toast; open the toast from Action Center instead"),
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
+            IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -1427,6 +1434,22 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// </summary>
     private static string BuildAgentHookCommand(string inboxDirectory)
         => "pwsh -NoProfile -Command \"$j=@{schemaVersion=1;agent='claude-code';event='Stop';title='Claude Code';timestamp=(Get-Date).ToString('o')}|ConvertTo-Json -Compress;Set-Content -LiteralPath (Join-Path '" + inboxDirectory + "' ('claude-'+[guid]::NewGuid().ToString('N')+'.json')) -Value $j\"";
+
+    /// <summary>
+    /// Copies a notification's detected verification code to the clipboard. The code travels in
+    /// <see cref="IslandPlatformAction.Text"/> so the platform seam never needs the toast snapshot.
+    /// </summary>
+    private IslandActionResult CopyNotificationCode(in IslandPlatformAction action)
+    {
+        if (string.IsNullOrWhiteSpace(action.Text))
+        {
+            return Unsupported("the notification row has no verification code to copy");
+        }
+
+        var copyText = action.Text;
+        _ = RunAsync(() => _clipboard.SetTextAsync(copyText), "island.actions.notification-copy-code");
+        return IslandActionResult.Handled;
+    }
 
     /// <summary>
     /// Removes one notification row. Windows has no public API to dismiss another app's toast, so this

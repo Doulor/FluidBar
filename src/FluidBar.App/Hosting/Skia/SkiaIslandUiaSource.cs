@@ -21,6 +21,9 @@ public static class SkiaIslandUiaElementIds
     /// <summary>Compact "+N" overflow chip (button; opens the oldest background activity's page).</summary>
     public const string Overflow = "island.compact.overflow";
 
+    /// <summary>Secondary notification pill below the compact pill (button; opens the notifications page).</summary>
+    public const string SecondaryNotification = "island.compact.notification";
+
     /// <summary>Split-island preview button id ("island.compact.split.N").</summary>
     public static string SplitIslet(int index) => $"island.compact.split.{index.ToString(CultureInfo.InvariantCulture)}";
 
@@ -301,6 +304,19 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 new UiaElementState { IsFocusable = true },
                 help: L(LocKeys.Island.Accessibility.MoreActivitiesHelp,
                     "Press Enter to open the page of the oldest background activity.")));
+        }
+
+        if (state.SecondaryCompact is { } secondaryActivity)
+        {
+            children.Add(Node(
+                SkiaIslandUiaElementIds.SecondaryNotification,
+                UiaElementRole.Button,
+                CompactName(secondaryActivity),
+                ToRect(IslandMetrics.SecondaryShellRect(state)),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true },
+                help: L("Island.Accessibility.SecondaryNotificationHelp",
+                    "Press Enter to open the notifications page; the current activity stays in the main pill.")));
         }
 
         if (state.Form != ShellForm.Expanded && state.SplitIslets.Length > 0)
@@ -661,26 +677,40 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     {
         var model = state.Pages.Notifications;
         var rows = new List<UiaElementSnapshot>();
-        var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(model.ScrollOffset, model.Items.Count,
-            PageLayout.NotificationRowHeight, PageLayout.NotificationRowGap);
+        var metrics = FontScaleMetrics.From(state.FontScale);
+        var body = PageMetricsLayout.NotificationBody(page);
+        var scroll = PageMetricsLayout.ClampListScroll(
+            model.Items.Count,
+            PageMetricsLayout.NotificationRowHeight(metrics),
+            PageMetricsLayout.NotificationGap,
+            (float)model.ScrollOffset);
 
         for (var i = 0; i < Math.Min(model.Items.Count, MaxListRows); i++)
         {
             var item = model.Items[i];
-            var row = PageLayout.NotificationRow(page, i, scroll);
+            var row = PageMetricsLayout.NotificationRow(page, i, scroll, metrics);
             var name = JoinNotEmpty(" — ", item.AppName, item.Title, item.Body);
-            var dismiss = PageLayout.NotificationDismiss(page, i, scroll);
-            var children = new List<UiaElementSnapshot>(1)
+            var dismiss = PageMetricsLayout.NotificationDismiss(row);
+            var children = new List<UiaElementSnapshot>(2);
+            if (item.VerificationCode is { Length: > 0 })
             {
-                Node(
-                    $"island.page.2.row.{i}.dismiss",
+                var copy = PageMetricsLayout.NotificationCopyCode(row);
+                children.Add(Node(
+                    $"island.page.2.row.{i}.copy",
                     UiaElementRole.Button,
-                    L("Common.Close", "Dismiss"),
-                    ToRect(dismiss),
+                    model.CopyCodeLabel ?? L("Notifications.CopyCode", "Copy code"),
+                    ToRect(copy),
                     UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true }),
-            };
+                    new UiaElementState { IsFocusable = true }));
+            }
+
+            children.Add(Node(
+                $"island.page.2.row.{i}.dismiss",
+                UiaElementRole.Button,
+                model.DismissLabel ?? L("Common.Close", "Dismiss"),
+                ToRect(dismiss),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true }));
 
             rows.Add(Node(
                 $"island.page.2.row.{i}",
@@ -692,7 +722,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 {
                     IsFocusable = true,
                     IsOffscreen = !Intersects(row, body),
-                    ItemStatus = JoinNotEmpty(", ", item.TimeText, item.VerificationCode),
+                    ItemStatus = JoinNotEmpty(", ", item.TimeText, item.CodeChipLabel ?? item.VerificationCode),
                 },
                 children: children));
         }
@@ -1077,6 +1107,12 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
         }
 
+        if (string.Equals(id, SkiaIslandUiaElementIds.SecondaryNotification, StringComparison.Ordinal))
+        {
+            _controller.ActivateSecondaryNotification();
+            return;
+        }
+
         if (id.StartsWith("island.compact.split.", StringComparison.Ordinal)
             && int.TryParse(id.AsSpan("island.compact.split.".Length), NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out var splitIndex))
@@ -1458,9 +1494,11 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             ? UiaRect.Empty
             : new UiaRect(rect.Left, rect.Top, rect.Width, rect.Height);
 
-    private string CompactName(in IslandRenderState state)
+    private string CompactName(in IslandRenderState state) => CompactName(state.Compact);
+
+    private string CompactName(CompactActivity? activity)
     {
-        var model = state.Compact?.Model;
+        var model = activity?.Model;
         if (model is null)
         {
             return L("Activity.Idle", "Idle");

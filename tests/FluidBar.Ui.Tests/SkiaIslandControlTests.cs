@@ -3,6 +3,7 @@ using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Settings;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
+using FluidBar.Core.Layout;
 using FluidBar.Island;
 using SkiaSharp;
 
@@ -148,8 +149,9 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(2);
 
         var page = Page(2, fixture);
-        Click(fixture, PageLayout.NotificationRow(page, 0));
-        Click(fixture, PageLayout.NotificationDismiss(page, 1));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.NotificationRow(page, 0, 0, metrics));
+        Click(fixture, PageMetricsLayout.NotificationDismiss(page, 1, 0, metrics));
 
         Assert.Equal(2, actions.Calls.Count);
         Assert.Equal(IslandPlatformActionKind.NotificationActivate, actions.Calls[0].Kind);
@@ -275,7 +277,8 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(2);
 
-        Click(fixture, PageLayout.NotificationRow(Page(2, fixture), 0));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.NotificationRow(Page(2, fixture), 0, 0, metrics));
 
         Assert.True(fixture.Logger.HasEvent("island.skia.control-deferred"));
         Assert.False(fixture.Logger.HasEvent("island.skia.control-unsupported"));
@@ -329,12 +332,53 @@ public sealed class SkiaIslandControlTests
 
         var state = fixture.Controller.RenderState;
         var page = IslandMetrics.PageRect(state, 2);
-        // Row index 3 does not exist (three notification rows): the click is a scroll-region hit.
-        var row = PageLayout.NotificationRow(page, 3);
-        var hit = SkiaIslandHitTest.Hit(state, row.MidX, row.MidY);
+        // Row index 3 does not exist (three notification rows); the empty band below the last card is
+        // still the list's scroll region.
+        var body = PageMetricsLayout.NotificationBody(page);
+        var hit = SkiaIslandHitTest.Hit(state, body.MidX, body.Bottom - 2);
 
         Assert.Equal(IslandHitKind.PageControl, hit.Kind);
         Assert.Equal(IslandPageControl.Scroll, hit.Control);
+    }
+
+    [Fact]
+    public void Notification_beside_media_renders_a_second_pill_and_opens_the_notifications_page()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
+        {
+            Title = "Midnight City",
+            Subtitle = "M83",
+            IsActive = true,
+            ProgressPercent = 42,
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "GitHub",
+            Body = "Run failed: Export Live Data",
+            SourceName = "GitHub",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(ActivityKind.Media, state.Compact?.Kind);
+        Assert.True(state.SecondaryCompact is { Kind: ActivityKind.Notification });
+        var primary = IslandMetrics.ShellRect(state);
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        Assert.True(secondary.Top >= primary.Bottom, "the notification pill must sit below the main island");
+
+        var hit = SkiaIslandHitTest.Hit(state, secondary.MidX, secondary.MidY);
+        Assert.Equal(IslandHitKind.SecondaryCompact, hit.Kind);
+
+        fixture.Controller.HandlePointerPressed(secondary.MidX, secondary.MidY);
+        fixture.Controller.HandlePointerReleased(secondary.MidX, secondary.MidY);
+        fixture.RunToRest();
+
+        var expanded = fixture.Controller.RenderState;
+        Assert.Equal(ShellForm.Expanded, expanded.Form);
+        Assert.Equal(PageSlotKind.Notifications, expanded.Pages.PageSlotAt(expanded.PageIndex)?.Kind);
     }
 
     private static SKRect Page(int page, ControllerFixture fixture)

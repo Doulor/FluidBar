@@ -68,7 +68,9 @@ public static class SkiaIslandControlRouter
                     ? new IslandPlatformAction(IslandPlatformActionKind.ClipboardPin, hit.Index)
                     : null;
             case IslandPageControl.Copy:
-                return TryClipboardCopy(state, hit.Index);
+                return state.Pages.PageSlotAt(hit.PageIndex)?.Kind == PageSlotKind.Notifications
+                    ? TryNotificationCopyCode(state, hit.Index)
+                    : TryClipboardCopy(state, hit.Index);
             case IslandPageControl.Row:
                 return MapRow(state, hit);
             case IslandPageControl.TaskToggle:
@@ -132,6 +134,22 @@ public static class SkiaIslandControlRouter
             IslandPlatformActionKind.ClipboardCopy,
             index,
             Text: item.Kind == ClipboardContentKind.Image ? null : item.Preview);
+    }
+
+    private static IslandPlatformAction? TryNotificationCopyCode(in IslandRenderState state, int index)
+    {
+        var items = state.Pages.Notifications.Items;
+        if (!HasRow(items, index))
+        {
+            return null;
+        }
+
+        var code = items[index].VerificationCode;
+        return string.IsNullOrWhiteSpace(code)
+            // The copy chip is only painted when a code exists; a click in that lane on a code-less
+            // card must still behave like the row instead of becoming a dead zone.
+            ? new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, index)
+            : new IslandPlatformAction(IslandPlatformActionKind.NotificationCopyCode, index, Text: code);
     }
 
     private static bool HasRow<T>(IReadOnlyList<T>? items, int index)

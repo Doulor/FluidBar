@@ -169,6 +169,32 @@ public static class IslandMetrics
         (float)(state.ShellOrigin.X + state.ShellWidth),
         (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.ShellHeight));
 
+    /// <summary>
+    /// Secondary notification pill below the primary compact shell (above it in dock mode). Returns an
+    /// empty rectangle unless the state carries a secondary compact and is in a compact form.
+    /// </summary>
+    public static SKRect SecondaryShellRect(in IslandRenderState state)
+    {
+        if (state.SecondaryCompact is null || state.Form is not (ShellForm.Compact or ShellForm.Peek))
+        {
+            return SKRect.Empty;
+        }
+
+        var size = LayoutTokens.CompactSizeFor(state.SecondaryCompact.Value.Kind, state.Mode, state.FontScale);
+        var primary = ShellRect(state);
+        var surface = HostSurface.ForMode(state.Mode);
+        const float gap = 8f;
+        var width = (float)size.Width;
+        var height = (float)size.Height;
+        var left = primary.Left + ((primary.Width - width) / 2);
+        var top = state.Mode == IslandMode.Dock
+            ? primary.Top - gap - height
+            : primary.Bottom + gap;
+        left = Math.Clamp(left, 0, Math.Max(0, (float)surface.Width - width));
+        top = Math.Clamp(top, 0, Math.Max(0, (float)surface.Height - height));
+        return new SKRect(left, top, left + width, top + height);
+    }
+
     /// <summary>Gap between split circles and between a circle and the primary pill (DIP).</summary>
     public const double SplitIsletGap = 8;
 
@@ -692,12 +718,6 @@ public static class PageLayout
     /// <summary>Scrollable list body height (page body 28..260 DIP; prototype2 `.scroll-area` fills 232).</summary>
     public const float ListBodyHeight = 232;
 
-    /// <summary>Notification row height (40 DIP).</summary>
-    public const float NotificationRowHeight = 40;
-
-    /// <summary>Notification row gap (4 DIP).</summary>
-    public const float NotificationRowGap = 4;
-
     /// <summary>Clipboard row height (48 DIP).</summary>
     public const float ClipboardRowHeight = 48;
 
@@ -718,27 +738,6 @@ public static class PageLayout
 
     /// <summary>Scrollable list body rectangle (page-local DIP).</summary>
     public static SKRect ListBody(SKRect page) => new(page.Left + 16, page.Top + 28, page.Right - 16, page.Top + 260);
-
-    /// <summary>Notification row rectangle for an index at a scroll offset.</summary>
-    public static SKRect NotificationRow(SKRect page, int index, float scrollOffset = 0)
-    {
-        var top = page.Top + 28 + (index * (NotificationRowHeight + NotificationRowGap)) - scrollOffset;
-        return new SKRect(page.Left + 16, top, page.Right - 16, top + NotificationRowHeight);
-    }
-
-    /// <summary>Notification dismiss button rectangle.</summary>
-    public static SKRect NotificationDismiss(SKRect page, int index, float scrollOffset = 0)
-    {
-        var row = NotificationRow(page, index, scrollOffset);
-        return new SKRect(row.Right - 30, row.Top + 10, row.Right - 10, row.Top + 30);
-    }
-
-    /// <summary>Notification verification-code chip rectangle.</summary>
-    public static SKRect NotificationCodeChip(SKRect page, int index, float scrollOffset = 0)
-    {
-        var row = NotificationRow(page, index, scrollOffset);
-        return new SKRect(row.Right - 98, row.Top + 21, row.Right - 38, row.Top + 37);
-    }
 
     /// <summary>Clipboard row rectangle for an index at a scroll offset.</summary>
     public static SKRect ClipboardRow(SKRect page, int index, float scrollOffset = 0)
@@ -911,37 +910,6 @@ public static class PageLayout
                 }
 
                 return IslandPageControl.None;
-            case PageSlotKind.Notifications:
-                {
-                    var body = ListBody(pageRect);
-                    if (!body.Contains(x, y))
-                    {
-                        return IslandPageControl.None;
-                    }
-
-                    var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampScroll(scrollOffset, count, NotificationRowHeight, NotificationRowGap);
-                    for (var i = 0; i < count; i++)
-                    {
-                        if (NotificationDismiss(pageRect, i, scroll).Contains(x, y))
-                        {
-                            index = i;
-                            return IslandPageControl.Dismiss;
-                        }
-                    }
-
-                    for (var i = 0; i < count; i++)
-                    {
-                        if (NotificationRow(pageRect, i, scroll).Contains(x, y))
-                        {
-                            index = i;
-                            return IslandPageControl.Row;
-                        }
-                    }
-
-                    return IslandPageControl.Scroll;
-                }
-
             case PageSlotKind.Clipboard:
                 {
                     var body = ListBody(pageRect);

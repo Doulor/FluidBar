@@ -84,6 +84,12 @@ public static class SkiaIslandHitTest
             return new IslandHitTarget(IslandHitKind.OverflowBadge, state.PageIndex);
         }
 
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        if (!secondary.IsEmpty && secondary.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.SecondaryCompact, state.PageIndex);
+        }
+
         if (state.Form == ShellForm.Expanded)
         {
             if (PageLayout.CollapseRect(content).Contains(x, y))

@@ -61,6 +61,7 @@ public sealed class IslandRenderer : IDisposable
     private readonly SquirclePathCache _paths;
     private readonly ShadowCache _shadows;
     private readonly CompactRenderer _compact;
+    private readonly CompactRenderer _secondaryCompact;
     private readonly PageRenderer _pages;
     private readonly TransientStripRenderer _strip;
 
@@ -99,6 +100,7 @@ public sealed class IslandRenderer : IDisposable
         _paths = new SquirclePathCache(_options.PathCacheCapacity);
         _shadows = new ShadowCache(_options.ShadowCacheCapacity);
         _compact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
+        _secondaryCompact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
         _pages = new PageRenderer(_text, _accents, _art, _artwork, _numbers);
         _strip = new TransientStripRenderer(_text);
     }
@@ -280,6 +282,12 @@ public sealed class IslandRenderer : IDisposable
         var shell = IslandMetrics.ShellRect(state);
         var content = IslandMetrics.ContentRect(shell);
 
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        if (!secondary.IsEmpty && secondary.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.SecondaryCompact, state.PageIndex);
+        }
+
         if (state.Form == ShellForm.Expanded)
         {
             if (PageLayout.CollapseRect(content).Contains(x, y))
@@ -439,8 +447,57 @@ public sealed class IslandRenderer : IDisposable
             canvas.Restore();
         }
 
+        DrawSecondaryCompact(canvas, state, opacity, dpiScale);
         _strip.Draw(canvas, state, shell);
         DrawFocusRing(canvas, state);
+    }
+
+    /// <summary>
+    /// Paints the secondary notification pill below the primary compact shell. The pill is a full
+    /// compact island (same material, shadow and content renderer as the primary) so a notification can
+    /// stay visible without displacing the activity the user is currently looking at.
+    /// </summary>
+    private void DrawSecondaryCompact(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
+    {
+        var rect = IslandMetrics.SecondaryShellRect(state);
+        if (rect.Width <= 0 || rect.Height <= 0 || state.SecondaryCompact is not { } activity)
+        {
+            return;
+        }
+
+        var secondary = state with
+        {
+            Form = ShellForm.Compact,
+            ShellOrigin = new VisualPoint(rect.Left, rect.Top),
+            ShellWidth = rect.Width,
+            ShellHeight = rect.Height,
+            ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, state.Mode, rect.Height),
+            Compact = activity,
+            SecondaryCompact = null,
+            GhostCount = 0,
+            OverflowCount = 0,
+            SplitIslets = [],
+            SplitProgress = 0,
+            PressedControl = IslandPageControl.None,
+            PressedPage = -1,
+            PressedIndex = -1,
+            NudgeOffsetY = 0,
+        };
+
+        if (_options.EnableShadow)
+        {
+            DrawShadow(canvas, secondary, rect, dpiScale, opacity);
+        }
+
+        var path = _paths.Get(rect.Width, rect.Height, secondary.ShellRadii);
+        canvas.Save();
+        canvas.Translate(rect.Left, rect.Top);
+        DrawShellBody(canvas, secondary, path, opacity);
+        canvas.Save();
+        canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+        _secondaryCompact.Draw(canvas, secondary, opacity);
+        canvas.Restore();
+        canvas.Restore();
     }
 
     /// <summary>
@@ -1007,6 +1064,7 @@ public sealed class IslandRenderer : IDisposable
         _art.Dispose();
         _artwork.Dispose();
         _compact.Dispose();
+        _secondaryCompact.Dispose();
         _pages.Dispose();
         _strip.Dispose();
         _glassShader?.Dispose();

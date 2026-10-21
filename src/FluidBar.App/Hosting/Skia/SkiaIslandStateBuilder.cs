@@ -204,9 +204,11 @@ public static class SkiaIslandStateBuilder
 
         var notificationsPage = new NotificationsPageModel
         {
-            Items = BuildNotifications(content.Notifications),
+            Items = BuildNotifications(content.Notifications, localizer),
             EmptyTitle = localizer.Get(LocKeys.Notifications.Empty),
             EmptyHint = localizer.Get(LocKeys.Notifications.EmptyHint),
+            DismissLabel = localizer.Get(LocKeys.Common.Close),
+            CopyCodeLabel = localizer.Get(LocKeys.Notifications.CopyCode),
         };
 
         var clipboardPage = new ClipboardPageModel
@@ -261,19 +263,25 @@ public static class SkiaIslandStateBuilder
         };
     }
 
-    private static NotificationItemModel[] BuildNotifications(IReadOnlyList<NotificationItemData> items)
+    private static NotificationItemModel[] BuildNotifications(
+        IReadOnlyList<NotificationItemData> items,
+        ILocalizer localizer)
     {
         var models = new NotificationItemModel[items.Count];
         for (var i = 0; i < models.Length; i++)
         {
             var item = items[i];
+            var code = NullIfEmpty(item.VerificationCode);
             models[i] = new NotificationItemModel
             {
                 AppName = NullIfEmpty(item.Source),
                 Title = item.Title,
                 Body = item.Body,
                 TimeText = item.TimeText,
-                VerificationCode = NullIfEmpty(item.VerificationCode),
+                VerificationCode = code,
+                CodeChipLabel = code is null
+                    ? null
+                    : localizer.Format(LocKeys.Notifications.VerificationCode, ("code", code)),
             };
         }
 

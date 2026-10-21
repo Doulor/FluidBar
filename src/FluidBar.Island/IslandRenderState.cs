@@ -177,6 +177,12 @@ public readonly record struct IslandRenderState
     /// <summary>Compact activity; null renders the idle pill.</summary>
     public CompactActivity? Compact { get; init; }
 
+    /// <summary>
+    /// Secondary compact notification island (drawn below the primary pill so a notification can appear
+    /// without displacing the current activity). Null when there is no notification to surface this way.
+    /// </summary>
+    public CompactActivity? SecondaryCompact { get; init; }
+
     /// <summary>Expanded page content (home/media models + page titles).</summary>
     public ExpandedPageContent Pages { get; init; }
 
@@ -924,8 +930,9 @@ public sealed record MediaPageModel
 }
 
 /// <summary>
-/// Expanded notifications page (page 2): a scrollable list of notification rows. The renderer paints
-/// up to five 40 DIP rows in the 368×216 body band; extra rows scroll by <see cref="ScrollOffset"/>.
+/// Expanded notifications page (page 2): a scrollable list of notification cards. Cards are 72 DIP at
+/// scale 1.0 and carry an app glyph, app pill, bold title, two body lines, a bottom-right timestamp and
+/// action chips; extra cards scroll by <see cref="ScrollOffset"/>.
 /// </summary>
 public sealed record NotificationsPageModel
 {
@@ -946,6 +953,12 @@ public sealed record NotificationsPageModel
 
     /// <summary>Empty-state hint override.</summary>
     public string? EmptyHint { get; init; }
+
+    /// <summary>Localized dismiss-chip label ("Close" / "关闭").</summary>
+    public string? DismissLabel { get; init; }
+
+    /// <summary>Localized fallback label for the copy-code chip ("Copy code" / "复制验证码").</summary>
+    public string? CopyCodeLabel { get; init; }
 }
 
 /// <summary>One notification row.</summary>
@@ -965,6 +978,9 @@ public sealed record NotificationItemModel
 
     /// <summary>Optional verification code rendered as a chip.</summary>
     public string? VerificationCode { get; init; }
+
+    /// <summary>Localized chip caption for <see cref="VerificationCode"/> ("Code 418302"); falls back to the code.</summary>
+    public string? CodeChipLabel { get; init; }
 
     /// <summary>Optional app accent colour hex for the leading glyph.</summary>
     public string? AccentHex { get; init; }

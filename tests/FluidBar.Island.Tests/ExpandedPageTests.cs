@@ -193,7 +193,10 @@ public sealed class ExpandedPageTests
             {
                 Notifications = pages.Notifications with
                 {
-                    ScrollOffset = PageLayout.MaxScroll(items.Count, PageLayout.NotificationRowHeight, PageLayout.NotificationRowGap),
+                    ScrollOffset = PageMetricsLayout.MaxListScroll(
+                        items.Count,
+                        PageMetricsLayout.NotificationRowHeight(FontScaleMetrics.One),
+                        PageMetricsLayout.NotificationGap),
                 },
             },
         };

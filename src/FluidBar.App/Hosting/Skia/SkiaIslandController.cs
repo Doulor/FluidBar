@@ -1000,6 +1000,31 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>
+    /// Activates the secondary notification pill: expands the island and opens the notifications page.
+    /// The primary activity keeps the main pill; only the expanded page changes.
+    /// </summary>
+    /// <returns>Whether a secondary notification pill is currently painted.</returns>
+    public bool ActivateSecondaryNotification()
+    {
+        if (_secondaryCompact is null)
+        {
+            return false;
+        }
+
+        var page = CoreIslandPage.Notifications;
+        if (State.Kind != IslandStateKind.Expanded)
+        {
+            ApplyInput(IslandInput.PrimaryClick());
+        }
+
+        ApplyInput(IslandInput.PageRequested(page));
+        HandlePageRequest(page);
+        InvalidateFull();
+        StateChanged?.Invoke();
+        return true;
+    }
+
+    /// <summary>
     /// Activates one split preview ball: expands the island to that activity's page while the split
     /// spring runs in reverse, so the ball visibly fuses back into the pill.
     /// </summary>
@@ -1351,6 +1376,8 @@ public sealed class SkiaIslandController : IDisposable
             case IslandHitKind.OverflowBadge:
                 // The +N chip opens the page of the oldest background activity instead of the primary's.
                 return ActivateOverflowBadge();
+            case IslandHitKind.SecondaryCompact:
+                return ActivateSecondaryNotification();
 
             case IslandHitKind.Compact:
                 if (hit.Control == IslandPageControl.PlayPause)
@@ -2159,12 +2186,21 @@ public sealed class SkiaIslandController : IDisposable
                 measured, CompactMediaLayout.MinContentWidth, (float)LayoutTokens.ExpandedWidth);
             compactSize = new VisualSize(width, compactSize.Height);
         }
+        var ghostCount = 0;
+        foreach (var ghost in viewModel.Ghosts)
+        {
+            if (_secondaryCompact is null || ghost.Kind != ActivityKind.Notification)
+            {
+                ghostCount++;
+            }
+        }
+
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
-            ? Math.Clamp(viewModel.Ghosts.Length, 0, LayoutTokens.MaxGhosts)
+            ? Math.Clamp(ghostCount, 0, LayoutTokens.MaxGhosts)
             : 0;
         var splitCount = settings.Stacking == StackingStrategySetting.Split
             && State.Kind != IslandStateKind.Expanded
-            ? Math.Min(viewModel.Ghosts.Length, LayoutTokens.MaxGhosts)
+            ? Math.Min(ghostCount, LayoutTokens.MaxGhosts)
             : 0;
 
         // The split previews need the two side lanes: cap an over-long lyric pill so both capsules
@@ -2323,7 +2359,10 @@ public sealed class SkiaIslandController : IDisposable
         if (settings.Stacking == StackingStrategySetting.Split
             && State.Kind is not (IslandStateKind.Expanded or IslandStateKind.Closing))
         {
-            _splitPreviews = viewModel.Ghosts.Take(LayoutTokens.MaxGhosts).ToArray();
+            _splitPreviews = viewModel.Ghosts
+                .Where(ghost => _secondaryCompact is null || ghost.Kind != ActivityKind.Notification)
+                .Take(LayoutTokens.MaxGhosts)
+                .ToArray();
             return;
         }
 

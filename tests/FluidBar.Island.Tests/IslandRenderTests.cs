@@ -244,6 +244,36 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
+    public void Secondary_notification_pill_renders_below_the_primary_compact_pill()
+    {
+        var state = IslandTestFixtures.MediaCompact() with
+        {
+            SecondaryCompact = new CompactActivity(ActivityKind.Notification, new CompactModel
+            {
+                Title = "GitHub",
+                Subtitle = "Run failed",
+                AppName = "GitHub",
+                UnreadCount = 2,
+            }),
+        };
+
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var primary = IslandMetrics.ShellRect(state);
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        Assert.True(secondary.Top >= primary.Bottom, "the notification pill must sit below the primary pill");
+        Assert.True(secondary.Bottom <= IslandMetrics.SurfaceSize(state.Mode).Height);
+
+        var hit = renderer.HitTest(state, secondary.MidX, secondary.MidY);
+        Assert.Equal(IslandHitKind.SecondaryCompact, hit.Kind);
+
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        var pixel = bitmap.GetPixel(
+            (int)(secondary.MidX * IslandTestFixtures.Scale),
+            (int)(secondary.MidY * IslandTestFixtures.Scale));
+        Assert.True(pixel.Alpha > 200, "the secondary pill must paint an opaque surface");
+    }
+
+    [Fact]
     public void Invalid_dpi_scale_is_rejected()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);

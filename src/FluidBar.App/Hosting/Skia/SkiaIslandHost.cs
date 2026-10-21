@@ -2038,6 +2038,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     placement.X + (shell.Right + slackDip) * scale,
                     placement.Y + (shell.Bottom + slackDip) * scale));
 
+                var secondary = IslandMetrics.SecondaryShellRect(state);
+                if (!secondary.IsEmpty)
+                {
+                    _hookRects.Add(new IslandMouseHook.Rect(
+                        placement.X + (secondary.Left - slackDip) * scale,
+                        placement.Y + (secondary.Top - slackDip) * scale,
+                        placement.X + (secondary.Right + slackDip) * scale,
+                        placement.Y + (secondary.Bottom + slackDip) * scale));
+                }
+
                 foreach (var ball in IslandMetrics.SplitIsletRects(state))
                 {
                     if (ball.Width <= 0 || ball.Height <= 0)
@@ -2121,6 +2131,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         Span<VisualRect> rects = stackalloc VisualRect[LayeredHitRegion.MaxInteractiveRects];
         var count = 0;
+        // The secondary notification pill sits outside the primary shell, so it needs its own
+        // interactive rectangle; the gap between the two pills stays click-through.
+        AddRect(rects, ref count, IslandMetrics.SecondaryShellRect(state));
         // Split previews live outside the shell, so each ball gets its own interactive rect (clicks
         // between the balls stay transparent/click-through).
         foreach (var ball in IslandMetrics.SplitIsletRects(state))
