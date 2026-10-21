@@ -228,16 +228,17 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
 
-## 2026-10-22 01:10 — 手机式通知弹窗（最终版）
+## 2026-10-22 02:05 — 手机式通知弹窗（最终半尺寸）
 
-**用户两次反馈**：先要 NetSpeed-Dynamic / 手机通知卡的结构；随后要求「不要 app 名首字母 + 映射颜色，只保留真实可获取图片，不行就一个图标」并且「现在太大，变小」。
+**用户反馈**：先要 NetSpeed-Dynamic / 手机通知卡的结构；随后要求「不要 app 名首字母 + 映射颜色，只保留真实可获取图片，不行就一个图标」；最后明确「把大小改为现在的 1/2」。
 
-- 紧凑通知岛 `248×36` → **`340×76` DIP**（比例 4.47；第一版 400×96 已被用户否掉为太大）。
-- **真实 app 图标**：`NotificationService` 读取 `AppInfo.DisplayInfo.GetLogo(64×64)`，PNG 字节随 `NotificationEntry → NotificationItemData → CompactModel` 下行；`CompactRenderer` 用 `ArtworkImageCache` 解码并按 44 DIP 圆角 tile 绘制。
+- 紧凑通知岛最终固定为 **`170×38` DIP**（上一版 `340×76` 的一半）。
+- **真实 app 图标**：`NotificationService` 读取 `AppInfo.DisplayInfo.GetLogo(64×64)`，PNG 字节随 `NotificationEntry → NotificationItemData → CompactModel` 下行；`CompactRenderer` 用 `ArtworkImageCache` 解码并按 24 DIP 圆角 tile 绘制。
 - 读不到 logo 时只画**一个通用铃铛图标**（中性 tile），不再生成 app 首字母、不再按 app 映射颜色、不再画假副图标。
-- 右侧列保留相对时间（上）与软件名（下）；中间主标题 + 正文；验证码 chip 左下；时间优先取同一 toast 的 `TimeText`，缺失回退「刚刚」。
-- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 紧凑变体都适配；`notifications.seeded` / `notifications.received` 日志新增 `icons` 计数，便于确认真实 logo 是否读到。本机实测 12 条真实 toast：`{"count":12,"icons":12}`（全部读到真实 logo）。
+- 半尺寸布局：24 DIP 图标、单行标题/正文、右侧时间/软件名；时间优先取同一 toast 的 `TimeText`，缺失回退「刚刚」。
+- 临时拖拽校准、设置滑杆、`NotificationCardScale` 和尺寸覆盖代码已全部移除；只保留固定 token。
+- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 紧凑变体都适配；`notifications.seeded` / `notifications.received` 日志保留 `icons` 计数，实测 12 条真实 toast 全部读到 logo。
 - 副岛仍显示在主岛下方，主岛不被通知抢占；golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `C42723C1CADDB6FC3163B1E6839EE5A1759A6DEAE7D315000E027955313D92C9`。
-- 证据：`build/evidence/notifications-step8-final-small/compact-notifications.png`（340×76，demo toast 无真实 logo，故显示单个通用铃铛）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `CF6A73515FA6C51084F9932C39E42C72345969B6921A83C892AE84C868814050`。
+- 证据：`build/evidence/notifications-half-final/compact-notifications.png`（170×38，demo toast 无真实 logo，故显示单个通用铃铛）。
 
