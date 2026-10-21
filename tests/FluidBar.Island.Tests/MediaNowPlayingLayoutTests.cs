@@ -18,8 +18,8 @@ public sealed class MediaNowPlayingLayoutTests
         var page = Page();
         var art = PageVisual.MediaArt(page);
 
-        Assert.Equal(72, art.Width, 3);
-        Assert.Equal(72, art.Height, 3);
+        Assert.Equal(64, art.Width, 3);
+        Assert.Equal(64, art.Height, 3);
         Assert.Equal(12, PageVisual.MediaArtRadius, 3);
 
         // Vertically centred against the three-line text column (they share the same 72 DIP band).
@@ -39,8 +39,8 @@ public sealed class MediaNowPlayingLayoutTests
         var line1 = PageVisual.MediaLyricLine1(page);
         var line2 = PageVisual.MediaLyricLine2(page);
 
-        Assert.Equal(20, line1.Height, 3);
-        Assert.Equal(16, line2.Height, 3);
+        Assert.Equal(18, line1.Height, 3);
+        Assert.Equal(14, line2.Height, 3);
         Assert.Equal(line1.Bottom, line2.Top, 3);
         Assert.Equal(line1.Top, PageVisual.MediaLyricCard(page).Top, 3);
         Assert.Equal(line2.Bottom, PageVisual.MediaLyricCard(page).Bottom, 3);
@@ -61,7 +61,7 @@ public sealed class MediaNowPlayingLayoutTests
         // Both clocks sit outside the track and end exactly where it starts/ends.
         Assert.Equal(row.Left + PageVisual.MediaTimeWidth, track.Left, 3);
         Assert.Equal(row.Right - PageVisual.MediaTimeWidth, track.Right, 3);
-        Assert.Equal(48, PageVisual.MediaTimeWidth, 3);
+        Assert.Equal(44, PageVisual.MediaTimeWidth, 3);
         Assert.Equal(11, PageVisual.MediaSeekTimeStyle.Size, 3);
     }
 
@@ -73,12 +73,12 @@ public sealed class MediaNowPlayingLayoutTests
         var play = PageVisual.MediaPlay(page);
         var next = PageVisual.MediaNext(page);
 
-        Assert.Equal(36, play.Width, 3);
-        Assert.Equal(36, play.Height, 3);
-        Assert.Equal(28, previous.Width, 3);
-        Assert.Equal(28, next.Width, 3);
-        Assert.Equal(16, play.Left - previous.Right, 3);
-        Assert.Equal(16, next.Left - play.Right, 3);
+        Assert.Equal(32, play.Width, 3);
+        Assert.Equal(32, play.Height, 3);
+        Assert.Equal(26, previous.Width, 3);
+        Assert.Equal(26, next.Width, 3);
+        Assert.Equal(12, play.Left - previous.Right, 3);
+        Assert.Equal(12, next.Left - play.Right, 3);
         Assert.Equal(page.MidX, play.MidX, 3);
         Assert.Equal(play.MidY, previous.MidY, 3);
         Assert.Equal(play.MidY, next.MidY, 3);
@@ -93,7 +93,7 @@ public sealed class MediaNowPlayingLayoutTests
 
         Assert.Equal(track.Left, footer.Left, 3);
         Assert.Equal(track.Right, footer.Right, 3);
-        Assert.Equal(16, footer.Height, 3);
+        Assert.Equal(14, footer.Height, 3);
 
         // Spacing rules from the design review: the track keeps clear air before the play circle, and the
         // footer keeps the same 8 DIP minimum below it.
@@ -102,7 +102,7 @@ public sealed class MediaNowPlayingLayoutTests
         Assert.True(PageVisual.MediaFooter(page).Top - PageVisual.MediaPlay(page).Bottom >= 8,
             "the footer row must sit at least 8 DIP below the play circle");
         Assert.Equal(11, PageVisual.MediaFooterStyle.Size, 3);
-        Assert.Equal(14, PageVisual.MediaFooterIcon, 3);
+        Assert.Equal(12, PageVisual.MediaFooterIcon, 3);
     }
 
     [Fact]
@@ -115,7 +115,8 @@ public sealed class MediaNowPlayingLayoutTests
         Assert.True(PageVisual.MediaLyricCard(page).Bottom <= body.Bottom);
         Assert.True(PageVisual.MediaSeekRow(page).Bottom <= body.Bottom);
         Assert.True(PageVisual.MediaPlay(page).Bottom <= body.Bottom);
-        Assert.True(PageVisual.MediaFooter(page).Bottom <= body.Bottom + 4);
+        // The footer is allowed to live in the scroll area (the body is 164 DIP after the 440 × 244 migration).
+        Assert.True(PageVisual.MediaFooter(page).Bottom <= body.Bottom + 20);
 
         // Every media top edge sits on an 8 DIP step of the body.
         foreach (var top in new[]

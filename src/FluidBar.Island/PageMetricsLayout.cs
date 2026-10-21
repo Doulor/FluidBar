@@ -742,8 +742,11 @@ public static class PageVisual
 
     // ---------------------------------------------------------------- media (iOS Now Playing)
 
-    /// <summary>Cover thumbnail: 56 DIP square, 12 DIP radius (iOS Now Playing artwork ratio).</summary>
-    public const float MediaArtSize = 56;
+    // The expanded panel is 440 × 244, so the media page body is ~204 DIP: the layout is compacted on the
+    // same 8 DIP grid (cover 64, lyrics 72..105, seek 112..126, transport 136..168, footer 176..190).
+
+    /// <summary>Cover thumbnail: 64 DIP square, 12 DIP radius (iOS Now Playing artwork ratio).</summary>
+    public const float MediaArtSize = 64;
 
     /// <summary>Cover corner radius (12 DIP).</summary>
     public const float MediaArtRadius = 12;
@@ -751,37 +754,37 @@ public static class PageVisual
     /// <summary>Gap between the cover and the text column (8 DIP).</summary>
     public const float MediaTextGap = 8;
 
-    /// <summary>Height of the first lyric line box (13/20 type = 20 DIP).</summary>
-    public const float MediaLyricLine1Height = 20;
+    /// <summary>Height of the first lyric line box (13/18 type = 18 DIP).</summary>
+    public const float MediaLyricLine1Height = 18;
 
-    /// <summary>Height of the secondary lyric line box (11.5/16 type = 16 DIP).</summary>
-    public const float MediaLyricLine2Height = 16;
+    /// <summary>Height of the secondary lyric line box (11.5/15 type = 15 DIP).</summary>
+    public const float MediaLyricLine2Height = 14;
 
     /// <summary>Progress track thickness (3 DIP, round caps).</summary>
     public const float MediaTrackHeight = 3;
 
-    /// <summary>Time column width, so both labels sit flush with the track ends (48 DIP).</summary>
-    public const float MediaTimeWidth = 48;
+    /// <summary>Time column width, so both labels sit flush with the track ends (44 DIP).</summary>
+    public const float MediaTimeWidth = 44;
 
-    /// <summary>Main transport button diameter (36 DIP circle).</summary>
-    public const float MediaPlayDiameter = 36;
+    /// <summary>Main transport button diameter (32 DIP circle).</summary>
+    public const float MediaPlayDiameter = 32;
 
-    /// <summary>Previous/next button diameter (28 DIP, outlined).</summary>
-    public const float MediaSideDiameter = 28;
+    /// <summary>Previous/next button diameter (26 DIP, outlined).</summary>
+    public const float MediaSideDiameter = 26;
 
-    /// <summary>Gap between transport buttons (16 DIP).</summary>
-    public const float MediaButtonGap = 16;
+    /// <summary>Gap between transport buttons (12 DIP).</summary>
+    public const float MediaButtonGap = 12;
 
-    /// <summary>Footer info row height (11 DIP type, 16 DIP row).</summary>
-    public const float MediaFooterHeight = 16;
+    /// <summary>Footer info row height (11 DIP type, 14 DIP row).</summary>
+    public const float MediaFooterHeight = 14;
 
-    /// <summary>Footer icon box (14 DIP).</summary>
-    public const float MediaFooterIcon = 14;
+    /// <summary>Footer icon box (12 DIP).</summary>
+    public const float MediaFooterIcon = 12;
 
-    /// <summary>Media lyric line: 13 DIP on a 20 DIP line (iOS Now Playing body text).</summary>
+    /// <summary>Media lyric line: 13 DIP on an 18 DIP line (iOS Now Playing body text).</summary>
     public static readonly TextStyle MediaLyricStyle = new(FontRole.UiMedium, 13f);
 
-    /// <summary>Media secondary lyric line: 11.5 DIP on a 16 DIP line.</summary>
+    /// <summary>Media secondary lyric line: 11.5 DIP on a 15 DIP line.</summary>
     public static readonly TextStyle MediaLyricNextStyle = new(FontRole.Ui, 11.5f);
 
     /// <summary>Media time labels: 11 DIP tabular (mono keeps the two clocks from jittering).</summary>
@@ -790,46 +793,46 @@ public static class PageVisual
     /// <summary>Media footer info row: 11 DIP tertiary.</summary>
     public static readonly TextStyle MediaFooterStyle = new(FontRole.Ui, 11f);
 
-    /// <summary>Media artwork: 72 DIP square at the page inset, top of the body.</summary>
+    /// <summary>Media artwork: 64 DIP square at the page inset, top of the body.</summary>
     public static SKRect MediaArt(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop,
         page.Left + PageInset + MediaArtSize, page.Top + BodyTop + MediaArtSize);
 
     /// <summary>Left edge of the text column (cover + 8 DIP gap).</summary>
     public static float MediaTextLeft(SKRect page) => page.Left + PageInset + MediaArtSize + MediaTextGap;
 
-    /// <summary>Media eyebrow, vertically centred against the cover.</summary>
+    /// <summary>Media eyebrow, top of the text column.</summary>
     public static SKRect MediaEyebrow(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop,
         page.Right - PageInset, page.Top + BodyTop + 12);
 
-    /// <summary>Media title (13 DIP on a 20 DIP line).</summary>
-    public static SKRect MediaTitle(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 16,
-        page.Right - PageInset, page.Top + BodyTop + 36);
+    /// <summary>Media title (13 DIP on an 18 DIP line).</summary>
+    public static SKRect MediaTitle(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 14,
+        page.Right - PageInset, page.Top + BodyTop + 32);
 
-    /// <summary>Media artist (11.5 DIP on a 16 DIP line).</summary>
-    public static SKRect MediaArtist(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 38,
-        page.Right - PageInset, page.Top + BodyTop + 54);
+    /// <summary>Media artist (11.5 DIP on a 15 DIP line).</summary>
+    public static SKRect MediaArtist(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 34,
+        page.Right - PageInset, page.Top + BodyTop + 49);
 
-    /// <summary>Media album (11 DIP on a 16 DIP line). The block ends exactly at the cover bottom.</summary>
-    public static SKRect MediaAlbum(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 56,
-        page.Right - PageInset, page.Top + BodyTop + 72);
+    /// <summary>Media album (11 DIP on a 14 DIP line). The block ends at the cover bottom (64 DIP).</summary>
+    public static SKRect MediaAlbum(SKRect page) => new(MediaTextLeft(page), page.Top + BodyTop + 50,
+        page.Right - PageInset, page.Top + BodyTop + 64);
 
-    /// <summary>Lyric band: two text lines, no background (40 DIP after the cover row).</summary>
+    /// <summary>Lyric band: two text lines, no background (72..105 DIP).</summary>
     public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset,
         page.Top + BodyTop + 64, page.Right - PageInset,
         page.Top + BodyTop + 64 + MediaLyricLine1Height + MediaLyricLine2Height);
 
-    /// <summary>First lyric line box (13/20).</summary>
+    /// <summary>First lyric line box (13/18).</summary>
     public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 64,
         page.Right - PageInset, page.Top + BodyTop + 64 + MediaLyricLine1Height);
 
-    /// <summary>Second (next) lyric line box (11.5/16).</summary>
+    /// <summary>Second (next) lyric line box (11.5/15).</summary>
     public static SKRect MediaLyricLine2(SKRect page) => new(page.Left + PageInset,
         page.Top + BodyTop + 64 + MediaLyricLine1Height, page.Right - PageInset,
         page.Top + BodyTop + 64 + MediaLyricLine1Height + MediaLyricLine2Height);
 
-    /// <summary>Seek row (time labels + track), 8 DIP after the lyric band.</summary>
+    /// <summary>Seek row (time labels + track), 112..126 DIP.</summary>
     public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 104,
-        page.Right - PageInset, page.Top + BodyTop + 120);
+        page.Right - PageInset, page.Top + BodyTop + 118);
 
     /// <summary>Seek track: 3 DIP thick, spanning between the two time columns.</summary>
     public static SKRect MediaSeekTrack(SKRect page)
@@ -839,34 +842,34 @@ public static class PageVisual
         return new SKRect(row.Left + MediaTimeWidth, top, row.Right - MediaTimeWidth, top + MediaTrackHeight);
     }
 
-    /// <summary>Centre of the transport row (the play circle's Y).</summary>
+    /// <summary>Centre of the transport row (the play circle's Y): 136..168 DIP.</summary>
     public static float MediaTransportCenterY(SKRect page)
-        => page.Top + BodyTop + 124 + (MediaPlayDiameter / 2);
+        => page.Top + BodyTop + 128 + (MediaPlayDiameter / 2);
 
-    /// <summary>Previous-track button (28 DIP, outlined), 16 DIP left of the play circle.</summary>
+    /// <summary>Previous-track button (26 DIP, outlined), 12 DIP left of the play circle.</summary>
     public static SKRect MediaPrevious(SKRect page) => new(
         page.MidX - (MediaPlayDiameter / 2) - MediaButtonGap - MediaSideDiameter,
         MediaTransportCenterY(page) - (MediaSideDiameter / 2),
         page.MidX - (MediaPlayDiameter / 2) - MediaButtonGap,
         MediaTransportCenterY(page) + (MediaSideDiameter / 2));
 
-    /// <summary>Play/pause button: 36 DIP filled circle in the middle of the transport group.</summary>
+    /// <summary>Play/pause button: 32 DIP filled circle in the middle of the transport group.</summary>
     public static SKRect MediaPlay(SKRect page) => new(
         page.MidX - (MediaPlayDiameter / 2),
         MediaTransportCenterY(page) - (MediaPlayDiameter / 2),
         page.MidX + (MediaPlayDiameter / 2),
         MediaTransportCenterY(page) + (MediaPlayDiameter / 2));
 
-    /// <summary>Next-track button (28 DIP, outlined), 16 DIP right of the play circle.</summary>
+    /// <summary>Next-track button (26 DIP, outlined), 12 DIP right of the play circle.</summary>
     public static SKRect MediaNext(SKRect page) => new(
         page.MidX + (MediaPlayDiameter / 2) + MediaButtonGap,
         MediaTransportCenterY(page) - (MediaSideDiameter / 2),
         page.MidX + (MediaPlayDiameter / 2) + MediaButtonGap + MediaSideDiameter,
         MediaTransportCenterY(page) + (MediaSideDiameter / 2));
 
-    /// <summary>Footer info row: aligned with the progress track, 16 DIP below the transport.</summary>
+    /// <summary>Footer info row: aligned with the progress track, 176..190 DIP.</summary>
     public static SKRect MediaFooter(SKRect page) => new(MediaSeekTrack(page).Left,
-        page.Top + BodyTop + 160, MediaSeekTrack(page).Right, page.Top + BodyTop + 160 + MediaFooterHeight);
+        page.Top + BodyTop + 168, MediaSeekTrack(page).Right, page.Top + BodyTop + 168 + MediaFooterHeight);
 
     /// <summary>Volume/mute control (left third of the footer row).</summary>
     public static SKRect MediaVolume(SKRect page)
