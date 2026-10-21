@@ -271,16 +271,9 @@ public sealed class SplitStackPolicy
     private static ImmutableArray<ActivityRecord> Arrange(
         ActivityRecord primary, ImmutableArray<ActivityRecord> visible)
     {
-        // Media outranks the agent, but ONLY against the agent: a playing track is what the user watches,
-        // while an agent works in the background. Doing it here (instead of renumbering the global ranks)
-        // keeps every other ordering, the overflow chip and the recorded replay fixtures untouched.
-        var mediaBeatsAgent = visible.Any(record => record.Kind == ActivityKind.Media)
-            && visible.Any(record => record.Kind == ActivityKind.Agent);
         var rest = visible
             .Where(record => record.Key != primary.Key)
-            .OrderBy(record => mediaBeatsAgent && record.Kind == ActivityKind.Media
-                ? -1
-                : ActivityPriorityPolicy.Rank(record.Kind))
+            .OrderBy(record => ActivityPriorityPolicy.Rank(record.Kind))
             .ThenBy(record => record.ReceivedAt)
             .ToImmutableArray();
         return rest.Insert(0, primary);
