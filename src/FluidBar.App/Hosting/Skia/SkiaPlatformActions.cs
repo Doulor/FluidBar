@@ -585,9 +585,43 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 
+    /// <summary>True when the lyric document describes the track that is playing.</summary>
+    private static bool LyricsBelongToTrack(LyricsDocument document, MediaSnapshot media)
+    {
+        var title = (document.Title ?? string.Empty).Trim();
+        var artist = (document.Artist ?? string.Empty).Trim();
+        if (title.Length == 0)
+        {
+            return true;
+        }
+
+        var wanted = (media.Title ?? string.Empty).Trim();
+        var wantedArtist = (media.Artist ?? string.Empty).Trim();
+        var titleOk = Mentions(title, wanted) || Mentions(wanted, title);
+        var artistOk = artist.Length == 0 || wantedArtist.Length == 0
+            || Mentions(artist, wantedArtist) || Mentions(wantedArtist, artist);
+        return titleOk && artistOk;
+    }
+
+    private static bool Mentions(string haystack, string needle)
+        => needle.Length > 0 && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
     private (string? Current, string? Next, double Highlight, FluidBar.Island.KaraokeTrack? Karaoke) ResolveLyrics(
         MediaSnapshot media, TimeSpan position)
     {
+        // The player's own KRC file comes FIRST: it is exactly what KuGou is showing (word-level timing)
+        // and cannot be another song. It used to be consulted after the "no online document" early
+        // return, so a track without an online lyric never reached it (user report 2026-10-21).
+        var localDocument = FluidBar.Platform.Windows.Media.Lyrics.KugouLyricCache.TryFind(media.Title, media.Artist);
+        if (localDocument is { IsEmpty: false })
+        {
+            var localSelection = LyricsTimelineSelector.SelectDetailed(localDocument, position, media.Title, media.Artist);
+            _logger.Information(LogCategories.Platform, "lyrics.local",
+                $"Local lyric used: '{localDocument.Title}' by '{localDocument.Artist}' lines={localDocument.Lines.Length} track='{media.Title}'.");
+            return (localSelection.Current, localSelection.Next, localSelection.Highlight,
+                ToKaraokeTrack(localSelection.Line, localDocument));
+        }
+
         var document = _lyricsDocument;
         if (document is null || document.IsEmpty
             || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
@@ -596,6 +630,16 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         // SelectDetailed also returns the karaoke sweep of the current line (KRC word timeline).
+        // The catalogue search is fuzzy: a cover, a same-titled single or a mistyped window title
+        // returns another song's lyrics, which then scroll against the wrong track. Reject a document
+        // whose metadata does not describe this track (user report 2026-10-21).
+        if (!LyricsBelongToTrack(document, media))
+        {
+            _logger.Information(LogCategories.Platform, "lyrics.rejected",
+                $"Rejected lyrics '{document.Title}' by '{document.Artist}' ({document.Source}) for '{media.Title}'.");
+            return (null, null, -1, null);
+        }
+
         var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
         return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line, document));
     }
@@ -688,6 +732,17 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private MediaSessionData MapMedia(MediaSnapshot media)
     {
         var duration = media.Duration > TimeSpan.Zero ? media.Duration : LyricDurationFor(media);
+
+        // The track length from the player's own clock is the least reliable number we have: the text it
+        // comes from freezes with the window. The lyric timeline (local KRC: last line end; online: the
+        // duration the provider reports) is stable and cannot be minutes off, so it wins whenever the two
+        // disagree by more than a tolerance (user report 2026-10-21: "时长不匹配").
+        var lyricDuration = LyricDurationFor(media);
+        if (lyricDuration > TimeSpan.Zero
+            && (duration <= TimeSpan.Zero || Math.Abs((duration - lyricDuration).TotalSeconds) > 3))
+        {
+            duration = lyricDuration;
+        }
 
         // Optimistic play state (see SetOptimisticPlaying): until the source agrees, publish the flip.
         var sourcePlaying = media.IsPlaying;

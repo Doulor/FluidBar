@@ -3011,9 +3011,15 @@ private void HandlePageControl(in IslandHitTarget hit)
         // rewrites its position a few seconds late). Snapping on it rewound the sweep by up to ~5 s and
         // the line appeared to lag the singing (user report 2026-10-21). Ignore such a sample while the
         // line and the play state are unchanged; a real backwards seek is far larger than this window.
+        // A sample that CHANGED since the previous poll is live and must always be able to correct the
+        // clock (that is the auto-correction the user asked for). Only a sample that repeats — i.e. the
+        // player's clock is frozen — is ignored, so a stale value can no longer drag the sweep backwards.
+        var sampleIsLive = Math.Abs(media.PositionMs - _lastSampledPositionMs) > 1;
+        _lastSampledPositionMs = media.PositionMs;
         var staleBackward = sameLine
             && _karaokeClock.HasAnchor
             && media.IsPlaying
+            && !sampleIsLive
             && media.PositionMs < _karaokeClock.PositionAt(now) - StaleSampleWindowMs
             && media.PositionMs > _karaokeClock.PositionAt(now) - 10000;
         if (staleBackward)
@@ -3123,6 +3129,9 @@ private void HandlePageControl(in IslandHitTarget hit)
 
     /// <summary>How far behind our extrapolation a sample may sit before it is treated as a real seek.</summary>
     private const double StaleSampleWindowMs = 400;
+
+    /// <summary>Raw position of the previous sample, used to tell a live clock from a frozen one.</summary>
+    private double _lastSampledPositionMs = double.NaN;
 
     /// <summary>Lyric line currently painted (used to detect a line change and start the transition window).</summary>
     private string? _lyricLinePainted;

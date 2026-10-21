@@ -186,6 +186,30 @@ internal static class MediaWindowFallback
         return true;
     }
 
+    /// <summary>Peak level of the sessions owned by one process (0 when it renders nothing).</summary>
+    /// <remarks>
+    /// The device-wide meter includes every other application, so a browser tab or a system sound kept the
+    /// island "playing" after KuGou was paused. This isolates the player (user report 2026-10-21).
+    /// </remarks>
+    public static float GetProcessPeak(int processId)
+    {
+        if (processId <= 0 || !AudioSessionProbe.TryGetActiveRenderSessions(out var sessions))
+        {
+            return 0;
+        }
+
+        var peak = 0f;
+        foreach (var session in sessions)
+        {
+            if (session.ProcessId == processId)
+            {
+                peak = Math.Max(peak, session.Peak);
+            }
+        }
+
+        return peak;
+    }
+
     public static WindowMediaCandidate? FindCandidate()
     {
         var ok = AudioSessionProbe.TryGetActiveRenderSessions(out var sessions);

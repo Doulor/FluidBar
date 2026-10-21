@@ -56,6 +56,12 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
     /// <summary>Position parsed on that read, used to detect the one-second flip.</summary>
     private TimeSpan _lastTimelinePosition;
+
+    /// <summary>Consecutive polls that returned the same clock text.</summary>
+    private int _stuckTimelinePolls;
+
+    /// <summary>When the clock text last changed (its last trustworthy moment).</summary>
+    private long _lastTimelineChangeMs;
     private const string PreviousButtonName = "上一首";
     private const string NextButtonName = "下一首";
     private const string PlayButtonName = "播放";
@@ -261,8 +267,30 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                                 Math.Clamp((nowMs - previousRead) / 2.0, 0, 400));
                         }
 
+                        // A frozen clock text (the player repaints the time only while its window is
+                        // visible) used to be stamped as "now", which put the island tens of seconds
+                        // away from the real position. Three identical reads mean "not live": refuse the
+                        // sample so the caller keeps the ini timeline, which carries a real write time.
+                        var changed = position != _lastTimelinePosition;
+                        _stuckTimelinePolls = changed ? 0 : _stuckTimelinePolls + 1;
+                        if (changed || _lastTimelineChangeMs == 0)
+                        {
+                            _lastTimelineChangeMs = nowMs;
+                        }
+
                         _lastTimelineReadMs = nowMs;
                         _lastTimelinePosition = position;
+                        if (_stuckTimelinePolls >= 3)
+                        {
+                            // The text stopped updating (KuGou only repaints it while its window is drawn),
+                            // but the duration it carries is still valid and the position was true at the
+                            // moment it last changed. Back-date the sample instead of dropping the whole
+                            // timeline — dropping it also lost the track length (user report 2026-10-21).
+                            age = TimeSpan.FromMilliseconds(Math.Max(0, nowMs - _lastTimelineChangeMs));
+                            timeline = new PlayerTimeline(position, duration) { Age = age };
+                            return true;
+                        }
+
                         timeline = new PlayerTimeline(position, duration) { Age = age };
                         return true;
                     }

@@ -281,8 +281,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // no matter what the transport glyph says. Three consecutive silent polls are required so a
         // quiet passage or a fade-out does not flip the icon (user report: the island kept showing
         // "playing" after the song was paused).
-        _audioSilentPolls = audioPeak > 0.0005 ? 0 : _audioSilentPolls + 1;
-        if (audioPeak > 0.002)
+        // Only THIS player's output counts: the device-wide meter also carries the browser, system
+        // sounds and every other app, which is why a paused KuGou still looked like it was playing.
+        var playerPeak = MediaWindowFallback.GetProcessPeak(candidate.ProcessId);
+        _audioSilentPolls = playerPeak > 0.0005 ? 0 : _audioSilentPolls + 1;
+        if (playerPeak > 0.002)
         {
             playing = true;
             _fallbackPlayingHint = true;
@@ -296,7 +299,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // of waiting for the next one-second tick (user report 2026-10-21).
         _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
             ? (playing ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(5))
-            : (playing ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(1)));
+            : (playing ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(1)));
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
