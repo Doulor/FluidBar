@@ -115,6 +115,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private DateTime? _stateFileWrittenAt;
 
+    /// <summary>Last state-file write we observed (a new write proves the player is running).</summary>
+    private DateTimeOffset _lastSeenWriteUtc;
+
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
     private double _stateFilePlayingMs;
 
@@ -576,7 +579,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
             // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
-            var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
+            // Playing time must advance at wall-clock rate while the player is genuinely playing: gating
+            // it purely on the audio peak made the estimate lag ~3 %/s, which the island then chased into a
+            // 2 s sawtooth between state-file writes (measured 2026-10-22). A fresh state-file write is
+            // proof enough that the player is running, so either signal counts.
+            var justWrote = state.SampledAtUtc != _lastSeenWriteUtc;
+            _lastSeenWriteUtc = state.SampledAtUtc;
+            var audible = justWrote || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
             if (audible)
             {
                 _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
