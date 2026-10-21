@@ -97,10 +97,10 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(79f, layout.Current.Width, 0.001f);
         Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
-        Assert.Equal(316f + offsetY, layout.Current.Top, 0.001f);   // sampled absolute 316 (offsetY is top-12)
+        Assert.Equal(304f + offsetY, layout.Current.Top, 0.001f);   // sampled absolute 316, offsetY = top-12   // sampled absolute 316 (offsetY is top-12)
         Assert.Equal(658.5f + offsetX, layout.Previous.MidX, 0.001f);
         Assert.Equal(781.5f + offsetX, layout.Next.MidX, 0.001f);
-        Assert.Equal(333f + offsetY, layout.Current.MidY, 0.001f);   // sampled 333 at offsetY 12
+        Assert.Equal(321f + offsetY, layout.Current.MidY, 0.001f);   // sampled absolute 333   // sampled 333 at offsetY 12
 
         Assert.Equal(2, layout.DotsLeft.Length);
         Assert.Equal(1, layout.DotsRight.Length);
@@ -108,7 +108,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(634.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
         Assert.Equal(802.5f + offsetX, layout.DotsRight[0].Left, 0.001f);
         Assert.Equal(3f, layout.DotsLeft[0].Width, 0.001f);
-        Assert.Equal(331.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
+        Assert.Equal(319.5f + offsetY, layout.DotsLeft[0].Top, 0.001f);
 
         // Island gaps are 8 DIP and the dot cluster keeps 7 DIP from the nearest island edge.
         Assert.Equal(8f, layout.Current.Left - layout.Previous.Right, 0.001f);
@@ -134,7 +134,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(3f, layout.DotsRight[1].Width, 0.001f);
         Assert.Equal(7f, layout.DotsRight[2].Width, 0.001f);
         var offsetY = IslandMetrics.ShellRect(State(0)).Top - 12f;
-        Assert.Equal(333f + offsetY, layout.DotsRight[2].MidY, 0.001f);
+        Assert.Equal(321f + offsetY, layout.DotsRight[2].MidY, 0.001f);
 
         Assert.True(layout.Previous.IsEmpty, "page 0 has no previous island");
         Assert.False(layout.Next.IsEmpty);
@@ -153,7 +153,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(3, layout.DotsLeft.Length);
         Assert.Equal(616.5f + offsetX, layout.DotsLeft[0].Left, 0.001f);
         Assert.Equal(623.5f + offsetX, layout.DotsLeft[1].Left, 0.001f);
-        Assert.Equal(592.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);
+        Assert.Equal(630.5f + offsetX, layout.DotsLeft[2].Left, 0.001f);   // sampled absolute 154.5
         Assert.Equal(7f, layout.DotsLeft[2].Width, 0.001f);
         Assert.True(layout.Next.IsEmpty, "the last page has no next island");
     }
@@ -271,7 +271,7 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(capsule, layout.Current.Width, 0.001f);
         Assert.Equal(capsule, layout.CapsuleWidth, 0.001f);
-        Assert.Equal(333f + dy, layout.Current.MidY, 0.001f);   // sampled 333
+        Assert.Equal(321f + dy, layout.Current.MidY, 0.001f);   // sampled absolute 333   // sampled 333
 
         if (page > 0)
         {

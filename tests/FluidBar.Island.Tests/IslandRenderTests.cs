@@ -73,7 +73,7 @@ public sealed class IslandRenderTests
         Assert.Equal(52, state.ShellHeight);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(666, bitmap.Height);
+        Assert.Equal(669, bitmap.Height);   // sampled with the 34 DIP rail strip
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
     }
 
