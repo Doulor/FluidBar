@@ -145,11 +145,19 @@ internal sealed partial class PageRenderer
         canvas.Save();
         canvas.Translate(0, dy);
         var accent = _accents.Get(item.AccentHex, _theme.Info);
-        var glyph = new SKRect(row.Left + 10, row.Top + 7, row.Left + 36, row.Top + 33);
+        var glyph = new SKRect(row.Left + 8, row.Top + 4, row.Left + 38, row.Top + 34);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(accent, 0.16f * _opacity);
         canvas.DrawRoundRect(glyph, 7, 7, _fill);
-        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, glyph.Deflate(6), Alpha(accent, _opacity), _icon);
+        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, glyph.Deflate(7), Alpha(accent, _opacity), _icon);
+
+        // Unread cue the old row never had (user request 2026-10-21: notifications should read like a
+        // phone card). Drawn inside the existing 40 DIP row so the hit geometry contract is untouched.
+        if (item.IsUnread)
+        {
+            _fill.Color = Alpha(accent, _opacity);
+            canvas.DrawCircle(glyph.Right - 2, glyph.Top + 4, 3f, _fill);
+        }
 
         var dismiss = new SKRect(row.Right - 30, row.Top + 10, row.Right - 10, row.Top + 30);
         if (hovered)
