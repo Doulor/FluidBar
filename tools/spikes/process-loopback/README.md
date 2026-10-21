@@ -33,3 +33,14 @@
 
 - 20 ms 拉一次帧数 → `audioMs`；`位置 = 锚点 + audioMs`；换曲/seek 重锚；
 - 先做成可选开关 + **影子运行**（只记录不显示），连续 30 分钟误差 < 0.2 s 再切主路径。
+
+## 2026-10-22 08:05 追记
+
+- 事件驱动模式（AUDCLNT_STREAMFLAGS_EVENTCALLBACK + SetEventHandle）**同样 0 帧**；
+- 逐个 KuGou 进程（99424 / 16820 / 69168 / 87076 / 96688 / 97304）测试，**全部 0 帧**；
+- 设备路径 `VAD\Process_Loopback` 确认正确；
+- 改用 `GetMixFormat` 的格式初始化时，`Initialize` 前抛 `NotImplementedException`（接口声明或 RCW 问题）。
+
+**最可能的原因**：播放器使用 **WASAPI 独占模式**（或音频渲染在非目标进程），此时进程回环拿不到数据。
+验证方法：用 `IAudioSessionManager2` 读取该会话的 `AudioSessionState` 与端点即可确认；
+若是独占模式，则这条路在酷狗上直接走不通，需要换回"ini + 播放时长"的方案。

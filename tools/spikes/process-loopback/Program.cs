@@ -6,16 +6,29 @@ using System.Runtime.InteropServices;
 
 var name = args.Length > 0 ? args[0] : "KuGou";
 var seconds = args.Length > 1 ? int.Parse(args[1]) : 5;
-var target = Process.GetProcessesByName(name).FirstOrDefault();
-if (target is null)
+int targetPid;
+string label;
+if (int.TryParse(name, out var explicitPid))
 {
-    Console.WriteLine($"process '{name}' not running");
-    return 1;
+    targetPid = explicitPid;
+    label = "(explicit pid)";
+}
+else
+{
+    var target = Process.GetProcessesByName(name).FirstOrDefault();
+    if (target is null)
+    {
+        Console.WriteLine($"process '{name}' not running");
+        return 1;
+    }
+
+    targetPid = target.Id;
+    label = name;
 }
 
-Console.WriteLine($"target pid={target.Id} ({name})");
+Console.WriteLine($"target pid={targetPid} ({label})");
 var capture = new ProcessLoopbackCapture();
-if (!capture.TryStart(target.Id, out var error))
+if (!capture.TryStart(targetPid, out var error))
 {
     Console.WriteLine($"start failed: {error}");
     return 2;
@@ -41,9 +54,11 @@ internal sealed class ProcessLoopbackCapture : IDisposable
 {
     private AudioInterop.IAudioClient? _client;
     private IntPtr _capturePtr;
+    private IntPtr _eventHandle;
     private AudioInterop.IAudioInterfaceCompletionHandler? _handler;
 
     public int SampleRate { get; private set; } = 48000;
+    public IntPtr EventHandle => _eventHandle;
     public string FormatDescription { get; private set; } = "?";
 
     public bool TryStart(int processId, out string error)
@@ -75,10 +90,18 @@ internal sealed class ProcessLoopbackCapture : IDisposable
             }
 
             Console.WriteLine("client activated, initializing...");
-            var format = AudioInterop.CreatePcmFormat(48000, 2, 16);
+            var mixHr = _client.GetMixFormat(out var mixFormat);
+            var format = mixHr == 0 && mixFormat != IntPtr.Zero
+                ? mixFormat
+                : AudioInterop.CreatePcmFormat(48000, 2, 16);
+            var wfx = Marshal.PtrToStructure<AudioInterop.WaveFormatEx>(format);
+            Console.WriteLine($"mixHr=0x{mixHr:X8} fmt tag={wfx.FormatTag} ch={wfx.Channels} rate={wfx.SamplesPerSecond} bits={wfx.BitsPerSample}");
             var flags = AudioInterop.AudclntStreamFlagsLoopback
                 | AudioInterop.AudclntStreamFlagsAutoConvertPcm
-                | AudioInterop.AudclntStreamFlagsSrcDefaultQuality;
+                | AudioInterop.AudclntStreamFlagsSrcDefaultQuality
+                | AudioInterop.AudclntStreamFlagsEventCallback;
+            _eventHandle = AudioInterop.CreateEventW(IntPtr.Zero, false, false, IntPtr.Zero);
+            Console.WriteLine($"event handle={_eventHandle}");
             var initHr = _client.Initialize(
                 AudioInterop.AudclntShareModeShared,
                 flags,
@@ -94,7 +117,10 @@ internal sealed class ProcessLoopbackCapture : IDisposable
             }
 
             _capturePtr = capturePtr;
-            _client.Start();
+            var setHandleHr = _client.SetEventHandle(_eventHandle);
+            Console.WriteLine($"SetEventHandle hr=0x{setHandleHr:X8}");
+            var startHr = _client.Start();
+            Console.WriteLine($"Start hr=0x{startHr:X8}");
             SampleRate = 48000;
             FormatDescription = "48000/2ch/16bit";
             return true;
@@ -145,11 +171,18 @@ internal sealed class ProcessLoopbackCapture : IDisposable
 
 internal static class AudioInterop
 {
-    public const string VirtualDeviceProcessLoopback = @"VAD\Process_Loopback";
+    public const string VirtualDeviceProcessLoopback = "VAD\\Process_Loopback";
     public const int AudclntShareModeShared = 0;
     public const int AudclntStreamFlagsLoopback = 0x00020000;
     public const int AudclntStreamFlagsAutoConvertPcm = unchecked((int)0x80000000);
     public const int AudclntStreamFlagsSrcDefaultQuality = 0x08000000;
+    public const int AudclntStreamFlagsEventCallback = 0x00040000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr CreateEventW(IntPtr attributes, bool manualReset, bool initialState, IntPtr name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 
     [DllImport("Mmdevapi.dll", ExactSpelling = true, PreserveSig = false)]
     private static extern void ActivateAudioInterfaceAsync(
