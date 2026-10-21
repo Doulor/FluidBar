@@ -536,7 +536,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _lastStateTitle = candidate.Title;
             _stateFilePlayingMs = 0;
             _stateFileWrittenAt = null;
-            _stateFileValidFromUtc = _timeProviderNow();
+            // KuGou rewrites the state file ~3 s after a switch with the PREVIOUS track's position, so
+            // samples written in the first few seconds after the change are not evidence of the new track
+            // (measured 06:30:38 -> title change, 06:30:41 -> old value 51 s, 2026-10-22).
+            _stateFileValidFromUtc = _timeProviderNow() + TimeSpan.FromSeconds(5);
         }
 
         if (state.SampledAtUtc < _stateFileValidFromUtc)
