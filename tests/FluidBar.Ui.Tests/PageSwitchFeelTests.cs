@@ -42,9 +42,7 @@ public sealed class PageSwitchFeelTests
         using var _fixture = fixture;
         var positions = new List<double> { Position(controller) };
 
-        // One physical notch is 70 DIP (half a page step, like prototype2's 100 px notch vs its
-        // 140 px wheelStep); two notches make exactly one page.
-        Assert.False(controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false).Paged);
+        // One physical notch is one 140 DIP page step.
         Assert.True(controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false).Paged);
         for (var i = 0; i < 90; i++)
         {

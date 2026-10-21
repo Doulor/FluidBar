@@ -208,23 +208,16 @@ public sealed class SkiaIslandHostMappingTests
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        // One physical notch is half a page step (70 of the 140 DIP prototype wheelStep): it is
-        // consumed but does not turn the page — prototype2's 100 px Chrome notch also falls short of
-        // its 140 px wheelStep, so a page needs two notches there as well.
+        // One physical notch is one 140 DIP page step now.
         var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
-        Assert.False(first.Paged);
-        Assert.Equal(0, fixture.Controller.Pager.SelectedIndex);
-
-        var second = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
-        Assert.True(second.Paged);
-        Assert.Equal(1, second.Page);
+        Assert.True(first.Paged);
+        Assert.Equal(1, first.Page);
         fixture.RunToRest();
 
-        // Two more notches inside the 180 ms cooldown accumulate but must not flip a page.
-        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        // A notch inside the 180 ms cooldown does not flip a page.
         Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
 
-        // After the cooldown the held pair commits the next page.
+        // After the cooldown the next notch commits the next page.
         fixture.Time.Advance(TimeSpan.FromMilliseconds(FluidBar.Core.Interaction.PagerConstants.WheelCooldownMs + 40));
         var third = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.True(third.Paged);
@@ -237,12 +230,10 @@ public sealed class SkiaIslandHostMappingTests
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
         Assert.True(first.Paged);
 
-        // The next pair lands inside the cooldown: both notches are held, no page step.
-        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        // The next notch lands inside the cooldown: no page step.
         Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
 
         // After the cooldown the held pair is a fresh page step (prototype2 pacing); the old behaviour

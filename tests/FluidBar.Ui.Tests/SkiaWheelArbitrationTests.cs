@@ -170,11 +170,6 @@ public sealed class SkiaWheelArbitrationTests
         using var fixture = CreateClipboardFixture(items: 1);
         var page = Page(fixture);
 
-        var half = fixture.Controller.HandleWheel(
-            PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
-        Assert.False(half.Paged);
-        Assert.Equal(page, Page(fixture));
-
         var full = fixture.Controller.HandleWheel(
             PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
         Assert.True(full.Paged);
