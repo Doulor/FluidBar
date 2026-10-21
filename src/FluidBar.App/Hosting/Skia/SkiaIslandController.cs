@@ -347,9 +347,28 @@ public sealed class SkiaIslandController : IDisposable
         && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>Frame interval the host should use for the current activity.</summary>
-    public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
-        ? TimeSpan.FromMilliseconds(33)
-        : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+    public TimeSpan PreferredFrameInterval
+    {
+        get
+        {
+            if (IsWaveOnly || IsKaraokeOnly)
+            {
+                return TimeSpan.FromMilliseconds(33);
+            }
+
+            // Shell/page transitions are software-Skia frames with a 10 ms paint budget; 120 Hz
+            // pacing left no headroom and made a single slow frame produce a 16–33 ms gap. Pace the
+            // transition at 60 fps so the p99 stays inside the 16.7 ms contract; settled media/wave
+            // paths keep their own 30 fps cadence.
+            if (!_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
+                || _railMotion.IsAnimating || IsTrackTransitionAnimating)
+            {
+                return TimeSpan.FromMilliseconds(1000.0 / 60.0);
+            }
+
+            return TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+        }
+    }
 
     /// <summary>
     /// Whether the only animated thing is the karaoke sweep / progress clock on a rested shell. 30 fps is

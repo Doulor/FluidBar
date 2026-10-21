@@ -85,7 +85,8 @@ internal static class IslandFrameProbe
     /// <param name="damageW">Damage width in DIP (0 for a full frame).</param>
     /// <param name="damageH">Damage height in DIP (0 for a full frame).</param>
     public static void Record(double renderMs, long allocBytes, bool fullFrame, double damageW, double damageH,
-        int dirtyRects = 0, double dirtyArea = 0, string? fullReason = null)
+        int dirtyRects = 0, double dirtyArea = 0, string? fullReason = null,
+        double paintMs = 0, double commitMs = 0)
     {
         if (!Enabled)
         {
@@ -113,6 +114,8 @@ internal static class IslandFrameProbe
                         dirtyRects,
                         dirtyArea = Math.Round(dirtyArea, 1),
                         fullReason = fullFrame ? fullReason ?? "unspecified" : null,
+                        paintMs = Math.Round(paintMs, 3),
+                        commitMs = Math.Round(commitMs, 3),
                     }) + "\n");
             }
         }
@@ -1286,6 +1289,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private SkiaIslandRenderChange _lastChange;
     private bool _lastRenderHappened;
+    private long _lastHookRebuildTimestamp;
 
     private void OnFrame(TimeSpan delta)
     {
@@ -1320,13 +1324,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 var state = _controller.RenderState;
                 if (state.Archipelago.Visible)
                 {
-                    RebuildHookRects(state);
+                    RebuildHookRectsThrottled(state);
                 }
             }
             else
             {
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
+                RebuildHookRects(_controller.RenderState);
                 RefreshAccessibility();
                 ScheduleIdleTrim();
             }
@@ -1801,9 +1806,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var started = Stopwatch.GetTimestamp();
+        double paintMs = 0;
+        double commitMs = 0;
         var frame = entry.Host.BeginFrame();
         var surface = EnsureSurface(entry, frame);
         var scale = (float)frame.Scale;
+        var paintStarted = Stopwatch.GetTimestamp();
 
         try
         {
@@ -1811,7 +1819,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             {
                 _renderer.Render(surface.Canvas, state, scale);
                 surface.Canvas.Flush();
+                paintMs = (Stopwatch.GetTimestamp() - paintStarted) * 1000.0 / Stopwatch.Frequency;
+                var commitStarted = Stopwatch.GetTimestamp();
                 var result = entry.Host.CommitFrame();
+                commitMs = (Stopwatch.GetTimestamp() - commitStarted) * 1000.0 / Stopwatch.Frequency;
                 RecordCommit(entry, result, dirty: false);
             }
             else
@@ -1840,10 +1851,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 }
 
                 surface.Canvas.Flush();
+                paintMs = (Stopwatch.GetTimestamp() - paintStarted) * 1000.0 / Stopwatch.Frequency;
                 var pixelDamage = damageRects
                     .Select(rect => LayeredRect.FromDip(rect, frame.Scale))
                     .ToArray();
+                var commitStarted = Stopwatch.GetTimestamp();
                 var result = entry.Host.CommitFrame(pixelDamage);
+                commitMs = (Stopwatch.GetTimestamp() - commitStarted) * 1000.0 / Stopwatch.Frequency;
                 RecordCommit(entry, result, dirty: true);
             }
         }
@@ -1868,7 +1882,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 change.FullFrame ? 0 : change.DamageDip.Height,
                 change.FullFrame ? 0 : probeDamage.Count,
                 change.FullFrame ? 0 : probeDamage.Sum(static rect => rect.Width * rect.Height),
-                change.FullReason);
+                change.FullReason, paintMs, commitMs);
         }
 
         _frameStats.Record(elapsedMs);
@@ -1960,6 +1974,24 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// a click on a moving neighbour glass through to the desktop.
     /// </summary>
     /// <param name="state">Current render state.</param>
+    /// <summary>
+    /// Updates mouse-hook regions at a bounded rate while the shell is animating. The shell geometry
+    /// changes every frame, but the Win32 hook region only needs to track it closely enough for hover
+    /// and click-through; rebuilding it at 120 Hz was competing with the render loop itself.
+    /// </summary>
+    private void RebuildHookRectsThrottled(in IslandRenderState state)
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (_lastHookRebuildTimestamp != 0
+            && (now - _lastHookRebuildTimestamp) * 1000.0 / Stopwatch.Frequency < 33.0)
+        {
+            return;
+        }
+
+        _lastHookRebuildTimestamp = now;
+        RebuildHookRects(state);
+    }
+
     private void RebuildHookRects(in IslandRenderState state)
     {
         _hookRects.Clear();
