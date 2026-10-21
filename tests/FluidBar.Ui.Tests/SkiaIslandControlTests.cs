@@ -47,8 +47,8 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
 
-        var track = PageVisual.MediaSeekTrack(Page(1, fixture));
-        fixture.Controller.HandlePointerPressed(track.Left + (track.Width * 0.75), track.MidY);
+        var row = PageVisual.MediaSeekRow(Page(1, fixture));
+        fixture.Controller.HandlePointerPressed(row.Left + (row.Width * 0.75), row.MidY);
 
         var call = Assert.Single(actions.Calls);
         Assert.Equal(IslandPlatformActionKind.MediaSeek, call.Kind);
@@ -64,11 +64,11 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(1);
 
         var page = Page(1, fixture);
-        var track = PageVisual.MediaSeekTrack(page);
+        var row = PageVisual.MediaSeekRow(page);
         // Inside the seek row but left of the track: fraction clamps to 0.
-        fixture.Controller.HandlePointerPressed(track.Left - 8, track.MidY);
+        fixture.Controller.HandlePointerPressed(row.Left + 1, row.MidY);
         // Inside the seek row but right of the track: fraction clamps to 1.
-        fixture.Controller.HandlePointerPressed(track.Right + 8, track.MidY);
+        fixture.Controller.HandlePointerPressed(row.Right - 1, row.MidY);
 
         Assert.Equal(2, actions.Calls.Count);
         Assert.Equal(0, actions.Calls[0].Value, 3);
@@ -330,6 +330,7 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerReleased(rect.MidX, rect.MidY);
     }
 }
+
 
 
 

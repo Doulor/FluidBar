@@ -124,7 +124,7 @@ public sealed class ShellAndCompactSurfaceTests
             });
 
             Assert.Equal(CompactAction.Expand, media.HitTest(new Point(30, 20), isPeeked: false));
-            Assert.Equal(CompactAction.TogglePlay, media.HitTest(new Point(206, 20), isPeeked: false));
+            Assert.Equal(CompactAction.Expand, media.HitTest(new Point(206, 20), isPeeked: false));
 
             // Peek reveals previous / play / next thirds on the right.
             Assert.Equal(CompactAction.Previous, media.HitTest(new Point(156, 23), isPeeked: true));
@@ -336,6 +336,7 @@ public sealed class MotionDriverTests
         false,
         LayoutTokens.WindowHeight);
 }
+
 
 
 

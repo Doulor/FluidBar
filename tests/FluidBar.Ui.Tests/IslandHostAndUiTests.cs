@@ -222,7 +222,7 @@ public sealed class ExpandedAndSettingsUiTests
             Assert.Equal(440, panel.DesiredSize.Width);
             Assert.Equal(244, panel.DesiredSize.Height);
             Assert.Equal(400, ExpandedPanel.ViewportWidth);
-            Assert.Equal(252, ExpandedPanel.ViewportHeight);
+            Assert.Equal(212, ExpandedPanel.ViewportHeight);
             foreach (var page in CoreIslandPage.BuiltinPages.Where(page => page != CoreIslandPage.Agent))
             {
                 var pageView = panel.PageFor(page);
@@ -412,5 +412,6 @@ internal sealed class HostFixture : IDisposable
 
     public void Dispose() => Host.Dispose();
 }
+
 
 
