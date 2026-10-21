@@ -500,6 +500,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
     {
+        // The poll timestamp must advance on EVERY call, including the ones that return early below;
+        // otherwise the next call accumulates the whole gap as "playing time" and the estimate jumps
+        // forward by several seconds (measured bursts of +6 s, 2026-10-22).
+        var pollNow = _timeProviderNow();
+        var pollPrevious = _lastPollAt;
+        _lastPollAt = pollNow;
         // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
         // same cadence, so the two disagree by up to half a minute and the arbitration kept jumping the
         // published position forward — which made the media pill vanish (user report 2026-10-22).
@@ -575,18 +581,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
             _stateFilePlayingMs = 0;
         }
-        else if (_lastPollAt is { } previous)
+        else if (pollPrevious is { } previous)
         {
             // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
             // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
             var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
             if (audible)
             {
-                _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
+                _stateFilePlayingMs += Math.Clamp((nowForAccumulation - previous).TotalMilliseconds, 0, 2000);
             }
         }
-
-        _lastPollAt = nowForAccumulation;
         if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
         {
             return candidate; // too old to arbitrate
