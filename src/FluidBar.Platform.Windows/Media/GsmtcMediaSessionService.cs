@@ -494,7 +494,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _lastMsaaChangeMs = freshNow;
         }
 
-        var msaaIsFresh = freshNow - _lastMsaaChangeMs < 3000;
+        // A small reading is trustworthy for longer right after a track change: KuGou writes the PREVIOUS
+        // track's position into the state file for a few seconds after switching, and following it made the
+        // island jump to the old position (measured 20s vs 51s, 2026-10-22).
+        var msaaTrustMs = candidate.Position > TimeSpan.Zero && candidate.Position < TimeSpan.FromSeconds(90)
+            ? 10_000
+            : 3_000;
+        var msaaIsFresh = freshNow - _lastMsaaChangeMs < msaaTrustMs;
         // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
         // same cadence, so the two disagree by up to half a minute and the arbitration kept jumping the
         // published position forward — which made the media pill vanish (user report 2026-10-22).
