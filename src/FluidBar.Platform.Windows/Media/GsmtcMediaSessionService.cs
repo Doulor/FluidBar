@@ -95,6 +95,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private long _lastCrossCheckLogMs;
 
     /// <summary>Write time of the state file we are currently extrapolating.</summary>
+    /// <summary>Master switch for the state-file arbitration. Off while the two clocks fight.</summary>
+    private const bool CrossCheckEnabled = false;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -449,6 +452,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </summary>
     private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
     {
+        // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
+        // same cadence, so the two disagree by up to half a minute and the arbitration kept jumping the
+        // published position forward — which made the media pill vanish (user report 2026-10-22).
+        if (!CrossCheckEnabled)
+        {
+            return candidate;
+        }
+
         if (!string.Equals(candidate.ProcessName, "KuGou", StringComparison.OrdinalIgnoreCase))
         {
             return candidate;
