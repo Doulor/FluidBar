@@ -22,10 +22,11 @@ public static class SplitSatelliteStyle
     // ---------------------------------------------------------------- cover well
 
     /// <summary>
-    /// Inset of the rounded-square cover well from the ball edge (DIP): side = diameter - 10, i.e.
-    /// 30 DIP on a 40 DIP ball (75 %), so the black ring around the cover reads clearly.
+    /// Inset of the rounded-square cover well from the ball edge (DIP): side = diameter - 16, i.e.
+    /// 24 DIP on a 40 DIP ball (60 %, the audited 20-24 band), so the pure-circular black ring around
+    /// the cover reads unmistakably and the silhouette can never be mistaken for a squircle.
     /// </summary>
-    public const float InnerFrameInsetDip = 5f;
+    public const float InnerFrameInsetDip = 8f;
 
     /// <summary>Corner radius of the cover well as a fraction of its side (22.5 %, the approved ratio).</summary>
     public const float InnerFrameRadiusFactor = 0.225f;

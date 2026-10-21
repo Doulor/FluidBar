@@ -89,7 +89,8 @@ public static class IslandMetrics
     public const double MiniCurrentMaxWidth = 104;
 
     /// <summary>Detached current mini-island height (28 DIP, prototype).</summary>
-    public const double MiniCurrentHeight = 28;
+    /// <summary>Current capsule height (32: matches the 32 DIP rail strip, was 28).</summary>
+    public const double MiniCurrentHeight = 32;
 
     /// <summary>Gap between detached islands (8 DIP, prototype `RAIL_GAP`).</summary>
     public const double MiniGap = 8;
@@ -245,16 +246,9 @@ public static class IslandMetrics
             centre.X + (width / 2), centre.Y + (height / 2));
     }
 
-    /// <summary>Inner rounded-square artwork rectangle (4 DIP padding inside the circle).</summary>
+    /// <summary>Inner rounded-square artwork rectangle (single source: SplitSatelliteStyle inset).</summary>
     public static SKRect SplitIsletThumbnailRect(SKRect circle)
-    {
-        var side = Math.Max(0f, circle.Width - 8f);
-        return new SKRect(
-            circle.MidX - (side / 2),
-            circle.MidY - (side / 2),
-            circle.MidX + (side / 2),
-            circle.MidY + (side / 2));
-    }
+        => SplitSatelliteStyle.InnerFrameRect(circle);
 
     /// <summary>Corner radius of the inner cover well (Single source: SplitSatelliteStyle).</summary>
     public static float SplitIsletThumbnailRadius(SKRect thumbnail)

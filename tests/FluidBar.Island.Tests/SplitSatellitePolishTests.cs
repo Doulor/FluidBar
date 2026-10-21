@@ -166,14 +166,19 @@ public sealed class SplitSatellitePolishTests
         var state = State(withMedia: true);
         var ball = IslandMetrics.SplitIsletRects(state)[1];
         var frame = IslandMetrics.SplitIsletThumbnailRect(ball);
-        // Round 2: inset 5 DIP per side, so the well is the ball minus 10 (30 DIP on a 40 DIP ball).
-        Assert.Equal(ball.Width - 10f, frame.Width, 0.001f);
+        // Round 3: inset 8 DIP per side, so the well is the ball minus 16 (24 DIP on a 40 DIP ball,
+        // 0.6x the diameter) with the corner radius at 22.5 % (5.4 DIP). Spec change, not relaxed.
+        Assert.Equal(ball.Width - 16f, frame.Width, 0.001f);
+        Assert.Equal(frame.Width * 0.225f, IslandMetrics.SplitIsletThumbnailRadius(frame), 0.001f);
         Assert.Equal(frame.Width * 0.225f, IslandMetrics.SplitIsletThumbnailRadius(frame), 0.001f);
 
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, 4f);
-        var hairline = At(bitmap, frame.Left + 0.35f, frame.MidY, 4f);
-        var interior = At(bitmap, frame.Left + 2.2f, frame.MidY, 4f);
+        // The 1 DIP well edge is a vertical bevel (white 7 % at the top -> black 25 % at the bottom), so
+        // the *visible* hairline is on the top edge; sampling at mid height would read the neutral
+        // middle of that gradient. Spec-faithful sample point, same assertion.
+        var hairline = At(bitmap, frame.MidX, frame.Top + 0.35f, 4f);
+        var interior = At(bitmap, frame.MidX, frame.Top + 2.2f, 4f);
         Assert.True(hairline.Red + hairline.Green + hairline.Blue >= interior.Red + interior.Green + interior.Blue + 8,
             "cover hairline missing: " + hairline + " vs " + interior);
 

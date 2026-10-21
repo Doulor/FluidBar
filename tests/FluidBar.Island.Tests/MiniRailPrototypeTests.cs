@@ -76,7 +76,7 @@ public sealed class MiniRailPrototypeTests
         Assert.Equal(32f, layout.Strip.Height, 0.001f);
         Assert.Equal(shell.MidX, layout.Current.MidX, 0.001f);
         Assert.Equal(CentreX + (shell.Left - 500f), layout.Current.MidX, 0.001f);
-        Assert.Equal(28f, layout.Current.Height, 0.001f);
+        Assert.Equal(32f, layout.Current.Height, 0.001f);   // 11 pt pass: height 28 -> 32 (rail strip height)
         Assert.Equal(26f, layout.Previous.Width, 0.001f);
         Assert.Equal(26f, layout.Previous.Height, 0.001f);
         Assert.Equal(26f, layout.Next.Width, 0.001f);
@@ -97,7 +97,7 @@ public sealed class MiniRailPrototypeTests
 
         Assert.Equal(79f, layout.Current.Width, 0.001f);
         Assert.Equal(680.5f + offsetX, layout.Current.Left, 0.001f);
-        Assert.Equal(306f + offsetY, layout.Current.Top, 0.001f);
+        Assert.Equal(304f + offsetY, layout.Current.Top, 0.001f);   // midY 320 - 32/2
         Assert.Equal(659.5f + offsetX, layout.Previous.MidX, 0.001f);
         Assert.Equal(780.5f + offsetX, layout.Next.MidX, 0.001f);
         Assert.Equal(320f + offsetY, layout.Current.MidY, 0.001f);
