@@ -3016,17 +3016,17 @@ private void HandlePageControl(in IslandHitTarget hit)
         // player's clock is frozen — is ignored, so a stale value can no longer drag the sweep backwards.
         var sampleIsLive = Math.Abs(media.PositionMs - _lastSampledPositionMs) > 1;
         _lastSampledPositionMs = media.PositionMs;
-        var staleBackward = sameLine
-            && _karaokeClock.HasAnchor
-            && media.IsPlaying
-            && !sampleIsLive
-            && media.PositionMs < _karaokeClock.PositionAt(now) - StaleSampleWindowMs
-            && media.PositionMs > _karaokeClock.PositionAt(now) - 10000;
+        // A backward sample is never allowed to rewind the sweep any more. KuGou's clock has one-second
+        // resolution plus transport latency, so every poll lands 0.3-1 s behind our extrapolation; snapping
+        // to it rewound the highlight and the next frames pushed it forward again — the "flicker" the user
+        // reported (2026-10-21). Only a real seek (>2.5 s) moves the clock backwards.
+        var staleBackward = false;
         if (staleBackward)
         {
             // keep the anchor, keep extrapolating
         }
-        else if (!sameLine || !_karaokeClock.HasAnchor || _karaokeClock.IsJump(media.PositionMs, now))
+        else if (!sameLine || !_karaokeClock.HasAnchor
+                 || Math.Abs(media.PositionMs - _karaokeClock.PositionAt(now)) > SeekThresholdMs)
         {
             // New line, first sample or a seek: snap instead of easing (a seek must not fast-forward
             // through the words between the old and the new position).
@@ -3103,6 +3103,14 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var position = _karaokeClock.PositionAt(NowMs());
         var highlight = track.Progress(position);
+        // Belt and braces for the same reason: a sample that lands slightly behind must not erase painted
+        // characters. Only a SMALL reversal is absorbed (sample jitter stays well under 20 % of a line);
+        // a bigger drop is a real reset — new track, seek or a fresh fixture — and must go through.
+        if (_karaokeActive && highlight < _karaokeHighlight && highlight >= _karaokeHighlight - 0.2)
+        {
+            highlight = _karaokeHighlight;
+        }
+
         var finished = track.IsFinished(position);
         _karaokeActive = !finished;
         if (Math.Abs(highlight - _karaokeHighlight) < KaraokeHighlightTolerance && !finished)
@@ -3129,6 +3137,9 @@ private void HandlePageControl(in IslandHitTarget hit)
 
     /// <summary>How far behind our extrapolation a sample may sit before it is treated as a real seek.</summary>
     private const double StaleSampleWindowMs = 400;
+
+    /// <summary>Deviation that counts as a real seek (drag / track jump) instead of clock jitter.</summary>
+    private const double SeekThresholdMs = 2500;
 
     /// <summary>Raw position of the previous sample, used to tell a live clock from a frozen one.</summary>
     private double _lastSampledPositionMs = double.NaN;
