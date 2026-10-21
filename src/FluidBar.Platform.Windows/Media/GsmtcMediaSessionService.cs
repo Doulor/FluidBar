@@ -106,6 +106,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Title the playing-time accumulator belongs to.</summary>
     private string? _lastStateTitle;
 
+    /// <summary>State-file samples older than this belong to the previous track.</summary>
+    private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -494,10 +497,18 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var nowForAccumulation = _timeProviderNow();
         if (_lastStateTitle != candidate.Title)
         {
-            // New track: the old accumulator belongs to the previous song.
+            // New track: the old accumulator AND the old state-file position belong to the previous song,
+            // so the estimate is unusable until the player writes the new one (measured 3 s error at every
+            // track start, 2026-10-22).
             _lastStateTitle = candidate.Title;
             _stateFilePlayingMs = 0;
             _stateFileWrittenAt = null;
+            _stateFileValidFromUtc = _timeProviderNow();
+        }
+
+        if (state.SampledAtUtc < _stateFileValidFromUtc)
+        {
+            return candidate;
         }
 
         if (_stateFileWrittenAt != state.SampledAtUtc.UtcDateTime)
