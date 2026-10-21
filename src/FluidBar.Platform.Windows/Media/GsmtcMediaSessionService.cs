@@ -416,11 +416,19 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var descriptors = new List<MediaSessionDescriptor>();
         var sessions = manager.GetSessions();
         var now = _timeProviderNow();
+        MediaDiagnostics.Log($"poll sessions={sessions.Count}");
         foreach (var session in sessions)
         {
             try
             {
                 var playbackStatus = session.GetPlaybackInfo().PlaybackStatus;
+                if (MediaDiagnostics.Enabled)
+                {
+                    var props = await session.TryGetMediaPropertiesAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                    MediaDiagnostics.Log(
+                        $"session app={session.SourceAppUserModelId} status={playbackStatus} title={props?.Title ?? "null"}");
+                }
+
                 _lastSessionUpdate.TryGetValue(session.SourceAppUserModelId, out var updated);
                 descriptors.Add(new MediaSessionDescriptor(session.SourceAppUserModelId, MapPlaybackState(playbackStatus),
                     null, updated == default ? now : updated));
@@ -434,6 +442,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var selected = MediaSourceSelectionPolicy.SelectActive(descriptors);
+        MediaDiagnostics.Log($"selected={(selected?.SourceAppUserModelId ?? "none")}");
         var activeSession = selected is null
             ? null
             : sessions.FirstOrDefault(session =>

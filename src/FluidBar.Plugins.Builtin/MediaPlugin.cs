@@ -96,6 +96,12 @@ public sealed class MediaPlugin : BuiltinPluginBase
             return;
         }
 
+        MediaDiagnostics.Log(
+            snapshot is null || snapshot.IsEmpty
+                ? "plugin snapshot empty -> retract (activity=0)"
+                : $"plugin snapshot app={snapshot.SourceAppUserModelId} status={(snapshot.IsPlaying ? "Playing" : "Paused")} " +
+                  $"title={snapshot.Title} IsActive={snapshot.IsPlaying} -> activity=1");
+
         if (snapshot is null || snapshot.IsEmpty)
         {
             lock (_stateGate)
@@ -111,6 +117,7 @@ public sealed class MediaPlugin : BuiltinPluginBase
             }
 
             Retract();
+            MediaDiagnostics.Log("plugin retract emitted (activity=0)");
             return;
         }
 
@@ -174,6 +181,7 @@ public sealed class MediaPlugin : BuiltinPluginBase
             ["body"] = body,
             ["actions"] = BuiltinIds.MediaTogglePlayPause,
         };
+        MediaDiagnostics.Log($"plugin publish key=media:gsmtc title={snapshot.Title} IsActive={snapshot.IsPlaying} activity=1");
         Publish(new IslandEvent
         {
             Source = PluginId,
