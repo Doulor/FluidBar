@@ -291,6 +291,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     return;
                 }
 
+                // Silence alone must not freeze the clock: a minimised KuGou drops out of the render-session
+                // list while it keeps playing, and the island then froze for 90 s (measured -149 s drift,
+                // 2026-10-22). Require the state file to have stopped advancing as well.
+                var stateStillAdvancing = PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is { } probe
+                    && _timeProviderNow() - probe.SampledAtUtc < TimeSpan.FromSeconds(40);
+                if (stateStillAdvancing)
+                {
+                    _audioSilentPolls = 0;
+                    _fallbackPausedSinceMs = 0;
+                    _fallbackLastSeenMs = retainedNowMs;
+                    Publish(retained);
+                    _fallbackPoller?.SetInterval(FallbackPollInterval);
+                    return;
+                }
+
                 if (_audioSilentPolls >= 2)
                 {
                     if (_fallbackPausedSinceMs == 0)
