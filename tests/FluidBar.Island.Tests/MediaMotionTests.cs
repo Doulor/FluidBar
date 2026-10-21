@@ -174,15 +174,19 @@ public sealed class MediaMotionTests
         var clock = 0.0;
         MediaMotionClock.Override = () => clock;
         var lines = new List<string>();
-        Render(renderer, state with { Pages = state.Pages with { Media = media with { ProgressPercent = 20, IsPlaying = true } } });
-        clock += 40;
+        var baseline = state with { Pages = state.Pages with { Media = media with { ProgressPercent = 20, IsPlaying = true } } };
+        using (var first = renderer.RenderToBitmap(baseline, 2f))
+        {
+            lines.Add($"seek baseline t=0ms thumbX={ThumbX(first, baseline)} fill={FillWidth(first, baseline)}");
+        }
+
         for (var frame = 0; frame < 6; frame++)
         {
+            clock += 20;
             var current = state with { Pages = state.Pages with { Media = media with { ProgressPercent = 70, IsPlaying = true } } };
             using var bitmap = renderer.RenderToBitmap(current, 2f);
             bitmap.Encode(SKEncodedImageFormat.Png, 100).SaveTo(File.Create(Path.Combine(dir, $"seek-{frame:00}.png")));
-            lines.Add($"seek {frame:00} t={clock,6:0}ms thumbX={ThumbX(bitmap, current)}");
-            clock += 40;
+            lines.Add($"seek {frame:00} t={clock,6:0}ms thumbX={ThumbX(bitmap, current)} fill={FillWidth(bitmap, current)}");
         }
 
         File.WriteAllLines(Path.Combine(dir, "seek.txt"), lines);

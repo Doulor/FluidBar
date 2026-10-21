@@ -461,11 +461,25 @@ internal sealed partial class PageRenderer : IDisposable
         if (media.HasTimeline)
         {
             var seek = PageVisual.MediaSeekTrack(page);
-            var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
+            // Exponential approach instead of jumping to each sample: the bar glides toward the
+            // reported position (tau 180 ms) and stops dead on pause, so a paused bar never creeps.
+            var target = Math.Clamp(media.ProgressPercent, 0, 100);
+            if (double.IsNaN(_progressShown) || !media.IsPlaying)
+            {
+                _progressShown = target;
+            }
+            else
+            {
+                _progressShown += (target - _progressShown) * (1 - Math.Exp(-dt / MediaMotion.ProgressTauMs));
+            }
+
+            var progress = Math.Clamp(_progressShown / 100.0, 0, 1);
             DrawSeekTrack(canvas, seek, progress, accent);
             _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
             _fill.Color = Alpha(SKColors.White, _opacity);
-            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 3, _fill);
+            var thumbScale = IsPressed(IslandPageControl.Seek) ? MediaMotion.SeekThumbScale : 1f;
+            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 3 * thumbScale, _fill);
 
             _text.Draw(canvas, media.PositionText, PageVisual.MediaSeekTimeStyle,
                 new SKRect(seekRow.Left, seekTextTop, seekRow.Left + seekTimeWidth, seekTextTop + seekTextHeight),
