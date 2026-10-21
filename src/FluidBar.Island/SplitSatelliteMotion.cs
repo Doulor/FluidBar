@@ -61,7 +61,6 @@ public sealed class SplitSatelliteMotion
     private readonly Spring _y = new(SatelliteMotionTokens.PositionSnapEpsilon,
         SatelliteMotionTokens.PositionSnapVelocity);
     private readonly Spring _scale = new(1, SatelliteMotionTokens.MorphPeriodSeconds, SatelliteMotionTokens.MorphDampingRatio);
-    private readonly Spring _hover = new(0, SatelliteMotionTokens.PressPeriodSeconds, SatelliteMotionTokens.PressDampingRatio);
     private readonly Spring _press = new(0, SatelliteMotionTokens.PressPeriodSeconds, SatelliteMotionTokens.PressDampingRatio);
 
     private double _elapsed;
@@ -76,12 +75,21 @@ public sealed class SplitSatelliteMotion
     private double _mergeFromY;
     private double _mergeToX;
     private double _mergeToY;
+    private double _hoverProgress;
+    private double _hoverTarget;
+    private double _hoverDuration = SplitSatelliteStyle.HoverFadeOutSeconds;
+    private double _releaseRemaining;
+    private double _releaseShade;
+    private double _staggerRemaining;
 
     /// <summary>Current lifecycle state.</summary>
     public SplitSatelliteState State { get; private set; } = SplitSatelliteState.Hidden;
 
-    /// <summary>True while the springs have not settled yet.</summary>
-    public bool IsAnimating => State is SplitSatelliteState.Birth or SplitSatelliteState.Merge || !_scale.Settled;
+    /// <summary>True while the springs, the hover fade or the release overshoot are still moving.</summary>
+    public bool IsAnimating => State is SplitSatelliteState.Birth or SplitSatelliteState.Merge
+        || !_scale.Settled
+        || _releaseRemaining > 0
+        || Math.Abs(_hoverProgress - _hoverTarget) > 0.0001;
 
     /// <summary>Elapsed seconds since the current birth/merge started (diagnostics/tests).</summary>
     public double ElapsedSeconds => _elapsed;
@@ -95,20 +103,32 @@ public sealed class SplitSatelliteMotion
                 ? 1 + (SatelliteMotionTokens.BreathAmplitude *
                     Math.Sin(2 * Math.PI * _idleSeconds / SatelliteMotionTokens.BreathPeriodSeconds))
                 : 1.0;
+            // Composition order is fixed and documented: lifecycle (birth/merge) -> breathing ->
+            // hover -> press -> release overshoot. Breathing is applied first so a hovering or pressed
+            // satellite keeps breathing at the same relative amplitude and the interaction scale is
+            // never multiplied twice.
+            var hover = EaseOut(_hoverProgress);
+            var hoverMultiplier = 1 + ((SatelliteMotionTokens.HoverScale - 1) * hover);
             var pressMultiplier = 1 + ((SatelliteMotionTokens.PressScale - 1) * _press.Value);
-            var hoverMultiplier = 1 + ((SatelliteMotionTokens.HoverScale - 1) * _hover.Value);
+            var release = _releaseRemaining > 0
+                ? Math.Sin(Math.PI * (1 - (_releaseRemaining / SplitSatelliteStyle.ReleaseOvershootSeconds)))
+                : 0.0;
+            var released = _releaseRemaining > 0
+                ? _releaseShade * (_releaseRemaining / SplitSatelliteStyle.ReleaseOvershootSeconds)
+                : _press.Value;
+            var releaseMultiplier = 1 + ((SplitSatelliteStyle.ReleaseOvershootScale - 1) * release);
             return new SplitSatelliteValues(
                 State,
                 _x.Value,
                 _y.Value,
-                _scale.Value * pressMultiplier * hoverMultiplier * breathing,
+                _scale.Value * breathing * hoverMultiplier * pressMultiplier * releaseMultiplier,
                 _stretchX,
                 _stretchY,
-                _hover.Value * SatelliteMotionTokens.HoverHighlight,
+                hover * SatelliteMotionTokens.HoverHighlight,
                 SatelliteMotionTokens.PressBrightness * _press.Value,
                 breathing,
                 _ringAngle,
-                _press.Value);
+                released);
         }
     }
 
@@ -123,8 +143,12 @@ public sealed class SplitSatelliteMotion
     /// <param name="toY">Seat Y in DIP.</param>
     /// <param name="directionX">Travel direction X (unit-ish, used for the stretch axis).</param>
     /// <param name="directionY">Travel direction Y.</param>
-    public void BeginBirth(double fromX, double fromY, double toX, double toY, double directionX, double directionY)
+    /// <param name="order">Position in the birth order (0 = first); each step delays the birth by
+    /// <see cref="SplitSatelliteStyle.StaggerSeconds"/> so two satellites never pop together.</param>
+    public void BeginBirth(double fromX, double fromY, double toX, double toY, double directionX, double directionY,
+        int order = 0)
     {
+        _staggerRemaining = Math.Max(0, order) * SplitSatelliteStyle.StaggerSeconds;
         var firstBirth = State == SplitSatelliteState.Hidden;
         if (firstBirth)
         {
@@ -165,8 +189,11 @@ public sealed class SplitSatelliteMotion
     /// </summary>
     /// <param name="toX">Parent edge X in DIP.</param>
     /// <param name="toY">Parent edge Y in DIP.</param>
-    public void BeginMerge(double toX, double toY)
+    /// <param name="order">Reverse position in the merge order (0 = collapses first); the later-born
+    /// satellite therefore folds in first.</param>
+    public void BeginMerge(double toX, double toY, int order = 0)
     {
+        _staggerRemaining = Math.Max(0, order) * SplitSatelliteStyle.StaggerSeconds;
         State = SplitSatelliteState.Merge;
         _elapsed = 0;
         _mergeFromX = _x.Value;
@@ -184,15 +211,45 @@ public sealed class SplitSatelliteMotion
         _mergeOvershootRemaining = 0;
     }
 
-    /// <summary>Turns the hover state on or off (1.02 pop + highlight lift).</summary>
+    /// <summary>
+    /// Turns the hover state on or off: the 0.06 white glow and the 1.02 pop fade in over 120 ms
+    /// (ease-out) and fade out over 160 ms. Driven by the state machine, so the renderer only reads
+    /// <see cref="SplitSatelliteValues.Highlight"/> and never rebuilds a paint per frame.
+    /// </summary>
     /// <param name="hover">True while the pointer is over the satellite.</param>
-    public void SetHover(bool hover) => _hover.Target = hover ? 1 : 0;
+    public void SetHover(bool hover)
+    {
+        var target = hover ? 1.0 : 0.0;
+        if (Math.Abs(_hoverTarget - target) < 0.0001)
+        {
+            return;
+        }
+
+        _hoverTarget = target;
+        _hoverDuration = hover
+            ? SplitSatelliteStyle.HoverFadeInSeconds
+            : SplitSatelliteStyle.HoverFadeOutSeconds;
+    }
 
     /// <summary>Presses the satellite (0.94 scale, -6 % brightness, same as the main island).</summary>
     public void Press() => _press.Target = 1;
 
-    /// <summary>Releases the press; the spring rebounds.</summary>
-    public void Release() => _press.Target = 0;
+    /// <summary>
+    /// Releases the press. The press scale drops out immediately (the ball springs back), the inner
+    /// shadow fades over the same 80 ms, and a 1.02 overshoot bump peaks at 40 ms before settling on
+    /// 1.0 — the "lift off" bounce requested for the satellite balls.
+    /// </summary>
+    public void Release()
+    {
+        _press.Target = 0;
+        if (_press.Value > 0.02)
+        {
+            _releaseShade = _press.Value;
+            _releaseRemaining = SplitSatelliteStyle.ReleaseOvershootSeconds;
+            _press.Value = 0;
+            _press.Velocity = 0;
+        }
+    }
 
     /// <summary>Advances the animation by <paramref name="dt"/> seconds.</summary>
     /// <param name="dt">Elapsed time in seconds (frame delta).</param>
@@ -210,6 +267,23 @@ public sealed class SplitSatelliteMotion
             var step = Math.Min(remaining, SatelliteMotionTokens.MaxSubstepSeconds);
             remaining -= step;
             _elapsed += step;
+
+            if (_staggerRemaining > 0)
+            {
+                // Still waiting for its turn: nothing moves and nothing is drawn yet.
+                _staggerRemaining = Math.Max(0, _staggerRemaining - step);
+                continue;
+            }
+
+            if (_hoverProgress != _hoverTarget && _hoverDuration > 0)
+            {
+                var rate = step / _hoverDuration;
+                _hoverProgress = _hoverTarget > _hoverProgress
+                    ? Math.Min(_hoverTarget, _hoverProgress + rate)
+                    : Math.Max(_hoverTarget, _hoverProgress - rate);
+            }
+
+            _releaseRemaining = Math.Max(0, _releaseRemaining - step);
 
             if (State == SplitSatelliteState.Birth && _preloadRemaining > 0)
             {
@@ -230,7 +304,6 @@ public sealed class SplitSatelliteMotion
             _x.Step(step);
             _y.Step(step);
             _scale.Step(step);
-            _hover.Step(step);
             _press.Step(step);
 
             if (State == SplitSatelliteState.Birth && _x.Settled && _y.Settled && _scale.Settled)
@@ -278,6 +351,13 @@ public sealed class SplitSatelliteMotion
         }
 
         return true;
+    }
+
+    /// <summary>Ease-out curve for the hover fade: fast start, soft landing.</summary>
+    private static double EaseOut(double progress)
+    {
+        var clamped = Math.Clamp(progress, 0, 1);
+        return 1 - ((1 - clamped) * (1 - clamped));
     }
 
     /// <summary>Frame-rate independent damped spring (semi-implicit Euler, snapping when settled).</summary>

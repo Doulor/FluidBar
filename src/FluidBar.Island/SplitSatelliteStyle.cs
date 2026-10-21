@@ -100,6 +100,23 @@ public static class SplitSatelliteStyle
     /// <summary>Extra white alpha added to the rim/hairline at <c>Highlight = 1</c> (hover lift).</summary>
     public const byte HoverRimBoost = 70;
 
+    // ---------------------------------------------------------------- interaction timing
+
+    /// <summary>Hover fade-in for the glow and the 1.02 pop (120 ms, ease-out).</summary>
+    public const double HoverFadeInSeconds = 0.120;
+
+    /// <summary>Hover fade-out when the pointer leaves (160 ms).</summary>
+    public const double HoverFadeOutSeconds = 0.160;
+
+    /// <summary>Release overshoot peak (1.02) after a press, before settling back to 1.0.</summary>
+    public const double ReleaseOvershootScale = 1.02;
+
+    /// <summary>Release overshoot duration (80 ms).</summary>
+    public const double ReleaseOvershootSeconds = 0.080;
+
+    /// <summary>Stagger between two satellites' births (60 ms) and, reversed, their merges.</summary>
+    public const double StaggerSeconds = 0.060;
+
     // ---------------------------------------------------------------- agent ring
 
     /// <summary>Ring stroke width (DIP).</summary>

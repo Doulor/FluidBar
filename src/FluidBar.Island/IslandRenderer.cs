@@ -664,8 +664,11 @@ public sealed class IslandRenderer : IDisposable
             _stroke.StrokeCap = SKStrokeCap.Butt;
             _stroke.Shader = null;
             _stroke.MaskFilter = SplitBlur(surface.DpiScale, cover: false);
+            // Highlight arrives normalised to SatelliteMotionTokens.HoverHighlight (0.35); the glow is
+            // specified as 6 % white, so rescale it to 0..1 before applying the alpha.
+            var glow = Math.Clamp(surface.Highlight / SatelliteMotionTokens.HoverHighlight, 0, 1);
             _stroke.Color = SKColors.White.WithAlpha((byte)Math.Clamp(
-                SplitSatelliteStyle.HoverGlowAlpha * surface.Highlight * alpha, 0, 255));
+                SplitSatelliteStyle.HoverGlowAlpha * glow * alpha, 0, 255));
             canvas.DrawCircle(ball.MidX, ball.MidY, radius, _stroke);
             _stroke.MaskFilter = null;
         }
