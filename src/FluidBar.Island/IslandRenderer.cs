@@ -202,6 +202,37 @@ public sealed class IslandRenderer : IDisposable
     }
 
     /// <summary>Renders to a new premultiplied BGRA bitmap (matching the layered host DIB).</summary>
+    /// <summary>Enter/exit slide of a page, in DIP, along the travel direction.</summary>
+    public const float PageEnterSlideDip = 6f;
+
+    /// <summary>Enter/exit shrink of a page at the far edge of the transition (1.8 %).</summary>
+    public const float PageEnterScaleDelta = 0.018f;
+
+    /// <summary>
+    /// Page enter/exit pose while the pager moves. The sign of <paramref name="pagePosition"/> - page
+    /// encodes the direction: an incoming page sits 6 DIP further along the travel direction and 1.8 %
+    /// smaller, so it slides/scales into place; the outgoing page does the opposite. The pose is a pure
+    /// function of the continuous page position, so a rapid second switch continues from the current
+    /// visual pose instead of snapping back.
+    /// </summary>
+    public static (float SlideDip, float Scale) PageEnterPose(double pagePosition, int page, bool reducedMotion = false)
+    {
+        if (reducedMotion || !double.IsFinite(pagePosition))
+        {
+            return (0f, 1f);
+        }
+
+        var relative = (float)Math.Clamp(pagePosition - page, -1.0, 1.0);
+        var distance = Math.Abs(relative);
+        return (-PageEnterSlideDip * relative, 1f - (PageEnterScaleDelta * distance));
+    }
+
+    /// <summary>Hover progress of the satellite glass under the pointer (0..1; diagnostics/tests).</summary>
+    public float SatelliteHoverProgress => _strip.HoverProgress;
+
+    /// <summary>Scale the hovered satellite glass is painted at (1..1.06; diagnostics/tests).</summary>
+    public float SatelliteHoverScale => _strip.HoverScale;
+
     public SKBitmap RenderToBitmap(in IslandRenderState state, float dpiScale)
     {
         var pixels = MeasurePixels(state, dpiScale);
@@ -769,6 +800,18 @@ public sealed class IslandRenderer : IDisposable
 
             canvas.Save();
             canvas.ClipRect(pageRect);
+
+            // Enter/exit pose: 6 DIP slide along the travel direction plus a 1.8 % shrink, derived from the
+            // continuous page position (direction = sign of the pagePosition delta, continuity for free).
+            var (pageSlide, pageScale) = PageEnterPose(pagePosition, page, state.ReducedMotion);
+            if (pageSlide != 0 || pageScale != 1)
+            {
+                canvas.Translate(pageRect.MidX, pageRect.MidY);
+                canvas.Scale(pageScale, pageScale);
+                canvas.Translate(-pageRect.MidX, -pageRect.MidY);
+                canvas.Translate(pageSlide, 0);
+            }
+
             var slot = state.Pages.PageSlotAt(page);
             if (slot is { Kind: PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets })
             {
