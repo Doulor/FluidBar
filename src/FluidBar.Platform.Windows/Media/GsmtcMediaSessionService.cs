@@ -118,9 +118,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
     private double _stateFilePlayingMs;
 
-    /// <summary>Playing time accumulated since the current track started (pauses excluded).</summary>
-    private double _trackStartPlayingMs;
-
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
@@ -534,7 +531,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFilePlayingMs = 0;
             _stateFileWrittenAt = null;
             _stateFileValidFromUtc = _timeProviderNow();
-            _trackStartPlayingMs = 0;
         }
 
         if (state.SampledAtUtc < _stateFileValidFromUtc)
@@ -542,7 +538,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // The state file still describes the PREVIOUS track. KuGou starts a new track at zero, so while
             // the accessibility text agrees with that (a few seconds in), counting from the track change is
             // far more accurate than a frozen text or the previous song's position (2026-10-22).
-            var sinceStart = TimeSpan.FromMilliseconds(_trackStartPlayingMs);
+            var sinceStart = _timeProviderNow() - _stateFileValidFromUtc;
             // A freshly repainted clock text is the best evidence we have: trust it over counting from zero.
             if (msaaIsFresh)
             {
