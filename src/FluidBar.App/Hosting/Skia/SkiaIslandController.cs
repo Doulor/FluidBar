@@ -126,6 +126,7 @@ public sealed class SkiaIslandController : IDisposable
     private ActivityViewModel[] _splitPreviews = [];
     private readonly Dictionary<string, byte[]?> _splitArtwork = new(StringComparer.Ordinal);
     private readonly SplitStackPolicy _splitPolicy = new();
+    private ActivityKey? _splitPinnedKey;
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
@@ -2038,6 +2039,35 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var ordered = _splitPolicy.Order(_schedulerState.Visible, _time.GetLocalNow(), wheelSteps);
+
+        // The scheduler is the real consumer of the activity snapshot on the next heartbeat: its
+        // preemption path removes a non-pinned primary before SplitStackPolicy gets a chance to
+        // re-order. Mirror the wheel pin into ActivityRecord.IsPinned as well, otherwise the
+        // controller test (and the policy test) can pass while the heartbeat still drops the pin.
+        if (wheelSteps != 0)
+        {
+            if (_splitPinnedKey is { } oldPin && !oldPin.Equals(ordered[0].Key))
+            {
+                _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
+            }
+
+            var newPin = ordered[0].Key;
+            var pinUpdate = _scheduler.SetPinned(_schedulerState, newPin, true);
+            if (pinUpdate.Kind != ActivityUpdateKind.None)
+            {
+                _schedulerState = pinUpdate.State;
+            }
+
+            _splitPinnedKey = newPin;
+            PinDiagnostics.Log($"pin set to {newPin} (wheel)");
+        }
+        else if (_splitPinnedKey is { } oldPin && _splitPolicy.PinnedKey is null)
+        {
+            _schedulerState = _scheduler.SetPinned(_schedulerState, oldPin, false).State;
+            PinDiagnostics.Log($"pin released {oldPin}");
+            _splitPinnedKey = null;
+        }
+
         if (!ordered.SequenceEqual(_schedulerState.Visible))
         {
             _schedulerState = _schedulerState with { Visible = ordered };

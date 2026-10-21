@@ -267,8 +267,28 @@ public sealed class SplitStackPolicy
     {
         if (_primaryKey != record.Key)
         {
+            LogPrimaryChange(_primaryKey, record.Key, _pinnedKey is { } pin && pin == record.Key ? "pin" : "order");
             _primaryKey = record.Key;
             _primarySince = now;
+        }
+    }
+
+    private static void LogPrimaryChange(ActivityKey? oldKey, ActivityKey newKey, string reason)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            var frame = Environment.StackTrace.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Take(3);
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | {oldKey?.ToString() ?? "none"} -> {newKey} | {reason} | {string.Join(" <- ", frame)}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
         }
     }
 

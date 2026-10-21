@@ -52,9 +52,10 @@ public sealed class PageSwitchFeelTests
 
         Assert.Equal(1, controller.Pager.SelectedIndex);
         Assert.Equal(1.0, positions[^1], 3);
-        Assert.All(positions.Zip(positions.Skip(1)), pair => Assert.True(pair.Second >= pair.First - 1e-9,
-            "the snap must never move backwards (no rebound)"));
-        Assert.True(positions.Max() <= 1.0001, "the snap must never overshoot the target page");
+        // Feel pass (2026-10-21): the snap uses zeta 0.75 and is allowed to overshoot by <= 2 % of a
+        // page before settling exactly on the target (spec change, previously "no overshoot").
+        Assert.True(positions.Max() <= 1.02, "the overshoot must stay subtle");
+        Assert.Equal(1.0, positions[^1], 3);
     }
 
     [Fact]
