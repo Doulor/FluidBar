@@ -84,6 +84,17 @@ public sealed class SatelliteAgentStateTests
     }
 
     [Fact]
+    public void Ring_period_matches_the_big_island_spinner()
+    {
+        // The old 110-130 deg/s gate is void: the satellite ring must run at exactly the big island's
+        // 0.9 s per revolution (400 deg/s). Asserted as equality between the two sources, not a range.
+        Assert.Equal(AgentSpinner.PeriodSeconds, IslandMetrics.SplitRingPeriodSeconds, 0.0001);
+        Assert.Equal(AgentMotion.RingPeriodSeconds, IslandMetrics.SplitRingPeriodSeconds, 0.0001);
+        Assert.Equal(0.9, IslandMetrics.SplitRingPeriodSeconds, 0.0001);
+        Assert.Equal(SKStrokeCap.Butt, AgentSpinner.Cap);
+    }
+
+    [Fact]
     public void Ring_centre_line_sits_inside_the_cover_well_with_margin()
     {
         var ball = IslandMetrics.SplitIsletRects(State(CompactStatus.Info))[0];
