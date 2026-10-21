@@ -568,7 +568,7 @@ public sealed class IslandRenderer : IDisposable
     private void DrawAgentSettledState(SKCanvas canvas, SKRect rect, float radius, CompactStatus status, float alpha)
     {
         var ink = Alpha(_theme.ForegroundSecondary, alpha);
-        var thickness = Math.Max(1.4f, radius * 0.11f);
+        var thickness = Math.Max(IslandMetrics.SplitRingEndMarkStrokeDip, radius * 0.11f);
         _stroke.Style = SKPaintStyle.Stroke;
         _stroke.StrokeWidth = thickness;
         _stroke.StrokeCap = SKStrokeCap.Round;
@@ -645,7 +645,7 @@ public sealed class IslandRenderer : IDisposable
                         rect.Right - ringInset,
                         rect.Bottom - ringInset);
                     _stroke.Style = SKPaintStyle.Stroke;
-                    _stroke.StrokeWidth = 2f;
+                    _stroke.StrokeWidth = IslandMetrics.SplitRingStrokeDip;
                     _stroke.StrokeCap = SKStrokeCap.Round;
                     _stroke.Shader = null;
                     _stroke.Color = Alpha(_theme.Info, alpha);

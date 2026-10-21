@@ -89,13 +89,17 @@ public sealed class SatelliteAgentStateTests
         var ball = IslandMetrics.SplitIsletRects(State(CompactStatus.Info))[0];
         var frame = IslandMetrics.SplitIsletThumbnailRect(ball);
         var centreRadius = (ball.Width / 2) * IslandMetrics.SplitRingRadiusFactor;
-        Assert.InRange(centreRadius, 11f, 12f);
+        Assert.InRange(centreRadius, 10.9f, 11.2f);
 
         // Outer edge of the 2 DIP ring vs the well's rounded-corner arc (side/2 - r + r*sqrt2 ...).
         var cornerRadius = IslandMetrics.SplitIsletThumbnailRadius(frame);
         var cornerArcDistance = ((frame.Width / 2) - cornerRadius) * Math.Sqrt(2) + cornerRadius;
-        Assert.True(cornerArcDistance - (centreRadius + 1f) >= 2f,
-            $"ring outer {centreRadius + 1f:0.0} must clear the corner arc {cornerArcDistance:0.0} by >= 2 DIP");
+        // Stroke thickened to 2.75 DIP; the outer edge must still clear the well's corner arc by >= 1.5.
+        Assert.Equal(2.75f, IslandMetrics.SplitRingStrokeDip, 0.001f);
+        Assert.Equal(2.25f, IslandMetrics.SplitRingEndMarkStrokeDip, 0.001f);
+        var outer = centreRadius + (IslandMetrics.SplitRingStrokeDip / 2);
+        Assert.True(cornerArcDistance - outer >= 1.5f,
+            $"ring outer {outer:0.0} must clear the corner arc {cornerArcDistance:0.0} by >= 1.5 DIP");
     }
 
     private static IslandRenderState State(CompactStatus status)

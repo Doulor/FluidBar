@@ -173,10 +173,20 @@ public static class IslandMetrics
     public const double SplitIsletGap = 8;
 
     /// <summary>
-    /// Agent ring centre-line radius as a fraction of the satellite radius (0.575 = 11.5 DIP on a
-    /// 40 DIP ball); the ring stays >= 2 DIP clear of the 24 DIP cover well's rounded corners.
+    /// Agent ring centre-line radius as a fraction of the satellite radius. 0.55 = 11.0 DIP on a
+    /// 40 DIP ball: with the thickened 2.75 DIP stroke the outer edge (12.4) still clears the 24 DIP
+    /// cover well's rounded corners by >= 2 DIP and only grazes the well hairline.
     /// </summary>
-    public const float SplitRingRadiusFactor = 0.575f;
+    public const float SplitRingRadiusFactor = 0.55f;
+
+    /// <summary>
+    /// Agent ring stroke width (DIP). Thickened from 2 to 2.75 on request: the ring reads clearly at
+    /// 40 DIP without muddying the 24 DIP cover well (outer edge 12.9, corner arc 14.7 -> 1.8 DIP).
+    /// </summary>
+    public const float SplitRingStrokeDip = 2.75f;
+
+    /// <summary>Stroke of the static Completed/Failed marks (2.25 DIP: same visual weight as the ring).</summary>
+    public const float SplitRingEndMarkStrokeDip = 2.25f;
 
     /// <summary>Agent ring period in seconds (3 s = 120 deg/s, inside the frozen 110-130 deg/s gate).</summary>
     public const double SplitRingPeriodSeconds = 3.0;
