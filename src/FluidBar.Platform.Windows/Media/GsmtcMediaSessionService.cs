@@ -535,10 +535,20 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         // The state file is written while playing, so extrapolate it to now.
         // Extrapolate by the time the track was actually PLAYING since the file was written, not by wall
-        // time: the file is only rewritten every ~30 s, so a pause inside that window made the estimate
-        // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
+        // time, and never by more than the file is old (a runaway accumulator pushed the island 4 s ahead,
+        // 2026-10-22).
+        var maxPlayingMs = age.TotalMilliseconds + 1000;
+        _stateFilePlayingMs = Math.Min(_stateFilePlayingMs, maxPlayingMs);
         var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
         var difference = (candidate.Position - expected).Duration();
+        // A disagreement wider than a minute means the file belongs to another track or another position in
+        // time; trusting it produced a 125 s jump (2026-10-22). In that case keep the accessibility reading.
+        if (difference > TimeSpan.FromSeconds(60))
+        {
+            MediaDiagnostics.LogAlways($"sync.truth-rejected ini={expected.TotalSeconds:0.0}s msaa={candidate.Position.TotalSeconds:0.0}s");
+            return candidate;
+        }
+
         if (difference <= TimeSpan.FromSeconds(0.4))
         {
             return candidate;
