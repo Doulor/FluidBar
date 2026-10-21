@@ -239,7 +239,7 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 媒体在播时保留参考 UI 右侧的 **5 条音频频谱**，避免通知卡顶掉音乐状态后画面缺一块。
 - 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
 - FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
-- 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛。golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `8046BA58F1FCA7209FDB8E2AC8D6D400CA80363586AB1848DB3D5992F33A459F`。
-- 证据：`build/evidence/notifications-netspeed-wave/split-settled.png`（360×70，GitHub demo toast：圆形铃铛头像 + 标题 + app chip + 正文）。
+- 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛，通知为主时隐藏 split 预览球。golden `04/30/31/32/33` 重录。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `97AE5AEC5C7EE1581920808A6527C188D0BB1294023CDF7B2A93724981B2AEC9`。
+- 证据：`build/evidence/notifications-netspeed-only/split-settled.png`（360×70，GitHub demo toast：圆形铃铛头像 + 标题 + app chip + 正文）。
 
