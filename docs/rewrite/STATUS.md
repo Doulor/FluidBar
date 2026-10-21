@@ -237,6 +237,6 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 时间从 `content.Notifications` 的同一 toast 记录取 `TimeText`，取不到回退「刚刚/just now」；app 名/图标/accent 都按来源 app 映射（无公开 logo API，用字母 tile + 类型 glyph 代替真实 logo）。
 - 字号随 FontScale 缩放（0.8/1.0/1.6 golden 都过），Dock 52 DIP 走紧凑变体。
 - 副岛仍显示在主岛下方，主岛不被通知抢占；golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `D8E0FBA848D9D1F7B4E78321B4EAF472CBE0D4C7D81822D2871E69D53CE8791A`。
-- 证据：`build/evidence/notifications-step5-final/compact-notifications.png`（GitHub 卡片作为副岛显示在 Agent 主岛下方）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `BC4E58726D6C9B546626AF5F0B6F45F2C8A1370D6312F4E9F72C590364800423`。
+- 证据：`build/evidence/notifications-step6-current/compact-notifications.png`（GitHub 卡片作为副岛显示在 Agent 主岛下方）。
 
