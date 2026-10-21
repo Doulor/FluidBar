@@ -86,9 +86,10 @@ public static class ActivityPriorityPolicy
         ActivityKind.BatteryLow => true,
         ActivityKind.Progress => true,
         ActivityKind.Timer => true,
-        // Only an actively playing media session reserves a visible slot; a paused session is
-        // ordinary content and may be displaced by live feedback.
-        ActivityKind.Media => payload is null || payload.IsActive == true,
+        // PlaybackStatus=Playing is authoritative; accept wave/badge fallback when a player omits
+        // IsActive on a heartbeat but still reports playing content. Paused media stays ordinary.
+        ActivityKind.Media => payload is null || payload.IsActive == true || payload.ShowsAudioWave == true ||
+            string.Equals(payload.Badge, "playing", StringComparison.OrdinalIgnoreCase),
         // A running Agent session is persistent content; a waiting/idle agent is a short event.
         ActivityKind.Agent => payload?.IsActive == true,
         _ => false,

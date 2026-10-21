@@ -98,6 +98,30 @@ public class ActivitySchedulerTests
     }
 
     [Fact]
+    public void PlayingMediaStaysPersistentAndVisibleAcrossEightHeartbeats()
+    {
+        var key = TestData.Key(ActivityKind.Media, "media:gsmtc");
+        var state = TestData.BuildState(_scheduler, TestData.Media());
+        for (var beat = 1; beat <= 8; beat++)
+        {
+            var heartbeat = IslandEvent.New(key, TestData.Payload("Track") with { IsActive = true, ShowsAudioWave = true }, beat + 1);
+            state = _scheduler.Update(state, heartbeat, TestData.Now.AddSeconds(beat * 2)).State;
+            Assert.True(state.Primary!.IsPersistent, $"beat {beat}");
+            Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+        }
+    }
+
+    [Fact]
+    public void PlayingMediaWaveFallbackRemainsPersistentWhenIsActiveIsOmitted()
+    {
+        var key = TestData.Key(ActivityKind.Media, "media:wave");
+        var media = IslandEvent.New(key, TestData.Payload("Track") with { IsActive = false, ShowsAudioWave = true }, 1);
+        var state = TestData.BuildState(_scheduler, media);
+        Assert.True(state.Primary!.IsPersistent);
+        Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+    }
+
+    [Fact]
     public void CompletedAgentExpiresAfterThreeSecondCompletionBeat()
     {
         var key = TestData.Key(ActivityKind.Agent, "agent:test");
