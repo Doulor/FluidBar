@@ -109,17 +109,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>State-file samples older than this belong to the previous track.</summary>
     private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
 
-    /// <summary>Last accessibility position and when it changed (freshness of the player's clock text).</summary>
-    private TimeSpan _lastMsaaPosition = TimeSpan.MinValue;
-    private long _lastMsaaChangeMs;
-
-    /// <summary>
-    /// Systematic offset of our own estimate against the player's text, learned whenever the text is fresh
-    /// (it then reflects the true position). Subtracting it removes the constant few seconds that the
-    /// playing-time accumulator drifts by (measured +3.7 s, 2026-10-22).
-    /// </summary>
-    private double _biasMs;
-
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -477,35 +466,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Resolves a disagreement between the accessibility clock and the player's state file in favour of the
     /// one that can prove when it was sampled.
     /// </summary>
-    /// <summary>Position the state file implies right now, or null when it cannot be used.</summary>
-    private double? EstimateFromStateFile(WindowMediaCandidate candidate, out TimeSpan age)
-    {
-        age = TimeSpan.Zero;
-        if (candidate.ProcessName is null
-            || !string.Equals(candidate.ProcessName, "KuGou", StringComparison.OrdinalIgnoreCase)
-            || PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
-        {
-            return null;
-        }
-
-        age = _timeProviderNow() - state.SampledAtUtc;
-        if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45) || state.SampledAtUtc < _stateFileValidFromUtc)
-        {
-            return null;
-        }
-
-        var playingMs = Math.Min(_stateFilePlayingMs, age.TotalMilliseconds + 1000);
-        return state.Position.TotalMilliseconds + Math.Clamp(playingMs, 0, 60_000);
-    }
-
     private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
     {
-        // The poll timestamp must advance on EVERY call, including the ones that return early below;
-        // otherwise the next call accumulates the whole gap as "playing time" and the estimate jumps
-        // forward by several seconds (measured bursts of +6 s, 2026-10-22).
-        var pollNow = _timeProviderNow();
-        var pollPrevious = _lastPollAt;
-        _lastPollAt = pollNow;
         // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
         // same cadence, so the two disagree by up to half a minute and the arbitration kept jumping the
         // published position forward — which made the media pill vanish (user report 2026-10-22).
@@ -531,33 +493,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return candidate; // no accessibility reading at all (player minimised): cross-check is mute
         }
 
-        var nowCheck = _timeProviderNow().ToUnixTimeMilliseconds();
-        if (candidate.Position != _lastMsaaPosition)
-        {
-            // The text just repainted, so it is a trustworthy sample of the true position: compare it with
-            // our own estimate and learn the systematic offset.
-            var estimateMs = EstimateFromStateFile(candidate, out _);
-            if (estimateMs is { } estimate)
-            {
-                var sample = estimate - candidate.Position.TotalMilliseconds;
-                if (Math.Abs(sample) < 15_000)
-                {
-                    _biasMs = (_biasMs * 0.7) + (sample * 0.3);
-                }
-            }
-
-            _lastMsaaPosition = candidate.Position;
-            _lastMsaaChangeMs = nowCheck;
-        }
-
-        // Fusion: whichever clock moved most recently is the fresher one. A text that repainted within the
-        // last two seconds is better than a state file that may be half a minute old; when the text is
-        // frozen (KuGou stops repainting) the state file takes over.
-        if (nowCheck - _lastMsaaChangeMs < 2000)
-        {
-            return candidate;
-        }
-
         var age = _timeProviderNow() - state.SampledAtUtc;
         var nowForAccumulation = _timeProviderNow();
         if (_lastStateTitle != candidate.Title)
@@ -581,16 +516,18 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
             _stateFilePlayingMs = 0;
         }
-        else if (pollPrevious is { } previous)
+        else if (_lastPollAt is { } previous)
         {
             // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
             // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
             var audible = MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
             if (audible)
             {
-                _stateFilePlayingMs += Math.Clamp((nowForAccumulation - previous).TotalMilliseconds, 0, 2000);
+                _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
             }
         }
+
+        _lastPollAt = nowForAccumulation;
         if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
         {
             return candidate; // too old to arbitrate
@@ -598,22 +535,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         // The state file is written while playing, so extrapolate it to now.
         // Extrapolate by the time the track was actually PLAYING since the file was written, not by wall
-        // time, and never by more than the file is old (a runaway accumulator pushed the island 4 s ahead,
-        // 2026-10-22).
-        var maxPlayingMs = age.TotalMilliseconds + 1000;
-        _stateFilePlayingMs = Math.Min(_stateFilePlayingMs, maxPlayingMs);
-        var expected = statePosition
-            + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000))
-            - TimeSpan.FromMilliseconds(_biasMs);
+        // time: the file is only rewritten every ~30 s, so a pause inside that window made the estimate
+        // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
+        var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
         var difference = (candidate.Position - expected).Duration();
-        // A disagreement wider than a minute means the file belongs to another track or another position in
-        // time; trusting it produced a 125 s jump (2026-10-22). In that case keep the accessibility reading.
-        if (difference > TimeSpan.FromSeconds(60))
-        {
-            MediaDiagnostics.LogAlways($"sync.truth-rejected ini={expected.TotalSeconds:0.0}s msaa={candidate.Position.TotalSeconds:0.0}s");
-            return candidate;
-        }
-
         if (difference <= TimeSpan.FromSeconds(0.4))
         {
             return candidate;
@@ -624,7 +549,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             _lastCrossCheckLogMs = nowTicks;
             MediaDiagnostics.LogAlways($"sync.truth ini={expected.TotalSeconds:0.0}s msaa={candidate.Position.TotalSeconds:0.0}s " +
-                $"delta={difference.TotalSeconds:0.0}s playingMs={_stateFilePlayingMs:0} ageS={age.TotalSeconds:0.0} bias={_biasMs:0}");
+                $"delta={difference.TotalSeconds:0.0}s playingMs={_stateFilePlayingMs:0} ageS={age.TotalSeconds:0.0}");
         }
         return candidate with
         {
