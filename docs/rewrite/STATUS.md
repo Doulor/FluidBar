@@ -228,17 +228,17 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
 - Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
 
-## 2026-10-22 02:05 — 手机式通知弹窗（最终半尺寸）
+## 2026-10-22 02:20 — 按 NetSpeed-Dynamic 的 msg-box 复刻通知卡
 
-**用户反馈**：先要 NetSpeed-Dynamic / 手机通知卡的结构；随后要求「不要 app 名首字母 + 映射颜色，只保留真实可获取图片，不行就一个图标」；最后明确「把大小改为现在的 1/2」。
+**最终用户指令**：直接照抄 `https://github.com/GEORGEWWWU/NetSpeed-Dynamic` 里的通知样式。
 
-- 紧凑通知岛最终固定为 **`170×38` DIP**（上一版 `340×76` 的一半）。
-- **真实 app 图标**：`NotificationService` 读取 `AppInfo.DisplayInfo.GetLogo(64×64)`，PNG 字节随 `NotificationEntry → NotificationItemData → CompactModel` 下行；`CompactRenderer` 用 `ArtworkImageCache` 解码并按 24 DIP 圆角 tile 绘制。
-- 读不到 logo 时只画**一个通用铃铛图标**（中性 tile），不再生成 app 首字母、不再按 app 映射颜色、不再画假副图标。
-- 半尺寸布局：24 DIP 图标、单行标题/正文、右侧时间/软件名；时间优先取同一 toast 的 `TimeText`，缺失回退「刚刚」。
-- 临时拖拽校准、设置滑杆、`NotificationCardScale` 和尺寸覆盖代码已全部移除；只保留固定 token。
-- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 紧凑变体都适配；`notifications.seeded` / `notifications.received` 日志保留 `icons` 计数，实测 12 条真实 toast 全部读到 logo。
-- 副岛仍显示在主岛下方，主岛不被通知抢占；golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `CF6A73515FA6C51084F9932C39E42C72345969B6921A83C892AE84C868814050`。
-- 证据：`build/evidence/notifications-half-final/compact-notifications.png`（170×38，demo toast 无真实 logo，故显示单个通用铃铛）。
+- 对齐参考仓库 `src/views/WidgetIsland.vue` 的 `.msg-box`：**360×70 DIP**、100px CSS 圆角裁剪成 **35 DIP 胶囊**。
+- **35 DIP 圆形头像**（30 DIP 图片，`object-fit: cover`）；真实 app logo 由 `AppInfo.DisplayInfo.GetLogo(64×64)` 读取，无 logo 时画一个通用铃铛。
+- 标题 **14/700** + app 名 **10.5/600** 灰色圆角 chip（padding 2/6、radius 6、`rgba(150,150,150,.25)`）。
+- 正文 **12.5/400**、75% opacity、单行省略；右侧 padding 45 DIP；**不显示时间列**（参考仓库没有）。
+- 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
+- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
+- 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛。golden `04/30/31/32/33` 重录。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `FF37DB67D1F61B9B58969340421721F40CAF9B042A8B62D48E34AC1AC2BB473E`。
+- 证据：`build/evidence/notifications-netspeed-split/split-settled.png`（360×70，GitHub demo toast：圆形铃铛头像 + 标题 + app chip + 正文）。
 

@@ -342,7 +342,7 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void Notification_beside_media_renders_a_second_pill_and_opens_the_notifications_page()
+    public void Notification_takes_the_normal_island_position_and_opens_the_notifications_page()
     {
         using var fixture = ControllerFixture.Create();
         fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
@@ -363,17 +363,12 @@ public sealed class SkiaIslandControlTests
         fixture.Settle();
 
         var state = fixture.Controller.RenderState;
-        Assert.Equal(ActivityKind.Media, state.Compact?.Kind);
-        Assert.True(state.SecondaryCompact is { Kind: ActivityKind.Notification });
+        Assert.Equal(ActivityKind.Notification, state.Compact?.Kind);
+        Assert.Null(state.SecondaryCompact);
         var primary = IslandMetrics.ShellRect(state);
-        var secondary = IslandMetrics.SecondaryShellRect(state);
-        Assert.True(secondary.Top >= primary.Bottom, "the notification pill must sit below the main island");
 
-        var hit = SkiaIslandHitTest.Hit(state, secondary.MidX, secondary.MidY);
-        Assert.Equal(IslandHitKind.SecondaryCompact, hit.Kind);
-
-        fixture.Controller.HandlePointerPressed(secondary.MidX, secondary.MidY);
-        fixture.Controller.HandlePointerReleased(secondary.MidX, secondary.MidY);
+        fixture.Controller.HandlePointerPressed(primary.MidX, primary.MidY);
+        fixture.Controller.HandlePointerReleased(primary.MidX, primary.MidY);
         fixture.RunToRest();
 
         var expanded = fixture.Controller.RenderState;

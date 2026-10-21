@@ -1980,9 +1980,9 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
-        // A notification is an aside, not a takeover: when another activity owns the primary pill,
-        // present the notification as a second compact island below it instead of preempting the pill.
-        var presentation = PreferNotificationSecondary(viewModel);
+        // Notification uses the normal island position; it is no longer demoted to a second pill.
+
+        var presentation = viewModel;
         PinDiagnostics.Log(
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
             $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
@@ -2042,7 +2042,7 @@ public sealed class SkiaIslandController : IDisposable
         // jumping straight to the words made the track feel unannounced (user request 2026-10-21).
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
         _compact = SkiaIslandStateBuilder.BuildCompact(presentation, content, _localizer, peeked, showCompactLyrics);
-        _secondaryCompact = BuildSecondaryCompact(presentation, content);
+        _secondaryCompact = null;
         TrackCompactLyric();
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
         _pages = ApplyPageScroll(ApplyCopyFeedback(
@@ -3478,7 +3478,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             Pager = PagerRenderState.FromPosition(
                 _pager.PagePosition, _pages.PageCount, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,
-            SecondaryCompact = expanded ? null : _secondaryCompact,
+            SecondaryCompact = null,
             Pages = _pages,
             Theme = _theme,
             Archipelago = _options.EnableArchipelago
