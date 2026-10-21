@@ -142,6 +142,7 @@ public sealed class SkiaIslandController : IDisposable
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
     private string _structuralSignature = string.Empty;
+    private string _compactStructuralSignature = string.Empty;
     private string _mediaStructuralSignature = string.Empty;
     private string? _lastMediaTitle;
     private string? _lastMediaArtworkKey;
@@ -305,6 +306,75 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Whether the host started the pipeline.</summary>
     public bool IsStarted => _started;
 
+    /// <summary>
+    /// Builds a settled expanded render state from the current page content. The host uses it once to
+    /// prime the renderer's text/path caches before the first user expand; this is a cache warm-up,
+    /// never a rendered host frame and never part of the animation timeline.
+    /// </summary>
+    public IslandRenderState CreateExpandedWarmupState()
+        => _hasRenderState
+            ? IslandRenderState.Expanded(
+                _renderState.Mode,
+                _renderState.Pager,
+                _renderState.Pages,
+                _renderState.Theme,
+                _renderState.Archipelago,
+                _settings.Current.FontScale)
+            : default;
+
+    /// <summary>
+    /// Returns the compact shadow-bucket states plus the settled expanded state used by the host's
+    /// one-shot renderer warm-up. The compact states cover the early expand frames where the shadow
+    /// cache would otherwise bake a fresh blurred image; the expanded state primes page text/layout.
+    /// </summary>
+    public IReadOnlyList<IslandRenderState> CreateMotionWarmupStates()
+    {
+        if (!_hasRenderState)
+        {
+            return [];
+        }
+
+        var compact = IslandRenderState.ForCompact(
+            _renderState.Mode,
+            _renderState.Compact,
+            _renderState.Theme,
+            _renderState.Pager,
+            _renderState.Archipelago,
+            ShellForm.Compact,
+            _settings.Current.FontScale);
+        var startWidth = Math.Max(64.0, _motion.Target.CompactSize.Width);
+        var span = Math.Max(1.0, LayoutTokens.ExpandedWidth - startWidth);
+        var states = new List<IslandRenderState>(4)
+        {
+            compact with
+            {
+                ShellMorphing = true,
+                ShellWidth = Math.Round((startWidth + (span * 0.25)) / 24.0) * 24.0,
+                ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, _renderState.Mode, compact.ShellHeight),
+            },
+            compact with
+            {
+                ShellMorphing = true,
+                ShellWidth = Math.Round((startWidth + (span * 0.42)) / 24.0) * 24.0,
+                ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, _renderState.Mode, compact.ShellHeight),
+            },
+            compact with
+            {
+                ShellMorphing = true,
+                ShellWidth = Math.Round((startWidth + (span * 0.6)) / 24.0) * 24.0,
+                ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, _renderState.Mode, compact.ShellHeight),
+            },
+            IslandRenderState.Expanded(
+                _renderState.Mode,
+                _renderState.Pager,
+                _renderState.Pages,
+                _renderState.Theme,
+                _renderState.Archipelago,
+                _settings.Current.FontScale),
+        };
+        return states;
+    }
+
     /// <summary>Whether a compact press is waiting to resolve into a click or a window drag.</summary>
     public bool HasPendingClick => _clickPending;
 
@@ -379,7 +449,7 @@ public sealed class SkiaIslandController : IDisposable
         && (IsKaraokeAnimating || IsMediaProgressAnimating) && !IsWaveActive();
 
     /// <summary>Whether a deadline timer is needed (hover/auto-collapse/scheduler/strip auto-hide).</summary>
-    public bool HasPendingDeadline
+    public bool HasUiDeadline
     {
         get
         {
@@ -391,10 +461,21 @@ public sealed class SkiaIslandController : IDisposable
                 || state.AutoHideDeadline is not null
                 || _syntheticPeek != SyntheticPeekPhase.None
                 || _copiedClipboard is not null
-                || _schedulerState.HasActivities
                 || _archipelago.IsVisible;
         }
     }
+
+    /// <summary>Whether any timer-driven lifecycle deadline needs polling.</summary>
+    public bool HasPendingDeadline => HasUiDeadline || _schedulerState.HasActivities;
+
+    /// <summary>
+    /// Deadline poll period. A scheduler activity only needs TTL granularity (250 ms); UI deadlines
+    /// (hover/peek/auto-hide/strip) keep the 50 ms timer. Polling at 50 ms for an idle scheduler was
+    /// charging a continuous timer wake-up to every idle island.
+    /// </summary>
+    public TimeSpan DeadlinePollInterval => HasUiDeadline
+        ? TimeSpan.FromMilliseconds(50)
+        : TimeSpan.FromMilliseconds(250);
 
     /// <summary>Starts the data source, reveals the island and snaps the springs to their targets.</summary>
     public void Start()
@@ -1864,6 +1945,19 @@ public sealed class SkiaIslandController : IDisposable
                         : "media-structure";
             }
         }
+        else if (structuralChanged && !full && _renderState.Form != ShellForm.Expanded)
+        {
+            // Background page/stat heartbeats are not painted by the compact pill. Keep the compact
+            // signature independent of those pages so an idle host does not wake the frame loop every
+            // couple of seconds just to repaint an identical pill.
+            var compactStructural = CompactStructuralSignature(viewModel, settings);
+            structuralChanged = !string.Equals(compactStructural, _compactStructuralSignature, StringComparison.Ordinal);
+            _compactStructuralSignature = compactStructural;
+            if (structuralChanged)
+            {
+                structuralReason = "compact-structure";
+            }
+        }
 
         var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
         _structuralSignature = structural;
@@ -1905,6 +1999,39 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         return true;
+    }
+
+    private string CompactStructuralSignature(IslandViewModel viewModel, AppSettings settings)
+    {
+        var primary = viewModel.Primary;
+        var model = _compact.Model;
+        var builder = new StringBuilder(180);
+        builder.Append(_localizer.Culture).Append('|')
+            .Append(settings.Mode).Append('|').Append(settings.Anchor).Append('|')
+            .Append(settings.Theme).Append('|').Append(settings.Material).Append('|')
+            .Append(settings.Palette).Append('|').Append(settings.AccentMode).Append('|')
+            .Append(settings.AccentFallback).Append('|')
+            .Append(settings.FillOpacity.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)).Append('|')
+            .Append(settings.FontScale.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)).Append('|')
+            .Append(settings.Stacking).Append('|')
+            .Append(viewModel.StateKind).Append('|').Append(viewModel.Page).Append('|')
+            .Append(primary?.Kind.ToString() ?? "idle").Append('|')
+            .Append(primary?.Title).Append('|').Append(primary?.Subtitle).Append('|')
+            .Append(primary?.Body).Append('|').Append(primary?.Badge).Append('|')
+            .Append(primary?.SourceName).Append('|').Append(primary?.VerificationCode).Append('|')
+            .Append(primary?.AccentColorHex).Append('|')
+            .Append(_compact.Kind).Append('|')
+            .Append(model.Title).Append('|').Append(model.Subtitle).Append('|').Append(model.Body).Append('|')
+            .Append(model.Badge).Append('|').Append(model.AppName).Append('|')
+            .Append(model.ClockText).Append('|').Append(model.DateText).Append('|')
+            .Append(model.StatusText).Append('|').Append(model.DurationText).Append('|')
+            .Append(model.TimerText).Append('|').Append(model.VerificationCode).Append('|')
+            .Append(model.Level).Append('|').Append(model.BatteryPercent).Append('|')
+            .Append(model.UnreadCount).Append('|').Append(model.IsActive).Append('|')
+            .Append(model.IsMuted).Append('|').Append(model.IsCharging).Append('|')
+            .Append(model.AccentHex).Append('|').Append(model.ArtworkKey).Append('|')
+            .Append(model.ShowLyrics).Append('|').Append(model.Canvas?.ToString());
+        return builder.ToString();
     }
 
     private string MediaStructuralSignature(IslandContent content, IslandViewModel viewModel, AppSettings settings)
@@ -3154,6 +3281,14 @@ public sealed class SkiaIslandController : IDisposable
             return false;
         }
 
+        // The design-time/fallback content can carry a nominal media activity with no real timeline.
+        // Without a real playback clock the wave is a frozen decorative animation that wakes the
+        // frame loop forever; only animate it when a real duration/position is available.
+        if (_compact.Kind == ActivityKind.Media && _mediaDurationMs <= 0)
+        {
+            return false;
+        }
+
         // Breathing applies to both the media waveform and any determinate progress bar; at 30 fps
         // it is a sub-2 % ambient motion rather than a busy animation.
         return (_compact.Kind == ActivityKind.Media && _compact.Model.IsActive)
@@ -3256,8 +3391,11 @@ public sealed class SkiaIslandController : IDisposable
 
     private VisualRect ContentDamage()
     {
-        if (!_hasRenderState)
+        if (!_hasRenderState || _renderState.Form != ShellForm.Expanded)
         {
+            // The page content only exists while the expanded panel is painted. Returning the
+            // expanded 400×224 rect from a compact state used to wake an idle host for an off-screen
+            // region every content heartbeat.
             return VisualRect.Empty;
         }
 

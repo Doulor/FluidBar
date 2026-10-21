@@ -498,6 +498,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             UpdateHitRegions(force: true);
             RefreshAccessibility();
             RenderNow(forceFull: true);
+            WarmExpandedRenderer();
             EnsureFollowMousePolling();
             EnsureDeadlineTicker();
             EnsureFrameLoop();
@@ -1290,6 +1291,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private SkiaIslandRenderChange _lastChange;
     private bool _lastRenderHappened;
     private long _lastHookRebuildTimestamp;
+    private bool _expandedWarmupDone;
 
     private void OnFrame(TimeSpan delta)
     {
@@ -1388,9 +1390,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         if (_controller.HasPendingDeadline)
         {
+            var period = _controller.DeadlinePollInterval;
             if (!_deadlineTicker.IsRunning)
             {
-                _deadlineTicker.Start(TimeSpan.FromMilliseconds(50), OnDeadlineTick);
+                _deadlineTicker.Start(period, OnDeadlineTick);
+            }
+            else if (_deadlineTicker.Period != period)
+            {
+                _deadlineTicker.SetPeriod(period);
             }
         }
         else if (_deadlineTicker.IsRunning)
@@ -1921,6 +1928,35 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             entry.DirtyFrames++;
             Interlocked.Increment(ref _dirtyFrames);
+        }
+    }
+
+    /// <summary>
+    /// Primes the renderer's expanded-page text/path caches once, while the host is still on its
+    /// startup frame. The first expand then paints into already-warm caches instead of paying the
+    /// whole expanded layout on the first animated frame. This is offscreen and intentionally not
+    /// counted as a frame.
+    /// </summary>
+    private void WarmExpandedRenderer()
+    {
+        if (_expandedWarmupDone || !_controller.HasRenderState || _windows.Count == 0)
+        {
+            return;
+        }
+
+        _expandedWarmupDone = true;
+        try
+        {
+            var scale = SafeScale(_windows[0].Host.Scale);
+            foreach (var state in _controller.CreateMotionWarmupStates())
+            {
+                using var bitmap = _renderer.RenderToBitmap(state, (float)scale);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(LogCategories.Render, "island.skia.warmup-failed",
+                "Expanded renderer warm-up failed; the first expand will take the normal cold path.", ex);
         }
     }
 
