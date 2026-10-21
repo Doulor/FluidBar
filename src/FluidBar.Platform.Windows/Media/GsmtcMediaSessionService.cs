@@ -513,9 +513,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // far more accurate than a frozen text or the previous song's position (2026-10-22).
             var sinceStart = _timeProviderNow() - _stateFileValidFromUtc;
             if (sinceStart >= TimeSpan.Zero
-                && sinceStart < TimeSpan.FromSeconds(40)
+                && sinceStart < TimeSpan.FromSeconds(20)
                 && candidate.Position >= TimeSpan.Zero
-                && candidate.Position < TimeSpan.FromSeconds(12))
+                && candidate.Position < TimeSpan.FromSeconds(25))
             {
                 return candidate with
                 {
