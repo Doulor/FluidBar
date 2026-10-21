@@ -58,10 +58,16 @@ public static partial class KugouLyricCache
             {
                 foreach (var pair in _index)
                 {
-                    var both = wantedArtist.Length == 0
-                        ? pair.Key.EndsWith(wantedTitle, StringComparison.Ordinal)
-                        : pair.Key.Contains(wantedTitle, StringComparison.Ordinal)
-                          && pair.Key.Contains(wantedArtist, StringComparison.Ordinal);
+                    // A fuzzy contains match on a short title ("雨", "夜") pulled an unrelated song's lyric
+                    // into an instrumental track (user report 2026-10-22). Require a near-exact key instead.
+                    var expectedLength = wantedTitle.Length + wantedArtist.Length;
+                    var both = wantedTitle.Length >= 4
+                        && (wantedArtist.Length == 0
+                            ? pair.Key.EndsWith(wantedTitle, StringComparison.Ordinal)
+                              && Math.Abs(pair.Key.Length - wantedTitle.Length) <= 2
+                            : pair.Key.Contains(wantedTitle, StringComparison.Ordinal)
+                              && pair.Key.Contains(wantedArtist, StringComparison.Ordinal)
+                              && Math.Abs(pair.Key.Length - expectedLength) <= 4);
                     if (both)
                     {
                         hit = pair.Value;
@@ -81,7 +87,7 @@ public static partial class KugouLyricCache
         try
         {
             var decoded = KrcDecoder.TryDecode(File.ReadAllBytes(path));
-            return decoded?.Document;
+            return decoded?.Document is { Lines.Length: > 0 } document ? document : null;
         }
         catch (IOException)
         {
