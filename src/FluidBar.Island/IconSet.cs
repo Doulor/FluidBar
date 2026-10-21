@@ -157,13 +157,35 @@ public enum IconKind
 }
 
 /// <summary>
-/// Path-based icon set on the 24×24 grid (1.6 grid stroke, spec 3.6). Paths are built once and reused;
-/// drawing only sets the paint colour, so per-frame cost is one transform plus two path draws.
+/// Path-based icon set drawn on a 20×20 grid with one 1.5 DIP hairline stroke and round caps/joins.
+/// its ink is centred on the 20 unit viewbox centre (10,10) and scaled to the optical size of its
+/// weight class, so a filled transport glyph, a stroke glyph and a small affordance never drift apart.
+/// Paths are built once and reused; drawing only sets the paint colour, so per-frame cost is one
+/// transform plus two path draws.
 /// </summary>
 public static class IconSet
 {
-    private const float Grid = 24f;
-    private const float Stroke = 1.6f;
+    /// <summary>Coordinate grid the final paths live in (20 units = the 20 DIP viewbox).</summary>
+    private const float Grid = 20f;
+
+    /// <summary>The single stroke weight used by every stroked glyph (DIP at the nominal 20 DIP size).</summary>
+    private const float Stroke = 1.5f;
+
+    /// <summary>Centre of the viewbox in grid units.</summary>
+    private const float Center = Grid / 2f;
+
+    /// <summary>Optical size class: what fraction of the viewbox a glyph may occupy.</summary>
+    private enum OpticalClass
+    {
+        /// <summary>Solid glyphs (transport, bolt, sparkle, alert): ~62 % of the box, they read heavier.</summary>
+        Glyph,
+
+        /// <summary>Every stroke glyph: ~80 % of the box.</summary>
+        Standard,
+
+        /// <summary>Small affordances (chevrons, close, check, pin): ~60 %, they sit inside buttons.</summary>
+        Affordance,
+    }
 
     private static readonly Dictionary<IconKind, IconGeometry> Cache = [];
     private static readonly Lock Gate = new();
@@ -275,12 +297,10 @@ public static class IconSet
 
                 break;
             case IconKind.Store:
-                b.Line(4, 9, 20, 9);
-                b.Line(5.5f, 9, 6.5f, 4.5f);
-                b.Line(18.5f, 9, 17.5f, 4.5f);
-                b.Rounded(4.5f, 9, 15, 11, 2);
-                b.Line(9.5f, 13.5f, 9.5f, 16.5f);
-                b.Line(14.5f, 13.5f, 14.5f, 16.5f);
+                // Marketplace = shopping bag: rounded body plus a handle arc (the old glyph had two
+                // unexplained vertical bars inside the body and read as a basket).
+                b.Rounded(4.2f, 8.2f, 15.6f, 11.6f, 2.4f);
+                b.Arc(12, 8.2f, 3.6f, 180, 180);
                 break;
             case IconKind.Close:
                 b.Line(6.5f, 6.5f, 17.5f, 17.5f);
@@ -306,11 +326,11 @@ public static class IconSet
                 b.Line(11, 8, 21, 5.5f);
                 break;
             case IconKind.Bell:
-                b.Arc(12, 10.5f, 6.5f, 190, 160);
-                b.Line(5.5f, 16.5f, 18.5f, 16.5f);
-                b.Line(5.5f, 16.5f, 7, 13.5f);
-                b.Line(18.5f, 16.5f, 17, 13.5f);
-                b.Line(10, 19.5f, 14, 19.5f);
+                b.Arc(12, 11, 6.4f, 185, 170);
+                b.Line(5.75f, 10.45f, 5.2f, 16.4f);
+                b.Line(18.25f, 10.45f, 18.8f, 16.4f);
+                b.Line(5.2f, 16.4f, 18.8f, 16.4f);
+                b.Arc(12, 16.4f, 2.2f, 20, 140);
                 break;
             case IconKind.Clipboard:
                 b.Rounded(5, 4.5f, 14, 16, 2.5f);
@@ -421,35 +441,47 @@ public static class IconSet
                 b.Arc(12.5f, 12, 11.5f, -55, 110);
                 break;
             case IconKind.Brightness:
-                b.Dot(12, 12, 3.6f);
-                b.Rays(12, 12, 7.4f, 9.6f, 8);
+                b.Dot(12, 12, 3.9f);
+                b.Rays(12, 12, 7.6f, 10.0f, 8);
                 break;
             case IconKind.BrightnessLow:
-                b.Dot(12, 12, 3.2f);
-                b.Rays(12, 12, 7.4f, 9.2f, 8);
+                b.Dot(12, 12, 2.9f);
+                b.Rays(12, 12, 7.6f, 10.0f, 8);
                 break;
             case IconKind.BrightnessHigh:
-                b.Dot(12, 12, 4.2f);
-                b.Rays(12, 12, 7.6f, 10.2f, 8);
+                b.Dot(12, 12, 5.0f);
+                b.Rays(12, 12, 7.6f, 10.0f, 8);
                 break;
             case IconKind.Alert:
-                b.FillPolygon((12, 3.5f), (21, 20), (3, 20));
-                b.Line(12, 9.5f, 12, 14.5f);
-                b.Dot(12, 17.5f, 0.9f);
+                // Outline triangle + solid mark: the previous filled triangle hid its own exclamation
+                // (both paths were painted in the same colour, so the glyph read as a blank triangle).
+                b.Line(12, 4, 20.4f, 19);
+                b.Line(20.4f, 19, 3.6f, 19);
+                b.Line(3.6f, 19, 12, 4);
+                b.FillRect(11.1f, 9.6f, 1.8f, 4.9f);
+                b.Dot(12, 16.9f, 1);
                 break;
             case IconKind.Moon:
-                b.Arc(13.5f, 12, 8.0f, 60, 250);
-                b.Arc(9.0f, 12, 6.4f, 60, 250);
+                // Crescent with joined ends: left half-circle plus a shallow inner arc that bulges right.
+                b.Arc(12, 12, 8, 90, 180);
+                b.Arc(2, 12, 12.806f, -38.66f, 77.32f);
                 break;
             case IconKind.Sun:
-                b.Dot(12, 12, 4.2f);
-                b.Rays(12, 12, 7.2f, 10.0f, 8);
+                // Light theme: an outline core with long rays. BrightnessHigh used to be pixel-identical,
+                // which made the theme toggle and the brightness slider read as the same control.
+                b.Ellipse(12, 12, 4.0f, 4.0f);
+                b.Rays(12, 12, 7.2f, 10.2f, 8);
                 break;
             case IconKind.CloudSun:
-                b.Dot(15.5f, 9.0f, 2.6f);
-                b.Rays(15.5f, 9.0f, 4.4f, 6.2f, 6);
-                b.Arc(9.5f, 15.5f, 5.2f, 160, 220);
-                b.Line(4.5f, 15.5f, 14.5f, 15.5f);
+                // Cloud silhouette: a main dome, a smaller right bump and a flat base; the sun sits in
+                // the top-right corner with short rays so the two shapes never overlap.
+                b.Arc(9.4f, 14.6f, 4.2f, 180, 180);
+                b.Arc(13.6f, 14.2f, 3.2f, 270, 90);
+                b.Line(5.2f, 14.6f, 5.2f, 17.0f);
+                b.Line(16.8f, 14.2f, 16.8f, 17.0f);
+                b.Line(5.2f, 17.0f, 16.8f, 17.0f);
+                b.Dot(17.2f, 7.0f, 1.9f);
+                b.Rays(17.2f, 7.0f, 2.9f, 3.9f, 6);
                 break;
             case IconKind.Speaker:
                 b.FillPolygon((4, 9.5f), (8, 9.5f), (12.5f, 5.5f), (12.5f, 18.5f), (8, 14.5f), (4, 14.5f));
@@ -469,8 +501,15 @@ public static class IconSet
                 b.Line(12, 3.5f, 12, 5.5f);
                 break;
             case IconKind.Copy:
-                b.Rounded(8, 8, 12, 12, 2);
-                b.Rounded(4, 4, 12, 12, 2);
+                // Front card plus only the silhouette of the sheet behind it: its top edge, the rounded
+                // top-left corner, the left edge and a stub that stops on the front card, so the back
+                // outline never runs through the front one (the old pair of full rectangles did).
+                b.Rounded(7.4f, 7.4f, 12.5f, 12.5f, 2.2f);
+                b.Line(15.4f, 4.2f, 5.8f, 4.2f);
+                b.Arc(5.8f, 5.8f, 1.6f, 180, 90);
+                b.Line(4.2f, 5.8f, 4.2f, 14.4f);
+                b.Arc(5.8f, 14.4f, 1.6f, 180, -90);
+                b.Line(5.8f, 16, 7.4f, 16);
                 break;
             case IconKind.Code:
                 b.Line(8, 8, 4, 12);
@@ -514,8 +553,80 @@ public static class IconSet
                 break;
         }
 
-        return new IconGeometry(stroke, fill);
+        return Normalize(kind, new IconGeometry(stroke, fill));
     }
+
+    /// <summary>
+    /// Optical normalisation: centres the glyph's ink on the viewbox centre and scales its longest
+    /// side to the target of its weight class. The stroke is painted in grid units, so it stays 1.5 DIP
+    /// regardless of how much the path itself is scaled (that is the optical-size, not weight, knob).
+    /// </summary>
+    private static IconGeometry Normalize(IconKind kind, IconGeometry geometry)
+    {
+        var bounds = InkBounds(geometry);
+        if (bounds.Width <= 0.01f || bounds.Height <= 0.01f)
+        {
+            return geometry;
+        }
+
+        var longest = Math.Max(bounds.Width, bounds.Height);
+        var target = TargetSize(kind);
+        var scale = target / longest;
+        var toOrigin = SKMatrix.CreateTranslation(-bounds.MidX, -bounds.MidY);
+        var toCenter = SKMatrix.CreateTranslation(Center, Center);
+        var scaleMatrix = SKMatrix.CreateScale(scale, scale);
+        Transform(geometry.Stroke, toOrigin, scaleMatrix, toCenter);
+        Transform(geometry.Fill, toOrigin, scaleMatrix, toCenter);
+        return geometry;
+
+        static void Transform(SKPath path, SKMatrix a, SKMatrix b, SKMatrix c)
+        {
+            if (path.IsEmpty)
+            {
+                return;
+            }
+
+            path.Transform(a);
+            path.Transform(b);
+            path.Transform(c);
+        }
+    }
+
+    /// <summary>Union of the stroke and fill geometry bounds (no stroke width).</summary>
+    private static SKRect InkBounds(IconGeometry geometry)
+    {
+        var stroke = geometry.Stroke.IsEmpty ? SKRect.Empty : geometry.Stroke.Bounds;
+        var fill = geometry.Fill.IsEmpty ? SKRect.Empty : geometry.Fill.Bounds;
+        if (stroke.IsEmpty)
+        {
+            return fill;
+        }
+
+        if (fill.IsEmpty)
+        {
+            return stroke;
+        }
+
+        return SKRect.Union(stroke, fill);
+    }
+
+    /// <summary>Longest side a glyph may occupy, in grid units, for its optical class.</summary>
+    private static float TargetSize(IconKind kind) => ClassOf(kind) switch
+    {
+        OpticalClass.Glyph => 12.4f,      // 62 % of the 20 unit box
+        OpticalClass.Affordance => 12.0f, // 60 %
+        _ => 16.0f,                       // 80 %
+    };
+
+    /// <summary>Optical weight class of an icon.</summary>
+    private static OpticalClass ClassOf(IconKind kind) => kind switch
+    {
+        IconKind.Play or IconKind.Pause or IconKind.Previous or IconKind.Next or IconKind.Bolt
+            or IconKind.Agent or IconKind.Alert => OpticalClass.Glyph,
+        IconKind.Close or IconKind.ChevronDown or IconKind.ChevronRight or IconKind.ChevronLeft
+            or IconKind.Check or IconKind.Pin => OpticalClass.Affordance,
+        _ => OpticalClass.Standard,
+    };
 
     private readonly record struct IconGeometry(SKPath Stroke, SKPath Fill);
 
