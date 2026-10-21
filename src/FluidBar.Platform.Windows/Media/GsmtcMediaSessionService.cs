@@ -89,6 +89,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private bool? _lastPublishedPlaying;
 
     /// <summary>Throttles the cross-check log line (arbitration runs on every poll).</summary>
+    /// <summary>Lead that cancels the truncation bias of the player's one-second-resolution clock.</summary>
+    private static readonly TimeSpan AccessibilityLead = TimeSpan.FromMilliseconds(500);
+
     private long _lastCrossCheckLogMs;
 
     /// <summary>Write time of the state file we are currently extrapolating.</summary>
@@ -574,9 +577,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return enriched;
         }
 
+        // The text is the FLOOR of the true position (mm:ss truncates) and the paint lags a little on top,
+        // which made the island sit a steady second behind the song. Half a second of lead cancels the
+        // truncation bias; the residual is then transport latency, well under a tenth (user report
+        // 2026-10-22: "还是比真实歌曲慢大概 1s").
         return enriched with
         {
-            Position = timeline.Position,
+            Position = timeline.Position + AccessibilityLead,
             Duration = timeline.Duration,
             // Back-dated by the reading's age: a one-second-resolution clock is stale by up to half a
             // poll window the moment it is seen (see PlayerTimeline.Age).
