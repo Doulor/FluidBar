@@ -125,7 +125,9 @@ public sealed class MediaPositionClock
         _anchorAtMs = nowMs;
         _driftMs = 0;
         _driftAtMs = nowMs;
-        _rate = Math.Abs(diff) < 400 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.97, 1.03);
+        // Proportional controller with a small gain and no deadband: a constant tiny correction is
+        // invisible, while a deadband made the rate hunt between 0.99 and 1.01 (measured 2026-10-22).
+        _rate = Math.Clamp(1.0 + (diff / 8000.0), 0.98, 1.02);
     }
 
     /// <summary>
