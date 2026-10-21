@@ -106,7 +106,7 @@ public sealed class MediaPositionClock
 
     /// <summary>
     /// Converges the clock onto a sample WITHOUT jumping: the current position is kept and the playback
-    /// rate is bent by up to ±10 % until the difference is gone (about <paramref name="windowMs"/>).
+    /// rate is bent by up to ±50 % until the difference is gone (about <paramref name="windowMs"/>).
     /// </summary>
     /// <param name="positionMs">Sampled position to converge on.</param>
     /// <param name="nowMs">Monotonic "now" (milliseconds).</param>
@@ -125,7 +125,7 @@ public sealed class MediaPositionClock
         _anchorAtMs = nowMs;
         _driftMs = 0;
         _driftAtMs = nowMs;
-        _rate = Math.Abs(diff) < 250 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.9, 1.1);
+        _rate = Math.Abs(diff) < 250 ? 1.0 : Math.Clamp(1.0 + (diff / Math.Max(1, windowMs)), 0.5, 1.5);
     }
 
     /// <summary>
