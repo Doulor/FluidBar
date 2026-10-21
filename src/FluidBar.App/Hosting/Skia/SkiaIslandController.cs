@@ -1820,6 +1820,10 @@ public sealed class SkiaIslandController : IDisposable
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
             $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
             $"primary={viewModel.Primary?.Kind}:{viewModel.Primary?.Title}");
+        PinDiagnostics.Log(
+            $"strategy requested={settings.Stacking} state={State.Kind} visibleCount={_schedulerState.Visible.Length} " +
+            $"ghostCount={viewModel.Ghosts.Length} splitAllowed={settings.Stacking == StackingStrategySetting.Split && State.Kind != IslandStateKind.Expanded} " +
+            $"stackRotateAllowed={settings.Stacking == StackingStrategySetting.Stacked && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek && _schedulerState.Visible.Length > 1}");
         ObserveTrackChange(content, settings);
         ObserveTrackTransition(content, viewModel);
 

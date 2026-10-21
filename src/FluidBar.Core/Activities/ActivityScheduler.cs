@@ -404,7 +404,12 @@ public sealed class ActivityScheduler
                 : backgroundKeys.Contains(record.Key)
                     ? $"background(over visibleCapacity={capacity})"
                     : $"dropped(over backgroundMax={maxBackground})";
-            rows.Add($"{i}:{record.Key} rank={record.PriorityRank} pinned={record.IsPinned} persistent={record.IsPersistent} {reason}");
+            var payload = record.Payload;
+            var playback = $"IsActive={(payload.IsActive is null ? "null" : payload.IsActive.Value.ToString())}" +
+                $",ShowsAudioWave={(payload.ShowsAudioWave is null ? "null" : payload.ShowsAudioWave.Value.ToString())}" +
+                $",Badge={payload.Badge ?? "null"},PositionTicks={payload.PositionTicks},EndTicks={payload.EndTicks}";
+            rows.Add($"{i}:{record.Key} kind={record.Kind} rank={record.PriorityRank} pinned={record.IsPinned} " +
+                $"persistent={record.IsPersistent} playback=[{playback}] {reason}");
         }
 
         try
