@@ -172,6 +172,44 @@ public static class IslandMetrics
     /// <summary>Gap between split circles and between a circle and the primary pill (DIP).</summary>
     public const double SplitIsletGap = 8;
 
+    /// <summary>
+    /// Agent ring centre-line radius as a fraction of the satellite radius (0.575 = 11.5 DIP on a
+    /// 40 DIP ball); the ring stays >= 2 DIP clear of the 24 DIP cover well's rounded corners.
+    /// </summary>
+    public const float SplitRingRadiusFactor = 0.575f;
+
+    /// <summary>Agent ring period in seconds (3 s = 120 deg/s, inside the frozen 110-130 deg/s gate).</summary>
+    public const double SplitRingPeriodSeconds = 3.0;
+
+    /// <summary>Agent ring rotation in degrees for an elapsed animation time (monotonic, 120 deg/s).</summary>
+    /// <param name="seconds">Elapsed animation seconds.</param>
+    public static double SplitRingDegrees(double seconds)
+        => double.IsFinite(seconds) ? (seconds / SplitRingPeriodSeconds) * 360.0 % 360.0 : 0;
+
+    /// <summary>
+    /// True only while a visible split satellite is an agent in Running/Waiting (Info). Completed,
+    /// Failed and Cancelled are static states, so the host must not keep a 30 fps ring clock alive.
+    /// </summary>
+    /// <param name="state">Current render state.</param>
+    public static bool HasSpinningSplitRing(in IslandRenderState state)
+    {
+        if (state.SplitIslets.Length == 0 || state.SplitProgress <= 0.01)
+        {
+            return false;
+        }
+
+        foreach (var islet in state.SplitIslets)
+        {
+            if (islet.Kind == FluidBar.Core.Activities.ActivityKind.Agent
+                && islet.Status == CompactStatus.Info)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Split circle diameter: exactly the compact primary height (36-40 DIP).</summary>
     public static float SplitIsletDiameter(in IslandRenderState state)
     {

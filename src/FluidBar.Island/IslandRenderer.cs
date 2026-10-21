@@ -561,6 +561,44 @@ public sealed class IslandRenderer : IDisposable
     /// circular album cover (or a neutral music-note fallback), and everything else gets one icon.
     /// No labels, badges, status dots, action buttons or decorative rings.
     /// </summary>
+    /// <summary>
+    /// Static end states of an agent satellite: a neutral check for Completed, a neutral cross for
+    /// Failed and a neutral dot for Cancelled. Never blue, never spinning.
+    /// </summary>
+    private void DrawAgentSettledState(SKCanvas canvas, SKRect rect, float radius, CompactStatus status, float alpha)
+    {
+        var ink = Alpha(_theme.ForegroundSecondary, alpha);
+        var thickness = Math.Max(1.4f, radius * 0.11f);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = thickness;
+        _stroke.StrokeCap = SKStrokeCap.Round;
+        _stroke.Shader = null;
+        _stroke.Color = ink;
+        var c = radius * 0.42f;
+        if (status is CompactStatus.Success or CompactStatus.Warning)
+        {
+            using var path = new SKPath();
+            path.MoveTo(rect.MidX - c, rect.MidY);
+            path.LineTo(rect.MidX - (c * 0.15f), rect.MidY + (c * 0.75f));
+            path.LineTo(rect.MidX + c, rect.MidY - (c * 0.8f));
+            canvas.DrawPath(path, _stroke);
+        }
+        else if (status == CompactStatus.Danger)
+        {
+            canvas.DrawLine(rect.MidX - c, rect.MidY - c, rect.MidX + c, rect.MidY + c, _stroke);
+            canvas.DrawLine(rect.MidX + c, rect.MidY - c, rect.MidX - c, rect.MidY + c, _stroke);
+        }
+        else
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = ink;
+            canvas.DrawCircle(rect.MidX, rect.MidY, radius * 0.16f, _fill);
+        }
+
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+    }
+
     private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
     {
         if (state.SplitIslets.Length == 0 || state.SplitProgress <= 0.01)
@@ -594,22 +632,31 @@ public sealed class IslandRenderer : IDisposable
 
             if (islet.Kind == ActivityKind.Agent)
             {
-                // The ring is the agent's entire content: 2 DIP, 180° arc, 900 ms linear clockwise.
-                var phase = (float)((state.AgentAnimationSeconds / 0.9) % 1.0);
-                if (phase < 0) { phase += 1f; }
-                var ringInset = Math.Max(1f, radius * 0.12f);
-                var ringRect = new SKRect(
-                    rect.Left + ringInset,
-                    rect.Top + ringInset,
-                    rect.Right - ringInset,
-                    rect.Bottom - ringInset);
-                _stroke.Style = SKPaintStyle.Stroke;
-                _stroke.StrokeWidth = 2f;
-                _stroke.StrokeCap = SKStrokeCap.Round;
-                _stroke.Shader = null;
-                _stroke.Color = Alpha(_theme.Info, alpha);
-                canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
-                _stroke.StrokeCap = SKStrokeCap.Butt;
+                if (islet.Status == CompactStatus.Info)
+                {
+                    // Running/Waiting: 2 DIP, 180° arc at 120 deg/s, centred at 0.575 x radius.
+                    var phase = (float)((state.AgentRingFrozenDegrees
+                        ?? IslandMetrics.SplitRingDegrees(state.AgentAnimationSeconds)) / 360.0);
+                    if (phase < 0) { phase += 1f; }
+                    var ringInset = Math.Max(1f, radius * (1f - IslandMetrics.SplitRingRadiusFactor));
+                    var ringRect = new SKRect(
+                        rect.Left + ringInset,
+                        rect.Top + ringInset,
+                        rect.Right - ringInset,
+                        rect.Bottom - ringInset);
+                    _stroke.Style = SKPaintStyle.Stroke;
+                    _stroke.StrokeWidth = 2f;
+                    _stroke.StrokeCap = SKStrokeCap.Round;
+                    _stroke.Shader = null;
+                    _stroke.Color = Alpha(_theme.Info, alpha);
+                    canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
+                    _stroke.StrokeCap = SKStrokeCap.Butt;
+                }
+                else
+                {
+                    DrawAgentSettledState(canvas, rect, radius, islet.Status, alpha);
+                }
+
                 continue;
             }
 

@@ -21,7 +21,8 @@ public sealed record IslandSplitIslet(
     string? Badge = null,
     bool ShowAction = false,
     byte[]? Artwork = null,
-    string? ArtworkKey = null);
+    string? ArtworkKey = null,
+    CompactStatus Status = CompactStatus.Info);
 
 /// <summary>
 /// One immutable island frame: the animating shell geometry, the active surface, the page strip
@@ -196,6 +197,14 @@ public readonly record struct IslandRenderState
     /// advances while an agent is running, so an idle island requests no frames.
     /// </summary>
     public double AgentAnimationSeconds { get; init; }
+
+    /// <summary>
+    /// Agent ring angle (degrees) frozen at the moment the activity left Running/Waiting. While the
+    /// status stays live the renderer uses <see cref="AgentAnimationSeconds"/>; once the activity is
+    /// Completed/Failed/Cancelled the arc is removed and this value keeps the last painted angle so it
+    /// can never jump back to 0.
+    /// </summary>
+    public double? AgentRingFrozenDegrees { get; init; }
 
     /// <summary>
     /// Logical keyboard/UIA focus ring in host-local DIP (null when nothing is focused). The renderer
