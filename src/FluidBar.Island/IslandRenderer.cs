@@ -471,7 +471,7 @@ public sealed class IslandRenderer : IDisposable
             ShellOrigin = new VisualPoint(rect.Left, rect.Top),
             ShellWidth = rect.Width,
             ShellHeight = rect.Height,
-            ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, state.Mode, rect.Height),
+            ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, state.Mode, rect.Height, kind: activity.Kind),
             Compact = activity,
             SecondaryCompact = null,
             GhostCount = 0,

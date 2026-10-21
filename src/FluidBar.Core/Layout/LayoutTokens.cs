@@ -327,9 +327,12 @@ public static class LayoutTokens
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    // NetSpeed-Dynamic message card (src/views/WidgetIsland.vue): 360×70 DIP, 100px CSS radius
-    // clipped by the 70 DIP height → 35 DIP stadium corners.
-    private static readonly VisualSize NotificationSize = new(360, 70);
+    // NetSpeed-Dynamic message card (screenshot4.png measured): 360×64 DIP, ~21 DIP radius,
+    // i.e. clearly squarer than the 35 DIP stadium a 70-high card would produce.
+    private static readonly VisualSize NotificationSize = new(360, 64);
+
+    /// <summary>Squarer notification-card radius measured from the reference screenshot (~43 px at 2×).</summary>
+    public const double NotificationCornerRadius = 21;
     private static readonly VisualSize ClipboardSize = new(264, 36);
     // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
     private static readonly VisualSize AgentSize = new(236, 36);
@@ -400,8 +403,14 @@ public static class LayoutTokens
     /// flush has square top corners; dock uses the 12/16 radii.
     /// </summary>
     public static CornerRadii RadiiFor(ShellForm form, IslandMode mode, double height,
-        double expandedRadius = ExpandedRadius)
+        double expandedRadius = ExpandedRadius, Activities.ActivityKind? kind = null)
     {
+        if (kind == Activities.ActivityKind.Notification && mode == IslandMode.Float
+            && (form is ShellForm.Compact or ShellForm.Peek))
+        {
+            return CornerRadii.Uniform(NotificationCornerRadius);
+        }
+
         var compactRadius = Math.Min(height / 2, CompactRadiusCap);
         return form switch
         {

@@ -319,7 +319,7 @@ internal sealed class CompactRenderer : IDisposable
         if (model.ShowsAudioWave)
         {
             var wave = new SKRect(width - (38f * s), (height - (18f * s)) / 2, width - (14f * s), (height + (18f * s)) / 2);
-            DrawWave(canvas, wave, _accents.Get(model.AccentHex, _theme.Accent), active: true);
+            DrawWave(canvas, wave, new SKColor(0xB6, 0xE0, 0xEE), active: true);
         }
 
         if (_pressed)

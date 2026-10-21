@@ -3448,13 +3448,16 @@ private void HandlePageControl(in IslandHitTarget hit)
         _motion.PanelRadius = _settings.Current.PanelRadius;
         var form = ResolveVisualForm();
         var expanded = form == ShellForm.Expanded;
+        var shellRadii = !expanded && _compact.Kind == ActivityKind.Notification
+            ? CornerRadii.Uniform(LayoutTokens.NotificationCornerRadius)
+            : _motion.ShellRadii;
         _renderState = new IslandRenderState
         {
             Mode = mode,
             Form = form,
             ShellWidth = _motion.Width,
             ShellHeight = _motion.Height,
-            ShellRadii = _motion.ShellRadii,
+            ShellRadii = shellRadii,
             ShellMorphing = !_motion.IsAtRest,
             ShellOrigin = _motion.ShellOrigin,
             Opacity = _motion.Opacity * _trackTransitionOpacity,

@@ -198,13 +198,13 @@ public sealed class NotificationCompactSurface : CompactSurface
     public const double PillWidth = 360;
 
     /// <summary>Card height token (DIP).</summary>
-    public const double PillHeight = 70;
+    public const double PillHeight = 64;
 
     /// <summary>Verification-code chip width (DIP).</summary>
     public const double ChipWidth = 40;
 
     /// <summary>Fixed 35 DIP circular avatar.</summary>
-    public static Rect IconRect => new(14, 17.5, 35, 35);
+    public static Rect IconRect => new(14, 14.5, 35, 35);
 
     /// <summary>Text column (zero-width safe) for a card with or without a code chip.</summary>
     public static Rect TextColumn(bool hasChip)
@@ -217,18 +217,18 @@ public sealed class NotificationCompactSurface : CompactSurface
     public static Rect TitleRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 16, column.Width, 20);
+        return new Rect(column.X, 13, column.Width, 20);
     }
 
     /// <summary>Body line inside the text column.</summary>
     public static Rect BodyRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 38, column.Width, 16);
+        return new Rect(column.X, 35, column.Width, 16);
     }
 
     /// <summary>Bottom-left verification-code chip.</summary>
-    public static Rect ChipRect => new(61, 54, ChipWidth, 10);
+    public static Rect ChipRect => new(61, 51, ChipWidth, 10);
 
     /// <inheritdoc />
     public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;

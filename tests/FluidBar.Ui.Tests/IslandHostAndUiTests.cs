@@ -135,7 +135,7 @@ public sealed class IslandHostTests
             fixture.PumpFramesToRest();
             Assert.Equal(1, fixture.Host.SchedulerState.ActivityCount);
             Assert.Equal(360, fixture.Host.Motion!.Frame.Width, 1);
-            Assert.Equal(70, fixture.Host.Motion.Frame.Height, 1);
+            Assert.Equal(64, fixture.Host.Motion.Frame.Height, 1);
 
             fixture.Time.Advance(TimeSpan.FromSeconds(6));
             fixture.Host.PumpTimers();

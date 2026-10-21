@@ -241,7 +241,7 @@ public readonly record struct IslandRenderState
         double fontScale = 1.0)
     {
         var size = LayoutTokens.CompactSizeFor(activity?.Kind, mode, fontScale);
-        var radii = LayoutTokens.RadiiFor(form, mode, size.Height);
+        var radii = LayoutTokens.RadiiFor(form, mode, size.Height, kind: activity?.Kind);
         var host = HostSurface.ForMode(mode);
         var origin = mode == IslandMode.Dock
             ? new VisualPoint(host.SidePadding, host.DockStripTopLocal)

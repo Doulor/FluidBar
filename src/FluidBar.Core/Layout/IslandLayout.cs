@@ -347,7 +347,7 @@ public static class IslandLayout
                 shell.Y - placement.WindowVisual.Y),
         };
 
-        var radii = LayoutTokens.RadiiFor(request.Form, request.Mode, shell.Height);
+        var radii = LayoutTokens.RadiiFor(request.Form, request.Mode, shell.Height, kind: request.CompactKind);
         var (content, rail) = MeasureContent(request.Form, shell);
         var geometry = ShellGeometry.ForShell(shell, radii);
         var archipelago = request.Form == ShellForm.Expanded
