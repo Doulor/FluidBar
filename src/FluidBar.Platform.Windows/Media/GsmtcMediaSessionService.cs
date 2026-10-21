@@ -531,7 +531,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             }
 
             if (sinceStart >= TimeSpan.Zero
-                && sinceStart < TimeSpan.FromSeconds(40)
+                && sinceStart < TimeSpan.FromSeconds(90)
                 && candidate.Position >= TimeSpan.Zero
                 && candidate.Position < TimeSpan.FromSeconds(25))
             {
