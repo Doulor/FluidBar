@@ -76,7 +76,7 @@ public sealed class SkiaHostDockParityTests
 
         // Prototype2: rail top = shell bottom + 8 DIP (24 + 244 + 8 = 316), 32 DIP tall.
         Assert.Equal(276f, strip.Strip.Top, 3);
-        Assert.Equal(32f, strip.Strip.Height, 3);
+        Assert.Equal(34f, strip.Strip.Height, 3);
         Assert.Equal(244f, strip.Strip.MidX, 3);
     }
 

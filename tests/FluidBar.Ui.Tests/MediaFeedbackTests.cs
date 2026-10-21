@@ -14,7 +14,7 @@ public sealed class MediaFeedbackTests
     private static SKRect PlayRect(IslandRenderState state)
     {
         var page = IslandMetrics.PageRect(state, 1);
-        return PageMetricsLayout.MediaPlay(page, FontScaleMetrics.From(state.FontScale));
+        return PageVisual.MediaPlay(page);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class MediaFeedbackTests
         var metrics = FontScaleMetrics.From(state.FontScale);
 
         var mediaPage = IslandMetrics.PageRect(state, 1);
-        var mediaVolume = PageMetricsLayout.MediaVolume(mediaPage, metrics);
+        var mediaVolume = PageVisual.MediaVolume(mediaPage);
         var mediaHit = SkiaIslandHitTest.Hit(state, mediaVolume.MidX, mediaVolume.MidY);
         Assert.Equal(IslandPageControl.VolumeMute, mediaHit.Control);
         Assert.Equal(
@@ -265,3 +265,4 @@ public sealed class MediaFeedbackTests
         Assert.False(optimistic.LastResolveRolledBack);
     }
 }
+

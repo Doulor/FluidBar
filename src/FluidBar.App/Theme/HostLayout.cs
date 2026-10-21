@@ -20,11 +20,11 @@ public static class HostLayout
     /// <summary>Design height of the expanded content layer (440×336: 284 shell + 52 archipelago band).</summary>
     public const double ExpandedLayerHeight = FluidBar.Core.Layout.LayoutTokens.ExpandedHeight + ExtraBottomDip;
 
-    /// <summary>Float/flush host window height in DIP (488×384).</summary>
-    public static double WindowHeight => FluidBar.Core.Layout.LayoutTokens.WindowHeight + ExtraBottomDip;
+    /// <summary>Float/flush host window height in DIP, derived from the Core host surface.</summary>
+    public static double WindowHeight => FluidBar.Core.Layout.LayoutTokens.HostSurfaceFloatHeight;
 
-    /// <summary>Dock host window height once the dock strip/panel band grows by the archipelago (488×444).</summary>
-    public static double DockWindowHeight => FluidBar.Core.Layout.LayoutTokens.WindowHeight + ExtraBottomDip + 60;
+    /// <summary>Dock host window height in DIP, derived from the Core host surface.</summary>
+    public static double DockWindowHeight => FluidBar.Core.Layout.LayoutTokens.HostSurfaceDockHeight;
 
     /// <summary>Fixed host window width (unchanged: 488 DIP).</summary>
     public const double WindowWidth = FluidBar.Core.Layout.LayoutTokens.WindowWidth;

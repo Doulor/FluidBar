@@ -233,7 +233,7 @@ public sealed class MotionDriverTests
         }
 
         Assert.False(clock.IsRunning);
-        Assert.Equal(248, driver.Frame.Width, 1);
+        Assert.Equal(LayoutTokens.CompactSize(ActivityKind.Notification).Width, driver.Frame.Width, 1);
         Assert.Equal(36, driver.Frame.Height, 1);
 
         // Reverse mid-flight must not snap to the target immediately.
@@ -336,5 +336,6 @@ public sealed class MotionDriverTests
         false,
         LayoutTokens.WindowHeight);
 }
+
 
 

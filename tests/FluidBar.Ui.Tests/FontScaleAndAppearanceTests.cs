@@ -68,7 +68,7 @@ public sealed class FontScaleAndAppearanceTests
         for (var i = 0; i < 3 && fixture.Controller.State.Page == FluidBar.Core.Activities.PageRef.Home; i++)
         {
             fixture.Controller.HandleWheel(PagerConstants.WheelNotchDip, horizontal: false, shift: false);
-            Assert.Equal(0, fixture.Controller.RenderState.Pages.Home.ScrollOffset, 3);
+            Assert.True(fixture.Controller.RenderState.Pages.Home.ScrollOffset > 0, "home content taller than the 244 body must scroll instead of turning the page");
             fixture.Time.Advance(TimeSpan.FromMilliseconds(PagerConstants.WheelCooldownMs + 40));
             fixture.RunToRest();
         }
@@ -139,4 +139,5 @@ public sealed class FontScaleAndAppearanceTests
             $"accent expected #{red:X2}{green:X2}{blue:X2} but was #{accent.Red:X2}{accent.Green:X2}{accent.Blue:X2} (a={accent.Alpha:X2}, mode={fixture.Settings.Current.AccentMode})");
     }
 }
+
 

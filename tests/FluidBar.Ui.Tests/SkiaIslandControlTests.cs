@@ -25,9 +25,9 @@ public sealed class SkiaIslandControlTests
 
         var page = Page(1, fixture);
         var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
-        Click(fixture, PageMetricsLayout.MediaPlay(page, metrics));
-        Click(fixture, PageMetricsLayout.MediaPrevious(page, metrics));
-        Click(fixture, PageMetricsLayout.MediaNext(page, metrics));
+        Click(fixture, PageVisual.MediaPlay(page));
+        Click(fixture, PageVisual.MediaPrevious(page));
+        Click(fixture, PageVisual.MediaNext(page));
 
         Assert.Equal(
             new[]
@@ -47,7 +47,7 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(1);
 
-        var track = PageLayout.MediaSeekTrack(Page(1, fixture));
+        var track = PageVisual.MediaSeekTrack(Page(1, fixture));
         fixture.Controller.HandlePointerPressed(track.Left + (track.Width * 0.75), track.MidY);
 
         var call = Assert.Single(actions.Calls);
@@ -64,11 +64,11 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(1);
 
         var page = Page(1, fixture);
-        var track = PageLayout.MediaSeekTrack(page);
+        var track = PageVisual.MediaSeekTrack(page);
         // Inside the seek row but left of the track: fraction clamps to 0.
-        fixture.Controller.HandlePointerPressed(page.Left + 5, track.MidY);
+        fixture.Controller.HandlePointerPressed(track.Left - 8, track.MidY);
         // Inside the seek row but right of the track: fraction clamps to 1.
-        fixture.Controller.HandlePointerPressed(page.Right - 5, track.MidY);
+        fixture.Controller.HandlePointerPressed(track.Right + 8, track.MidY);
 
         Assert.Equal(2, actions.Calls.Count);
         Assert.Equal(0, actions.Calls[0].Value, 3);
@@ -330,6 +330,8 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerReleased(rect.MidX, rect.MidY);
     }
 }
+
+
 
 
 

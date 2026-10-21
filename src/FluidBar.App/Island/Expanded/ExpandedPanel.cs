@@ -42,8 +42,8 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     /// <summary>Page viewport width (400, Core constant).</summary>
     public const double ViewportWidth = 400;
 
-    /// <summary>Page viewport height (252, Core constant).</summary>
-    public const double ViewportHeight = 252;
+    /// <summary>Page viewport height, derived from the expanded shell and vertical inset.</summary>
+    public const double ViewportHeight = LayoutTokens.ContentUsableHeight;
 
     /// <summary>Bottom hover band of the shell that reveals the archipelago (DIP).</summary>
     public const double BottomHoverBand = 12;

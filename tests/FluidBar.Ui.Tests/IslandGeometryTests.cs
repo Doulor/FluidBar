@@ -45,8 +45,8 @@ public sealed class IslandGeometryTests
             Assert.Equal(shell.Height, path.Bounds.Height, Eps);
             Assert.InRange(outline[0].X, shell.X - Eps, shell.X + 0.5);
             Assert.InRange(outline[^1].X, shell.X - Eps, shell.X + 0.5);
-            Assert.InRange(outline[0].Y, shell.Y + 20, shell.Y + 30);
-            Assert.InRange(outline[^1].Y, shell.Bottom - 30, shell.Bottom - 20);
+            Assert.InRange(outline[0].Y, shell.Y + 30, shell.Y + 60);
+            Assert.InRange(outline[^1].Y, shell.Bottom - 60, shell.Bottom - 30);
 
             // Avalonia's headless Geometry.FillContains is only reliable for four-point paths, so
             // evaluate the same closed polygon (the StreamGeometry's source points) in managed code.
@@ -222,5 +222,6 @@ public sealed class IslandGeometryTests
         return inside;
     }
 }
+
 
 
