@@ -85,6 +85,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private int _fallbackLastPid;
     private long _fallbackLastSeenMs;
 
+    /// <summary>Last published play state, used to log transitions only (one line per flip).</summary>
+    private bool? _lastPublishedPlaying;
+
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
