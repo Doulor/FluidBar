@@ -815,21 +815,21 @@ public static class PageVisual
 
     /// <summary>Lyric band: two text lines, no background (40 DIP after the cover row).</summary>
     public static SKRect MediaLyricCard(SKRect page) => new(page.Left + PageInset,
-        page.Top + BodyTop + 80, page.Right - PageInset,
-        page.Top + BodyTop + 80 + MediaLyricLine1Height + MediaLyricLine2Height);
+        page.Top + BodyTop + 72, page.Right - PageInset,
+        page.Top + BodyTop + 72 + MediaLyricLine1Height + MediaLyricLine2Height);
 
     /// <summary>First lyric line box (13/20).</summary>
-    public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 80,
-        page.Right - PageInset, page.Top + BodyTop + 80 + MediaLyricLine1Height);
+    public static SKRect MediaLyricLine1(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 72,
+        page.Right - PageInset, page.Top + BodyTop + 72 + MediaLyricLine1Height);
 
     /// <summary>Second (next) lyric line box (11.5/16).</summary>
     public static SKRect MediaLyricLine2(SKRect page) => new(page.Left + PageInset,
-        page.Top + BodyTop + 80 + MediaLyricLine1Height, page.Right - PageInset,
-        page.Top + BodyTop + 80 + MediaLyricLine1Height + MediaLyricLine2Height);
+        page.Top + BodyTop + 72 + MediaLyricLine1Height, page.Right - PageInset,
+        page.Top + BodyTop + 72 + MediaLyricLine1Height + MediaLyricLine2Height);
 
     /// <summary>Seek row (time labels + track), 16 DIP after the lyric band.</summary>
-    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 128,
-        page.Right - PageInset, page.Top + BodyTop + 144);
+    public static SKRect MediaSeekRow(SKRect page) => new(page.Left + PageInset, page.Top + BodyTop + 112,
+        page.Right - PageInset, page.Top + BodyTop + 128);
 
     /// <summary>Seek track: 3 DIP thick, spanning between the two time columns.</summary>
     public static SKRect MediaSeekTrack(SKRect page)
@@ -866,7 +866,7 @@ public static class PageVisual
 
     /// <summary>Footer info row: aligned with the progress track, 16 DIP below the transport.</summary>
     public static SKRect MediaFooter(SKRect page) => new(MediaSeekTrack(page).Left,
-        page.Top + BodyTop + 176, MediaSeekTrack(page).Right, page.Top + BodyTop + 176 + MediaFooterHeight);
+        page.Top + BodyTop + 184, MediaSeekTrack(page).Right, page.Top + BodyTop + 184 + MediaFooterHeight);
 
     /// <summary>Volume/mute control (left third of the footer row).</summary>
     public static SKRect MediaVolume(SKRect page)

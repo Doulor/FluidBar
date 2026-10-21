@@ -94,6 +94,13 @@ public sealed class MediaNowPlayingLayoutTests
         Assert.Equal(track.Left, footer.Left, 3);
         Assert.Equal(track.Right, footer.Right, 3);
         Assert.Equal(16, footer.Height, 3);
+
+        // Spacing rules from the design review: the track keeps clear air before the play circle, and the
+        // footer keeps the same 8 DIP minimum below it.
+        Assert.True(PageVisual.MediaPlay(page).Top - PageVisual.MediaSeekTrack(page).Bottom >= 8,
+            "the progress track must sit at least 8 DIP above the play circle");
+        Assert.True(PageVisual.MediaFooter(page).Top - PageVisual.MediaPlay(page).Bottom >= 8,
+            "the footer row must sit at least 8 DIP below the play circle");
         Assert.Equal(11, PageVisual.MediaFooterStyle.Size, 3);
         Assert.Equal(14, PageVisual.MediaFooterIcon, 3);
     }

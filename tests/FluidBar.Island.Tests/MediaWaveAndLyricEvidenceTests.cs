@@ -53,7 +53,7 @@ public sealed class MediaWaveAndLyricEvidenceTests
 
         var shell = IslandMetrics.ShellRect(early);
         var page = IslandMetrics.PageRect(early, 1);
-        var lyric = PageMetricsLayout.MediaLyricCard(page, FontScaleMetrics.One);
+        var lyric = PageVisual.MediaLyricCard(page);
         var lyricRect = new SKRect(
             lyric.Left * Scale,
             lyric.Top * Scale,
