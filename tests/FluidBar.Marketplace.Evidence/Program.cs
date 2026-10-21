@@ -582,9 +582,14 @@ internal static class Program
             () => controller.Motion.SplitProgress,
             midTrigger: () => settings.Update(current => current with { Stacking = StackingStrategySetting.Latest })));
 
+        // v2: satellite hover/press (enter, leave, press, release) and media lyric switches.
+        segments.Add(CaptureSatelliteHoverPress(controller, renderer, time, outputDir, step));
+        segments.Add(CaptureLyricSwitch(controller, renderer, time, outputDir, step, data));
+
         WriteTimingCsv(outputDir, segments);
         WriteMotionReport(outputDir, segments);
-        BuildMotionStrip(outputDir, segments);
+        BuildMotionStrip(outputDir, segments, "motion-strip-v2.png");
+        BuildMotionStrip(outputDir, segments, "motion-strip.png");
         BuildKeyFrames(outputDir, [("expand", 30), ("page", 30), ("satellite", 15)]);
 
         Console.WriteLine(JsonSerializer.Serialize(
@@ -608,7 +613,12 @@ internal static class Program
         Increasing,
         Decreasing,
         Peaks,
+
+        /// <summary>Multi-event segment (hover in/out, press/release, lyric fades); analysed per event interval.</summary>
+        Free,
     }
+
+    private const double BackJumpTolerance = 0.01;
 
     private sealed record MotionFrame(
         int Index,
@@ -674,7 +684,10 @@ internal static class Program
         MotionDirection direction,
         Action trigger,
         Func<double> metric,
-        Action? midTrigger = null)
+        Action? midTrigger = null,
+        Action<int>? beforeFrame = null,
+        Func<IslandRenderState, IslandRenderState>? decorate = null,
+        IReadOnlyList<int>? eventFrames = null)
     {
         var segmentDir = Path.Combine(outputDir, name);
         Directory.CreateDirectory(segmentDir);
@@ -693,11 +706,16 @@ internal static class Program
                 midTrigger?.Invoke();
             }
 
+            beforeFrame?.Invoke(index);
             time.Advance(step);
             var advanceWatch = System.Diagnostics.Stopwatch.StartNew();
             controller.Advance(step);
             advanceWatch.Stop();
             var state = controller.RenderState;
+            if (decorate is not null)
+            {
+                state = decorate(state);
+            }
 
             var renderWatch = System.Diagnostics.Stopwatch.StartNew();
             using var bitmap = renderer.RenderToBitmap(state, 1.5f);
@@ -724,6 +742,12 @@ internal static class Program
         }
 
         var segment = new MotionSegment { Name = name, Direction = direction, Frames = framesRecorded };
+        if (direction == MotionDirection.Free)
+        {
+            AnalyzeFree(segment, eventFrames);
+            return segment;
+        }
+
         var peakIndex = direction == MotionDirection.Decreasing
             ? framesRecorded.IndexOf(framesRecorded.MinBy(static frame => frame.Metric)!)
             : framesRecorded.IndexOf(framesRecorded.MaxBy(static frame => frame.Metric)!);
@@ -739,7 +763,9 @@ internal static class Program
             {
                 // Only motion that stalls or reverses before the target is reached is a defect; the damped
                 // spring settling afterwards legitimately oscillates around the target.
-                var backJump = direction == MotionDirection.Decreasing ? delta > 1e-4 : delta < -1e-4;
+                var backJump = direction == MotionDirection.Decreasing
+                    ? delta > BackJumpTolerance
+                    : delta < -BackJumpTolerance;
                 if (backJump)
                 {
                     segment.BackJumpCount++;
@@ -763,6 +789,280 @@ internal static class Program
 
         segment.MaxJump = maxJump;
         return segment;
+    }
+
+    /// <summary>
+    /// Event-interval analysis for multi-event segments (hover in/out, press/release, lyric fades):
+    /// each interval between triggers should move monotonically, so reversals, stalls and duplicate
+    /// frames inside it count as defects; intervals that are pure holds are skipped.
+    /// </summary>
+    /// <summary>Satellite hover/press: one split ball enters, leaves, presses and releases (60 frames).</summary>
+    private static MotionSegment CaptureSatelliteHoverPress(
+        SkiaIslandController controller,
+        IslandRenderer renderer,
+        HarnessTimeProvider time,
+        string outputDir,
+        TimeSpan step)
+    {
+        Settle(controller, time, step);
+        controller.HandleEscape();
+        Settle(controller, time, step);
+
+        controller.PublishActivity(
+            ActivityKind.Media,
+            new ActivityPayload
+            {
+                Title = "Midnight City",
+                Subtitle = "M83",
+                IsActive = true,
+                ShowsAudioWave = true,
+                ProgressPercent = 46,
+            },
+            sequence: 30);
+        controller.PublishActivity(
+            ActivityKind.Agent,
+            new ActivityPayload { Title = "Refactor parser", Body = "Running tests", IsActive = true },
+            sequence: 31);
+        for (var settle = 0; settle < 120; settle++)
+        {
+            time.Advance(step);
+            controller.Advance(step);
+        }
+
+        var state = controller.RenderState;
+        var rects = IslandMetrics.SplitIsletRects(state);
+        var shell = IslandMetrics.ShellRect(state);
+        var satellite = new SplitSatelliteMotion();
+        if (rects.Length > 0)
+        {
+            var seatX = rects[0].MidX - shell.MidX;
+            var seatY = rects[0].MidY - shell.MidY;
+            satellite.BeginBirth(shell.Width / 2, 0, seatX, seatY, 1, 0);
+            for (var settle = 0; settle < 90; settle++)
+            {
+                satellite.Update(1.0 / 60.0);
+            }
+        }
+
+        IslandRenderState Decorate(IslandRenderState current)
+        {
+            if (current.SplitIslets.Length == 0)
+            {
+                return current;
+            }
+
+            var values = satellite.Values;
+            var pose = new IslandRenderState.IslandSatelliteFrame(
+                values.State,
+                values.X,
+                values.Y,
+                values.Scale,
+                values.StretchX,
+                values.StretchY,
+                values.Highlight,
+                values.Brightness,
+                values.RingAngleDegrees,
+                values.PressDepth);
+            var frames = new IslandRenderState.IslandSatelliteFrame[current.SplitIslets.Length];
+            for (var index = 0; index < frames.Length; index++)
+            {
+                frames[index] = pose;
+            }
+
+            return current with { SatelliteFrames = frames, SplitProgress = 1 };
+        }
+
+        return CaptureSegment(
+            controller,
+            renderer,
+            time,
+            outputDir,
+            step,
+            "satellite-hover",
+            60,
+            MotionDirection.Free,
+            static () => { },
+            // Highlight + press depth: hover in/out and press/release ramps only; breathing is excluded.
+            () => satellite.Values.Highlight + satellite.Values.PressDepth,
+            beforeFrame: index =>
+            {
+                switch (index)
+                {
+                    case 8:
+                        satellite.SetHover(true);
+                        break;
+                    case 24:
+                        satellite.SetHover(false);
+                        break;
+                    case 32:
+                        satellite.SetHover(true);
+                        satellite.Press();
+                        break;
+                    case 44:
+                        satellite.Release();
+                        break;
+                    case 52:
+                        satellite.SetHover(false);
+                        break;
+                }
+
+                satellite.Update(1.0 / 60.0);
+            },
+            decorate: Decorate,
+            eventFrames: [8, 24, 32, 44, 52]);
+    }
+
+    /// <summary>Media lyric switch: two line changes on the compact lyric pill (220 ms fade-in each).</summary>
+    private static MotionSegment CaptureLyricSwitch(
+        SkiaIslandController controller,
+        IslandRenderer renderer,
+        HarnessTimeProvider time,
+        string outputDir,
+        TimeSpan step,
+        DesignIslandDataSource data)
+    {
+        Settle(controller, time, step);
+        controller.HandleEscape();
+        Settle(controller, time, step);
+
+        // Drop the agent activity from the hover segment so the media pill becomes the primary.
+        controller.RetractActivity(ActivityKind.Agent, sequence: 32);
+        controller.RetractActivity(ActivityKind.Media, sequence: 31);
+        Settle(controller, time, step);
+        controller.PublishActivity(
+            ActivityKind.Media,
+            new ActivityPayload
+            {
+                Title = "Midnight City",
+                Subtitle = "M83",
+                IsActive = true,
+                ShowsAudioWave = true,
+                ProgressPercent = 46,
+            },
+            sequence: 40);
+        data.Update(content => content with
+        {
+            Media = new MediaSessionData
+            {
+                Title = "Midnight City",
+                Artist = "M83",
+                Album = "Hurry Up, We're Dreaming",
+                ProgressPercent = 46,
+                PositionText = "1:52",
+                DurationText = "4:03",
+                IsPlaying = true,
+                AccentHex = "#F06AB0",
+                LyricLine = "Waiting for a car to drive me home",
+                NextLyricLine = "The city is my church",
+            },
+        });
+        for (var settle = 0; settle < 60; settle++)
+        {
+            time.Advance(step);
+            controller.Advance(step);
+        }
+
+        var line = 0;
+        return CaptureSegment(
+            controller,
+            renderer,
+            time,
+            outputDir,
+            step,
+            "lyrics",
+            60,
+            MotionDirection.Free,
+            static () => { },
+            () => controller.RenderState.Compact?.Model.LyricFade ?? 1f,
+            beforeFrame: index =>
+            {
+                if (index is not (8 or 36))
+                {
+                    return;
+                }
+
+                line++;
+                data.Update(content => content with
+                {
+                    Media = content.Media with
+                    {
+                        LyricLine = line == 1 ? "The city is my church" : "Together we stand 30 feet tall",
+                        NextLyricLine = line == 1 ? "Together we stand 30 feet tall" : null,
+                    },
+                });
+            },
+            eventFrames: [8, 36]);
+    }
+
+    /// <summary>
+    /// Event-interval analysis for multi-event segments (hover in/out, press/release, lyric fades):
+    /// each interval between triggers should move monotonically, so reversals, stalls and duplicate
+    /// frames inside it count as defects; intervals that are pure holds are skipped.
+    /// </summary>
+    private static void AnalyzeFree(MotionSegment segment, IReadOnlyList<int>? eventFrames)
+    {
+        var frames = segment.Frames;
+        var boundaries = new List<int> { 0 };
+        if (eventFrames is not null)
+        {
+            boundaries.AddRange(eventFrames.Where(index => index > 0 && index < frames.Count));
+        }
+
+        boundaries.Add(frames.Count);
+        boundaries = boundaries.Distinct().OrderBy(static value => value).ToList();
+
+        var maxJump = 0.0;
+        for (var boundary = 0; boundary < boundaries.Count - 1; boundary++)
+        {
+            var start = boundaries[boundary];
+            var end = boundaries[boundary + 1];
+            if (end - start < 2)
+            {
+                continue;
+            }
+
+            var first = frames[start].Metric;
+            var last = frames[end - 1].Metric;
+            var rising = last - first > 1e-6;
+            var falling = first - last > 1e-6;
+            if (!rising && !falling)
+            {
+                continue;
+            }
+
+            // Spring settling after the interval peak legitimately oscillates, so defects are only
+            // counted up to the peak (same rule as the monotonic segments).
+            var peak = start;
+            for (var index = start + 1; index < end; index++)
+            {
+                if (rising ? frames[index].Metric > frames[peak].Metric : frames[index].Metric < frames[peak].Metric)
+                {
+                    peak = index;
+                }
+            }
+
+            for (var index = start + 1; index <= peak; index++)
+            {
+                var delta = frames[index].Metric - frames[index - 1].Metric;
+                maxJump = Math.Max(maxJump, Math.Abs(delta));
+                if ((rising && delta < -BackJumpTolerance) || (falling && delta > BackJumpTolerance))
+                {
+                    segment.BackJumpCount++;
+                }
+
+                if (Math.Abs(delta) < 1e-6)
+                {
+                    segment.StalledFrames++;
+                }
+
+                if (frames[index].Hash == frames[index - 1].Hash)
+                {
+                    segment.DuplicateFrames++;
+                }
+            }
+        }
+
+        segment.MaxJump = maxJump;
     }
 
     /// <summary>Pixels (at dpiScale) of the island plus a shadow margin, so frames are not mostly empty canvas.</summary>
@@ -839,7 +1139,7 @@ internal static class Program
         builder.AppendLine("Driver: real SkiaIslandController (motion/pager/split springs) + IslandRenderer.RenderToBitmap at 1.5x, 3 warm-up frames before capture.");
         builder.AppendLine("Per-frame cost is split into advance (controller), render (Skia) and encode (PNG, harness overhead); the 16.7 ms budget is judged on advance + render (ui).");
         builder.AppendLine();
-        builder.AppendLine("| segment | frames | duration (sim) | advance p50/p99 | render p50/p99 | encode p50/p99 | ui p50/p99 | frames > 16.7 ms (ui) | back-jumps | stalled | duplicate | settle overshoot | max step |");
+        builder.AppendLine("| segment | frames | duration (sim) | advance p50/p99 | render p50/p99 | encode p50/p99 | ui p50/p99 | frames > 16.7 ms (ui) | back-jumps | stalled | duplicate | settle overshoot | max step | 观感判定 |");
         builder.AppendLine("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
         foreach (var segment in segments)
         {
@@ -847,12 +1147,18 @@ internal static class Program
             var render = $"{segment.Percentile(static frame => frame.RenderMs, 50):0.00}/{segment.Percentile(static frame => frame.RenderMs, 99):0.00} ms";
             var encode = $"{segment.Percentile(static frame => frame.EncodeMs, 50):0.00}/{segment.Percentile(static frame => frame.EncodeMs, 99):0.00} ms";
             var ui = $"{segment.Percentile(50):0.00}/{segment.Percentile(99):0.00} ms";
-            builder.AppendLine($"| {segment.Name} | {segment.Frames.Count} | {segment.Frames.Count / 60.0:0.00} s | {advance} | {render} | {encode} | {ui} | {segment.OverBudgetCount} | {segment.BackJumpCount} | {segment.StalledFrames} | {segment.DuplicateFrames} | {segment.Overshoot:0.000} | {segment.MaxJump:0.000} |");
+            var verdict = (segment.BackJumpCount, segment.StalledFrames, segment.DuplicateFrames) switch
+            {
+                (0, 0, 0) when segment.Overshoot > 0.001 => $"平稳（弹簧超调 {segment.Overshoot:0.00}）",
+                (0, 0, 0) => "平稳",
+                _ => $"关注（回跳 {segment.BackJumpCount} / 停顿 {segment.StalledFrames} / 重复 {segment.DuplicateFrames}）",
+            };
+            builder.AppendLine($"| {segment.Name} | {segment.Frames.Count} | {segment.Frames.Count / 60.0:0.00} s | {advance} | {render} | {encode} | {ui} | {segment.OverBudgetCount} | {segment.BackJumpCount} | {segment.StalledFrames} | {segment.DuplicateFrames} | {segment.Overshoot:0.000} | {segment.MaxJump:0.000} | {verdict} |");
         }
 
         builder.AppendLine();
         builder.AppendLine("## Notes");
-        builder.AppendLine("- back-jumps: frames before the target is reached where the driving metric moves opposite to the expected direction (expand/page: rising; collapse: falling; satellite: rising until the fusion trigger, then falling).");
+        builder.AppendLine("- back-jumps: frames before the target is reached where the driving metric moves opposite to the expected direction by more than 0.01 (expand/page: rising; collapse: falling; satellite: rising until the fusion trigger, then falling; freeform segments: per event interval).");
         builder.AppendLine("- stalled / duplicate: frames before the target where the metric does not change, or the encoded frame is byte-identical to the previous one (a dropped or duplicated frame on screen).");
         builder.AppendLine("- settle overshoot: after the peak, the largest distance from the final value; damped spring oscillation is expected there and is not counted as a back-jump.");
         builder.AppendLine("- ui = advance + render (controller + Skia) and is what the 16.7 ms budget is judged on; encode (PNG at 1.5x) is harness overhead and is reported separately.");
@@ -862,7 +1168,7 @@ internal static class Program
         File.WriteAllText(Path.Combine(outputDir, "motion-capture.md"), builder.ToString(), System.Text.Encoding.UTF8);
     }
 
-    private static void BuildMotionStrip(string outputDir, IReadOnlyList<MotionSegment> segments)
+    private static void BuildMotionStrip(string outputDir, IReadOnlyList<MotionSegment> segments, string fileName)
     {
         const int columns = 8;
         const int thumbWidth = 220;
@@ -898,7 +1204,7 @@ internal static class Program
             }
         }
 
-        target.Save(Path.Combine(outputDir, "motion-strip.png"), System.Drawing.Imaging.ImageFormat.Png);
+        target.Save(Path.Combine(outputDir, fileName), System.Drawing.Imaging.ImageFormat.Png);
     }
 
     /// <summary>2x upscales of the frames humans should eyeball (one per motion family).</summary>
