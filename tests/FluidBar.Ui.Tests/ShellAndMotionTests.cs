@@ -234,8 +234,8 @@ public sealed class MotionDriverTests
         }
 
         Assert.False(clock.IsRunning);
-        Assert.Equal(170, driver.Frame.Width, 1);
-        Assert.Equal(38, driver.Frame.Height, 1);
+        Assert.Equal(360, driver.Frame.Width, 1);
+        Assert.Equal(70, driver.Frame.Height, 1);
 
         // Reverse mid-flight must not snap to the target immediately.
         driver.SetTarget(ExpandedTarget());

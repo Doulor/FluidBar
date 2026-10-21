@@ -327,9 +327,9 @@ public static class LayoutTokens
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    // Half-size notification pill (2026-10-22 final): 340×76 → 170×38 DIP. The compact renderer
-    // drops to a 26 DIP logo, one-line title/body and a tiny time/app column so the proportions hold.
-    private static readonly VisualSize NotificationSize = new(170, 38);
+    // NetSpeed-Dynamic message card (src/views/WidgetIsland.vue): 360×70 DIP, 100px CSS radius
+    // clipped by the 70 DIP height → 35 DIP stadium corners.
+    private static readonly VisualSize NotificationSize = new(360, 70);
     private static readonly VisualSize ClipboardSize = new(264, 36);
     // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
     private static readonly VisualSize AgentSize = new(236, 36);

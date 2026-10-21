@@ -181,8 +181,8 @@ public class LayoutTests
             Assert.True(result.Shell.Right <= work.Width + Eps, context);
             Assert.True(result.Shell.Bottom <= work.Height + Eps, context);
 
-            var expectedWidth = form == ShellForm.Expanded ? 440 : mode == IslandMode.Dock ? 440 : 170;
-            var expectedHeight = form == ShellForm.Expanded ? 284 : mode == IslandMode.Dock ? 52 : 38;
+            var expectedWidth = form == ShellForm.Expanded ? 440 : mode == IslandMode.Dock ? 440 : 360;
+            var expectedHeight = form == ShellForm.Expanded ? 284 : mode == IslandMode.Dock ? 52 : 70;
             Assert.Equal(expectedWidth, result.Shell.Width, Eps);
             Assert.Equal(expectedHeight, result.Shell.Height, Eps);
 
@@ -346,7 +346,7 @@ public class LayoutTests
                         Assert.Equal(22, result.Radii.BottomLeft, Eps);
                         break;
                     default:
-                        Assert.Equal(19, result.Radii.TopLeft, Eps);
+                        Assert.Equal(35, result.Radii.TopLeft, Eps);
                         break;
                 }
             }
@@ -682,7 +682,7 @@ public class LayoutTests
     [InlineData(ActivityKind.Media, 226, 40)]
     [InlineData(ActivityKind.Volume, 208, 40)]
     [InlineData(ActivityKind.Brightness, 208, 40)]
-    [InlineData(ActivityKind.Notification, 170, 38)]
+    [InlineData(ActivityKind.Notification, 360, 70)]
     [InlineData(ActivityKind.Clipboard, 264, 36)]
     [InlineData(ActivityKind.Agent, 236, 36)]
     [InlineData(ActivityKind.Timer, 190, 36)]

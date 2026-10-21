@@ -425,6 +425,12 @@ public static class IslandType
     /// <summary>Compact notification app name / body (prototype2 11.5 DIP).</summary>
     public static readonly TextStyle CompactNotice = new(FontRole.Ui, 11.5f);
 
+    /// <summary>Notification sender title — NetSpeed-Dynamic <c>.msg-title</c> 14 DIP / 700.</summary>
+    public static readonly TextStyle NotificationTitle = new(FontRole.UiSemiBold, 14f);
+
+    /// <summary>Notification body — NetSpeed-Dynamic <c>.msg-body</c> 12.5 DIP / 400.</summary>
+    public static readonly TextStyle NotificationBody = new(FontRole.Ui, 12.5f);
+
     /// <summary>Compact notification app name, semibold (prototype2 11.5 DIP / 600).</summary>
     public static readonly TextStyle CompactNoticeStrong = new(FontRole.UiSemiBold, 11.5f);
 
