@@ -2372,6 +2372,13 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Snapshots the split previews for the current strategy (kept while the merge animates).</summary>
     private void UpdateSplitPreviews(IslandViewModel viewModel, AppSettings settings)
     {
+        // The reference notification card owns the island; hide split previews while it is primary.
+        if (viewModel.Primary?.Kind == ActivityKind.Notification)
+        {
+            _splitPreviews = [];
+            return;
+        }
+
         if (settings.Stacking == StackingStrategySetting.Split
             && State.Kind is not (IslandStateKind.Expanded or IslandStateKind.Closing))
         {
