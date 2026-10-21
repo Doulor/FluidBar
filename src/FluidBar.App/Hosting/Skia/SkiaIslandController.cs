@@ -233,7 +233,9 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
-        _pager = new SkiaPager(IndexOfPage(State.Page), _pages.PageCount);
+        // Restore the page the user last scrolled to (clamped in case the page count changed).
+        var restoredPage = Math.Clamp(PageSelectionStore.Load(), 0, Math.Max(0, _pages.PageCount - 1));
+        _pager = new SkiaPager(restoredPage == 0 ? IndexOfPage(State.Page) : restoredPage, _pages.PageCount);
         _pager.PageChanged += OnPagerPageChanged;
         _archipelago = new SkiaArchipelago(profile);
 
@@ -2527,6 +2529,8 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         ApplyInput(IslandInput.PageRequested(PageAt(page)));
+        // Remember the manual choice so a restart opens on the same page (user request 2026-10-22).
+        PageSelectionStore.Save(page);
         InvalidateFull();
         FrameRequested?.Invoke();
     }
