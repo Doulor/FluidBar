@@ -80,6 +80,7 @@ public sealed class SkiaIslandController : IDisposable
     private IslandStateController _controller;
 
     private CompactActivity _compact = new(ActivityKind.Idle, new CompactModel());
+    private CompactActivity? _secondaryCompact;
 
     // Compact lyric mode: the setting is read live from the media plugin's store, and a line change
     // animates in over CompactLyricFadeMs so the pill does not hard-cut twice per line.
@@ -99,6 +100,9 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>Sweep fraction currently painted (compared with a 1/255 tolerance to avoid useless frames).</summary>
     private double _karaokeHighlight = -1;
+
+    /// <summary>Line the monotonic sweep is locked to (a different value means "take the new value").</summary>
+    private double _karaokeSweepLineStartMs = double.NaN;
 
     /// <summary>Whether the karaoke sweep needs frames right now.</summary>
     private bool _karaokeActive;
@@ -1933,6 +1937,9 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
+        // A notification is an aside, not a takeover: when another activity owns the primary pill,
+        // present the notification as a second compact island below it instead of preempting the pill.
+        var presentation = PreferNotificationSecondary(viewModel);
         PinDiagnostics.Log(
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
             $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
@@ -1952,9 +1959,9 @@ public sealed class SkiaIslandController : IDisposable
         var stackChanged = !string.Equals(stackSignature, _visibleStackSignature, StringComparison.Ordinal);
         _visibleStackSignature = stackSignature;
 
-        var structural = SkiaIslandStateBuilder.StructuralSignature(content, viewModel, _localizer, settings);
-        var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, viewModel);
-        var timingSignature = SkiaIslandStateBuilder.AgentTimingSignature(content, viewModel);
+        var structural = SkiaIslandStateBuilder.StructuralSignature(content, presentation, _localizer, settings);
+        var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, presentation);
+        var timingSignature = SkiaIslandStateBuilder.AgentTimingSignature(content, presentation);
         var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
         var dynamicChanged = !string.Equals(dynamicSignature, _dynamicSignature, StringComparison.Ordinal);
         var timingChanged = !string.Equals(timingSignature, _agentTimingSignature, StringComparison.Ordinal);
@@ -1991,19 +1998,20 @@ public sealed class SkiaIslandController : IDisposable
         // A new song shows its title/artist for three seconds before the lyric takes the pill over:
         // jumping straight to the words made the track feel unannounced (user request 2026-10-21).
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
-        _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked, showCompactLyrics);
+        _compact = SkiaIslandStateBuilder.BuildCompact(presentation, content, _localizer, peeked, showCompactLyrics);
+        _secondaryCompact = BuildSecondaryCompact(presentation, content);
         TrackCompactLyric();
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
         _pages = ApplyPageScroll(ApplyCopyFeedback(
-            SkiaIslandStateBuilder.BuildPages(content, viewModel, _localizer, settings),
+            SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings),
             _time.GetLocalNow())) with
         {
             PluginPages = _pluginPages,
             PageSlots = BuildPageSlots(),
         };
         _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
-        UpdateSplitPreviews(viewModel, settings);
-        _motion.SetTarget(BuildTarget(viewModel));
+        UpdateSplitPreviews(presentation, settings);
+        _motion.SetTarget(BuildTarget(presentation));
         BuildRenderState();
 
         if (full || !_hasRenderState || structuralChanged)
@@ -2249,6 +2257,64 @@ public sealed class SkiaIslandController : IDisposable
         _splitPolicy.Unpin();
         _splitPinnedKey = null;
         PinDiagnostics.Log($"pin released {oldPin}");
+    }
+
+    /// <summary>
+    /// Demotes a notification from the primary slot when another activity is alive, so the notification
+    /// can be painted as a second pill below the current island instead of replacing it.
+    /// </summary>
+    private static IslandViewModel PreferNotificationSecondary(IslandViewModel viewModel)
+    {
+        if (viewModel.Primary?.Kind != ActivityKind.Notification || viewModel.Ghosts.Length == 0)
+        {
+            return viewModel;
+        }
+
+        var partner = -1;
+        for (var i = 0; i < viewModel.Ghosts.Length; i++)
+        {
+            if (viewModel.Ghosts[i].Kind != ActivityKind.Notification)
+            {
+                partner = i;
+                break;
+            }
+        }
+
+        if (partner < 0)
+        {
+            return viewModel;
+        }
+
+        var notification = viewModel.Primary with { IsGhost = true, StackIndex = 1 };
+        var promoted = viewModel.Ghosts[partner] with { IsGhost = false, StackIndex = 0 };
+        return viewModel with
+        {
+            Primary = promoted,
+            Ghosts = viewModel.Ghosts.RemoveAt(partner).Insert(0, notification),
+        };
+    }
+
+    /// <summary>Builds the compact notification pill shown below the primary island (null when none).</summary>
+    private CompactActivity? BuildSecondaryCompact(IslandViewModel presentation, IslandContent content)
+    {
+        foreach (var ghost in presentation.Ghosts)
+        {
+            if (ghost.Kind != ActivityKind.Notification)
+            {
+                continue;
+            }
+
+            var ghostIsland = new IslandViewModel
+            {
+                StateKind = IslandStateKind.Compact,
+                Page = ghost.Page,
+                Primary = ghost,
+            };
+            return SkiaIslandStateBuilder.BuildCompact(
+                ghostIsland, content, _localizer, peeked: false, compactLyrics: false);
+        }
+
+        return null;
     }
 
     /// <summary>Snapshots the split previews for the current strategy (kept while the merge animates).</summary>
@@ -3033,9 +3099,10 @@ private void HandlePageControl(in IslandHitTarget hit)
             _karaokeClock.Anchor(media.PositionMs, now, media.IsPlaying);
             _karaokeHighlight = track.Progress(media.PositionMs);
         }
-        else if (_karaokeClock.Reconcile(media.PositionMs, now, media.IsPlaying))
+        else if (media.PositionMs > _karaokeClock.PositionAt(now)
+                 && _karaokeClock.Reconcile(media.PositionMs, now, media.IsPlaying))
         {
-            // Snapped on a seek: take the new position immediately.
+            // Forward-only easing. A lagging sample is ignored instead of pulling the clock backwards.
             _karaokeHighlight = track.Progress(media.PositionMs);
         }
 
@@ -3103,10 +3170,16 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var position = _karaokeClock.PositionAt(NowMs());
         var highlight = track.Progress(position);
-        // Belt and braces for the same reason: a sample that lands slightly behind must not erase painted
-        // characters. Only a SMALL reversal is absorbed (sample jitter stays well under 20 % of a line);
-        // a bigger drop is a real reset — new track, seek or a fresh fixture — and must go through.
-        if (_karaokeActive && highlight < _karaokeHighlight && highlight >= _karaokeHighlight - 0.2)
+        // The sweep is monotonic INSIDE one lyric line: a lower value can only come from a lagging sample
+        // or a clock wobble, and erasing painted characters is exactly the flicker the user reported
+        // (2026-10-21, "same line, not the line change"). The real resets — new line, seek, new track —
+        // arrive with a different LineStartMs and are taken as they are.
+        if (_karaokeSweepLineStartMs != track.LineStartMs)
+        {
+            _karaokeSweepLineStartMs = track.LineStartMs;
+            _karaokeHighlight = highlight;
+        }
+        else if (highlight < _karaokeHighlight)
         {
             highlight = _karaokeHighlight;
         }
@@ -3326,6 +3399,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             Pager = PagerRenderState.FromPosition(
                 _pager.PagePosition, _pages.PageCount, _pager.IsDragging, _pager.IsAnimating),
             Compact = _compact,
+            SecondaryCompact = expanded ? null : _secondaryCompact,
             Pages = _pages,
             Theme = _theme,
             Archipelago = _options.EnableArchipelago
