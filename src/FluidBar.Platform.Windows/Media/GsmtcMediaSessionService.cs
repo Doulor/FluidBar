@@ -101,7 +101,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     /// <summary>Write time of the state file we are currently extrapolating.</summary>
     /// <summary>Master switch for the state-file arbitration. Off while the two clocks fight.</summary>
-    private const bool CrossCheckEnabled = false;
+    private const bool CrossCheckEnabled = true;
 
     private DateTime? _stateFileWrittenAt;
 
@@ -511,7 +511,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
         var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
         var difference = (candidate.Position - expected).Duration();
-        if (difference <= TimeSpan.FromSeconds(3))
+        if (difference <= TimeSpan.FromSeconds(0.4))
         {
             return candidate;
         }
@@ -520,8 +520,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (nowTicks - _lastCrossCheckLogMs > 10_000)
         {
             _lastCrossCheckLogMs = nowTicks;
-            MediaDiagnostics.LogAlways($"timeline.crosscheck resolved=state-file delta={difference.TotalSeconds:0.0}s " +
-                $"msaa={candidate.Position.TotalSeconds:0.0}s state={expected.TotalSeconds:0.0}s age={age.TotalSeconds:0.0}s");
+            MediaDiagnostics.LogAlways($"sync.truth ini={expected.TotalSeconds:0.0}s msaa={candidate.Position.TotalSeconds:0.0}s " +
+                $"delta={difference.TotalSeconds:0.0}s playingMs={_stateFilePlayingMs:0} ageS={age.TotalSeconds:0.0}");
         }
         return candidate with
         {
