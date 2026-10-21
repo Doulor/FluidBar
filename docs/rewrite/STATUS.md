@@ -186,3 +186,25 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 
 
 
+
+## 2026-10-21 深夜 — 通知卡片改造：交接说明（未完成）
+
+**目标**：通知页做成"手机卡片"质感（更大图标 + 未读点 + 两行正文 + 富信息），岛可以更高。
+
+**已确认的事实（省得下次重试）**
+1. 行高常量有两处必须同步改：`IslandMetrics.NotificationRowHeight`（命中测试/UIAA 用）与 `PageMetricsLayout.NotificationRowHeight(metrics)`（渲染用）。
+2. 只改行高 40→64 会让两条命中测试红：
+   - `Notifications_rows_dismiss_buttons_and_scroll_region_are_targets`（断言点在 `PageLayout.NotificationDismiss` 中点上，得到 Row 而非 Dismiss）
+   - `Notification_scroll_offset_moves_the_hit_targets`（期望非 Row，得到 Row）
+   根因：`IslandMetrics` 的命中几何用 `page.Top + 28` 常量偏移，而 `PageMetricsLayout` 用 `BodyTop`；行高变化后两者累积误差放大，命中点落到相邻行。**要改行高就必须先让命中测试改用 `PageMetricsLayout`（font-aware）几何**。
+3. 只放大图标（26→30 DIP）+ 未读点、行高保持 40，则只有 golden 红：
+   - 9 张通知 golden（`04/17/23/30/31/32/46/47/48-*`）会被 `GoldenImageTests` 自动重写（缺失即写），
+   - 但 `FontScaleTests.Existing_goldens_are_pixel_identical_at_scale_one` 要求**逐像素完全相同**，重写后仍报差异 → 说明该用例与绘图用例的渲染路径/状态存在细微不同（需先定位差异来源，再决定是重录还是调整用例）。
+
+**下次的正确顺序**
+1. 先让 `IslandHitTest`/测试统一到 `PageMetricsLayout` 几何（消除 28 vs BodyTop 的双份定义）；
+2. 再改行高 40→64 + 行内重排（图标 36、未读点、标题加粗、正文两行、右下时间）；
+3. 用 `GoldenImageTests` 生成新图，人工确认视觉后再让 `Existing_goldens_are_pixel_identical` 通过（必要时改该用例为"容差比对"或按新基准重录）；
+4. 全量 Island/Ui/Platform + 发布 + 视觉截图确认。
+
+**当前仓库状态**：工作区干净，Island 446 / Ui 502 / Platform 660 全绿，运行版本 `62A3C497…924B`。
