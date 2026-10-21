@@ -1,5 +1,7 @@
 using SkiaSharp;
 
+using System;
+
 namespace FluidBar.Island;
 
 /// <summary>
@@ -147,10 +149,12 @@ public static class PageMetricsLayout
         => 30 + (metrics.LineGrow(IslandType.SeekTime) * 1.5f);
 
     /// <summary>Media lyric card rectangle (inner padding absorbs part of the line growth).</summary>
+    [Obsolete("Use PageVisual.MediaLyricCard: the media page has a single geometry source.")]
     public static SKRect MediaLyricCard(SKRect page, in FontScaleMetrics metrics)
         => MediaLyricCard(page, metrics, MediaSqueeze(page, metrics));
 
     /// <summary>Media seek row rectangle.</summary>
+    [Obsolete("Use PageVisual.MediaSeekRow: the media page has a single geometry source.")]
     public static SKRect MediaSeekRow(SKRect page, in FontScaleMetrics metrics)
         => MediaSeekRow(page, metrics, MediaSqueeze(page, metrics));
 

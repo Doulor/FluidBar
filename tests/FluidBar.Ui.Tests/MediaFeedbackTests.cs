@@ -264,6 +264,29 @@ public sealed class MediaFeedbackTests
         Assert.False(optimistic.IsPending);
         Assert.False(optimistic.LastResolveRolledBack);
     }
+
+    [Fact]
+    public void Seek_fraction_is_computed_from_the_painted_track()
+    {
+        // 75 % of the drawn track must map to 0.75 ± 0.01; the router used to read the legacy PageLayout
+        // track (21 DIP left of the paint), which turned a 75 % tap into 0.7174.
+        var state = new IslandRenderState
+        {
+            Mode = IslandMode.Float,
+            Form = ShellForm.Expanded,
+            ShellWidth = LayoutTokens.ExpandedWidth,
+            ShellHeight = LayoutTokens.ExpandedHeight,
+            Pager = PagerRenderState.FromPosition(1, 6, false, false),
+            Pages = new ExpandedPageContent { Media = new MediaPageModel { HasSession = true } },
+        };
+        var page = IslandMetrics.PageRect(state, 1);
+        var track = PageVisual.MediaSeekTrack(page);
+        var hit = new IslandHitTarget(IslandHitKind.PageControl, 1, IslandPageControl.Seek);
+
+        var action = SkiaIslandControlRouter.Map(hit, state, track.Left + (track.Width * 0.75));
+
+        Assert.NotNull(action);
+        Assert.Equal(IslandPlatformActionKind.MediaSeek, action!.Value.Kind);
+        Assert.InRange(action.Value.Value, 0.74, 0.76);
+    }
 }
-
-

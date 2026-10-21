@@ -3145,7 +3145,7 @@ public sealed class SkiaIslandController : IDisposable
         if (_renderState.Form == ShellForm.Expanded && CurrentPageIs(PageSlotKind.Media))
         {
             var page = IslandMetrics.PageRect(_renderState, _renderState.PageIndex);
-            var seek = PageMetricsLayout.MediaSeekRow(page, FontScaleMetrics.From(_settings.Current.FontScale));
+            var seek = PageVisual.MediaSeekRow(page);
             return new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height).Inflate(2);
         }
 
@@ -3326,13 +3326,13 @@ public sealed class SkiaIslandController : IDisposable
             if (!string.Equals(lyricKey, _lastDynamicLyric, StringComparison.Ordinal))
             {
                 _lastDynamicLyric = lyricKey;
-                var lyric = PageMetricsLayout.MediaLyricCard(page, metrics);
+                var lyric = PageVisual.MediaLyricCard(page);
                 InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
             }
 
             if (progressMoved)
             {
-                var seek = PageMetricsLayout.MediaSeekRow(page, metrics);
+                var seek = PageVisual.MediaSeekRow(page);
                 InvalidateDirty(new VisualRect(seek.Left, seek.Top, seek.Width, seek.Height).Inflate(2));
             }
 
@@ -3364,7 +3364,7 @@ public sealed class SkiaIslandController : IDisposable
                 var page = IslandMetrics.PageRect(_renderState, 1);
                 // Same geometry the renderer paints (font scale + squeeze applied); the old PageLayout
                 // constant was a fixed 400×46 box that did not match what was drawn.
-                var lyric = PageMetricsLayout.MediaLyricCard(page,
+                var lyric = PageVisual.MediaLyricCard(page); _ = (
                     FontScaleMetrics.From(_settings.Current.FontScale));
                 InvalidateDirty(new VisualRect(lyric.Left, lyric.Top, lyric.Width, lyric.Height).Inflate(2));
             }

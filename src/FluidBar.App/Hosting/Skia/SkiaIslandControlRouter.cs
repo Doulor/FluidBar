@@ -34,7 +34,7 @@ public static class SkiaIslandControlRouter
             case IslandPageControl.Seek:
                 return new IslandPlatformAction(
                     IslandPlatformActionKind.MediaSeek,
-                    Value: Fraction(PageLayout.MediaSeekTrack(page), pointerXDip));
+                    Value: Fraction(PageVisual.MediaSeekTrack(page), pointerXDip));
             case IslandPageControl.VolumeSlider:
                 return new IslandPlatformAction(
                     IslandPlatformActionKind.VolumeSet,

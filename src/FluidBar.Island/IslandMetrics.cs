@@ -3,6 +3,8 @@ using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 using SkiaSharp;
 
+using System;
+
 namespace FluidBar.Island;
 
 /// <summary>
@@ -609,25 +611,32 @@ public static class PageLayout
     public static SKRect MediaLyricCard(SKRect page) => new(page.Left, page.Top + 128, page.Left + 400, page.Top + 174);
 
     /// <summary>Media seek row rectangle.</summary>
-    public static SKRect MediaSeekRow(SKRect page) => new(page.Left, page.Top + 184, page.Left + 400, page.Top + 206);
+    [Obsolete("Use PageVisual.MediaSeekRow: the media page has a single geometry source.")]
+    public static SKRect MediaSeekRow(SKRect page) => PageVisual.MediaSeekRow(page);
 
     /// <summary>Media seek track (the interactive slider).</summary>
-    public static SKRect MediaSeekTrack(SKRect page) => new(page.Left + 39, page.Top + 193.5f, page.Left + 361, page.Top + 196.5f);
+    [Obsolete("Use PageVisual.MediaSeekTrack: the media page has a single geometry source.")]
+    public static SKRect MediaSeekTrack(SKRect page) => PageVisual.MediaSeekTrack(page);
 
     /// <summary>Media previous-track hit rectangle.</summary>
-    public static SKRect MediaPrevious(SKRect page) => new(page.Left, page.Top + 219, page.Left + 28, page.Top + 247);
+    [Obsolete("Use PageVisual.MediaPrevious: the media page has a single geometry source.")]
+    public static SKRect MediaPrevious(SKRect page) => PageVisual.MediaPrevious(page);
 
     /// <summary>Media play/pause hit rectangle.</summary>
-    public static SKRect MediaPlay(SKRect page) => new(page.Left + 31, page.Top + 218, page.Left + 61, page.Top + 248);
+    [Obsolete("Use PageVisual.MediaPlay: the media page has a single geometry source.")]
+    public static SKRect MediaPlay(SKRect page) => PageVisual.MediaPlay(page);
 
     /// <summary>Media next-track hit rectangle.</summary>
-    public static SKRect MediaNext(SKRect page) => new(page.Left + 64, page.Top + 219, page.Left + 92, page.Top + 247);
+    [Obsolete("Use PageVisual.MediaNext: the media page has a single geometry source.")]
+    public static SKRect MediaNext(SKRect page) => PageVisual.MediaNext(page);
 
     /// <summary>Media output button rectangle.</summary>
-    public static SKRect MediaOutput(SKRect page) => new(page.Left + 250, page.Top + 220, page.Left + 320, page.Top + 246);
+    [Obsolete("Use PageVisual.MediaOutput: the media page has a single geometry source.")]
+    public static SKRect MediaOutput(SKRect page) => PageVisual.MediaOutput(page);
 
     /// <summary>Media queue button rectangle.</summary>
-    public static SKRect MediaQueue(SKRect page) => new(page.Left + 326, page.Top + 220, page.Left + 400, page.Top + 246);
+    [Obsolete("Use PageVisual.MediaQueue: the media page has a single geometry source.")]
+    public static SKRect MediaQueue(SKRect page) => PageVisual.MediaQueue(page);
 
     // ---- shared empty state ---------------------------------------------------------------
 
@@ -833,32 +842,37 @@ public static class PageLayout
 
                 return IslandPageControl.None;
             case PageSlotKind.Media:
-                if (MediaPlay(pageRect).Contains(x, y))
+                if (PageVisual.MediaPlay(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.PlayPause;
                 }
 
-                if (MediaPrevious(pageRect).Contains(x, y))
+                if (PageVisual.MediaPrevious(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.Previous;
                 }
 
-                if (MediaNext(pageRect).Contains(x, y))
+                if (PageVisual.MediaNext(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.Next;
                 }
 
-                if (MediaSeekRow(pageRect).Contains(x, y))
+                if (PageVisual.MediaSeekRow(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.Seek;
                 }
 
-                if (MediaOutput(pageRect).Contains(x, y))
+                if (PageVisual.MediaVolume(pageRect).Contains(x, y))
+                {
+                    return IslandPageControl.VolumeMute;
+                }
+
+                if (PageVisual.MediaOutput(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.Output;
                 }
 
-                if (MediaQueue(pageRect).Contains(x, y))
+                if (PageVisual.MediaQueue(pageRect).Contains(x, y))
                 {
                     return IslandPageControl.Queue;
                 }

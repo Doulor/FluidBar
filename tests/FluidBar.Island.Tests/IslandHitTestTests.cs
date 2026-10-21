@@ -280,7 +280,30 @@ public sealed class IslandHitTestTests
         Assert.Equal(3, last.DotsLeft.Length);
         Assert.Empty(last.DotsRight);
     }
+
+    [Fact]
+    public void Media_control_centres_hit_the_painted_controls()
+    {
+        // Regression for "tapping the drawn play button does nothing": the hit geometry used to live 50 DIP
+        // below the paint. Every control must answer at the centre of the rectangle PageVisual paints.
+        var state = IslandTestFixtures.Expanded(1);
+        var page = IslandMetrics.PageRect(state, 1);
+        var expectations = new (IslandPageControl Control, SKRect Rect)[]
+        {
+            (IslandPageControl.PlayPause, PageVisual.MediaPlay(page)),
+            (IslandPageControl.Previous, PageVisual.MediaPrevious(page)),
+            (IslandPageControl.Next, PageVisual.MediaNext(page)),
+            (IslandPageControl.VolumeMute, PageVisual.MediaVolume(page)),
+            (IslandPageControl.Output, PageVisual.MediaOutput(page)),
+            (IslandPageControl.Queue, PageVisual.MediaQueue(page)),
+            (IslandPageControl.Seek, PageVisual.MediaSeekRow(page)),
+        };
+
+        foreach (var (control, rect) in expectations)
+        {
+            var hit = Hit(state, rect.MidX, rect.MidY);
+            Assert.Equal(IslandHitKind.PageControl, hit.Kind);
+            Assert.Equal(control, hit.Control);
+        }
+    }
 }
-
-
-

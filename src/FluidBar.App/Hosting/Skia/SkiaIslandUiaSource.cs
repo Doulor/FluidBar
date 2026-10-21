@@ -568,7 +568,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 "island.page.1.track",
                 UiaElementRole.Text,
                 track,
-                ToRect(PageLayout.MediaTitle(page)),
+                ToRect(PageVisual.MediaTitle(page)),
                 state: new UiaElementState
                 {
                     IsOffscreen = false,
@@ -581,34 +581,34 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             "island.page.1.previous",
             UiaElementRole.Button,
             L("Media.Previous", "Previous"),
-            ToRect(PageLayout.MediaPrevious(page)),
+            ToRect(PageVisual.MediaPrevious(page)),
             UiaPatternKind.Invoke,
             new UiaElementState { IsFocusable = true }));
         children.Add(Node(
             "island.page.1.play",
             UiaElementRole.Button,
             media.IsPlaying ? L("Media.Pause", "Pause") : L("Media.Play", "Play"),
-            ToRect(PageLayout.MediaPlay(page)),
+            ToRect(PageVisual.MediaPlay(page)),
             UiaPatternKind.Invoke,
             new UiaElementState { IsFocusable = true }));
         children.Add(Node(
             "island.page.1.next",
             UiaElementRole.Button,
             L("Media.Next", "Next"),
-            ToRect(PageLayout.MediaNext(page)),
+            ToRect(PageVisual.MediaNext(page)),
             UiaPatternKind.Invoke,
             new UiaElementState { IsFocusable = true }));
         children.Add(RangeNode(
             "island.page.1.seek",
             L("Media.Seek", "Seek"),
-            PageLayout.MediaSeekRow(page),
+            PageVisual.MediaSeekRow(page),
             media.ProgressPercent,
             media.PositionText));
         children.Add(Node(
             "island.page.1.mute",
             UiaElementRole.Button,
             media.IsMuted ? L("Hud.Muted", "Muted") : L("Hud.Volume", "Volume"),
-            ToRect(PageMetricsLayout.MediaVolume(page, mediaMetrics)),
+            ToRect(PageVisual.MediaVolume(page)),
             media.HasVolume ? UiaPatternKind.Invoke : UiaPatternKind.None,
             new UiaElementState
             {
@@ -625,7 +625,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             "island.page.1.output",
             UiaElementRole.Button,
             L("Page.Media.Output", "Audio output"),
-            ToRect(PageLayout.MediaOutput(page)),
+            ToRect(PageVisual.MediaOutput(page)),
             // Disabled control: no Invoke pattern — an "invokable but disabled" button is exactly the
             // dead-but-clickable shape the user complained about. The reason travels in ItemStatus/help.
             UiaPatternKind.None,
@@ -642,7 +642,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             "island.page.1.queue",
             UiaElementRole.Button,
             L("Page.Media.Queue", "Play queue"),
-            ToRect(PageLayout.MediaQueue(page)),
+            ToRect(PageVisual.MediaQueue(page)),
             UiaPatternKind.None,
             new UiaElementState
             {
