@@ -61,7 +61,7 @@ public sealed class SkiaHostDockParityTests
     {
         var floatSurface = HostSurface.Float;
         Assert.Equal(new VisualRect(24, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(68, 276, 352, 34), floatSurface.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(68, 316, 352, 34), floatSurface.ArchipelagoStripLocal);   // 24 + 284 + 8
 
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
@@ -74,10 +74,10 @@ public sealed class SkiaHostDockParityTests
         using var renderer = new IslandRenderer();
         var strip = renderer.MeasureStrip(state);
 
-        // Prototype2: rail top = shell bottom + 8 DIP (24 + 244 + 8 = 276), 32 DIP tall (sampled).
-        Assert.Equal(276f, strip.Strip.Top, 3);
+        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 34 DIP tall (sampled).
+        Assert.Equal(316f, strip.Strip.Top, 3);
         Assert.Equal(34f, strip.Strip.Height, 3);
-        Assert.Equal(284f, strip.Strip.MidX, 3);
+        Assert.Equal(244f, strip.Strip.MidX, 3);   // sampled: 68 + 352/2 = the shell centre x
     }
 
     [Theory]

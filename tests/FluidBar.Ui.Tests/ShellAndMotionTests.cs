@@ -123,13 +123,24 @@ public sealed class ShellAndCompactSurfaceTests
                 IsActive = true,
             });
 
+            // Sample points are derived from the live compact width (192 after the audit) so a future
+            // width change can never silently sample the wrong zone again.
+            var width = media.CompactSize.Width;
             Assert.Equal(CompactAction.Expand, media.HitTest(new Point(30, 20), isPeeked: false));
-            Assert.Equal(CompactAction.Expand, media.HitTest(new Point(206, 20), isPeeked: false));
+            Assert.Equal(CompactAction.TogglePlay, media.HitTest(new Point(width - 12 - 12, 20), isPeeked: false));
+            Assert.Equal(CompactAction.Expand, media.HitTest(new Point(width - 60, 20), isPeeked: false));
+            Assert.Equal(CompactAction.Expand, media.HitTest(new Point(width + 6, 20), isPeeked: false));
 
-            // Peek reveals previous / play / next thirds on the right.
-            Assert.Equal(CompactAction.Previous, media.HitTest(new Point(156, 23), isPeeked: true));
-            Assert.Equal(CompactAction.TogglePlay, media.HitTest(new Point(183, 23), isPeeked: true));
-            Assert.Equal(CompactAction.Next, media.HitTest(new Point(222, 23), isPeeked: true));
+            // Peek reveals previous / play / next thirds of the right-hand 80 DIP transport cluster;
+            // each third aligns with the 24 DIP icon the renderer draws there.
+            var peekWidth = width + 10;
+            var controlsX = peekWidth - 12 - 80;
+            const double third = 80.0 / 3;
+            Assert.Equal(CompactAction.Expand, media.HitTest(new Point(controlsX - 1, 23), isPeeked: true));
+            Assert.Equal(CompactAction.Previous, media.HitTest(new Point(controlsX + (third * 0.5), 23), isPeeked: true));
+            Assert.Equal(CompactAction.TogglePlay, media.HitTest(new Point(controlsX + (third * 1.5), 23), isPeeked: true));
+            Assert.Equal(CompactAction.Next, media.HitTest(new Point(controlsX + (third * 2.5), 23), isPeeked: true));
+            Assert.Equal(CompactAction.Next, media.HitTest(new Point(peekWidth - 13, 23), isPeeked: true));
 
             var hud = new HudCompactSurface();
             Assert.Equal(CompactAction.Expand, hud.HitTest(new Point(100, 20), isPeeked: false));
