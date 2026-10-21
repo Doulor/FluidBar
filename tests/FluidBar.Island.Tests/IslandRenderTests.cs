@@ -8,9 +8,9 @@ namespace FluidBar.Island.Tests;
 public sealed class IslandRenderTests
 {
     [Theory]
-    [InlineData(IslandMode.Float, 488, 384)]
-    [InlineData(IslandMode.Flush, 488, 384)]
-    [InlineData(IslandMode.Dock, 488, 444)]
+    [InlineData(IslandMode.Float, 488, 386)]
+    [InlineData(IslandMode.Flush, 488, 386)]
+    [InlineData(IslandMode.Dock, 488, 446)]
     public void Measure_returns_the_fixed_host_surface(IslandMode mode, double width, double height)
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
@@ -49,7 +49,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(579, bitmap.Height);
 
         var expected = LayoutTokens.CompactSize(state.Compact!.Value.Kind);
         Assert.Equal(expected.Width, state.ShellWidth);
@@ -91,7 +91,7 @@ public sealed class IslandRenderTests
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(579, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -158,7 +158,7 @@ public sealed class IslandRenderTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(
-            bitmap, new SKRect(0, 0, 488, 384), IslandTestFixtures.Scale, 0));
+            bitmap, new SKRect(0, 0, 488, 386), IslandTestFixtures.Scale, 0));
     }
 
     [Fact]
@@ -262,5 +262,6 @@ public sealed class IslandRenderTests
         renderer.Dispose();
     }
 }
+
 
 

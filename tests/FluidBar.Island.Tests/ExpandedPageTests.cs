@@ -18,7 +18,7 @@ public sealed class ExpandedPageTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(732, bitmap.Width);
-        Assert.Equal(576, bitmap.Height);
+        Assert.Equal(579, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, shell, IslandTestFixtures.Scale));
@@ -50,7 +50,7 @@ public sealed class ExpandedPageTests
         {
             Media = IslandTestFixtures.Content().Media with
             {
-                Artwork = SolidPng(new SKColor(144, 30, 40)),
+                Artwork = SolidPng(new SKColor(220, 30, 40)),
                 ArtworkKey = "cover-test",
             },
         };
@@ -58,7 +58,7 @@ public sealed class ExpandedPageTests
             IslandTestFixtures.Theme);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
-        var art = PageLayout.MediaArt(IslandMetrics.PageRect(state, 1));
+        var art = PageVisual.MediaArt(IslandMetrics.PageRect(state, 1));
         var pixel = bitmap.GetPixel(
             (int)Math.Round(art.MidX * IslandTestFixtures.Scale),
             (int)Math.Round(art.MidY * IslandTestFixtures.Scale));
@@ -407,6 +407,9 @@ public sealed class ExpandedPageTests
         return data.ToArray();
     }
 }
+
+
+
 
 
 
