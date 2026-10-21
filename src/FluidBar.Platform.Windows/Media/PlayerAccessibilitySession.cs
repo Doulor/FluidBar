@@ -33,6 +33,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     private const int RoleGraphic = 40;
     private const int MaxDepth = 12;
     private const int MaxNodes = 900;
+    private const int ReadRetryBackoffMs = 2500;
     private const string PreviousButtonName = "上一首";
     private const string NextButtonName = "下一首";
     private const string PlayButtonName = "播放";
@@ -52,6 +53,18 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     private readonly List<ButtonCandidate> _pauseButtons = [];
     private int _disposed;
     private int _lastWalkNodes;
+    private long _readRetryAfterMs;
+
+    /// <summary>Whether the last failed MSAA read is still in its short retry backoff.</summary>
+    internal bool IsReadBackoffActive => Volatile.Read(ref _readRetryAfterMs) > Environment.TickCount64;
+
+    /// <summary>Clears the backoff so an audible player is probed on the next fallback tick.</summary>
+    public void ResetReadBackoff() => Volatile.Write(ref _readRetryAfterMs, 0);
+
+    private void MarkReadFailure()
+        => Volatile.Write(ref _readRetryAfterMs, Environment.TickCount64 + ReadRetryBackoffMs);
+
+    private void MarkReadSuccess() => Volatile.Write(ref _readRetryAfterMs, 0);
 
     /// <summary>
     /// One transport control found in the tree. KuGou renders every button twice — a GRAPHIC wrapper
@@ -139,7 +152,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     public bool TryReadPlaybackState(out bool isPlaying)
     {
         isPlaying = false;
-        if (Volatile.Read(ref _disposed) != 0)
+        if (Volatile.Read(ref _disposed) != 0 || IsReadBackoffActive)
         {
             return false;
         }
@@ -159,10 +172,12 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                 resolved = AccessibilityPlaybackState.Resolve(HasVisible(_playButtons), HasVisible(_pauseButtons));
                 if (resolved is null)
                 {
+                    MarkReadFailure();
                     return false;
                 }
             }
 
+            MarkReadSuccess();
             isPlaying = resolved.Value;
             return true;
         }
@@ -172,7 +187,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     public bool TryReadTimeline(out PlayerTimeline timeline)
     {
         timeline = default;
-        if (Volatile.Read(ref _disposed) != 0)
+        if (Volatile.Read(ref _disposed) != 0 || IsReadBackoffActive)
         {
             return false;
         }
@@ -192,6 +207,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
                     if (element is null)
                     {
+                        MarkReadFailure();
                         return false;
                     }
                 }
@@ -202,6 +218,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                         && TryParseClock(match.Groups["duration"].Value, out var duration)
                         && duration > TimeSpan.Zero)
                     {
+                        MarkReadSuccess();
                         timeline = new PlayerTimeline(position, duration);
                         return true;
                     }
@@ -212,6 +229,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                 RebuildLocked();
             }
 
+            MarkReadFailure();
             return false;
         }
     }

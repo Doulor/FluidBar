@@ -67,6 +67,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private readonly object _accessibilityGate = new();
     private PlayerAccessibilitySession? _accessibility;
     private int _accessibilityProcessId;
+    private long _accessibilityRetryAfterMs;
+    private const int AccessibilityRetryBackoffMs = 2500;
     private int _fallbackMissCount;
     private volatile bool _fallbackActive;
     private CancellationTokenSource? _artworkCts;
@@ -212,18 +214,33 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             }
         }
 
+        var audioOutput = MediaWindowFallback.TryGetAudioOutput(out var audioPeak);
+        MediaDiagnostics.Log($"fallback tick audio={audioOutput} peak={audioPeak:0.000} misses={Volatile.Read(ref _fallbackMissCount)}");
         var candidate = MediaWindowFallback.FindCandidate();
         if (candidate is null)
         {
+            if (audioOutput)
+            {
+                // The render session proves sound is playing; a missing title is transient during
+                // track switches. Keep the previous snapshot and retry at the fast cadence instead
+                // of publishing an empty media snapshot.
+                MediaDiagnostics.Log("fallback no-candidate audio-active -> keep snapshot, retry fast");
+                _fallbackPoller?.SetInterval(FallbackPollInterval);
+                return;
+            }
+
             // A track change briefly makes the player unresolvable (its audio session and window title
             // are rewritten). Only a run of empty polls really means "nothing is playing", otherwise the
             // island flickers to the empty state and transport commands are dropped mid-switch: the last
             // snapshot stays published for FallbackMissGrace so the island keeps showing the track.
-            if (Interlocked.Increment(ref _fallbackMissCount) < FallbackMissThreshold)
+            var misses = Interlocked.Increment(ref _fallbackMissCount);
+            MediaDiagnostics.Log($"fallback miss={misses}/{FallbackMissThreshold} audio={audioOutput}");
+            if (misses < FallbackMissThreshold)
             {
                 return;
             }
 
+            MediaDiagnostics.Log("fallback retract: no candidate and no audio output");
             _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
                 ? TimeSpan.FromSeconds(5)
                 : TimeSpan.FromSeconds(1));
@@ -238,6 +255,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         Interlocked.Exchange(ref _fallbackMissCount, 0);
+        MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
         candidate = EnrichWithAccessibility(candidate);
         var playing = candidate.IsPlayingHint ?? DetermineFallbackPlaying(candidate);
@@ -288,6 +306,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         if (changed || positionMoved)
         {
+            MediaDiagnostics.Log($"publish source=fallback app={snapshot.SourceAppUserModelId} title={snapshot.Title} playing={snapshot.IsPlaying}");
             Publish(snapshot);
         }
     }
@@ -305,17 +324,45 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return candidate;
         }
 
+        var audible = MediaWindowFallback.TryGetAudioOutput(out var audioPeak);
+        var now = Environment.TickCount64;
         PlayerAccessibilitySession? session;
         lock (_accessibilityGate)
         {
             if (_accessibility is null || _accessibilityProcessId != candidate.ProcessId)
             {
+                if (now < _accessibilityRetryAfterMs && !audible)
+                {
+                    MediaDiagnostics.Log($"fallback accessibility backoff remaining={_accessibilityRetryAfterMs - now}ms audio={audible} peak={audioPeak:0.000}");
+                    return candidate;
+                }
+
                 ReleaseAccessibilityLocked();
                 _accessibility = PlayerAccessibilitySession.TryCreate(candidate.ProcessId);
                 _accessibilityProcessId = _accessibility is null ? 0 : candidate.ProcessId;
+                if (_accessibility is null)
+                {
+                    _accessibilityRetryAfterMs = now + AccessibilityRetryBackoffMs;
+                    MediaDiagnostics.Log($"fallback accessibility create-failed retryIn={AccessibilityRetryBackoffMs}ms audio={audible} peak={audioPeak:0.000}");
+                    return candidate;
+                }
+
+                MediaDiagnostics.Log($"fallback accessibility attached app={candidate.ProcessName} pid={candidate.ProcessId}");
             }
 
             session = _accessibility;
+        }
+
+        if (session is not null && audible)
+        {
+            // A meter level is positive proof that the player is producing audio; do not let a
+            // transient MSAA failure hide it for the whole backoff window.
+            session.ResetReadBackoff();
+        }
+
+        if (session is { IsReadBackoffActive: true })
+        {
+            MediaDiagnostics.Log($"fallback accessibility read-backoff app={candidate.ProcessName} audio={audible} peak={audioPeak:0.000}");
         }
 
         if (session is null)
@@ -462,9 +509,20 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (activeSession is null)
         {
             DetachSession();
+            var audioOutput = MediaWindowFallback.TryGetAudioOutput(out var audioPeak);
+            if (audioOutput)
+            {
+                // GSMTC has no session (KuGou is a window/MSAA fallback player), but WASAPI proves
+                // audio is playing. Prefer the fallback path and do not retract the media island.
+                MediaDiagnostics.Log($"gsmtc empty audio-active peak={audioPeak:0.000} -> fallback");
+                _fallbackPoller?.TriggerNow();
+                return;
+            }
+
             // The fallback poller owns the snapshot while it has a live non-SMTC player.
             if (!_fallbackActive)
             {
+                MediaDiagnostics.Log("gsmtc empty no-audio -> publish empty");
                 Publish(MediaSnapshot.Empty);
             }
 
@@ -534,6 +592,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 _lastRefreshTimestamp = _timeProviderNow();
             }
 
+            MediaDiagnostics.Log($"publish source=gsmtc app={aumid} title={properties.Title} playing={snapshot.IsPlaying}");
             Publish(snapshot);
 
             if (changed || !_artworkCache.TryGet(trackKey, out _))

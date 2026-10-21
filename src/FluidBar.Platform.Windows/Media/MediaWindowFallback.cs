@@ -169,6 +169,23 @@ internal static class MediaWindowFallback
     ];
 
     /// <summary>Finds the loudest active known player and parses its window title, or null.</summary>
+    /// <summary>True when at least one render session is active; <paramref name="peak"/> is its level.</summary>
+    public static bool TryGetAudioOutput(out float peak)
+    {
+        peak = 0;
+        if (!AudioSessionProbe.TryGetActiveRenderSessions(out var sessions) || sessions.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var session in sessions)
+        {
+            peak = Math.Max(peak, session.Peak);
+        }
+
+        return true;
+    }
+
     public static WindowMediaCandidate? FindCandidate()
     {
         var ok = AudioSessionProbe.TryGetActiveRenderSessions(out var sessions);
