@@ -105,7 +105,11 @@ public sealed class MediaEmptyStateTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         var page = IslandMetrics.PageRect(state, 1);
-        var lyric = PageVisual.MediaLyricCard(page);
+        var band = PageVisual.MediaLyricCard(page);
+        // Skip the band's first 2 DIP: the album line above ends exactly on the band's top edge and its
+        // descenders overhang into that first pixel row, which used to drag the measured ink box left and
+        // made the caption look off-centre (probe: stray row y=210 px spanning x 233..399 = the album text).
+        var lyric = new SKRect(band.Left, band.Top + 2, band.Right, band.Bottom);
         var (minX, maxX) = InkBoundsX(bitmap, lyric);
         Assert.True(maxX > minX, "the no-lyrics caption did not paint");
         var inkCenter = (minX + maxX) / 2f;
