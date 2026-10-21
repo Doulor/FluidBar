@@ -685,6 +685,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = _nav,
         };
+        SlimScrollBar(scroll);
         Grid.SetRow(scroll, 1);
         grid.Children.Add(scroll);
 
@@ -732,6 +733,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     {
         _content.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         _content.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        SlimScrollBar(_content);
         _content.Padding = new Thickness(SettingsMetrics.PanePadX, SettingsMetrics.PanePadY,
             SettingsMetrics.PanePadX, SettingsMetrics.PanePadY);
         ApplyPaneScrollBarStyle();
@@ -850,13 +852,29 @@ public sealed class SettingsWindow : Window, ILocalizable
             row.Children.Add(countHost);
             _navCounts[section] = countHost;
 
+            var accent = new Border
+            {
+                Width = 2,
+                Height = 18,
+                CornerRadius = new CornerRadius(1),
+                Background = _palette.ActiveBrush,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsVisible = false,
+                Margin = new Thickness(-SettingsMetrics.NavItemPadX + 2, 0, 0, 0),
+            };
+            _navAccents.Add(accent);
+            var itemContent = new Grid();
+            itemContent.Children.Add(row);
+            itemContent.Children.Add(accent);
+
             var item = new Border
             {
                 Height = SettingsMetrics.NavItemHeight,
                 CornerRadius = new CornerRadius(SettingsMetrics.NavItemRadius),
                 Padding = new Thickness(SettingsMetrics.NavItemPadX, 0, SettingsMetrics.NavItemPadX, 0),
                 Background = Brushes.Transparent,
-                Child = row,
+                Child = itemContent,
                 Cursor = new Cursor(StandardCursorType.Hand),
             };
             var captured = section;
@@ -894,6 +912,26 @@ public sealed class SettingsWindow : Window, ILocalizable
         UpdateNavSelection();
     }
 
+    private readonly List<Border> _navAccents = [];
+
+    /// <summary>
+    /// Slim overlay scrollbar: 6 DIP wide with a semi-transparent thumb. Applied to every pane so the
+    /// scrollbar reads as a hint instead of a chrome element.
+    /// </summary>
+    /// <param name="scroll">Scroll viewer to restyle.</param>
+    private static void SlimScrollBar(ScrollViewer scroll)
+    {
+        scroll.Styles.Add(new Style(x => x.OfType<ScrollBar>())
+        {
+            Setters =
+            {
+                new Setter(WidthProperty, 6.0),
+                new Setter(OpacityProperty, 0.55),
+                new Setter(MinWidthProperty, 6.0),
+            },
+        });
+    }
+
     private void UpdateNavSelection()
     {
         for (var i = 0; i < _navRows.Count; i++)
@@ -903,6 +941,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             _navRows[i].Background = selected ? _palette.RaisedBrush : Brushes.Transparent;
             _navLabels[i].Foreground = selected ? _palette.ForegroundBrush : _palette.SecondaryBrush;
             _navLabels[i].FontWeight = selected ? FontWeight.Medium : FontWeight.Normal;
+            _navAccents[i].IsVisible = selected;
             _navIcons[i].Brush = selected ? _palette.ForegroundBrush : _palette.TertiaryBrush;
             _navIcons[i].InvalidateVisual();
         }
