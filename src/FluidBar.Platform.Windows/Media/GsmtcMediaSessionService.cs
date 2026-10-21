@@ -80,6 +80,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>True while the paused track has been hidden from the island (5 s after the pause).</summary>
     private bool _fallbackPausedHidden;
 
+    /// <summary>Last published fallback snapshot and the player it belongs to.</summary>
+    private MediaSnapshot? _fallbackLastSnapshot;
+    private int _fallbackLastPid;
+    private long _fallbackLastSeenMs;
+
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
@@ -231,6 +236,52 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var candidate = MediaWindowFallback.FindCandidate();
         if (candidate is null)
         {
+            // A paused player vanishes from the render-session list. Using the DEVICE-wide meter here (as
+            // this branch used to) only proved that some other app was making noise, so a paused KuGou
+            // looked "playing" until the browser/game went quiet — the 5-10 s latency the user reported
+            // (2026-10-22). Judge the last known player's own sessions instead.
+            if (_fallbackLastSnapshot is { } retained)
+            {
+                var retainedNowMs = _timeProviderNow().ToUnixTimeMilliseconds();
+                var retainedPeak = MediaWindowFallback.GetProcessPeak(_fallbackLastPid);
+                _audioSilentPolls = retainedPeak > 0.0005 ? 0 : _audioSilentPolls + 1;
+                if (retainedPeak > 0.0005)
+                {
+                    _fallbackPausedSinceMs = 0;
+                    _fallbackPausedHidden = false;
+                    _fallbackLastSeenMs = retainedNowMs;
+                    Publish(retained);
+                    _fallbackPoller?.SetInterval(FallbackPollInterval);
+                    return;
+                }
+
+                if (_audioSilentPolls >= 2)
+                {
+                    if (_fallbackPausedSinceMs == 0)
+                    {
+                        _fallbackPausedSinceMs = retainedNowMs;
+                    }
+
+                    var pausedMs = retainedNowMs - _fallbackPausedSinceMs;
+                    if (pausedMs >= 5000)
+                    {
+                        if (!_fallbackPausedHidden)
+                        {
+                            _fallbackPausedHidden = true;
+                            MediaDiagnostics.Log($"fallback paused-for={pausedMs}ms -> hide media (retained)");
+                            Publish(MediaSnapshot.Empty);
+                        }
+                    }
+                    else
+                    {
+                        Publish(retained with { IsPlaying = false });
+                    }
+
+                    _fallbackPoller?.SetInterval(FallbackPollInterval);
+                    return;
+                }
+            }
+
             if (audioOutput)
             {
                 // The render session proves sound is playing; a missing title is transient during
@@ -380,6 +431,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return;
         }
 
+        _fallbackLastSnapshot = snapshot;
+        _fallbackLastPid = candidate.ProcessId;
+        _fallbackLastSeenMs = _timeProviderNow().ToUnixTimeMilliseconds();
         Publish(snapshot);
         }
     }
