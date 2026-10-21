@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -7,6 +8,50 @@ namespace FluidBar.Island;
 /// battery) and media (artwork/metadata/lyrics/seek/transport) pages at the 400×260 content size, plus
 /// a compact placeholder for the remaining pages and the shared title/collapse chrome.
 /// </summary>
+/// <summary>
+/// Timing of the media page motion (iOS-like). The numbers are a design contract and are asserted by
+/// <c>MediaMotionTests</c> so a "feels slower" regression fails instead of drifting silently.
+/// </summary>
+public static class MediaMotion
+{
+    /// <summary>Old lyric line: slide up and fade out.</summary>
+    public const float LyricOutMs = 200;
+
+    /// <summary>New lyric line: fade in from below.</summary>
+    public const float LyricInMs = 260;
+
+    /// <summary>Delay between the outgoing and the incoming lyric line.</summary>
+    public const float LyricStaggerMs = 40;
+
+    /// <summary>Vertical travel of a lyric line change (DIP).</summary>
+    public const float LyricSlideDip = 6;
+
+    /// <summary>Exponential smoothing time constant of the progress position (ms).</summary>
+    public const float ProgressTauMs = 180;
+
+    /// <summary>Thumb scale while the seek row is held (drag).</summary>
+    public const float SeekThumbScale = 1.4f;
+
+    /// <summary>Cover cross-fade on a track change (ms).</summary>
+    public const float ArtCrossFadeMs = 180;
+
+    /// <summary>Press scale of the main play button.</summary>
+    public const float PlayPressScale = 0.92f;
+
+    /// <summary>Press scale of the previous/next buttons.</summary>
+    public const float SidePressScale = 0.94f;
+
+    /// <summary>Spring-ish time constant of the press feedback (same feel as the island springs).</summary>
+    public const float PressTauMs = 90;
+}
+
+/// <summary>Clock override for the media motion (tests inject a synthetic clock).</summary>
+public static class MediaMotionClock
+{
+    /// <summary>Replaces the wall clock (milliseconds) while set; null restores the monotonic stopwatch.</summary>
+    public static Func<double>? Override { get; set; }
+}
+
 internal sealed partial class PageRenderer : IDisposable
 {
     private readonly ScaledText _text;
@@ -311,6 +356,56 @@ internal sealed partial class PageRenderer : IDisposable
             new SKRect(rect.Left + 300, rect.Top, rect.Right, rect.Bottom), _theme.ForegroundTertiary, TextAlign.Right, _opacity);
     }
 
+    // ------------------------------------------------------------------ media motion
+
+    private long _mediaLastTicks = -1;
+    private double _mediaNowMs;
+    private double _mediaDtMs = 16.7;
+
+    private string? _lyricShown;
+    private string? _lyricOutgoing;
+    private double _lyricChangedAt = double.NegativeInfinity;
+
+    private double _progressShown = double.NaN;
+
+    private string? _artShownKey;
+    private byte[]? _artShownBytes;
+    private byte[]? _artOutgoingBytes;
+    private string? _artOutgoingKey;
+    private double _artChangedAt = double.NegativeInfinity;
+
+    private double _playScale = 1;
+    private double _sideScale = 1;
+
+    /// <summary>Advances the media motion clock by one rendered frame.</summary>
+    /// <returns>The frame delta in milliseconds (clamped so a stalled frame cannot jump an animation).</returns>
+    private double TickMediaClock()
+    {
+        var now = MediaMotionClock.Override?.Invoke() ?? (Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
+        if (_mediaLastTicks < 0)
+        {
+            _mediaLastTicks = 0;
+            _mediaDtMs = 1000.0 / 60.0;
+        }
+        else
+        {
+            _mediaDtMs = Math.Clamp(now - _mediaNowMs, 0, 100);
+        }
+
+        _mediaNowMs = now;
+        return _mediaDtMs;
+    }
+
+    /// <summary>Springs one press scale toward its target.</summary>
+    private static double Approach(double current, double target, double dtMs, float tauMs)
+        => current + ((target - current) * (1 - Math.Exp(-dtMs / tauMs)));
+
+    private static double SmoothStep(double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return t * t * (3 - (2 * t));
+    }
+
     // ------------------------------------------------------------------ media
 
     private void DrawMedia(SKCanvas canvas, MediaPageModel media, SKRect page)
@@ -322,11 +417,11 @@ internal sealed partial class PageRenderer : IDisposable
         }
 
         var m = _metrics;
+        var dt = TickMediaClock();
         // Accent from the album cover (extracted upstream) drives the art glow, the progress track and
         // the karaoke sweep; without a cover the theme fallback rules stay in charge.
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
-        DrawArt(canvas, PageVisual.MediaArt(page), PageVisual.MediaArtRadius, accent, large: true, media.Artwork,
-            media.ArtworkKey);
+        DrawMediaArt(canvas, media, page, accent, dt);
 
         _text.Draw(canvas, media.Eyebrow, IslandType.MediaEyebrow, PageVisual.MediaEyebrow(page),
             _theme.ForegroundTertiary, TextAlign.Left, _opacity);
@@ -344,29 +439,7 @@ internal sealed partial class PageRenderer : IDisposable
         var hasLyrics = !string.IsNullOrWhiteSpace(media.LyricLine) || !string.IsNullOrWhiteSpace(media.NextLyricLine);
         if (hasLyrics)
         {
-            // iOS Now Playing does not put a coloured block behind the lyrics: the two lines sit on the
-            // page itself (13/20 for the current line, 11.5/16 for the next one) and the karaoke sweep
-            // supplies the only colour.
-            var line1 = PageVisual.MediaLyricLine1(page);
-            var baseColor = media.LyricHighlight < 0
-                ? _theme.Foreground
-                : KaraokeText.UnsungColor(_theme.Foreground);
-            var sungColor = media.LyricHighlight < 0
-                ? accent
-                : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
-            KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, PageVisual.MediaLyricStyle,
-                line1, baseColor, sungColor, TextAlign.Left, _opacity);
-
-            var line2 = PageVisual.MediaLyricLine2(page);
-            // The tag is measured instead of parked in a fixed column: at a 1.6 font scale the old
-            // column clipped it to "NE…" (the label must stay whole, 6 DIP before the text).
-            var tagWidth = Math.Max(0, _text.Measure(media.NextLyricLabel, IslandType.MediaEyebrow));
-            _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
-                new SKRect(line2.Left, line2.Top, Math.Min(line2.Right, line2.Left + tagWidth + 1), line2.Bottom),
-                _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-            _text.Draw(canvas, media.NextLyricLine, PageVisual.MediaLyricNextStyle,
-                new SKRect(line2.Left + tagWidth + 6, line2.Top, line2.Right, line2.Bottom),
-                _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+            DrawMediaLyrics(canvas, media, page, accent);
         }
         else if (!string.IsNullOrWhiteSpace(media.NoLyricsText))
         {
@@ -481,6 +554,105 @@ internal sealed partial class PageRenderer : IDisposable
                 new SKRect(queue.Left, queue.Top, queue.Right - PageVisual.MediaFooterIcon - 4, queue.Bottom),
                 _theme.ForegroundTertiary, TextAlign.Right, queueAlpha);
         }
+    }
+
+    /// <summary>
+    /// Paints the current lyric with the line-change motion: the outgoing line slides up 6 DIP and fades out
+    /// over 200 ms while the incoming line starts 40 ms later and fades in from 6 DIP below over 260 ms. The
+    /// karaoke sweep is untouched — it is recomputed every frame from the word timeline for the new line.
+    /// </summary>
+    private void DrawMediaLyrics(SKCanvas canvas, MediaPageModel media, SKRect page, SKColor accent)
+    {
+        if (!string.Equals(media.LyricLine, _lyricShown, StringComparison.Ordinal))
+        {
+            _lyricOutgoing = _lyricShown;
+            _lyricShown = media.LyricLine;
+            _lyricChangedAt = _mediaNowMs;
+        }
+
+        var line1 = PageVisual.MediaLyricLine1(page);
+        var line2 = PageVisual.MediaLyricLine2(page);
+        var baseColor = media.LyricHighlight < 0 ? _theme.Foreground : KaraokeText.UnsungColor(_theme.Foreground);
+        var sungColor = media.LyricHighlight < 0
+            ? accent
+            : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
+
+        var elapsed = _mediaNowMs - _lyricChangedAt;
+        var window = MediaMotion.LyricInMs + MediaMotion.LyricStaggerMs;
+        if (_lyricOutgoing is not null && elapsed < window)
+        {
+            var outT = Math.Clamp(elapsed / MediaMotion.LyricOutMs, 0, 1);
+            if (outT < 1)
+            {
+                DrawLyricLine(canvas, _lyricOutgoing, line1, baseColor, sungColor,
+                    -MediaMotion.LyricSlideDip * (float)SmoothStep(outT), (float)(1 - outT), -1);
+            }
+
+            var inT = Math.Clamp((elapsed - MediaMotion.LyricStaggerMs) / MediaMotion.LyricInMs, 0, 1);
+            if (inT > 0)
+            {
+                DrawLyricLine(canvas, media.LyricLine, line1, baseColor, sungColor,
+                    MediaMotion.LyricSlideDip * (float)(1 - SmoothStep(inT)), (float)inT, media.LyricHighlight);
+            }
+        }
+        else
+        {
+            DrawLyricLine(canvas, media.LyricLine, line1, baseColor, sungColor, 0, 1, media.LyricHighlight);
+        }
+
+        var tagWidth = Math.Max(0, _text.Measure(media.NextLyricLabel, IslandType.MediaEyebrow));
+        _text.Draw(canvas, media.NextLyricLabel, IslandType.MediaEyebrow,
+            new SKRect(line2.Left, line2.Top, Math.Min(line2.Right, line2.Left + tagWidth + 1), line2.Bottom),
+            _theme.ForegroundTertiary, TextAlign.Left, _opacity);
+        _text.Draw(canvas, media.NextLyricLine, PageVisual.MediaLyricNextStyle,
+            new SKRect(line2.Left + tagWidth + 6, line2.Top, line2.Right, line2.Bottom),
+            _theme.ForegroundSecondary, TextAlign.Left, _opacity);
+    }
+
+    private void DrawLyricLine(SKCanvas canvas, string? line, SKRect box, SKColor baseColor, SKColor sungColor,
+        float offsetY, float alpha, double highlight)
+    {
+        var moved = new SKRect(box.Left, box.Top + offsetY, box.Right, box.Bottom + offsetY);
+        KaraokeText.Draw(_text, canvas, line, highlight, PageVisual.MediaLyricStyle, moved, baseColor, sungColor,
+            TextAlign.Left, _opacity * alpha);
+    }
+
+    /// <summary>Draws the cover, cross-fading from the previous track's cover for 180 ms on a track change.</summary>
+    private void DrawMediaArt(SKCanvas canvas, MediaPageModel media, SKRect page, SKColor accent, double dt)
+    {
+        var rect = PageVisual.MediaArt(page);
+        if (!string.Equals(media.ArtworkKey, _artShownKey, StringComparison.Ordinal))
+        {
+            _artOutgoingBytes = _artShownBytes;
+            _artOutgoingKey = _artShownKey;
+            _artShownKey = media.ArtworkKey;
+            _artShownBytes = media.Artwork;
+            _artChangedAt = _mediaNowMs;
+        }
+
+        var elapsed = _mediaNowMs - _artChangedAt;
+        if (_artOutgoingBytes is null || elapsed >= MediaMotion.ArtCrossFadeMs)
+        {
+            DrawArt(canvas, rect, PageVisual.MediaArtRadius, accent, large: true, media.Artwork, media.ArtworkKey);
+            return;
+        }
+
+        var t = (float)SmoothStep(elapsed / MediaMotion.ArtCrossFadeMs);
+        DrawFadedArt(canvas, rect, accent, _artOutgoingBytes, _artOutgoingKey, 1 - t);
+        DrawFadedArt(canvas, rect, accent, media.Artwork, media.ArtworkKey, t);
+    }
+
+    private void DrawFadedArt(SKCanvas canvas, SKRect rect, SKColor accent, byte[]? bytes, string? key, float alpha)
+    {
+        if (alpha <= 0.01f)
+        {
+            return;
+        }
+
+        using var paint = new SKPaint { Color = SKColors.White.WithAlpha((byte)Math.Clamp(alpha * 255, 0, 255)) };
+        canvas.SaveLayer(paint);
+        DrawArt(canvas, rect, PageVisual.MediaArtRadius, accent, large: true, bytes, key);
+        canvas.Restore();
     }
 
     private void DrawTransport(SKCanvas canvas, MediaPageModel media, SKRect page)
