@@ -88,6 +88,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Last published play state, used to log transitions only (one line per flip).</summary>
     private bool? _lastPublishedPlaying;
 
+    /// <summary>Throttles the cross-check log line (arbitration runs on every poll).</summary>
+    private long _lastCrossCheckLogMs;
+
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
@@ -265,20 +268,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                         _fallbackPausedSinceMs = retainedNowMs;
                     }
 
-                    var pausedMs = retainedNowMs - _fallbackPausedSinceMs;
-                    if (pausedMs >= 5000)
-                    {
-                        if (!_fallbackPausedHidden)
-                        {
-                            _fallbackPausedHidden = true;
-                            MediaDiagnostics.Log($"fallback paused-for={pausedMs}ms -> hide media (retained)");
-                            Publish(MediaSnapshot.Empty);
-                        }
-                    }
-                    else
-                    {
-                        Publish(retained with { IsPlaying = false });
-                    }
+                    // Keep the paused track on screen. Hiding it after 5 s made the island disappear
+                    // whenever the level probe mis-read a playing player as silent (user report
+                    // 2026-10-22: "音乐灵动岛不显示了").
+                    Publish(retained with { IsPlaying = false });
 
                     _fallbackPoller?.SetInterval(FallbackPollInterval);
                     return;
@@ -426,21 +419,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (changed || positionMoved)
         {
             MediaDiagnostics.Log($"publish source=fallback app={snapshot.SourceAppUserModelId} title={snapshot.Title} playing={snapshot.IsPlaying}");
-            // Paused for 5 s: hide the media pill entirely (user request 2026-10-22) but keep polling fast
-        // enough that pressing play brings it straight back.
-        if (!playing && pausedForMs >= 5000)
-        {
-            if (!_fallbackPausedHidden)
-            {
-                _fallbackPausedHidden = true;
-                MediaDiagnostics.Log($"fallback paused-for={pausedForMs}ms -> hide media");
-                Publish(MediaSnapshot.Empty);
-            }
-
-            return;
-        }
-
-        _fallbackLastSnapshot = snapshot;
+            _fallbackLastSnapshot = snapshot;
         _fallbackLastPid = candidate.ProcessId;
         _fallbackLastSeenMs = _timeProviderNow().ToUnixTimeMilliseconds();
         Publish(snapshot);
@@ -470,6 +449,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         var statePosition = state.Position;
 
+        if (candidate.Position <= TimeSpan.Zero)
+        {
+            return candidate; // no accessibility reading at all (player minimised): cross-check is mute
+        }
+
         var age = _timeProviderNow() - state.SampledAtUtc;
         if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
         {
@@ -484,8 +468,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return candidate;
         }
 
-        MediaDiagnostics.LogAlways($"timeline.crosscheck resolved=state-file delta={difference.TotalSeconds:0.0}s " +
-            $"msaa={candidate.Position.TotalSeconds:0.0}s state={expected.TotalSeconds:0.0}s age={age.TotalSeconds:0.0}s");
+        var nowTicks = _timeProviderNow().ToUnixTimeMilliseconds();
+        if (nowTicks - _lastCrossCheckLogMs > 10_000)
+        {
+            _lastCrossCheckLogMs = nowTicks;
+            MediaDiagnostics.LogAlways($"timeline.crosscheck resolved=state-file delta={difference.TotalSeconds:0.0}s " +
+                $"msaa={candidate.Position.TotalSeconds:0.0}s state={expected.TotalSeconds:0.0}s age={age.TotalSeconds:0.0}s");
+        }
         return candidate with
         {
             Position = expected,
