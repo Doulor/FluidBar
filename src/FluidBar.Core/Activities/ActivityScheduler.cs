@@ -180,6 +180,15 @@ public sealed class ActivityScheduler
     {
         var visible = state.Visible.ToList();
         var background = state.Background.ToList();
+        var eventKey = evt.Key;
+
+        // Heartbeats re-publish a fresh ActivityRecord; the scheduler is the owner of the session
+        // pin, so a same-key snapshot must never silently clear it.
+        var pinSource = existing
+            ?? visible.FirstOrDefault(r => r.Key == eventKey)
+            ?? background.FirstOrDefault(r => r.Key == eventKey);
+        var inheritedPin = pinSource?.IsPinned ?? false;
+        LogSchedulerUpsert(evt.Key, inheritedPin, visible, background);
 
         if (existing is not null)
         {
@@ -191,6 +200,10 @@ public sealed class ActivityScheduler
                 evt.Sequence == 0 ? existing.Sequence : evt.Sequence,
                 now,
                 _policy.ResolveTtl(evt.Key.Kind, mergedPayload));
+            if (inheritedPin)
+            {
+                updated = updated.WithPinned(true);
+            }
             var contentChanged = ContentSignaturePolicy.ShouldUpdateContent(existing, updated);
             ReplaceInList(visible, background, updated);
 
@@ -224,6 +237,10 @@ public sealed class ActivityScheduler
             evt.Sequence,
             now,
             _policy.ResolveTtl(evt.Key.Kind, evt.Payload));
+        if (inheritedPin)
+        {
+            record = record.WithPinned(true);
+        }
 
         // Rule 3 (spec 2.3): equal priority replaces the older same-rank activity.
         var sameRankVisible = visible.FindIndex(r => r.PriorityRank == record.PriorityRank);
@@ -362,6 +379,29 @@ public sealed class ActivityScheduler
         }
 
         visible.Add(record);
+    }
+
+    private static void LogSchedulerUpsert(
+        ActivityKey key,
+        bool pinned,
+        IReadOnlyList<ActivityRecord> visible,
+        IReadOnlyList<ActivityRecord> background)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            var order = string.Join(",", visible.Select(r => r.Key.ToString()));
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | scheduler upsert {key} pinned={pinned} visible=[{order}] background={background.Count}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
     }
 
     private static bool SameKey(ActivityRecord? previousPrimary, ImmutableArray<ActivityRecord> visible)

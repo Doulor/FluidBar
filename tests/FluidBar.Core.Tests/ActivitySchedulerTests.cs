@@ -298,4 +298,20 @@ public class ActivitySchedulerTests
         Assert.True(a.DiffersFrom(b));
         Assert.False(a.DiffersFrom(ContentSignaturePolicy.Compute(key, ActivityKind.Media, payloadA)));
     }
+
+    [Fact]
+    public void HeartbeatReplacement_PreservesTheSessionPin()
+    {
+        var initial = TestData.BuildState(_scheduler, TestData.Media());
+        var key = initial.Primary!.Key;
+        var pinned = _scheduler.SetPinned(initial, key, true).State;
+        Assert.True(pinned.Primary!.IsPinned);
+
+        var heartbeat = IslandEvent.New(key, TestData.Payload("heartbeat"), 2);
+        var update = _scheduler.Update(pinned, heartbeat, TestData.Now.AddSeconds(2));
+
+        Assert.Equal(ActivityUpdateKind.ReplacedInPlace, update.Kind);
+        Assert.True(update.State.Primary!.IsPinned);
+        Assert.Equal(key, update.State.Primary.Key);
+    }
 }
