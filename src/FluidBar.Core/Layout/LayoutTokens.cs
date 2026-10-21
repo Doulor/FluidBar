@@ -327,9 +327,9 @@ public static class LayoutTokens
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    // Phone-style notification card (2026-10-22): 340×76 DIP — visibly smaller than the first
-    // 400×96 draft while keeping a 44 DIP real app logo, title/body, time and app name.
-    private static readonly VisualSize NotificationSize = new(340, 76);
+    // Half-size notification pill (2026-10-22 final): 340×76 → 170×38 DIP. The compact renderer
+    // drops to a 26 DIP logo, one-line title/body and a tiny time/app column so the proportions hold.
+    private static readonly VisualSize NotificationSize = new(170, 38);
     private static readonly VisualSize ClipboardSize = new(264, 36);
     // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
     private static readonly VisualSize AgentSize = new(236, 36);

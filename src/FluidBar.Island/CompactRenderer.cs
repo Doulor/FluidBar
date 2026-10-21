@@ -278,7 +278,7 @@ internal sealed class CompactRenderer : IDisposable
         }
 
         var textLeft = icon.Right + (compact ? 8f : 12f) * s;
-        var rightColumn = (compact ? 56f : 64f) * s;
+        var rightColumn = (compact ? 44f : 64f) * s;
         var textRight = width - (compact ? 8f : 14f) * s - rightColumn;
         var titleTop = (compact ? 3f : 12f) * s;
         var titleHeight = compact ? Math.Max(14f * s, (height / 2) - (4f * s)) : 20f * s;
@@ -291,13 +291,27 @@ internal sealed class CompactRenderer : IDisposable
         {
             var bodyBottom = !compact && !string.IsNullOrEmpty(model.VerificationCode)
                 ? height - (24f * s)
-                : height - (8f * s);
+                : height - (6f * s);
             _text.Draw(canvas, body, IslandType.CompactNotice,
                 new SKRect(textLeft, titleTop + titleHeight + (2f * s), textRight, bodyBottom),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
 
-        if (!compact)
+        if (compact)
+        {
+            // Half-size pill: keep the time/app column visible but let it shrink to ~44 DIP.
+            var right = new SKRect(width - (8f * s) - rightColumn, 0, width - (8f * s), height);
+            _text.Draw(canvas, model.TimeText, IslandType.CompactTiny,
+                new SKRect(right.Left, 2f * s, right.Right, 14f * s), _theme.ForegroundTertiary,
+                TextAlign.Right, _opacity);
+            if (!string.IsNullOrEmpty(app))
+            {
+                _text.Draw(canvas, app, IslandType.CompactSmallSemiBold,
+                    new SKRect(right.Left, 14f * s, right.Right, 28f * s), _theme.ForegroundSecondary,
+                    TextAlign.Right, _opacity);
+            }
+        }
+        else
         {
             var right = new SKRect(width - (14f * s) - rightColumn, 0, width - (14f * s), height);
             _text.Draw(canvas, model.TimeText, IslandType.CompactTiny,
@@ -315,11 +329,6 @@ internal sealed class CompactRenderer : IDisposable
                 var chip = new SKRect(textLeft, height - (22f * s), textLeft + (64f * s), height - (6f * s));
                 DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
             }
-        }
-        else if (!string.IsNullOrEmpty(model.VerificationCode))
-        {
-            var chip = new SKRect(width - (8f * s) - (40f * s), height - (20f * s), width - (8f * s), height - (4f * s));
-            DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
         }
 
         if (_pressed)

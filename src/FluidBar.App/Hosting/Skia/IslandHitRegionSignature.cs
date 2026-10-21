@@ -29,17 +29,27 @@ public readonly record struct IslandHitRegionSignature(
     int Page,
     bool Animating,
     int ShellWidthTenths,
-    int ShellHeightTenths)
+    int ShellHeightTenths,
+    int SecondaryKind,
+    int SecondaryWidthTenths,
+    int SecondaryHeightTenths)
 {
     /// <summary>Builds the signature for a render state.</summary>
     /// <param name="state">Current render state.</param>
     /// <param name="animating">Whether motion is in flight right now.</param>
-    public static IslandHitRegionSignature From(in IslandRenderState state, bool animating) => new(
-        state.Form,
-        state.IsVisible,
-        state.Archipelago.Visible,
-        state.PageIndex,
-        animating,
-        (int)Math.Round(state.ShellWidth * 10),
-        (int)Math.Round(state.ShellHeight * 10));
+    public static IslandHitRegionSignature From(in IslandRenderState state, bool animating)
+    {
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        return new(
+            state.Form,
+            state.IsVisible,
+            state.Archipelago.Visible,
+            state.PageIndex,
+            animating,
+            (int)Math.Round(state.ShellWidth * 10),
+            (int)Math.Round(state.ShellHeight * 10),
+            state.SecondaryCompact is { } activity ? (int)activity.Kind : -1,
+            (int)Math.Round(secondary.Width * 10),
+            (int)Math.Round(secondary.Height * 10));
+    }
 }
