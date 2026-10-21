@@ -55,6 +55,9 @@ public static class SkiaIslandStateBuilder
             ? (media.HasTimeline ? media.ProgressPercent : -1)
             : model.ProgressPercent ?? -1;
         var unread = kind == ActivityKind.Notification ? Math.Max(0, content.UnreadCount) : 0;
+        var showsAudioWave = kind == ActivityKind.Notification
+            && (content.Media?.IsPlaying == true
+                || island.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Media && ghost.IsActive));
         var isNotification = kind == ActivityKind.Notification;
         var notification = isNotification ? FindNotification(content, model.SourceName, model.Title) : null;
         var notificationTime = isNotification
@@ -83,6 +86,7 @@ public static class SkiaIslandStateBuilder
             Level = model.Level,
             BatteryPercent = model.BatteryPercent,
             UnreadCount = unread,
+            ShowsAudioWave = showsAudioWave,
             IsActive = model.IsActive,
             IsMuted = model.IsMuted,
             IsCharging = model.IsCharging,

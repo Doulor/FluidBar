@@ -535,6 +535,9 @@ public sealed record CompactModel
     /// <summary>Whether the media session is playing.</summary>
     public bool IsActive { get; init; }
 
+    /// <summary>Whether the notification card keeps the reference repo's right-side audio spectrum.</summary>
+    public bool ShowsAudioWave { get; init; }
+
     /// <summary>Whether the HUD is muted.</summary>
     public bool IsMuted { get; init; }
 

@@ -316,6 +316,12 @@ internal sealed class CompactRenderer : IDisposable
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity * 0.75f);
         }
 
+        if (model.ShowsAudioWave)
+        {
+            var wave = new SKRect(width - (38f * s), (height - (18f * s)) / 2, width - (14f * s), (height + (18f * s)) / 2);
+            DrawWave(canvas, wave, _accents.Get(model.AccentHex, _theme.Accent), active: true);
+        }
+
         if (_pressed)
         {
             _fill.Style = SKPaintStyle.Fill;
