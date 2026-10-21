@@ -226,5 +226,5 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - Island **447** / Ui **503** / Platform **660** 全绿。
 - Architecture 17/18：唯一失败是既有媒体侧 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（不属于通知改动）。
 - 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `9E8A280B14D8ACD7E034DB8EE033E22AC9E2FE407EC45434172FE8B2A63F55EA`，HEAD 即本通知改造提交。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
 
