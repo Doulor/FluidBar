@@ -36,8 +36,10 @@ public sealed class SplitStackPolicyTests
     }
 
     [Fact]
-    public void Media_plus_waiting_agent_puts_agent_primary_then_restores_media_when_it_ends()
+    public void Media_keeps_the_pill_when_a_waiting_agent_appears()
     {
+        // Contract changed 2026-10-22 (user request): a playing track stays on the main pill and the agent
+        // moves to the preview balls. The old rule let a fresh "waiting" agent borrow the pill.
         var policy = new SplitStackPolicy();
         var media = Record(ActivityKind.Media, "media", T0);
         var waiting = Record(ActivityKind.Agent, "agent", T0.AddSeconds(3),
@@ -46,8 +48,8 @@ public sealed class SplitStackPolicyTests
         _ = policy.Order(ImmutableArray.Create(media), T0);
         var ordered = policy.Order(ImmutableArray.Create(media, waiting), T0.AddSeconds(3));
 
-        Assert.Equal(ActivityKind.Agent, ordered[0].Kind);
-        Assert.Equal(ActivityKind.Media, ordered[1].Kind);
+        Assert.Equal(ActivityKind.Media, ordered[0].Kind);
+        Assert.Equal(ActivityKind.Agent, ordered[1].Kind);
 
         // The agent resolves/disappears: the previous persistent primary is restored.
         var restored = policy.Order(ImmutableArray.Create(media), T0.AddSeconds(4));
