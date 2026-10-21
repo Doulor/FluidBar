@@ -91,6 +91,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Throttles the cross-check log line (arbitration runs on every poll).</summary>
     private long _lastCrossCheckLogMs;
 
+    /// <summary>Write time of the state file we are currently extrapolating.</summary>
+    private DateTime? _stateFileWrittenAt;
+
+    /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
+    private double _stateFilePlayingMs;
+
+    /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
+    private DateTimeOffset? _lastPollAt;
+
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
@@ -455,13 +464,28 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var age = _timeProviderNow() - state.SampledAtUtc;
+        var nowForAccumulation = _timeProviderNow();
+        if (_stateFileWrittenAt != state.SampledAtUtc.UtcDateTime)
+        {
+            _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
+            _stateFilePlayingMs = 0;
+        }
+        else if (candidate.IsPlayingHint != false && _lastPollAt is { } previous)
+        {
+            _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
+        }
+
+        _lastPollAt = nowForAccumulation;
         if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
         {
             return candidate; // too old to arbitrate
         }
 
         // The state file is written while playing, so extrapolate it to now.
-        var expected = statePosition + (candidate.IsPlayingHint == false ? TimeSpan.Zero : age);
+        // Extrapolate by the time the track was actually PLAYING since the file was written, not by wall
+        // time: the file is only rewritten every ~30 s, so a pause inside that window made the estimate
+        // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
+        var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
         var difference = (candidate.Position - expected).Duration();
         if (difference <= TimeSpan.FromSeconds(3))
         {
