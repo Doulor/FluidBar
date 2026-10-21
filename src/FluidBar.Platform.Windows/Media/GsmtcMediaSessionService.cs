@@ -113,6 +113,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _lastMsaaPosition = TimeSpan.MinValue;
     private long _lastMsaaChangeMs;
 
+    /// <summary>
+    /// Systematic offset of our own estimate against the player's text, learned whenever the text is fresh
+    /// (it then reflects the true position). Subtracting it removes the constant few seconds that the
+    /// playing-time accumulator drifts by (measured +3.7 s, 2026-10-22).
+    /// </summary>
+    private double _biasMs;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -470,6 +477,27 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Resolves a disagreement between the accessibility clock and the player's state file in favour of the
     /// one that can prove when it was sampled.
     /// </summary>
+    /// <summary>Position the state file implies right now, or null when it cannot be used.</summary>
+    private double? EstimateFromStateFile(WindowMediaCandidate candidate, out TimeSpan age)
+    {
+        age = TimeSpan.Zero;
+        if (candidate.ProcessName is null
+            || !string.Equals(candidate.ProcessName, "KuGou", StringComparison.OrdinalIgnoreCase)
+            || PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
+        {
+            return null;
+        }
+
+        age = _timeProviderNow() - state.SampledAtUtc;
+        if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45) || state.SampledAtUtc < _stateFileValidFromUtc)
+        {
+            return null;
+        }
+
+        var playingMs = Math.Min(_stateFilePlayingMs, age.TotalMilliseconds + 1000);
+        return state.Position.TotalMilliseconds + Math.Clamp(playingMs, 0, 60_000);
+    }
+
     private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
     {
         // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
@@ -500,6 +528,18 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var nowCheck = _timeProviderNow().ToUnixTimeMilliseconds();
         if (candidate.Position != _lastMsaaPosition)
         {
+            // The text just repainted, so it is a trustworthy sample of the true position: compare it with
+            // our own estimate and learn the systematic offset.
+            var estimateMs = EstimateFromStateFile(candidate, out _);
+            if (estimateMs is { } estimate)
+            {
+                var sample = estimate - candidate.Position.TotalMilliseconds;
+                if (Math.Abs(sample) < 15_000)
+                {
+                    _biasMs = (_biasMs * 0.7) + (sample * 0.3);
+                }
+            }
+
             _lastMsaaPosition = candidate.Position;
             _lastMsaaChangeMs = nowCheck;
         }
@@ -558,7 +598,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // 2026-10-22).
         var maxPlayingMs = age.TotalMilliseconds + 1000;
         _stateFilePlayingMs = Math.Min(_stateFilePlayingMs, maxPlayingMs);
-        var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
+        var expected = statePosition
+            + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000))
+            - TimeSpan.FromMilliseconds(_biasMs);
         var difference = (candidate.Position - expected).Duration();
         // A disagreement wider than a minute means the file belongs to another track or another position in
         // time; trusting it produced a 125 s jump (2026-10-22). In that case keep the accessibility reading.
@@ -578,7 +620,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             _lastCrossCheckLogMs = nowTicks;
             MediaDiagnostics.LogAlways($"sync.truth ini={expected.TotalSeconds:0.0}s msaa={candidate.Position.TotalSeconds:0.0}s " +
-                $"delta={difference.TotalSeconds:0.0}s playingMs={_stateFilePlayingMs:0} ageS={age.TotalSeconds:0.0}");
+                $"delta={difference.TotalSeconds:0.0}s playingMs={_stateFilePlayingMs:0} ageS={age.TotalSeconds:0.0} bias={_biasMs:0}");
         }
         return candidate with
         {
