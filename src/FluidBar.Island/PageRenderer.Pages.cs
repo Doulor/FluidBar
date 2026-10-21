@@ -192,18 +192,25 @@ internal sealed partial class PageRenderer
         IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, glyph.Deflate(6), Alpha(accent, _opacity), _icon);
 
         var dismiss = new SKRect(row.Right - 30, row.Top + 10, row.Right - 10, row.Top + 30);
-        if (hovered)
+        // Pointer UI hides the close affordance until the row is hovered (120 ms host fade);
+        // keyboard selection reveals it too. Touch/no-hover devices keep it visible. The hit rect
+        // in PageLayout is independent of this paint alpha, so the row never jumps.
+        var closeAlpha = hovered || !_hasPointer ? 1f : 0f;
+        if (closeAlpha > 0)
         {
-            _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
-            canvas.DrawRoundRect(dismiss, 6, 6, _fill);
-        }
+            if (hovered)
+            {
+                _fill.Color = Alpha(SKColors.White, 0.04f * _opacity);
+                canvas.DrawRoundRect(dismiss, 6, 6, _fill);
+            }
 
-        IconSet.Draw(
-            canvas,
-            IconKind.Close,
-            dismiss.Deflate(5),
-            Alpha(hovered ? _theme.ForegroundSecondary : _theme.ForegroundTertiary, _opacity),
-            _icon);
+            IconSet.Draw(
+                canvas,
+                IconKind.Close,
+                dismiss.Deflate(5),
+                Alpha(hovered ? _theme.ForegroundSecondary : _theme.ForegroundTertiary, closeAlpha * _opacity),
+                _icon);
+        }
 
         var hasCode = item.VerificationCode is { Length: > 0 };
         var chip = hasCode
@@ -847,10 +854,14 @@ internal sealed partial class PageRenderer
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = selected
             ? Alpha(_theme.Accent, 0.10f * _opacity)
-            : hovered
-                ? Alpha(Mix(_theme.BackgroundRaised, SKColors.White, 0.06f), 0.68f * _opacity)
-                : Alpha(_theme.BackgroundRaised, 0.60f * _opacity);
+            : Alpha(_theme.BackgroundRaised, 0.60f * _opacity);
         canvas.DrawRoundRect(row, PageVisual.CardRadius, PageVisual.CardRadius, _fill);
+        if (hovered && !selected)
+        {
+            // Settings-panel hover is a 4 % white wash, not a brighter raised fill.
+            _fill.Color = Alpha(SKColors.White, 0.04f * _opacity);
+            canvas.DrawRoundRect(row, PageVisual.CardRadius, PageVisual.CardRadius, _fill);
+        }
         _stroke.Style = SKPaintStyle.Stroke;
         _stroke.StrokeWidth = 1.5f;
         _stroke.Color = Alpha(SKColors.White, 0.05f * _opacity);
