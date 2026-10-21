@@ -36,7 +36,7 @@ public sealed class PageSwitchFeelTests
     private static double Position(SkiaIslandController controller) => controller.RenderState.Pager.PagePosition;
 
     [Fact]
-    public void TwoWheelNotchesTurnExactlyOnePageAndSettleWithoutOvershoot()
+    public void SingleLightNotchTurnsOnePageWithASubtleOvershoot()
     {
         var (fixture, controller) = Create();
         using var _fixture = fixture;
@@ -52,21 +52,20 @@ public sealed class PageSwitchFeelTests
 
         Assert.Equal(1, controller.Pager.SelectedIndex);
         Assert.Equal(1.0, positions[^1], 3);
-        // Feel pass (2026-10-21): the snap uses zeta 0.75 and is allowed to overshoot by <= 2 % of a
-        // page before settling exactly on the target (spec change, previously "no overshoot").
-        Assert.True(positions.Max() <= 1.02, "the overshoot must stay subtle");
+        // Feel pass (2026-10-21): the snap uses zeta 0.75, whose analytic overshoot is ~2.8 % of a
+        // page; it must stay subtle and settle exactly on the target (previously "no overshoot").
+        Assert.True(positions.Max() <= 1.035, "the overshoot must stay subtle, peak " + positions.Max());
         Assert.Equal(1.0, positions[^1], 3);
     }
 
     [Fact]
-    public void ContinuousWheelGestureQueuesPagesInsteadOfSwallowingThem()
+    public void ContinuousWheelGestureIsLockedToOnePage()
     {
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at ~15 Hz (a real wheel spin), 70 DIP each. The prototype commits a page at most
-        // once per 180 ms window and keeps the residual; the previous build froze the whole chain for
-        // the duration of the snap and turned six notches into a single page.
+        // Six notches at ~15 Hz (a real wheel spin). Feel pass: one physical gesture may never chain
+        // pages — the gesture lock drops every notch until the wheel has been idle for 120 ms.
         for (var i = 0; i < 6; i++)
         {
             controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
@@ -78,19 +77,17 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.True(controller.Pager.SelectedIndex >= 2,
-            "a continuous six-notch gesture must queue at least two pages, got " + controller.Pager.SelectedIndex);
+        Assert.Equal(1, controller.Pager.SelectedIndex);
         Assert.Equal(controller.Pager.SelectedIndex, (int)Math.Round(Position(controller)));
     }
 
     [Fact]
-    public void ContinuousWheelAtTenHertzTurnsThreePagesForSixNotches()
+    public void ContinuousWheelAtTenHertzTurnsOnePagePerGesture()
     {
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at 10 Hz = 420 DIP of wheel = three page steps; the 180 ms cooldown still paces
-        // them (prototype2 measured 2-3 pages for the same gesture).
+        // Six notches at 10 Hz stay inside one gesture (gaps < 120 ms), so exactly one page turns.
         for (var i = 0; i < 6; i++)
         {
             controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
@@ -102,8 +99,8 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.Equal(3, controller.Pager.SelectedIndex);
-        Assert.Equal(3.0, Position(controller), 3);
+        Assert.Equal(1, controller.Pager.SelectedIndex);
+        Assert.Equal(1.0, Position(controller), 3);
     }
 
     [Fact]

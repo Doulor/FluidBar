@@ -31,6 +31,8 @@ public readonly record struct PagerWheelResult
 public sealed class PagerWheelPolicy
 {
     private DateTimeOffset? _lastPageChangeAt;
+    private DateTimeOffset? _lastEventAt;
+    private DateTimeOffset? _gestureLockUntil;
 
     /// <summary>Creates a wheel policy.</summary>
     /// <param name="pageCount">Number of pages (&gt;= 1); used by <see cref="ClampCurrent"/>.</param>
@@ -110,6 +112,26 @@ public sealed class PagerWheelPolicy
             AccumulatedDip = 0;
         }
 
+        // Gesture lock: notches that belong to the same gesture as a page step (gap < idle 120 ms)
+        // are dropped unqueued inside the 260 ms transition lock, so one flick can never chain pages.
+        var sameGesture = _lastEventAt is { } lastEvent
+            && now - lastEvent < TimeSpan.FromMilliseconds(PagerConstants.WheelGestureIdleMs);
+        _lastEventAt = now;
+        if (sameGesture && _gestureLockUntil is { } until && now < until)
+        {
+            // Still the same physical gesture: refresh the lock so a long continuous spin stays capped
+            // at one page until the user actually stops (>= WheelGestureIdleMs without a notch).
+            _gestureLockUntil = now.AddMilliseconds(PagerConstants.WheelGestureIdleMs);
+            AccumulatedDip = 0;
+            return new PagerWheelResult
+            {
+                PageDelta = 0,
+                Consumed = true,
+                CooldownBlocked = true,
+                AccumulatedDip = 0,
+            };
+        }
+
         AccumulatedDip += deltaDip;
         var inCooldown = IsInCooldown(now);
         if (Math.Abs(AccumulatedDip) >= NotchDip && !inCooldown)
@@ -117,6 +139,7 @@ public sealed class PagerWheelPolicy
             var sign = AccumulatedDip > 0 ? 1 : -1;
             AccumulatedDip -= sign * NotchDip;
             _lastPageChangeAt = now;
+            _gestureLockUntil = now.AddMilliseconds(PagerConstants.WheelTransitionLockMs);
             return new PagerWheelResult
             {
                 PageDelta = sign,
