@@ -1507,9 +1507,16 @@ public sealed class SkiaIslandController : IDisposable
         var wheelHit = _pointerInside
             ? SkiaIslandHitTest.Hit(_renderState, _pointerX, _pointerY).Kind
             : IslandHitKind.None;
+        var stackRotateAllowed = _settings.Current.Stacking == StackingStrategySetting.Stacked
+            && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek
+            && _schedulerState.Visible.Length > 1;
+        var splitRotateAllowed = _settings.Current.Stacking == StackingStrategySetting.Split
+            && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek
+            && _schedulerState.Visible.Length > 1;
         PinDiagnostics.Log(
-            $"wheel state={State.Kind} form={_renderState.Form} hit={wheelHit} delta={deltaDip:0.###} " +
-            $"visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind))}] islets={_renderState.SplitIslets.Length}");
+            $"wheel state={State.Kind} form={_renderState.Form} stacking={_settings.Current.Stacking} hit={wheelHit} " +
+            $"delta={deltaDip:0.###} horizontal={horizontal} shift={shift} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind))}] " +
+            $"islets={_renderState.SplitIslets.Length} stackRotateAllowed={stackRotateAllowed} splitRotateAllowed={splitRotateAllowed}");
 
         // Stacked strategy: the wheel over the compact pill rotates the visible stack, bringing the
         // next ghost to the front and pushing the former primary to the back (cyclic). Split mode and
@@ -1529,6 +1536,7 @@ public sealed class SkiaIslandController : IDisposable
 
             if (_settings.Current.Stacking == StackingStrategySetting.Stacked)
             {
+                PinDiagnostics.Log("wheel-route=stack-rotate");
                 RotateStack(deltaDip < 0 ? -1 : 1);
                 _motion.PlayStackRotation();
                 SyncContent(full: true);

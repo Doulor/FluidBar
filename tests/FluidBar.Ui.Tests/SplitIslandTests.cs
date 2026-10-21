@@ -182,7 +182,7 @@ public sealed class SplitIslandTests
         Publish(fixture, ActivityKind.Media, new ActivityPayload { Title = "Song", IsActive = true }, 2, "media");
         Settle(fixture);
 
-        Assert.True(fixture.Controller.HandleWheel(-100, horizontal: false, shift: false).Consumed);
+        Assert.True(fixture.Controller.HandleWheel(-60, horizontal: false, shift: false).Consumed);
         Settle(fixture);
         Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
 
