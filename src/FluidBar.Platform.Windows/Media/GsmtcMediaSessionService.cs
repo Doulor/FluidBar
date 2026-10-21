@@ -585,7 +585,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // proof enough that the player is running, so either signal counts.
             var justWrote = state.SampledAtUtc != _lastSeenWriteUtc;
             _lastSeenWriteUtc = state.SampledAtUtc;
-            var audible = justWrote || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
+            // No session at all (minimised player, or enumeration hiccup) is NOT evidence of a pause: counting
+            // it as silence made the estimate stall and the island drift ahead by ~2 s per window.
+            var audible = justWrote
+                || !MediaWindowFallback.HasSession(candidate.ProcessId)
+                || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
             if (audible)
             {
                 _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;

@@ -191,6 +191,25 @@ internal static class MediaWindowFallback
     /// The device-wide meter includes every other application, so a browser tab or a system sound kept the
     /// island "playing" after KuGou was paused. This isolates the player (user report 2026-10-21).
     /// </remarks>
+    /// <summary>True when the process still owns a render session (even a silent one).</summary>
+    public static bool HasSession(int processId)
+    {
+        if (processId <= 0 || !AudioSessionProbe.TryGetActiveRenderSessions(out var sessions))
+        {
+            return false;
+        }
+
+        foreach (var session in sessions)
+        {
+            if (session.ProcessId == processId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static float GetProcessPeak(int processId)
     {
         if (processId <= 0 || !AudioSessionProbe.TryGetActiveRenderSessions(out var sessions))
