@@ -381,6 +381,43 @@ public sealed class ActivityScheduler
         visible.Add(record);
     }
 
+    private static void LogNormalize(
+        IReadOnlyList<ActivityRecord> live,
+        IReadOnlyList<ActivityRecord> visible,
+        IReadOnlyList<ActivityRecord> background,
+        int capacity,
+        int maxBackground)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var visibleKeys = visible.Select(r => r.Key).ToHashSet();
+        var backgroundKeys = background.Select(r => r.Key).ToHashSet();
+        var rows = new List<string>(live.Count);
+        for (var i = 0; i < live.Count; i++)
+        {
+            var record = live[i];
+            var reason = visibleKeys.Contains(record.Key)
+                ? "visible"
+                : backgroundKeys.Contains(record.Key)
+                    ? $"background(over visibleCapacity={capacity})"
+                    : $"dropped(over backgroundMax={maxBackground})";
+            rows.Add($"{i}:{record.Key} rank={record.PriorityRank} pinned={record.IsPinned} persistent={record.IsPersistent} {reason}");
+        }
+
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | normalize capacity={capacity} live={live.Count} [{string.Join(" | ", rows)}]{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     private static void LogSchedulerUpsert(
         ActivityKey key,
         bool pinned,
@@ -473,6 +510,7 @@ public sealed class ActivityScheduler
             dropped++;
         }
 
+        LogNormalize(live, newVisible, newBackground, capacity, maxBackground);
         return new NormalizedStack([.. newVisible], [.. newBackground], dropped);
     }
 }
