@@ -819,7 +819,7 @@ public sealed class IslandRenderer : IDisposable
             _fill.MaskFilter = null;
             _fill.Color = Alpha(_theme.BackgroundInset, alpha);
             canvas.DrawCircle(ball.MidX, ball.MidY, discRadius, _fill);
-            var noteSize = discRadius * 1.05f;
+            var noteSize = ball.Width * 0.40f;
             IconSet.Draw(canvas, IconKind.Media,
                 new SKRect(ball.MidX - (noteSize / 2), ball.MidY - (noteSize / 2),
                     ball.MidX + (noteSize / 2), ball.MidY + (noteSize / 2)),
