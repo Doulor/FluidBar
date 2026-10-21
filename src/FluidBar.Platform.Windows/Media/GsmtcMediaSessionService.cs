@@ -530,10 +530,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return candidate;
             }
 
+            // Only count from zero when the player's own text agrees with that story (a track that starts
+            // mid-way would otherwise be shown several seconds off, measured +3 s, 2026-10-22).
+            var agreesWithZero = (candidate.Position - sinceStart).Duration() < TimeSpan.FromSeconds(6);
             if (sinceStart >= TimeSpan.Zero
                 && sinceStart < TimeSpan.FromSeconds(90)
                 && candidate.Position >= TimeSpan.Zero
-                && candidate.Position < TimeSpan.FromSeconds(25))
+                && candidate.Position < TimeSpan.FromSeconds(25)
+                && agreesWithZero)
             {
                 return candidate with
                 {
