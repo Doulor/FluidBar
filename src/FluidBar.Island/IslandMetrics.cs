@@ -185,13 +185,17 @@ public static class IslandMetrics
     /// </summary>
     public const float SplitRingRadiusDip = 11f;
 
-    /// <summary>Ring stroke width, derived from the shared spinner ratio (radius x 0.3158 = 3.47 DIP).</summary>
-    public const float SplitRingStrokeDip = SplitRingRadiusDip * AgentSpinner.StrokeToRadiusRatio;
+    /// <summary>
+    /// Ring stroke width. Uses the compact pill's ring ratio (1.5 / 9.25 = 0.162), not the chunkier
+    /// expanded-row spinner ratio, so the satellite paints the same thin circle as the primary island
+    /// (user report 2026-10-21: the thick arc read as a blobby halo).
+    /// </summary>
+    public const float SplitRingStrokeDip = SplitRingRadiusDip * AgentSpinner.RingStrokeToRadiusRatio;
 
     /// <summary>Stroke of the static Completed/Failed marks (2.25 DIP: same visual weight as the ring).</summary>
     public const float SplitRingEndMarkStrokeDip = 2.25f;
 
-    /// <summary>Agent ring period in seconds (3 s = 120 deg/s, inside the frozen 110-130 deg/s gate).</summary>
+    /// <summary>Agent ring period in seconds (0.9 s per turn = 400 deg/s, identical to the big-island spinner).</summary>
     public const double SplitRingPeriodSeconds = AgentSpinner.PeriodSeconds;
 
     /// <summary>Agent ring rotation in degrees for an elapsed animation time (monotonic, 120 deg/s).</summary>

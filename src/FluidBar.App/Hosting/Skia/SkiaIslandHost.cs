@@ -148,7 +148,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private PlatformMessageHost? _mouseHookHost;
     private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
-    private RegionSignature _regionSignature;
+    private IslandHitRegionSignature _regionSignature;
 
     // Reused buffer for the global-hook rectangles: they are rebuilt every frame while the preview
     // rail springs, so the animated pills stay inside the click-consuming envelope without allocating.
@@ -1247,8 +1247,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // painted. With no ring the island must not keep a timer alive even in Performance mode.
         var keepIdleFrames = profile.KeepIdleFrames && _controller.RenderState.IsVisible
             && _controller.HasSpinningSplitRing;
-        if ((!_controller.IsAnimating && !_controller.IsAgentAnimating && !keepIdleFrames)
-            || (!_lastRenderHappened && !keepIdleFrames))
+        if (!IslandFrameLoopPolicy.ShouldRun(_controller.IsAnimating, _controller.IsAgentAnimating, keepIdleFrames))
         {
             if (_frameClock.IsRunning)
             {
@@ -1277,7 +1276,6 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     }
 
     private SkiaIslandRenderChange _lastChange;
-    private bool _lastRenderHappened;
     private int _emptyFrameStreak;
     private TimeSpan _lastLoggedFrameInterval;
     private long _frameNumber;
@@ -1318,14 +1316,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _controller.Advance(delta);
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
-            RenderAllLocked(forceFull: false);
+            var painted = RenderAllLocked(forceFull: false);
             var profile = _controller.PowerProfile;
             var stopThreshold = _controller.HasSpinningSplitRing
                 ? profile.EmptyFrameStopThreshold
                 : 2;
             if (stopThreshold > 0)
             {
-                if (!_lastRenderHappened)
+                if (!painted)
                 {
                     _emptyFrameStreak++;
                 }
@@ -1364,7 +1362,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 SkiaFrameTrace.Frame(
                     ++_frameNumber,
                     _controller.PowerMode,
-                    _lastRenderHappened ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
+                    painted ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
                     _controller.RenderState,
                     _controller.Motion,
                     _controller.IsAgentAnimating,
@@ -1374,13 +1372,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             if (_controller.IsAnimating || _controller.IsAgentAnimating)
             {
-                // The preview rail springs move the pills a few DIP during a page turn; keep the
-                // hook envelope on the painted geometry instead of the start-of-animation one.
-                var state = _controller.RenderState;
-                if (state.Archipelago.Visible)
-                {
-                    RebuildHookRects(state);
-                }
+                // Follow the painted shell every frame: the expand/collapse transition, the pager and
+                // the preview-rail springs all move the clickable geometry. The region is a plain
+                // in-memory model (no Win32 calls), so refreshing it per frame is cheap.
+                UpdateHitRegions(force: false);
             }
             else if (!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
             {
@@ -1810,12 +1805,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
     }
 
-    private void RenderAllLocked(bool forceFull)
+    private bool RenderAllLocked(bool forceFull)
     {
-        _lastRenderHappened = false;
         if (_windows.Count == 0)
         {
-            return;
+            return false;
         }
 
         SkiaIslandRenderChange change;
@@ -1826,11 +1820,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
         else if (!_controller.TakeInvalidation(out change))
         {
-            return;
+            return false;
         }
 
         _lastChange = change;
-        _lastRenderHappened = true;
         var state = _controller.RenderState;
         double totalRenderMs = 0;
         foreach (var entry in _windows)
@@ -1844,6 +1837,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _perfProbe.RecordFrame(totalRenderMs, change.FullFrame, _probeAdvanceAlloc, renderAlloc);
             _probeAdvanceAlloc = 0;
         }
+
+        return true;
     }
 
     private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
@@ -1982,7 +1977,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var state = _controller.RenderState;
-        var signature = new RegionSignature(state.Form, state.IsVisible, state.Archipelago.Visible, state.PageIndex, _controller.IsAnimating);
+        // The clickable region must track the painted shell, not just the shell *form*: the expand /
+        // collapse transitions change the size every frame, and a stale region makes the body of the
+        // panel ignore every click (only the old compact pill stays interactive).
+        var signature = IslandHitRegionSignature.From(state, _controller.IsAnimating);
         if (!force && signature.Equals(_regionSignature))
         {
             return;
@@ -2278,13 +2276,6 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         data.SaveTo(stream);
         return true;
     }
-
-    private readonly record struct RegionSignature(
-        ShellForm Form,
-        bool Visible,
-        bool ArchipelagoVisible,
-        int Page,
-        bool Animating);
 
     /// <summary>Drop placement waiting for Core's <c>PersistPlacement</c> effect.</summary>
     private sealed record PendingDrop(

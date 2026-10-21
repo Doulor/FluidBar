@@ -130,8 +130,10 @@ public sealed class MiniRailMotionTests
         var mid = MiniRailLayout.Measure(midState, shell, left, right);
         Assert.InRange(mid.CapsuleWidth, 64f, 73f);
         Assert.NotEqual(frame.Previous.MidX, mid.Previous.MidX);
-        Assert.Equal(3, mid.LeftDots); // the cluster count follows the new page immediately
-        Assert.Equal(0, mid.RightDots);
+        // The dot clusters stay on the COMMITTED page (3) so the capsule label and the dots can never
+        // disagree; a stale rail page used to paint three unclickable dots on the Home page.
+        Assert.Equal(2, mid.LeftDots);
+        Assert.Equal(1, mid.RightDots);
     }
 
     [Theory]

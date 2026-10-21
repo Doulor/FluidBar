@@ -21,6 +21,9 @@ public sealed class MediaPillPreferences
     /// <summary>Setting key rendered by the media plugin's settings page.</summary>
     public const string CompactLyricsKey = "media.compactLyrics";
 
+    /// <summary>Karaoke lead/lag in milliseconds, owned by the media plugin (no island-side knob).</summary>
+    public const string LyricOffsetKey = "media.lyricOffsetMs";
+
     /// <summary>A reader that always reports the default ("on"; used by tests and headless hosts).</summary>
     public static MediaPillPreferences Default { get; } = new(showCompactLyrics: true);
 
@@ -31,6 +34,7 @@ public sealed class MediaPillPreferences
     private readonly bool _followFile;
     private readonly object _gate = new();
     private bool _showCompactLyrics = true;
+    private double _lyricOffsetMs;
     private DateTime _stamp = DateTime.MinValue;
 
     /// <summary>Creates a reader for the media plugin's settings file.</summary>
@@ -41,6 +45,24 @@ public sealed class MediaPillPreferences
         _path = settingsPath ?? PluginRuntimePaths.SettingsFile(
             PluginRuntimePaths.ResolveRoot(), MediaPluginId);
         _followFile = followFile;
+    }
+
+    /// <summary>Karaoke offset in milliseconds (-800..+800); positive shows the words sooner.</summary>
+    public double LyricOffsetMs
+    {
+        get
+        {
+            if (!_followFile)
+            {
+                return _lyricOffsetMs;
+            }
+
+            lock (_gate)
+            {
+                Refresh();
+                return _lyricOffsetMs;
+            }
+        }
     }
 
     private MediaPillPreferences(bool showCompactLyrics)
@@ -79,7 +101,9 @@ public sealed class MediaPillPreferences
             }
 
             _stamp = info.LastWriteTimeUtc;
-            _showCompactLyrics = ParseShowCompactLyrics(File.ReadAllText(_path));
+            var json = File.ReadAllText(_path);
+            _showCompactLyrics = ParseShowCompactLyrics(json);
+            _lyricOffsetMs = ParseLyricOffsetMs(json);
         }
         catch (IOException)
         {
@@ -93,6 +117,38 @@ public sealed class MediaPillPreferences
     /// <summary>Parses the host-owned settings payload (<c>{"values":{"media.compactLyrics":false}}</c>).</summary>
     /// <param name="json">Raw settings file content (may be null/blank).</param>
     /// <returns>True unless the store explicitly says false.</returns>
+    /// <summary>Parses <c>media.lyricOffsetMs</c>; missing/invalid means 0.</summary>
+    /// <param name="json">Host-owned settings payload.</param>
+    public static double ParseLyricOffsetMs(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("values", out var values)
+                || !values.TryGetProperty(LyricOffsetKey, out var raw))
+            {
+                return 0;
+            }
+
+            var value = raw.ValueKind switch
+            {
+                JsonValueKind.Number => raw.GetDouble(),
+                JsonValueKind.String when double.TryParse(raw.GetString(), out var parsed) => parsed,
+                _ => 0,
+            };
+            return double.IsFinite(value) ? Math.Clamp(value, -800, 800) : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+    }
+
     public static bool ParseShowCompactLyrics(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))

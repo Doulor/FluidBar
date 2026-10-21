@@ -590,6 +590,8 @@
     "setting.media.showLyrics.title": "显示歌词",
     "setting.media.compactLyrics.title": "胶囊显示歌词",
     "setting.media.compactLyrics.description": "播放时在胶囊里显示封面与实时歌词，不显示歌名与歌手",
+    "setting.media.lyricOffset.title": "歌词偏移",
+    "setting.media.lyricOffset.description": "正数=歌词提前（觉得慢就往正调），负数=延后。用于补偿播放器时钟误差。",
     "setting.clipboard.enabled.title": "记录剪贴板历史",
     "setting.notifications.permission.title": "通知访问权限",
     "setting.notifications.verificationCode.title": "识别验证码",

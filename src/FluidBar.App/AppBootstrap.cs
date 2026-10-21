@@ -52,6 +52,12 @@ internal sealed class AppBootstrap
     private StartupRegistrationSync? _startupRegistration;
     private AppUpdateCoordinator? _updates;
     private CrashGuard? _crashGuard;
+
+    /// <summary>True when safe mode is on, whether the user set it or the crash guard forced it.</summary>
+    private bool SafeModeActive => _settings.Current.Advanced.SafeMode || _forcedSafeMode;
+
+    /// <summary>Set for this run only by the crash guard (never persisted into settings).</summary>
+    private bool _forcedSafeMode;
     private UpdateState _lastPromptedUpdateState = UpdateState.Idle;
 
     public AppBootstrap(IClassicDesktopStyleApplicationLifetime lifetime)
@@ -190,10 +196,9 @@ internal sealed class AppBootstrap
             return;
         }
 
-        _settings.Update(settings => settings with
-        {
-            Advanced = settings.Advanced with { SafeMode = true },
-        });
+        // Apply it to this run only. Writing Advanced.SafeMode into the user's settings made the
+        // next start silently island-less even after the crash was fixed.
+        _forcedSafeMode = true;
     }
 
     private void OnAppDomainUnhandledException(object? sender, UnhandledExceptionEventArgs e)
@@ -965,7 +970,7 @@ internal sealed class AppBootstrap
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
                 BuiltinServices = services,
                 // Safe mode disables every community plugin (spec §8.4); first-party ones still load.
-                LoadCommunity = !_settings.Current.Advanced.SafeMode,
+                LoadCommunity = !SafeModeActive,
                 Enablement = new SettingsPluginEnablementStore(_settings),
                 MarketplaceIndexUrl = ResolveMarketplaceIndexUrl(),
                 Trust = ResolveMarketplaceTrust(),
@@ -975,7 +980,7 @@ internal sealed class AppBootstrap
 
             _pluginRuntime = await Task.Run(() => PluginRuntime.CreateAsync(options)).ConfigureAwait(true);
             var report = _pluginRuntime.Report;
-            if (_settings.Current.Advanced.SafeMode)
+            if (SafeModeActive)
             {
                 _logger.Warning(LogCategories.Plugin, "plugin.runtime.safe-mode",
                     "Safe mode is on: community plugins are not loaded.");
@@ -1123,6 +1128,18 @@ internal sealed class AppBootstrap
     /// </summary>
     private static void BringToFront(Window window)
     {
+        // A minimised window ignores Activate(): it stays in the taskbar and the settings button looks
+        // dead (user report 2026-10-21). Restore it first, then raise it.
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        if (!window.IsVisible)
+        {
+            window.Show();
+        }
+
         window.Activate();
         window.Topmost = true;
         Dispatcher.UIThread.Post(() => window.Topmost = false, DispatcherPriority.Background);

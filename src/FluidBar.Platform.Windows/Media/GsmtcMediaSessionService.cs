@@ -70,6 +70,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private long _accessibilityRetryAfterMs;
     private const int AccessibilityRetryBackoffMs = 2500;
     private int _fallbackMissCount;
+
+    /// <summary>Last play/pause state confirmed by the player accessibility glyph (null until read).</summary>
+    private bool? _fallbackPlayingHint;
+
+    /// <summary>Consecutive polls where the audio meter reported silence.</summary>
+    private int _audioSilentPolls;
     private volatile bool _fallbackActive;
     private CancellationTokenSource? _artworkCts;
     private int _refreshPending;
@@ -258,10 +264,39 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
         candidate = EnrichWithAccessibility(candidate);
-        var playing = candidate.IsPlayingHint ?? DetermineFallbackPlaying(candidate);
+        // Experimental: KuGou keeps a millisecond position counter in its own memory; see
+        // KugouMemoryPosition. No-op unless FLUIDBAR_KUGOU_MEM_POSITION=1 and always falls back.
+        candidate = KugouMemoryPosition.Apply(candidate, _timeProviderNow());
+        // The MSAA glyph read is the only live truth a fallback player gives us. When it is ambiguous
+        // (both/neither glyph visible during a repaint) the peak heuristic used to decide — and it
+        // flips the published state, so the island showed "paused" while the track was playing.
+        // Hold the last confirmed glyph instead; the heuristic only seeds the very first reading.
+        var playing = candidate.IsPlayingHint ?? _fallbackPlayingHint ?? DetermineFallbackPlaying(candidate);
+        if (candidate.IsPlayingHint is { } confirmed)
+        {
+            _fallbackPlayingHint = confirmed;
+        }
+
+        // The audio meter is the only signal the player cannot lie about: a silent session is paused,
+        // no matter what the transport glyph says. Three consecutive silent polls are required so a
+        // quiet passage or a fade-out does not flip the icon (user report: the island kept showing
+        // "playing" after the song was paused).
+        _audioSilentPolls = audioPeak > 0.0005 ? 0 : _audioSilentPolls + 1;
+        if (audioPeak > 0.002)
+        {
+            playing = true;
+            _fallbackPlayingHint = true;
+        }
+        else if (playing && _audioSilentPolls >= 2)
+        {
+            playing = false;
+            _fallbackPlayingHint = false;
+        }
+        // 500 ms while playing: the user sees their own pause/play in KuGou within half a second instead
+        // of waiting for the next one-second tick (user report 2026-10-21).
         _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
             ? (playing ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(5))
-            : TimeSpan.FromSeconds(1));
+            : (playing ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(1)));
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
@@ -387,7 +422,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             Position = timeline.Position,
             Duration = timeline.Duration,
-            PositionSampledAtUtc = _timeProviderNow(),
+            // Back-dated by the reading's age: a one-second-resolution clock is stale by up to half a
+            // poll window the moment it is seen (see PlayerTimeline.Age).
+            PositionSampledAtUtc = _timeProviderNow() - timeline.Age,
             HasTimeline = true,
             TimelineSource = PlayerTimelineSource.Accessibility,
         };
@@ -424,7 +461,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             candidate.PositionSampledAtUtc, staleAfter);
     }
 
-    private void ResetFallbackPlayback() => _fallbackPlayback.Reset();
+    private void ResetFallbackPlayback()
+    {
+        _fallbackPlayback.Reset();
+        _fallbackPlayingHint = null;
+    }
 
     /// <summary>Requests a coalesced refresh (called by GSMTC events; never blocks the WinRT callback thread).</summary>
     public Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -803,12 +844,35 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return;
         }
 
+        // Window-title scrapes carry the player's own chrome ("正在播放: "), and artist/title are often
+        // glued into one string; searching raw text is the main reason covers were missed.
+        var (searchTitle, searchArtist) = ArtworkSearchTerms.Split(candidate.Title, candidate.Artist);
+
         _ = Task.Run(async () =>
         {
             try
             {
-                var outcome = await fetcher.FetchAsync(candidate.Artist, candidate.Title, album: null)
-                    .ConfigureAwait(false);
+                // Three attempts: the title settles a beat after the track starts and a provider hiccup
+                // must not cost the whole track its cover (user report 2026-10-21).
+                ArtworkFetchOutcome outcome = default;
+                for (var attempt = 0; attempt < 3; attempt++)
+                {
+                    if (attempt > 0)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(attempt * 3)).ConfigureAwait(false);
+                        if (!string.Equals(Current?.TrackKey, candidate.TrackKey, StringComparison.Ordinal))
+                        {
+                            return;
+                        }
+                    }
+
+                    outcome = await fetcher.FetchAsync(searchArtist, searchTitle, album: null).ConfigureAwait(false);
+                    if (outcome.Succeeded)
+                    {
+                        break;
+                    }
+                }
+
                 if (!outcome.Succeeded || outcome.Entry is not { } entry || string.IsNullOrEmpty(candidate.TrackKey))
                 {
                     // Attributable failure: which level missed and how close the best candidate was.

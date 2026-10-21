@@ -16,11 +16,15 @@ public sealed class AgentSpinnerTests
         Assert.Equal(AgentSpinner.SweepDegrees, 180f, 0.001f);
         Assert.Equal(AgentSpinner.SweepDegrees, AgentMotion.ArcSweepDegrees, 0.001f);
 
-        // Stroke : radius ratio (1.5 DIP on a 4.75 DIP radius = 0.3158)
+        // Expanded-row spinner: 1.5 DIP on a 4.75 DIP radius = 0.3158.
         Assert.Equal(1.5f / 4.75f, AgentSpinner.StrokeToRadiusRatio, 0.0001f);
-        Assert.Equal(AgentSpinner.StrokeForRadius(IslandMetrics.SplitRingRadiusDip),
-            IslandMetrics.SplitRingStrokeDip, 0.001f);
         Assert.Equal(AgentSpinner.StrokeForRadius(4.75f), AgentMotion.RingStrokeWidth, 0.001f);
+
+        // Satellite ring: the primary pill's ratio (1.5 DIP on a 9.25 DIP radius) -> the same thin circle.
+        Assert.Equal(1.5f / 9.25f, AgentSpinner.RingStrokeToRadiusRatio, 0.0001f);
+        Assert.Equal(IslandMetrics.SplitRingStrokeDip,
+            AgentSpinner.RingStrokeForRadius(IslandMetrics.SplitRingRadiusDip), 0.001f);
+        Assert.InRange(IslandMetrics.SplitRingStrokeDip, 1.7f, 1.9f);
 
         // Speed
         Assert.Equal(0.9, AgentSpinner.PeriodSeconds, 0.0001);

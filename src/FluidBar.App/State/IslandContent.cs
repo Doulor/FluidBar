@@ -36,6 +36,12 @@ public sealed record MediaSessionData
     /// </summary>
     public bool HasTimeline { get; init; } = true;
 
+    /// <summary>
+    /// Whether the source can jump to a position. False for window-title fallback players (KuGou):
+    /// they expose no seek at all, so the island paints the row read-only instead of a dead slider.
+    /// </summary>
+    public bool CanSeek { get; init; } = true;
+
     /// <summary>Whether playback is active.</summary>
     public bool IsPlaying { get; init; }
 

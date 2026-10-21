@@ -862,9 +862,13 @@ public static class SettingsSectionBuilder
                 reload();
             },
             onEnter: () => reload());
+        // The search field lives in a host created ONCE: ShowList runs again after a plugin detail page,
+        // and a fresh Border would try to re-parent a control that still has one -> Avalonia throws
+        // "The Control already has a parent" and the whole app dies (crash 2026-10-21 21:19).
+        var searchHost = new Border { Margin = new Thickness(0, 0, 0, 10), Child = search };
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Plugins.Title),
             ctx.Localizer.Get(LocKeys.Settings.Plugins.Description),
-            new Border { Margin = new Thickness(0, 0, 0, 10), Child = search },
+            searchHost,
             list);
 
         var toolbar = BuildPluginToolbar(ctx, palette);
@@ -951,7 +955,7 @@ public static class SettingsSectionBuilder
             panel.Children.Add(SettingsWidgets.PaneHeader(
                 ctx.Localizer.Get(LocKeys.Settings.Plugins.Title),
                 ctx.Localizer.Get(LocKeys.Settings.Plugins.Description), palette));
-            panel.Children.Add(new Border { Margin = new Thickness(0, 0, 0, 10), Child = search });
+            panel.Children.Add(searchHost);
             panel.Children.Add(list);
             panel.Children.Add(toolbar);
             panel.Children.Add(footer);

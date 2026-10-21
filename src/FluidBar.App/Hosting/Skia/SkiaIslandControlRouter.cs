@@ -32,9 +32,12 @@ public static class SkiaIslandControlRouter
             case IslandPageControl.Next:
                 return new IslandPlatformAction(IslandPlatformActionKind.MediaNext);
             case IslandPageControl.Seek:
-                return new IslandPlatformAction(
-                    IslandPlatformActionKind.MediaSeek,
-                    Value: Fraction(PageLayout.MediaSeekTrack(page), pointerXDip));
+                // Read-only source (no seek capability): the tap/drag must not pretend to work.
+                return state.Pages.Media.CanSeek
+                    ? new IslandPlatformAction(
+                        IslandPlatformActionKind.MediaSeek,
+                        Value: Fraction(PageLayout.MediaSeekTrack(page), pointerXDip))
+                    : null;
             case IslandPageControl.VolumeSlider:
                 return new IslandPlatformAction(
                     IslandPlatformActionKind.VolumeSet,

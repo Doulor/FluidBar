@@ -871,6 +871,9 @@ public sealed record MediaPageModel
     /// <summary>Whether a real timeline is known (false hides the seek row).</summary>
     public bool HasTimeline { get; init; } = true;
 
+    /// <summary>Whether the source can seek; false paints the row read-only (no dead slider).</summary>
+    public bool CanSeek { get; init; } = true;
+
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }
 

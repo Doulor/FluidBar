@@ -590,6 +590,8 @@
     "setting.media.showLyrics.title": "Show lyrics",
     "setting.media.compactLyrics.title": "Lyrics in the pill",
     "setting.media.compactLyrics.description": "Show the cover, the live lyric line and the wave in the pill instead of the title and artist",
+    "setting.media.lyricOffset.title": "Lyric offset",
+    "setting.media.lyricOffset.description": "Positive shows the words sooner (raise it when the lyric lags); negative delays them.",
     "setting.clipboard.enabled.title": "Track clipboard history",
     "setting.notifications.permission.title": "Notification access",
     "setting.notifications.verificationCode.title": "Detect verification codes",

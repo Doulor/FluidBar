@@ -106,10 +106,11 @@ public sealed class SatelliteAgentStateTests
         // Outer edge of the 2 DIP ring vs the well's rounded-corner arc (side/2 - r + r*sqrt2 ...).
         var cornerRadius = IslandMetrics.SplitIsletThumbnailRadius(frame);
         var cornerArcDistance = ((frame.Width / 2) - cornerRadius) * Math.Sqrt(2) + cornerRadius;
-        // Stroke is derived from the shared spinner ratio (radius x 0.3158 = 3.47 DIP); the outer edge
-        // must still clear the well's corner arc by >= 1.5 DIP.
-        Assert.Equal(IslandMetrics.SplitRingRadiusDip * AgentSpinner.StrokeToRadiusRatio,
-            IslandMetrics.SplitRingStrokeDip, 0.001f);
+        // Stroke is the primary pill's ring ratio (radius x 0.1622 = 1.78 DIP); the outer edge must
+        // still clear the well's corner arc by >= 1.5 DIP.
+        Assert.Equal(IslandMetrics.SplitRingStrokeDip,
+            IslandMetrics.SplitRingRadiusDip * AgentSpinner.RingStrokeToRadiusRatio, 0.001f);
+        Assert.InRange(IslandMetrics.SplitRingStrokeDip, 1.7f, 1.9f);
         Assert.Equal(2.25f, IslandMetrics.SplitRingEndMarkStrokeDip, 0.001f);
         var outer = centreRadius + (IslandMetrics.SplitRingStrokeDip / 2);
         Assert.True(cornerArcDistance - outer >= 1.5f,

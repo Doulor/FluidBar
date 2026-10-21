@@ -182,6 +182,7 @@ public static class SkiaIslandStateBuilder
             ProgressPercent = media?.ProgressPercent ?? 0,
             IsPlaying = media?.IsPlaying ?? false,
             HasTimeline = media?.HasTimeline ?? false,
+                CanSeek = media?.CanSeek ?? false,
             AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? media?.AccentHex,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,

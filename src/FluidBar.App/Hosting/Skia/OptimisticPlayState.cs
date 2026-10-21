@@ -16,16 +16,20 @@ namespace FluidBar.App.Hosting.Skia;
 public sealed class OptimisticPlayState
 {
     /// <summary>Longest a flip may survive without two agreeing source reads (the "visible 2–3 s" window).</summary>
-    public static readonly TimeSpan HoldWindow = TimeSpan.FromMilliseconds(2500);
+    public static readonly TimeSpan HoldWindow = TimeSpan.FromMilliseconds(6000);
 
     /// <summary>
     /// Reads that arrive sooner than this after the tap are ignored: the accessibility poll almost always
     /// still carries the pre-tap glyph, so counting it would roll the flip back immediately.
     /// </summary>
-    public static readonly TimeSpan StaleReadGuard = TimeSpan.FromMilliseconds(150);
+    // Raised from 150 ms: a fallback player repaints its transport glyph ~0.5-1 s after the tap, so the
+    // first two polls after a toggle still report the PRE-tap state. Counting them rolled the flip back
+    // about a second after the click and left the icon inverted (user report 2026-10-21).
+    public static readonly TimeSpan StaleReadGuard = TimeSpan.FromMilliseconds(1200);
 
     /// <summary>Consecutive disagreeing reads required before the flip is dropped.</summary>
-    public const int RequiredDisagreements = 2;
+        // Four consistent contradicting reads (>= 1 s of polls after the guard) before the source wins.
+    public const int RequiredDisagreements = 4;
 
     private bool? _pending;
     private DateTimeOffset _startedAt;

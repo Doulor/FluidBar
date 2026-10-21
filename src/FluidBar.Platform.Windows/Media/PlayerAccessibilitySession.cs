@@ -7,7 +7,15 @@ namespace FluidBar.Platform.Windows.Media;
 /// <summary>Timeline a player exposes through its accessibility tree.</summary>
 /// <param name="Position">Current playback position.</param>
 /// <param name="Duration">Track length reported by the player.</param>
-internal readonly record struct PlayerTimeline(TimeSpan Position, TimeSpan Duration);
+internal readonly record struct PlayerTimeline(TimeSpan Position, TimeSpan Duration)
+{
+    /// <summary>
+    /// How old the reading already is. The player publishes its clock with one-second resolution, so a
+    /// freshly seen "0:13" may have flipped anywhere inside the last poll window; anchoring it at the
+    /// midpoint of that window removes the systematic "the lyric is always a bit late" bias.
+    /// </summary>
+    public TimeSpan Age { get; init; }
+}
 
 /// <summary>
 /// Drives a player that registers no SMTC session through its MSAA (IAccessible) tree.
@@ -34,6 +42,20 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     private const int MaxDepth = 12;
     private const int MaxNodes = 900;
     private const int ReadRetryBackoffMs = 2500;
+
+    // A player that does not expose a timeline (KuGou in mini mode) has no cached time element, so
+    // every poll used to walk its whole MSAA tree (~900 nodes of cross-process calls) at the 250 ms
+    // fallback cadence — measured at ~12% of one core. The transport buttons stay cached, so the walk
+    // is only needed to (re)find the time text; once a second is plenty for an mm:ss label.
+    private const int TimelineWalkIntervalMs = 1000;
+
+    private long _lastTimelineWalkMs;
+
+    /// <summary>Monotonic time of the previous successful time-text read (0 until the first one).</summary>
+    private long _lastTimelineReadMs;
+
+    /// <summary>Position parsed on that read, used to detect the one-second flip.</summary>
+    private TimeSpan _lastTimelinePosition;
     private const string PreviousButtonName = "上一首";
     private const string NextButtonName = "下一首";
     private const string PlayButtonName = "播放";
@@ -194,6 +216,16 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
         lock (_gate)
         {
+            // No cached time element: rate-limit the full tree walk instead of repeating it on every
+            // poll tick (the buttons are already cached and keep working).
+            var nowMs = Environment.TickCount64;
+            if (_timeText is null && nowMs - _lastTimelineWalkMs < TimelineWalkIntervalMs)
+            {
+                return false;
+            }
+
+            _lastTimelineWalkMs = nowMs;
+
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 var element = _timeText ?? (attempt == 0 ? null : RebuildLocked());
@@ -219,7 +251,19 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                         && duration > TimeSpan.Zero)
                     {
                         MarkReadSuccess();
-                        timeline = new PlayerTimeline(position, duration);
+                        var age = TimeSpan.Zero;
+                        var previousRead = _lastTimelineReadMs;
+                        if (previousRead > 0 && _lastTimelinePosition != position)
+                        {
+                            // The flip happened somewhere inside this window: its midpoint is the best
+                            // estimate of the real boundary, so the sample is that much old.
+                            age = TimeSpan.FromMilliseconds(
+                                Math.Clamp((nowMs - previousRead) / 2.0, 0, 400));
+                        }
+
+                        _lastTimelineReadMs = nowMs;
+                        _lastTimelinePosition = position;
+                        timeline = new PlayerTimeline(position, duration) { Age = age };
                         return true;
                     }
                 }

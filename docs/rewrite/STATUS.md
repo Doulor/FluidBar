@@ -1,11 +1,11 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-20 03:45（Asia/Shanghai）
+> 最后更新：2026-10-21 19:55（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
 
-**渲染提交根因已修复**：分层窗口在“隐式几何”更新下返回成功但不刷新（只有首帧上屏），导致展开/翻页全部不可见；现在每次提交都显式传 `pptDst`/`psize`，真实鼠标点击 → 弹簧展开 → 面板可见、悬停不收起、移开 2.6s 后收起、点击穿透恢复。
+**灵动岛动画卡顿已修复**：60 fps 帧时钟原来被 50 ms 截止计时器每个 tick 停掉（`_lastRenderHappened` 参与停止判定），展开/悬停/波浪只能画 2–3 帧。现在帧时钟只由动画状态决定（`IslandFrameLoopPolicy`），实测展开 380 ms 走 24 帧、interval p50 15.9 ms，空闲 CPU 12.8% → 2.1%。
 
 ## 里程碑
 
@@ -18,6 +18,27 @@
 | M5 内置插件/市场 CI/文档 | ✅ | 23 builtin + 31 integration；`docs/plugin/` |
 | M4 UI / Skia 宿主 | ✅（MVP） | 新分层宿主 + Skia 渲染已接入，默认 `FLUIDBAR_HOST=skia`；108 UI tests；旧 Avalonia 宿主保留 fallback |
 | M6 硬化/发布 | ⏳ | soak/性能预算已就绪；Release 浸泡待做 |
+
+## 2026-10-21 19:55 检查点（展开后点击区域 / 媒体探测节流）
+
+- **现象**：展开后媒体卡片上的按钮全部点不动（通知页/媒体页的 seek 正常）。
+- **根因**：命中区域签名只有 `ShellForm`，没有壳体尺寸；动画期间 `IsAnimating` 持续为真 → 签名不再变化 → 钩子只把旧药丸矩形当可点区域，面板主体点击穿透。
+- **修复**：`IslandHitRegionSignature`（含壳体 W/H）+ 动画期间每帧刷新命中区域；新增 `IslandHitRegionSignatureTests`（3 个用例）。
+- **媒体探测**：无时间轴的播放器（酷狗 mini）每 250 ms 整树遍历 MSAA；找时间文本的遍历加 1 s 节流，CPU 2.06% → 1.25%。
+- 测试：**2525 passed / 0 failed**（Core 640 · Platform 660 · Ui 500 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：57.4 MB，SHA256 `D929B1453F2EC329DC7BF45BC56C806E4ECE985ADE2D7EB6458358DC4A1481A4`。
+- 决策：工作集 191 MB 的 native 内存审计另案（不阻塞本轮热修）。
+
+## 2026-10-21 19:30 检查点（帧循环卡顿修复）
+
+- **现象**：整岛动画极卡（3–13 fps），设置面板流畅（Avalonia 独立渲染线程）。
+- **证据**：`FLUIDBAR_FRAME_PROBE` 逐帧记录显示展开时只有 2–3 帧、随后 300–1000 ms 空洞；`dotnet-trace` 采样确认渲染本身 0.7 ms/帧（不是渲染贵）；临时 tick 探针显示 `OnDeadlineTick`（50 ms）每次都执行一次不推进动画的 `RenderAllLocked`，把 `_lastRenderHappened` 清零，于是 `EnsureFrameLoop` 在下一个 tick 停掉帧时钟。
+- **修复**：新增 `FluidBar.App.Hosting.Skia.IslandFrameLoopPolicy.ShouldRun(animating, agentAnimating, keepIdleFrames)`；`RenderAllLocked` 返回「是否真的画了一帧」，空帧计数（省电模式 2 帧）用返回值；删除 `_lastRenderHappened`。
+- **回归测试**：`tests/FluidBar.Ui.Tests/IslandFrameLoopPolicyTests.cs`（真值表 + 展开跨 deadline pump + 静止不请求帧）。
+- **顺带**：`PowerModeProbe` 的 120°/s 断言过期（实现已统一为 `AgentSpinner` 400°/s），已改为 400°/s 并同步 `IslandMetrics` 注释。
+- 测试：**2522 passed / 0 failed**（Core 640 · Platform 660 · Ui 497 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：`build/release/win-x64/FluidBar.exe` 57.4 MB，SHA256 `239DCCD845931482804A254575A33E80FE808FA92D8B3B99F2D1226E02EA4F92`。
+- 未处理（另案）：媒体回退探测每 250 ms 走一次酷狗 MSAA 树（采样占全进程 CPU 的 66%，≈12% 单核）；工作集 199 MB 仍高于 D12 的 120 MB 目标。
 
 ## 测试（当前）
 

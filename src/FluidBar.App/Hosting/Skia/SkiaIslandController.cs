@@ -331,20 +331,28 @@ public sealed class SkiaIslandController : IDisposable
                 return CurrentPageIs(PageSlotKind.Agent) && HasActiveAgentRow(_renderState.Pages.Agent);
             }
 
-            // Compact ambient animation never keeps the host alive without a split-agent ring. A
-            // pointer entry or an actual split ring restores the animation immediately.
-            if (!_pointerInside && !HasSpinningSplitRing)
-            {
-                return false;
-            }
-
-            if (_splitPreviews.Any(preview => preview.Kind == ActivityKind.Agent && preview.IsActive))
+            // The compact pill can be the agent itself (primary). Its ring is painted every frame and
+            // must keep spinning wherever the pointer is; the old pointer gate froze it the moment the
+            // mouse left the pill and it only resumed on hover (user report 2026-10-21).
+            if (_compact.Kind == ActivityKind.Agent
+                && _compact.Model.Status is CompactStatus.Info or CompactStatus.Warning)
             {
                 return true;
             }
 
-            return _compact.Kind == ActivityKind.Agent
-                && _compact.Model.Status is CompactStatus.Info or CompactStatus.Warning;
+            // A split preview ball can carry the same ring; it is outside the pill, so the pointer being
+            // elsewhere says nothing about it.
+            if (HasSpinningSplitRing)
+            {
+                return true;
+            }
+
+            if (!_pointerInside)
+            {
+                return false;
+            }
+
+            return _splitPreviews.Any(preview => preview.Kind == ActivityKind.Agent && preview.IsActive);
         }
     }
 
@@ -412,7 +420,11 @@ public sealed class SkiaIslandController : IDisposable
         ? (PowerMode == IslandPowerMode.Saver && !_pointerInside
             ? TimeSpan.FromMilliseconds(1000.0 / 30)
             : TimeSpan.FromMilliseconds(1000.0 / 60))
-        : PowerProfile.FrameInterval;
+        : IsAgentOnly
+            // A 20 DIP ring spinning at 0.9 s/revolution is indistinguishable at 30 fps and costs
+            // half the frames of the 60/120 Hz host loop (measured ~20% of one core before this cap).
+            ? TimeSpan.FromMilliseconds(1000.0 / 30)
+            : PowerProfile.FrameInterval;
 
     /// <summary>
     /// A resting shell whose only motion is the agent spinner. The spinner is a 20 DIP ambient
@@ -1142,7 +1154,14 @@ public sealed class SkiaIslandController : IDisposable
     {
         _pointerX = xDip;
         _pointerY = yDip;
-        var now = _time.GetLocalNow();
+
+
+        // Dragging the seek row: keep dispatching seeks while the button is held (the press already
+        // committed one). The pager only owns page drags, so this is the only way a scrub works.
+        if (_pressedControl == IslandPageControl.Seek && _pressedPage >= 0)
+        {
+            TryDragSeek();
+        }        var now = _time.GetLocalNow();
         if (!_pointerInside)
         {
             _pointerInside = true;
@@ -1338,7 +1357,17 @@ public sealed class SkiaIslandController : IDisposable
 
                 // Expand on press: the compact pill is the primary affordance. Drag-to-move is a
                 // secondary gesture; it must never make a normal click feel unresponsive.
+                // The panel must open the page of the activity the pill actually PAINTS: the scheduler's
+                // primary page can be a different (newer) activity, which opened the agent card from a
+                // music pill (user report 2026-10-21).
+                var paintedPage = _compact.Kind.ToPage();
                 ApplyInput(IslandInput.PrimaryClick());
+                if (paintedPage != State.Page)
+                {
+                    ApplyInput(IslandInput.PageRequested(paintedPage));
+                    HandlePageRequest(paintedPage);
+                }
+
                 return true;
 
             case IslandHitKind.Collapse:
@@ -1959,6 +1988,8 @@ public sealed class SkiaIslandController : IDisposable
         SyncMediaProgress(content);
 
         var peeked = State.Kind == IslandStateKind.Peek;
+        // A new song shows its title/artist for three seconds before the lyric takes the pill over:
+        // jumping straight to the words made the track feel unannounced (user request 2026-10-21).
         var showCompactLyrics = _mediaPill.ShowCompactLyrics;
         _compact = SkiaIslandStateBuilder.BuildCompact(viewModel, content, _localizer, peeked, showCompactLyrics);
         TrackCompactLyric();
@@ -2412,6 +2443,29 @@ public sealed class SkiaIslandController : IDisposable
         });
     }
 
+    /// <summary>First three seconds of a track show the title/artist instead of the live lyric.</summary>
+    private const long TrackIntroMs = 3000;
+
+    private string? _introTrackKey;
+    private long _introUntilMs;
+
+    private bool IsTrackIntro(IslandContent content)
+    {
+        var media = content.Media;
+        var key = media is null ? null : media.Title + "\u0000" + media.Artist;
+        var now = NowMs();
+        if (!string.Equals(key, _introTrackKey, StringComparison.Ordinal))
+        {
+            // The very first track after launch gets no intro card: the island is already showing the
+            // track for the first time, and starting on the words matches the previous behaviour.
+            var firstTrack = _introTrackKey is null;
+            _introTrackKey = key;
+            _introUntilMs = key is null || firstTrack ? 0 : now + TrackIntroMs;
+        }
+
+        return now < _introUntilMs;
+    }
+
     private int IndexOfPage(CoreIslandPage page) => _pages.IndexOfPage(page);
 
     private CoreIslandPage PageAt(int index)
@@ -2622,7 +2676,35 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Drops a deferred compact click (drag, leave, escape, re-press).</summary>
     private void CancelPendingClick() => _clickPending = false;
 
-    private void HandlePageControl(in IslandHitTarget hit)
+        private long _lastSeekDragMs;
+    private double _lastSeekDragFraction = -1;
+
+    /// <summary>Commits a seek for the pointer's current X while the seek row is being dragged.</summary>
+    private void TryDragSeek()
+    {
+        var now = NowMs();
+        if (now - _lastSeekDragMs < 40)
+        {
+            return;
+        }
+
+        var action = SkiaIslandControlRouter.Map(
+            new IslandHitTarget(IslandHitKind.PageControl, _pressedPage, IslandPageControl.Seek),
+            _renderState,
+            _pointerX);
+        if (action is not { } seek || Math.Abs(seek.Value - _lastSeekDragFraction) < 0.004)
+        {
+            return;
+        }
+
+        _lastSeekDragMs = now;
+        _lastSeekDragFraction = seek.Value;
+        DispatchControl(seek, _pressedPage);
+        InvalidateDirty(ContentDamage());
+        FrameRequested?.Invoke();
+    }
+
+private void HandlePageControl(in IslandHitTarget hit)
     {
         if (hit.Control is IslandPageControl.PluginRow or IslandPageControl.PluginRowButton)
         {
@@ -2688,6 +2770,13 @@ public sealed class SkiaIslandController : IDisposable
             LogControlOutcome(action, page, "island.skia.control-unsupported",
                 "no IIslandPlatformActions seam is configured for this host");
             return;
+        }
+
+        if (action.Kind == IslandPlatformActionKind.MediaSeek)
+        {
+            // Our own seek knows the target immediately; waiting for the next 250 ms/1 s sample left the
+            // karaoke sweep (and the line) behind the drag (user report 2026-10-21).
+            ReanchorKaraokeAfterSeek(action.Value);
         }
 
         if (action.Kind == IslandPlatformActionKind.ClipboardCopy)
@@ -2869,6 +2958,27 @@ public sealed class SkiaIslandController : IDisposable
     /// Keeps the karaoke sweep in step with the extrapolated position: anchors the clock on every content
     /// sample (this is where seeks/loops show up as a jump) and remembers the per-word timeline.
     /// </summary>
+    /// <summary>Moves the karaoke clock to a freshly requested seek position (0..1 of the track).</summary>
+    private void ReanchorKaraokeAfterSeek(double fraction)
+    {
+        if (_karaokeTrack is not { } track || !double.IsFinite(fraction) || fraction <= 0)
+        {
+            return;
+        }
+
+        if (_karaokeClock.LimitMs <= 0)
+        {
+            return;
+        }
+
+        var now = NowMs();
+        var targetMs = Math.Clamp(fraction, 0, 1) * _karaokeClock.LimitMs;
+        _karaokeClock.Anchor(targetMs, now, playing: _karaokeClock.IsAdvancing);
+        _karaokeHighlight = track.Progress(targetMs);
+        InvalidateKaraokeDamage();
+        FrameRequested?.Invoke();
+    }
+
     private void SyncKaraoke(IslandContent content)
     {
         var media = content.Media;
@@ -2889,8 +2999,28 @@ public sealed class SkiaIslandController : IDisposable
         _karaokeTrack = track;
         _karaokeActive = true;
 
+        // The user-tunable lead/lag now lives in the MEDIA PLUGIN's settings file (media.lyricOffsetMs),
+        // not in the island pane; the legacy app setting stays as a fallback for old profiles.
+        var offsetMs = _mediaPill.LyricOffsetMs is var pluginOffset and not 0
+            ? pluginOffset
+            : Math.Clamp(_settings.Current.LyricOffsetMs, -800, 800);
+        media = media with { PositionMs = Math.Max(0, media.PositionMs + offsetMs) };
+
         _karaokeClock.SetLimit(media.DurationMs);
-        if (!sameLine || !_karaokeClock.HasAnchor || _karaokeClock.IsJump(media.PositionMs, now))
+        // A sample that lands BEHIND our extrapolation is the player's own clock being stale (KuGou
+        // rewrites its position a few seconds late). Snapping on it rewound the sweep by up to ~5 s and
+        // the line appeared to lag the singing (user report 2026-10-21). Ignore such a sample while the
+        // line and the play state are unchanged; a real backwards seek is far larger than this window.
+        var staleBackward = sameLine
+            && _karaokeClock.HasAnchor
+            && media.IsPlaying
+            && media.PositionMs < _karaokeClock.PositionAt(now) - StaleSampleWindowMs
+            && media.PositionMs > _karaokeClock.PositionAt(now) - 10000;
+        if (staleBackward)
+        {
+            // keep the anchor, keep extrapolating
+        }
+        else if (!sameLine || !_karaokeClock.HasAnchor || _karaokeClock.IsJump(media.PositionMs, now))
         {
             // New line, first sample or a seek: snap instead of easing (a seek must not fast-forward
             // through the words between the old and the new position).
@@ -2916,6 +3046,42 @@ public sealed class SkiaIslandController : IDisposable
     /// Paints the karaoke sweep for the current frame. Returns true when the sweep changed enough to need a
     /// repaint (1/255 of the line, i.e. sub-pixel on a normal-width line).
     /// </summary>
+    private int _lastPositionSecond = -1;
+
+    /// <summary>
+    /// Rewrites the elapsed time from the same interpolated clock the karaoke sweep uses.
+    /// </summary>
+    /// <remarks>
+    /// The text used to be a snapshot string rebuilt once per media poll, so it lagged up to a second
+    /// behind the sweep and could disagree with it by the whole source latency. One clock for both means
+    /// "what the number says" and "where the highlight is" can never drift apart (user report 2026-10-21).
+    /// </remarks>
+    private void UpdatePositionText()
+    {
+        if (!_karaokeClock.HasAnchor || _pages.Media.PositionText is null)
+        {
+            return;
+        }
+
+        var positionMs = _karaokeClock.PositionAt(NowMs());
+        var second = (int)(positionMs / 1000);
+        if (second == _lastPositionSecond)
+        {
+            return;
+        }
+
+        _lastPositionSecond = second;
+        var text = (int)(positionMs / 60000) + ":" + ((int)(positionMs / 1000) % 60).ToString("00");
+        if (string.Equals(text, _pages.Media.PositionText, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _pages = _pages with { Media = _pages.Media with { PositionText = text } };
+        InvalidateFull();
+        FrameRequested?.Invoke();
+    }
+
     private bool ApplyKaraokeSweep()
     {
         if (_karaokeTrack is not { } track || !_karaokeActive)
@@ -2954,6 +3120,9 @@ public sealed class SkiaIslandController : IDisposable
 
     /// <summary>1/255: the smallest sweep change that can move a lit pixel on a normal-width line.</summary>
     private const double KaraokeHighlightTolerance = 1.0 / 255.0;
+
+    /// <summary>How far behind our extrapolation a sample may sit before it is treated as a real seek.</summary>
+    private const double StaleSampleWindowMs = 400;
 
     /// <summary>Lyric line currently painted (used to detect a line change and start the transition window).</summary>
     private string? _lyricLinePainted;
@@ -3082,6 +3251,8 @@ public sealed class SkiaIslandController : IDisposable
     private void BuildRenderState()
     {
         SyncRailMotion(0);
+        UpdatePositionText();
+
         if (ApplyKaraokeSweep() && _hasRenderState)
         {
             // The sweep only repaints the lyric text, never the whole island.

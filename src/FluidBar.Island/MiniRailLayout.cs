@@ -209,9 +209,15 @@ public static class MiniRailLayout
         var page = rail.Active ? rail.Page : PageAt(position, pageCount);
         var capsule = rail.Active ? rail.CapsuleWidth : CapsuleWidthAt(position, state.Pages, state.FontScale);
 
-        // Dot counts follow the rail page (the page the pills represent), not the pager position: the
-        // prototype rebuilds the clusters the moment the strip retargets.
-        MiniRailTargetsFactory.DotCounts(page, out var leftDots, out var leftWide, out var rightDots, out var rightWide, pageCount);
+        // Dot clusters follow the COMMITTED page (the one the capsule label shows), not the rail's
+        // spring target: a stale rail page painted three left dots while the capsule already read
+        // "Home" — dots that could not be clicked anywhere (user report 2026-10-21).
+        // Anchor the clusters on the island's COMMITTED page (what the capsule label is built from).
+        // Neither the rail's spring page nor the archipelago's animated page position is trustworthy
+        // here: both can still point at the previous page while the shell already reads "Home", which
+        // painted three unclickable dots on the left of page 0 (user report 2026-10-21, twice).
+        MiniRailTargetsFactory.DotCounts(Math.Clamp(state.PageIndex, 0, Math.Max(0, pageCount - 1)),
+            out var leftDots, out var leftWide, out var rightDots, out var rightWide, pageCount);
 
         var prevAlpha = rail.Active ? rail.PrevAlpha : (page > 0 ? 1f : 0f);
         var nextAlpha = rail.Active ? rail.NextAlpha : (page < pageCount - 1 ? 1f : 0f);

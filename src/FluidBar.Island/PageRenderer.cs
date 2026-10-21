@@ -486,10 +486,14 @@ internal sealed partial class PageRenderer : IDisposable
         {
             var seek = PageMetricsLayout.MediaSeekTrack(page, m);
             var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
-            DrawTrack(canvas, seek, progress, accent, _theme.LineStrong);
+            // A source that cannot seek (KuGou: no SMTC session) gets a read-only row: the position is
+            // still informative, but a full-strength track with a knob invited dragging that could never
+            // work (user report 2026-10-21).
+            var seekAlpha = media.CanSeek ? _opacity : _opacity * 0.45f;
+            DrawTrack(canvas, seek, progress, Alpha(accent, seekAlpha), Alpha(_theme.LineStrong, seekAlpha));
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(accent, _opacity);
-            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
+            _fill.Color = Alpha(accent, seekAlpha);
+            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, media.CanSeek ? 4 : 2.5f, _fill);
 
             _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
                 new SKRect(seekRow.Left, seekTextTop, seekRow.Left + seekTimeWidth, seekTextTop + seekTextHeight),

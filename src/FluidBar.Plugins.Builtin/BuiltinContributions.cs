@@ -80,6 +80,22 @@ public static class BuiltinContributions
         Default = System.Text.Json.JsonSerializer.SerializeToElement(false),
     };
 
+    private static SettingControlContribution Slider(string key, string titleKey, double min, double max, double step,
+        double value, string? unit = null) => new()
+    {
+        Type = SettingControlType.Slider,
+        Key = key,
+        Title = Loc(titleKey),
+        Description = titleKey.EndsWith(".title", StringComparison.Ordinal)
+            ? Loc(titleKey[..^".title".Length] + ".description")
+            : null,
+        Min = min,
+        Max = max,
+        Step = step,
+        Unit = unit,
+        Default = System.Text.Json.JsonSerializer.SerializeToElement(value),
+    };
+
     private static SettingControlContribution Info(string key, string titleKey) => new()
     {
         Type = SettingControlType.Info,
@@ -145,7 +161,9 @@ public static class BuiltinContributions
                 Toggle("media.showWave", "setting.media.showWave.title"),
                 Toggle("media.showLyrics", "setting.media.showLyrics.title"),
                 // Island pill form: cover + live lyric + wave instead of title/artist (default on).
-                Toggle("media.compactLyrics", "setting.media.compactLyrics.title")),
+                Toggle("media.compactLyrics", "setting.media.compactLyrics.title"),
+                // Karaoke lead/lag belongs to the MEDIA plugin: it only compensates this source's clock.
+                Slider("media.lyricOffsetMs", "setting.media.lyricOffset.title", -800, 800, 50, 0, "ms")),
         ],
         Commands =
         [

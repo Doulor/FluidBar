@@ -634,13 +634,21 @@ public sealed class IslandRenderer : IDisposable
             {
                 if (islet.Status == CompactStatus.Info)
                 {
-                    // Running/Waiting: exactly the same primitive the expanded agent row uses, only
-                    // scaled down (same sweep, same stroke:radius ratio, same speed, same colour).
+                    // Same ring language as the primary compact pill: a faint full circle plus the
+                    // 180° rotating arc with the compact stroke ratio (the old thick arc read as a
+                    // blobby halo on a 40 DIP ball — user report 2026-10-21).
                     var rotation = state.AgentRingFrozenDegrees
                         ?? AgentSpinner.RotationDegrees(state.AgentAnimationSeconds);
                     var centreRadius = radius * IslandMetrics.SplitRingRadiusFactor;
-                    AgentSpinner.Draw(canvas, _stroke, new SKPoint(rect.MidX, rect.MidY), centreRadius, rotation,
-                        Alpha(_theme.Info, alpha));
+                    var centre = new SKPoint(rect.MidX, rect.MidY);
+                    _stroke.Style = SKPaintStyle.Stroke;
+                    _stroke.StrokeCap = SKStrokeCap.Butt;
+                    _stroke.StrokeWidth = IslandMetrics.SplitRingStrokeDip;
+                    _stroke.Shader = null;
+                    _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * alpha);
+                    canvas.DrawCircle(centre.X, centre.Y, centreRadius, _stroke);
+                    AgentSpinner.Draw(canvas, _stroke, centre, centreRadius, rotation,
+                        Alpha(_theme.Accent, alpha), IslandMetrics.SplitRingStrokeDip);
                 }
                 else
                 {

@@ -22,6 +22,9 @@ public readonly record struct LyricPair(string? Current, string? Next)
 /// </remarks>
 public static class LyricsTimelineSelector
 {
+    /// <summary>How long after a line finishes the next one takes over (the singing restarts there).</summary>
+    private static readonly TimeSpan HandOverWindow = TimeSpan.FromMilliseconds(1200);
+
     /// <summary>Selects the current and next line at <paramref name="position"/>.</summary>
     public static LyricPair Select(LyricsDocument? document, TimeSpan position)
         => Select(document, position, null, null);
@@ -54,6 +57,19 @@ public static class LyricsTimelineSelector
         }
 
         var current = lines[currentIndex];
+        // Lyric files leave a gap between lines: holding the finished line until the next timestamp hid
+        // the first words of every next line (user report 2026-10-21). Hand over as soon as the sweep
+        // completes, so the next line is already fading in when the singing starts.
+        if (LyricKaraoke.Progress(current, position) >= 1)
+        {
+            var following = FindLine(lines, currentIndex + 1, forward: true, title, artist);
+            if (following >= 0 && lines[following].Time - position <= HandOverWindow)
+            {
+                currentIndex = following;
+                current = lines[currentIndex];
+            }
+        }
+
         var nextIndex = FindLine(lines, currentIndex + 1, forward: true, title, artist);
         var next = nextIndex < 0 ? null : lines[nextIndex].Text;
         if (next is not null && string.Equals(next.Trim(), current.Text.Trim(), StringComparison.Ordinal))

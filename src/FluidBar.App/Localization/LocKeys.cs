@@ -877,6 +877,7 @@ public static partial class LocKeys
             public const string AutoHideMs = "Settings.Island.AutoHideMs";
             /// <summary><c>Settings.Island.AutoHideMsHint</c></summary>
             public const string AutoHideMsHint = "Settings.Island.AutoHideMsHint";
+
             /// <summary><c>Settings.Island.PeekOnTrackChange</c></summary>
             public const string PeekOnTrackChange = "Settings.Island.PeekOnTrackChange";
             /// <summary><c>Settings.Island.WeatherCity</c></summary>
@@ -1594,7 +1595,17 @@ public static partial class LocKeys
                 /// <summary><c>setting.media.compactLyrics.description</c></summary>
                 public const string description = "setting.media.compactLyrics.description";
             }
-        }
+
+
+    /// <summary>Keys in the 'lyricOffset' area.</summary>
+    public static class lyricOffset
+    {
+        /// <summary><c>setting.media.lyricOffset.title</c></summary>
+        public const string title = "setting.media.lyricOffset.title";
+
+        /// <summary><c>setting.media.lyricOffset.description</c></summary>
+        public const string description = "setting.media.lyricOffset.description";
+    }        }
         /// <summary>Keys in the 'clipboard' area.</summary>
         public static class clipboard
         {

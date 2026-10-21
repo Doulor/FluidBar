@@ -42,8 +42,10 @@ public sealed class PowerModeProbe
         }
 
         File.WriteAllText(Path.Combine(output, "power-split-ring-angles.csv"), string.Join(Environment.NewLine, angles));
-        Assert.Equal(4.0, IslandMetrics.SplitRingDegrees(1.0 / 30.0), 0);
-        Assert.Equal(2.0, IslandMetrics.SplitRingDegrees(1.0 / 60.0), 0);
+        // The ring shares one spinner primitive with the big island: 0.9 s per turn = 400 deg/s
+        // (IslandMetrics.SplitRingPeriodSeconds -> AgentSpinner.PeriodSeconds).
+        Assert.Equal(400.0 / 30.0, IslandMetrics.SplitRingDegrees(1.0 / 30.0), 1);
+        Assert.Equal(400.0 / 60.0, IslandMetrics.SplitRingDegrees(1.0 / 60.0), 1);
     }
 
     private static double Run(AppSettings settings)

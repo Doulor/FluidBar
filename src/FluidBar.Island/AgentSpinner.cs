@@ -32,6 +32,17 @@ public static class AgentSpinner
     /// <param name="radius">Centre-line radius in DIP.</param>
     public static float StrokeForRadius(float radius) => radius * StrokeToRadiusRatio;
 
+    /// <summary>
+    /// Compact-ring stroke : radius ratio (1.5 DIP on a 9.25 DIP radius = the 20 DIP padded pill ring).
+    /// The satellites reuse this ratio so their ring reads as the same circle as the primary island's,
+    /// instead of the thick 180° arc that used the expanded-row ratio.
+    /// </summary>
+    public const float RingStrokeToRadiusRatio = AgentMotion.RingStrokeWidth / ((20f - AgentMotion.RingStrokeWidth) / 2f);
+
+    /// <summary>Stroke width for a compact-style ring of the given centre-line radius (DIP).</summary>
+    /// <param name="radius">Centre-line radius in DIP.</param>
+    public static float RingStrokeForRadius(float radius) => radius * RingStrokeToRadiusRatio;
+
     /// <summary>Rotation in degrees for an elapsed animation time (linear, 0.9 s per turn).</summary>
     /// <param name="seconds">Elapsed animation seconds.</param>
     public static double RotationDegrees(double seconds)
@@ -44,10 +55,11 @@ public static class AgentSpinner
     /// <param name="radius">Centre-line radius in DIP.</param>
     /// <param name="rotationDegrees">Current rotation from <see cref="RotationDegrees"/>.</param>
     /// <param name="color">Arc colour (the theme accent/Info in both hosts).</param>
-    public static void Draw(SKCanvas canvas, SKPaint paint, SKPoint centre, float radius, double rotationDegrees, SKColor color)
+    public static void Draw(SKCanvas canvas, SKPaint paint, SKPoint centre, float radius, double rotationDegrees, SKColor color,
+        float? strokeWidth = null)
     {
         paint.Style = SKPaintStyle.Stroke;
-        paint.StrokeWidth = StrokeForRadius(radius);
+        paint.StrokeWidth = strokeWidth ?? StrokeForRadius(radius);
         paint.StrokeCap = Cap;
         paint.Shader = null;
         paint.Color = color;

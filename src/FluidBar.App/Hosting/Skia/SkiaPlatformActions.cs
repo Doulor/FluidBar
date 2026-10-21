@@ -740,6 +740,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             PositionText = hasElapsed ? FormatTime(position) : "—",
             DurationText = hasDuration ? FormatTime(duration) : "—",
             HasTimeline = hasDuration,
+            CanSeek = media.CanSeek && hasDuration,
             IsPlaying = isPlaying,
             Artwork = artwork,
             ArtworkKey = artwork is null ? null : media.TrackKey,
@@ -1171,7 +1172,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         try
         {
-            await Task.Delay(220).ConfigureAwait(false);
+            await Task.Delay(900).ConfigureAwait(false);
             RequestSourceReread(force: true);
         }
         catch (Exception)
