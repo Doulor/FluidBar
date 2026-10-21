@@ -594,6 +594,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // time: the file is only rewritten every ~30 s, so a pause inside that window made the estimate
         // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
         var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
+        // Guard against the state file still describing the previous track: right after a switch its value
+        // can be far AHEAD of the new track's small reading (measured 51 s vs 20 s, 2026-10-22).
+        if (candidate.Position > TimeSpan.Zero
+            && candidate.Position < TimeSpan.FromSeconds(90)
+            && expected > candidate.Position + TimeSpan.FromSeconds(15))
+        {
+            return candidate;
+        }
+
         var difference = (candidate.Position - expected).Duration();
         if (difference <= TimeSpan.FromSeconds(0.4))
         {
