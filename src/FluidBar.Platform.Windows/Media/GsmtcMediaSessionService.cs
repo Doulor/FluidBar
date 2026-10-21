@@ -109,6 +109,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>State-file samples older than this belong to the previous track.</summary>
     private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
 
+    /// <summary>Last accessibility position and when it last changed (freshness of the player's clock).</summary>
+    private TimeSpan _lastMsaaPosition = TimeSpan.MinValue;
+    private long _lastMsaaChangeMs;
+
     private DateTime? _stateFileWrittenAt;
 
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
@@ -468,6 +472,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </summary>
     private WindowMediaCandidate CrossCheckTimeline(WindowMediaCandidate candidate)
     {
+        var freshNow = _timeProviderNow().ToUnixTimeMilliseconds();
+        if (candidate.Position != _lastMsaaPosition)
+        {
+            _lastMsaaPosition = candidate.Position;
+            _lastMsaaChangeMs = freshNow;
+        }
+
+        var msaaIsFresh = freshNow - _lastMsaaChangeMs < 3000;
         // DISABLED: the state file is rewritten every ~30 s and the accessibility text is repainted on the
         // same cadence, so the two disagree by up to half a minute and the arbitration kept jumping the
         // published position forward — which made the media pill vanish (user report 2026-10-22).
@@ -512,10 +524,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // the accessibility text agrees with that (a few seconds in), counting from the track change is
             // far more accurate than a frozen text or the previous song's position (2026-10-22).
             var sinceStart = _timeProviderNow() - _stateFileValidFromUtc;
+            // A freshly repainted clock text is the best evidence we have: trust it over counting from zero.
+            if (msaaIsFresh)
+            {
+                return candidate;
+            }
+
             if (sinceStart >= TimeSpan.Zero
                 && sinceStart < TimeSpan.FromSeconds(40)
                 && candidate.Position >= TimeSpan.Zero
-                && candidate.Position < TimeSpan.FromSeconds(12))
+                && candidate.Position < TimeSpan.FromSeconds(25))
             {
                 return candidate with
                 {
