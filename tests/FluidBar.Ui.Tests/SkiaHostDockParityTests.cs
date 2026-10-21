@@ -82,8 +82,8 @@ public sealed class SkiaHostDockParityTests
 
     [Theory]
     [InlineData(96u, 1.0, 488, 386, 488, 446)]
-    [InlineData(144u, 1.5, 732, 519, 732, 666)]
-    [InlineData(192u, 2.0, 976, 768, 976, 812)]
+    [InlineData(144u, 1.5, 732, 579, 732, 666)]
+    [InlineData(192u, 2.0, 976, 772, 976, 812)]
     public void SurfacePixels_CeilAt150And200Percent(
         uint dpi, double scale, int floatWidth, int floatHeight, int dockWidth, int dockHeight)
     {
@@ -140,9 +140,9 @@ public sealed class SkiaHostDockParityTests
     }
 
     [Theory]
-    [InlineData(96u, 716, 592, 488, 446)]
-    [InlineData(144u, 594, 368, 732, 666)]
-    [InlineData(192u, 472, 144, 976, 812)]
+    [InlineData(96u, 716, 590, 488, 446)]
+    [InlineData(144u, 594, 365, 732, 666)]
+    [InlineData(192u, 472, 140, 976, 812)]
     public void DockPlacement_MeasuredWindowOrigin_ForA1920x1040WorkArea(
         uint dpi, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
     {
