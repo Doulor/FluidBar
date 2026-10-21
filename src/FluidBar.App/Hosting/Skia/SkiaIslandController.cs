@@ -299,6 +299,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
     public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
+        || IsLyricTransitionAnimating
         || IsMediaProgressAnimating || IsTrackTransitionAnimating;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
@@ -323,7 +324,15 @@ public sealed class SkiaIslandController : IDisposable
                 return CurrentPageIs(PageSlotKind.Agent) && HasActiveAgentRow(_renderState.Pages.Agent);
             }
 
-            // An agent preview ball also spins (the split strategy can keep the agent off the pill).
+            // An agent preview ball spins only while the pointer is over the island. A compact pill
+            // with the pointer elsewhere is ambient status, not an interaction surface: freezing its
+            // 20 DIP ring removes the last full-rate frame loop from an idle desktop without changing
+            // the expand/pager/wheel path (a pointer entry restarts the frame loop immediately).
+            if (!_pointerInside)
+            {
+                return false;
+            }
+
             if (_splitPreviews.Any(preview => preview.Kind == ActivityKind.Agent && preview.IsActive))
             {
                 return true;
@@ -356,6 +365,13 @@ public sealed class SkiaIslandController : IDisposable
     /// Whether the karaoke sweep still needs frames: a per-word line is on screen and playing, so the
     /// highlight advances every frame instead of stepping once per position poll.
     /// </summary>
+    /// <summary>
+    /// Whether a lyric line change is still animating. The renderer advances the fade from its own frame
+    /// clock, but the host only renders when the controller asks for a frame: without this flag the 180 ms
+    /// fade was stepped by the ~1 Hz media snapshot and looked like one frame per second.
+    /// </summary>
+    public bool IsLyricTransitionAnimating => NowMs() < _lyricTransitionUntilMs;
+
     public bool IsKaraokeAnimating => _karaokeActive
         && _karaokeTrack is not null
         && _karaokeClock.IsAdvancing
@@ -379,7 +395,17 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Frame interval the host should use for the current activity.</summary>
     public TimeSpan PreferredFrameInterval => IsWaveOnly || IsKaraokeOnly
         ? TimeSpan.FromMilliseconds(33)
-        : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+        : IsAgentOnly
+            ? TimeSpan.FromMilliseconds(100)
+            : TimeSpan.FromMilliseconds(1000.0 / _options.ResolvedFrameRate);
+
+    /// <summary>
+    /// A resting shell whose only motion is the agent spinner. The spinner is a 20 DIP ambient
+    /// indicator: 30 fps is indistinguishable at this size and avoids running the full 120 fps host
+    /// loop while an agent is merely reporting status.
+    /// </summary>
+    public bool IsAgentOnly => _motion.IsAtRest && !_pager.IsAnimating && !_archipelago.IsAnimating
+        && IsAgentAnimating && !IsWaveActive() && !IsKaraokeAnimating && !IsMediaProgressAnimating;
 
     /// <summary>
     /// Whether the only animated thing is the karaoke sweep / progress clock on a rested shell. 30 fps is
@@ -390,7 +416,10 @@ public sealed class SkiaIslandController : IDisposable
         && (IsKaraokeAnimating || IsMediaProgressAnimating) && !IsWaveActive();
 
     /// <summary>Whether a deadline timer is needed (hover/auto-collapse/scheduler/strip auto-hide).</summary>
-    public bool HasPendingDeadline
+    public bool HasPendingDeadline => HasUiDeadline || _schedulerState.HasActivities;
+
+    /// <summary>Whether a UI deadline needs the precise 50 ms poll.</summary>
+    public bool HasUiDeadline
     {
         get
         {
@@ -402,10 +431,18 @@ public sealed class SkiaIslandController : IDisposable
                 || state.AutoHideDeadline is not null
                 || _syntheticPeek != SyntheticPeekPhase.None
                 || _copiedClipboard is not null
-                || _schedulerState.HasActivities
                 || _archipelago.IsVisible;
         }
     }
+
+    /// <summary>
+    /// Poll cadence for lifecycle deadlines. Scheduler activity TTL only needs coarse polling;
+    /// keeping the 50 ms timer for an idle scheduler was a continuous 20 Hz wake-up even with no
+    /// visible deadline.
+    /// </summary>
+    public TimeSpan DeadlinePollInterval => HasUiDeadline
+        ? TimeSpan.FromMilliseconds(50)
+        : TimeSpan.FromSeconds(1);
 
     /// <summary>Starts the data source, reveals the island and snaps the springs to their targets.</summary>
     public void Start()
@@ -611,7 +648,7 @@ public sealed class SkiaIslandController : IDisposable
             && !string.IsNullOrEmpty(artwork);
 
         if ((identityChanged || artworkChanged) && !enrichment
-            && _started && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek or IslandStateKind.Expanded
+            && _started && (_pointerInside || State.Kind is IslandStateKind.Peek or IslandStateKind.Expanded)
             && !_motion.ReducedMotion)
         {
             // A new track always restarts the one timeline; rapid skipping cannot stack animations.
@@ -694,6 +731,10 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var dt = delta.TotalSeconds;
+
+        // Per frame, after the last content sync: a line change starts the transition window here so the
+        // host keeps requesting frames instead of stepping the fade on the ~1 Hz media snapshot.
+        ObserveLyricLineChange();
         if (dt <= 0)
         {
             return;
@@ -1778,9 +1819,16 @@ public sealed class SkiaIslandController : IDisposable
                 case IslandEffectKind.Retarget:
                     break;
                 case IslandEffectKind.PlayNudge:
-                    _motion.PlayNudge();
-                    InvalidateFull();
-                    FrameRequested?.Invoke();
+                    // A background activity update must not kick the full-rate shell animation while
+                    // the pointer is elsewhere; the nudge is a hover-visible cue. Pointer entry or an
+                    // expanded surface still plays the exact same spring.
+                    if (_pointerInside || State.Kind is IslandStateKind.Expanded or IslandStateKind.Peek)
+                    {
+                        _motion.PlayNudge();
+                        InvalidateFull();
+                        FrameRequested?.Invoke();
+                    }
+
                     break;
                 case IslandEffectKind.SyncClickThrough:
                     StateChanged?.Invoke();
@@ -2854,6 +2902,12 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>1/255: the smallest sweep change that can move a lit pixel on a normal-width line.</summary>
     private const double KaraokeHighlightTolerance = 1.0 / 255.0;
 
+    /// <summary>Lyric line currently painted (used to detect a line change and start the transition window).</summary>
+    private string? _lyricLinePainted;
+
+    /// <summary>End of the lyric line-change transition window (island clock, ms).</summary>
+    private double _lyricTransitionUntilMs = double.NegativeInfinity;
+
     /// <summary>
     /// Anchors the local progress clock when a media sample arrives. Repeated samples with the same
     /// position (fallback sources whose time text occasionally stops updating) must not re-anchor:
@@ -3094,6 +3148,14 @@ public sealed class SkiaIslandController : IDisposable
             return false;
         }
 
+        // A design-time/fallback media model can report IsActive without a real timeline. Without a
+        // duration the wave is a frozen decorative loop that wakes the host forever; only animate it
+        // when the media clock has a real timeline.
+        if (_compact.Kind == ActivityKind.Media && _mediaDurationMs <= 0)
+        {
+            return false;
+        }
+
         return _compact.Kind == ActivityKind.Media && _compact.Model.IsActive;
     }
 
@@ -3145,6 +3207,36 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Damage of whatever the karaoke sweep paints (compact lyric column or the media lyric card).</summary>
+    /// <summary>
+    /// Starts the transition window when the painted lyric line changes, so the host keeps requesting frames
+    /// for its duration instead of waiting for the next media snapshot.
+    /// </summary>
+    private void ObserveLyricLineChange()
+    {
+        var line = _pages.Media.LyricLine ?? _compact.Model?.LyricLine;
+        if (string.Equals(line, _lyricLinePainted, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var firstObservation = _lyricLinePainted is null;
+        _lyricLinePainted = line;
+        if (firstObservation)
+        {
+            // The first painted line is not a "change": do not start an animation for it.
+            return;
+        }
+
+        if (string.IsNullOrEmpty(line))
+        {
+            return;
+        }
+
+        // Slightly longer than the fade so the last frame (opacity 1, old line gone) is still requested.
+        _lyricTransitionUntilMs = NowMs()
+            + Math.Max(FluidBar.Island.LyricTransition.OutMs, FluidBar.Island.LyricTransition.InMs) + 32;
+    }
+
     private void InvalidateKaraokeDamage()
     {
         if (!_hasRenderState)
@@ -3176,8 +3268,11 @@ public sealed class SkiaIslandController : IDisposable
 
     private VisualRect ContentDamage()
     {
-        if (!_hasRenderState)
+        if (!_hasRenderState || _renderState.Form != ShellForm.Expanded)
         {
+            // Page content is not painted by the compact/peek surface. Returning the expanded
+            // 400x264 rect from a compact state woke the host for an off-screen region on every
+            // background poll and kept the frame loop alive while the pill was idle.
             return VisualRect.Empty;
         }
 
@@ -3188,6 +3283,11 @@ public sealed class SkiaIslandController : IDisposable
     private VisualRect StripDamage()
     {
         if (!_hasRenderState)
+        {
+            return VisualRect.Empty;
+        }
+
+        if (!_renderState.Archipelago.Visible)
         {
             return VisualRect.Empty;
         }
