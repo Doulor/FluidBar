@@ -105,8 +105,9 @@ public class RecordingReplayTests
 
         Assert.Equal(2, steps[2].View.Ghosts.Length);
         Assert.Equal("Hud.Volume", steps[4].View.Hud?.LabelKey);
-        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Media, steps[5].View.Primary?.Kind);
-        Assert.Null(steps[6].View.Primary);
+        // Persistent reservation keeps the running Agent ahead of the newly arrived Media.
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Agent, steps[5].View.Primary?.Kind);
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Agent, steps[6].View.Primary?.Kind);
     }
 
     [Fact]

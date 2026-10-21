@@ -53,8 +53,11 @@ public static class PagerConstants
     /// </summary>
     public const double WheelDipPerNotch = WheelNotchDip;
 
-    /// <summary>Minimum time between two wheel-driven page changes (feel pass: 150 ms).</summary>
-    public const int WheelCooldownMs = 150;
+    /// <summary>Minimum time between two wheel-driven page changes (page-turn cooldown: 260 ms).</summary>
+    public const int WheelCooldownMs = 260;
+
+    /// <summary>Minimum gap before a new wheel intent may start a fresh page turn (150 ms).</summary>
+    public const int WheelNewIntentMinMs = 150;
 
     /// <summary>
     /// Idle gap (ms) that ends a wheel gesture. Notches closer than this belong to the same gesture

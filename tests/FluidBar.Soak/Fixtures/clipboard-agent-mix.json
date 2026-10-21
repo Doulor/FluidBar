@@ -11,7 +11,10 @@
       "activityKind": "Clipboard",
       "source": "clipboard:host",
       "sequence": 1,
-      "payload": { "title": "Hello world", "body": "copied text" }
+      "payload": {
+        "title": "Hello world",
+        "body": "copied text"
+      }
     },
     {
       "offsetMs": 200,
@@ -19,7 +22,11 @@
       "activityKind": "Agent",
       "source": "agent:hook",
       "sequence": 1,
-      "payload": { "title": "Agent finished", "subtitle": "claude", "isActive": true }
+      "payload": {
+        "title": "Agent finished",
+        "subtitle": "claude",
+        "isActive": true
+      }
     },
     {
       "offsetMs": 400,
@@ -27,7 +34,9 @@
       "activityKind": "LockKeys",
       "source": "system:lockkeys",
       "sequence": 1,
-      "payload": { "title": "Caps Lock on" }
+      "payload": {
+        "title": "Caps Lock on"
+      }
     },
     {
       "offsetMs": 2000,
@@ -35,7 +44,10 @@
       "activityKind": "Notification",
       "source": "notif:toast-a",
       "sequence": 1,
-      "payload": { "title": "New message", "body": "1 unread" }
+      "payload": {
+        "title": "New message",
+        "body": "1 unread"
+      }
     },
     {
       "offsetMs": 4500,
@@ -43,7 +55,11 @@
       "activityKind": "Volume",
       "source": "system:volume",
       "sequence": 1,
-      "payload": { "title": "Volume", "level": 62, "isActive": true }
+      "payload": {
+        "title": "Volume",
+        "level": 62,
+        "isActive": true
+      }
     },
     {
       "offsetMs": 6500,
@@ -123,20 +139,20 @@
     {
       "atEventIndex": 5,
       "stateKind": "Compact",
-      "page": "Media",
-      "primaryKind": "Media",
-      "title": "Focus Flow",
-      "ghostCount": 0,
+      "page": "Agent",
+      "primaryKind": "Agent",
+      "title": "Agent finished",
+      "ghostCount": 1,
       "badgeCount": 0,
-      "progressPercent": 0,
-      "showsWave": true
+      "progressPercent": null,
+      "showsWave": false
     },
     {
       "atEventIndex": 6,
       "stateKind": "Compact",
-      "page": "Media",
-      "primaryKind": null,
-      "title": null,
+      "page": "Agent",
+      "primaryKind": "Agent",
+      "title": "Agent finished",
       "ghostCount": 0,
       "badgeCount": 0,
       "progressPercent": null,
