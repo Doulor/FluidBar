@@ -665,7 +665,10 @@ public static class SettingsSectionBuilder
                     value => $"×{value:0.00}", value => ctx.Settings.Update(s => s with { MotionStrength = value })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.AutoHideMs),
                     ctx.Localizer.Get(LocKeys.Settings.Island.AutoHideMsHint), 0, 30000, 500, settings.AutoHideMs,
-                    value => $"{value / 1000:0} s", value => ctx.Settings.Update(s => s with { AutoHideMs = (int)Math.Round(value) })),
+                    value => value <= 0
+                        ? ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseOff)
+                        : $"{value / 1000:0} s",
+                    value => ctx.Settings.Update(s => s with { AutoHideMs = (int)Math.Round(value) })),
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChange),
                     ctx.Localizer.Get(LocKeys.Settings.Island.PeekOnTrackChangeHint), settings.PeekOnTrackChange,
                     value => ctx.Settings.Update(s => s with { PeekOnTrackChange = value })),
