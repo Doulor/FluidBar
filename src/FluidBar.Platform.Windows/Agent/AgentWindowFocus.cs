@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,7 +18,7 @@ public static class AgentWindowFocus
     private static readonly HashSet<string> EligibleProcesses = new(StringComparer.OrdinalIgnoreCase)
     {
         "WindowsTerminal", "wt", "OpenConsole", "conhost", "powershell", "pwsh", "cmd",
-        "Code", "devenv", "idea64", "pycharm64", "Cursor", "Windsurf", "Alacritty",
+        "Code", "Code - Insiders", "devenv", "idea64", "pycharm64", "Cursor", "Windsurf", "Alacritty",
         "wezterm-gui", "Tabby", "Hyper", "mintty", "MobaXterm", "zcode", "Qoder",
         "WorkBuddy", "claude", "codex",
     };
@@ -96,6 +97,10 @@ public static class AgentWindowFocus
             return false;
         }
         catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (Win32Exception)
         {
             return false;
         }

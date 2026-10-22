@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **Agent 聚焦进程名单补全**：加入 `Code - Insiders`，并捕获 `Process.GetProcessById` 的 `Win32Exception`（进程已退出/权限不足），避免聚焦探测抛到 UI 线程。
 - **搜索 chip 截断**：剪贴板搜索 chip 显示 query 时超过 12 个字符截断并加省略号，避免长关键字把标题栏布局挤爆。
 - **preview.5 发布**：最新 rail/search/pin 修正后本地 `publish.ps1 -Version 2.0.0-preview.5 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `EF31F044...75DBD44A`。
 - **搜索时保持展开**：打开剪贴板搜索窗口时临时 pin 当前活动层（保存原 pin 状态），避免鼠标移到搜索框后岛按 AutoCollapse 收起；关闭窗口恢复原 pin 状态。

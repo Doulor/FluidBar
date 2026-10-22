@@ -10,6 +10,7 @@ public sealed class AgentWindowFocusTests
     {
         Assert.True(AgentWindowFocus.IsEligibleProcessName("WindowsTerminal"));
         Assert.True(AgentWindowFocus.IsEligibleProcessName("code"));
+        Assert.True(AgentWindowFocus.IsEligibleProcessName("Code - Insiders"));
         Assert.False(AgentWindowFocus.IsEligibleProcessName("chrome"));
         Assert.False(AgentWindowFocus.IsEligibleProcessName(null));
     }
