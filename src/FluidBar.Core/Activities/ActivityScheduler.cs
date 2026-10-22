@@ -180,6 +180,15 @@ public sealed class ActivityScheduler
     {
         var visible = state.Visible.ToList();
         var background = state.Background.ToList();
+        var eventKey = evt.Key;
+
+        // Heartbeats re-publish a fresh ActivityRecord; the scheduler is the owner of the session
+        // pin, so a same-key snapshot must never silently clear it.
+        var pinSource = existing
+            ?? visible.FirstOrDefault(r => r.Key == eventKey)
+            ?? background.FirstOrDefault(r => r.Key == eventKey);
+        var inheritedPin = pinSource?.IsPinned ?? false;
+        LogSchedulerUpsert(evt.Key, inheritedPin, visible, background);
 
         if (existing is not null)
         {
@@ -191,6 +200,10 @@ public sealed class ActivityScheduler
                 evt.Sequence == 0 ? existing.Sequence : evt.Sequence,
                 now,
                 _policy.ResolveTtl(evt.Key.Kind, mergedPayload));
+            if (inheritedPin)
+            {
+                updated = updated.WithPinned(true);
+            }
             var contentChanged = ContentSignaturePolicy.ShouldUpdateContent(existing, updated);
             ReplaceInList(visible, background, updated);
 
@@ -224,6 +237,10 @@ public sealed class ActivityScheduler
             evt.Sequence,
             now,
             _policy.ResolveTtl(evt.Key.Kind, evt.Payload));
+        if (inheritedPin)
+        {
+            record = record.WithPinned(true);
+        }
 
         // Rule 3 (spec 2.3): equal priority replaces the older same-rank activity.
         var sameRankVisible = visible.FindIndex(r => r.PriorityRank == record.PriorityRank);
@@ -364,6 +381,71 @@ public sealed class ActivityScheduler
         visible.Add(record);
     }
 
+    private static void LogNormalize(
+        IReadOnlyList<ActivityRecord> live,
+        IReadOnlyList<ActivityRecord> visible,
+        IReadOnlyList<ActivityRecord> background,
+        int capacity,
+        int maxBackground)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var visibleKeys = visible.Select(r => r.Key).ToHashSet();
+        var backgroundKeys = background.Select(r => r.Key).ToHashSet();
+        var rows = new List<string>(live.Count);
+        for (var i = 0; i < live.Count; i++)
+        {
+            var record = live[i];
+            var reason = visibleKeys.Contains(record.Key)
+                ? "visible"
+                : backgroundKeys.Contains(record.Key)
+                    ? $"background(over visibleCapacity={capacity})"
+                    : $"dropped(over backgroundMax={maxBackground})";
+            var payload = record.Payload;
+            var playback = $"IsActive={(payload.IsActive is null ? "null" : payload.IsActive.Value.ToString())}" +
+                $",ShowsAudioWave={(payload.ShowsAudioWave is null ? "null" : payload.ShowsAudioWave.Value.ToString())}" +
+                $",Badge={payload.Badge ?? "null"},PositionTicks={payload.PositionTicks},EndTicks={payload.EndTicks}";
+            rows.Add($"{i}:{record.Key} kind={record.Kind} rank={record.PriorityRank} pinned={record.IsPinned} " +
+                $"persistent={record.IsPersistent} playback=[{playback}] {reason}");
+        }
+
+        try
+        {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | normalize capacity={capacity} live={live.Count} [{string.Join(" | ", rows)}]{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    private static void LogSchedulerUpsert(
+        ActivityKey key,
+        bool pinned,
+        IReadOnlyList<ActivityRecord> visible,
+        IReadOnlyList<ActivityRecord> background)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            var order = string.Join(",", visible.Select(r => r.Key.ToString()));
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | scheduler upsert {key} pinned={pinned} visible=[{order}] background={background.Count}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     private static bool SameKey(ActivityRecord? previousPrimary, ImmutableArray<ActivityRecord> visible)
     {
         var next = visible.Length > 0 ? visible[0] : null;
@@ -410,8 +492,27 @@ public sealed class ActivityScheduler
         });
 
         var capacity = _policy.VisibleCapacity;
-        var newVisible = live.Count <= capacity ? live : live.GetRange(0, capacity);
-        var newBackground = live.Count <= capacity ? [] : live.GetRange(capacity, live.Count - capacity);
+
+        // Persistent content (playing media, running agent, timers, focus, progress, low battery)
+        // reserves visible slots first. Transient feedback may never push persistent content into
+        // the background just because its rank is numerically lower. Within each group the normal
+        // pinned > rank > ReceivedAt order still applies because live is already sorted.
+        var persistentRecords = live.Where(r => r.IsPersistent).ToList();
+        var transientRecords = live.Where(r => !r.IsPersistent).ToList();
+        var selectedKeys = new HashSet<ActivityKey>();
+        foreach (var record in persistentRecords.Take(capacity))
+        {
+            selectedKeys.Add(record.Key);
+        }
+
+        var remaining = capacity - selectedKeys.Count;
+        foreach (var record in transientRecords.Take(remaining))
+        {
+            selectedKeys.Add(record.Key);
+        }
+
+        var newVisible = live.Where(r => selectedKeys.Contains(r.Key)).ToList();
+        var newBackground = live.Where(r => !selectedKeys.Contains(r.Key)).ToList();
 
         var dropped = 0;
         if (!_policy.KeepPreemptedPersistent)
@@ -433,6 +534,7 @@ public sealed class ActivityScheduler
             dropped++;
         }
 
+        LogNormalize(live, newVisible, newBackground, capacity, maxBackground);
         return new NormalizedStack([.. newVisible], [.. newBackground], dropped);
     }
 }

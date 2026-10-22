@@ -36,6 +36,8 @@ public sealed class SplitStackPolicy
     private ActivityKey? _restoreKey;
     private ActivityKey? _userKey;
     private DateTimeOffset _userUntil;
+    private ActivityKey? _pinnedKey;
+    private ActivityKey? _pinOverrideKey;
 
     /// <summary>Current primary key (diagnostics/tests).</summary>
     public ActivityKey? PrimaryKey => _primaryKey;
@@ -50,6 +52,25 @@ public sealed class SplitStackPolicy
     /// <summary>Whether <paramref name="key"/> is currently user-locked into the main pill.</summary>
     public bool IsUserLocked(ActivityKey key, DateTimeOffset now)
         => _userKey == key && now < _userUntil;
+
+    /// <summary>The wheel-pinned primary; survives the short user-lock window until the activity ends.</summary>
+    public ActivityKey? PinnedKey => _pinnedKey;
+
+    /// <summary>Pins a user-selected primary without opening the short user-lock window.</summary>
+    public void Pin(ActivityKey key)
+    {
+        _pinnedKey = key;
+        _pinOverrideKey = null;
+        _restoreKey = null;
+    }
+
+    /// <summary>Clears the user pin; the next order falls back to normal priority.</summary>
+    public void Unpin()
+    {
+        _pinnedKey = null;
+        _pinOverrideKey = null;
+        _restoreKey = null;
+    }
 
     /// <summary>Whether an activity is an actionable short-lived event (notification/copy/waiting agent).</summary>
     public static bool IsActionable(ActivityRecord record)
@@ -93,7 +114,7 @@ public sealed class SplitStackPolicy
 
     private Layer Classify(ActivityRecord record, DateTimeOffset now)
     {
-        if (IsUserLocked(record.Key, now))
+        if (IsUserLocked(record.Key, now) || _pinnedKey == record.Key)
         {
             return Layer.User;
         }
@@ -117,6 +138,35 @@ public sealed class SplitStackPolicy
         DateTimeOffset now,
         int wheelSteps = 0)
     {
+        // A pin is owned by the user, not by a TTL. Release it only when the target disappears.
+        if (_pinnedKey is { } pinned && Find(visible, pinned) is null)
+        {
+            _pinnedKey = null;
+            _pinOverrideKey = null;
+        }
+
+        if (_pinOverrideKey is { } overrideKey)
+        {
+            var overrideRecord = Find(visible, overrideKey);
+            if (overrideRecord is null || !IsActionable(overrideRecord))
+            {
+                _pinOverrideKey = null;
+                var pinnedRecord = _pinnedKey is { } pk ? Find(visible, pk) : null;
+                if (pinnedRecord is not null)
+                {
+                    var preferred372 = PreferMediaOverAgent(pinnedRecord, visible);
+                    SetPrimary(preferred372, now);
+                    return Arrange(preferred372, visible);
+                }
+            }
+            else
+            {
+                var preferred434 = PreferMediaOverAgent(overrideRecord, visible);
+                SetPrimary(preferred434, now);
+                return Arrange(preferred434, visible);
+            }
+        }
+
         if (visible.Length <= 1)
         {
             if (visible.Length == 1)
@@ -138,6 +188,8 @@ public sealed class SplitStackPolicy
             var next = ((currentIndex - wheelSteps) % visible.Length + visible.Length) % visible.Length;
             var rotated = Rotate(visible, next);
             SetPrimary(rotated[0], now);
+            _pinnedKey = rotated[0].Key;
+            _pinOverrideKey = null;
             _restoreKey = null;
             return rotated;
         }
@@ -164,8 +216,9 @@ public sealed class SplitStackPolicy
             // Primary ended (TTL/retract): restore the persistent primary that a short event displaced.
             var restored = _restoreKey is { } restoreKey ? Find(visible, restoreKey) : null;
             var chosen = restored ?? best;
-            SetPrimary(chosen, now);
-            return Arrange(chosen, visible);
+            var preferred186 = PreferMediaOverAgent(chosen, visible);
+            SetPrimary(preferred186, now);
+            return Arrange(preferred186, visible);
         }
 
         var dwellElapsed = now - _primarySince >= MinDwell;
@@ -179,40 +232,128 @@ public sealed class SplitStackPolicy
         if (userWants || higherUser)
         {
             var chosen = bestLayer == Layer.User ? best : Find(visible, _userKey!.Value) ?? best;
-            SetPrimary(chosen, now);
-            return Arrange(chosen, visible);
+            var preferred186 = PreferMediaOverAgent(chosen, visible);
+            SetPrimary(preferred186, now);
+            return Arrange(preferred186, visible);
+        }
+
+        if (_pinnedKey == current.Key && dwellElapsed)
+        {
+            // The pinned item is classified as User, so the normal "best" search would pick the pin
+            // again. Look explicitly for an actionable event that may borrow the pill; the pin stays
+            // as the restore target until that event disappears.
+            ActivityRecord? actionable = null;
+            foreach (var record in visible)
+            {
+                if (IsActionable(record) && (actionable is null || record.ReceivedAt < actionable.ReceivedAt))
+                {
+                    actionable = record;
+                }
+            }
+
+            if (actionable is not null)
+            {
+                _pinOverrideKey = actionable.Key;
+                var preferred310 = PreferMediaOverAgent(actionable, visible);
+                SetPrimary(preferred310, now);
+                return Arrange(preferred310, visible);
+            }
         }
 
         if (shortEventCanPreempt)
         {
             // Remember the persistent primary so the pill returns to it when the short event expires.
             _restoreKey = currentLayer == Layer.Persistent ? current.Key : _restoreKey;
-            SetPrimary(best, now);
-            return Arrange(best, visible);
+            var preferred = PreferMediaOverAgent(best, visible);
+            var preferred279 = PreferMediaOverAgent(preferred, visible);
+            SetPrimary(preferred279, now);
+            return Arrange(preferred279, visible);
         }
 
-        // Stability: keep the current primary. Passive re-sorting must never flip the main pill.
-        return Arrange(current, visible);
+        // Stability: keep the current primary, EXCEPT when a track started playing — media then takes the
+        // pill back from an agent that grabbed it earlier (user report 2026-10-22: "还是 agent 优先").
+        var stablePrimary = PreferMediaOverAgent(current, visible);
+        if (stablePrimary.Key != current.Key)
+        {
+            SetPrimary(stablePrimary, now);
+        }
+
+        return Arrange(stablePrimary, visible);
     }
 
     /// <summary>Primary first; the remaining preview balls follow by importance (rank, then arrival).</summary>
     private static ImmutableArray<ActivityRecord> Arrange(
         ActivityRecord primary, ImmutableArray<ActivityRecord> visible)
     {
+        // Media outranks the agent, but ONLY against the agent: a playing track is what the user watches,
+        // while an agent works in the background. Doing it here (instead of renumbering the global ranks)
+        // keeps every other ordering, the overflow chip and the recorded replay fixtures untouched.
+        var mediaBeatsAgent = visible.Any(record => record.Kind == ActivityKind.Media)
+            && visible.Any(record => record.Kind == ActivityKind.Agent);
         var rest = visible
             .Where(record => record.Key != primary.Key)
-            .OrderBy(record => ActivityPriorityPolicy.Rank(record.Kind))
+            .OrderBy(record => mediaBeatsAgent && record.Kind == ActivityKind.Media
+                ? -1
+                : ActivityPriorityPolicy.Rank(record.Kind))
             .ThenBy(record => record.ReceivedAt)
             .ToImmutableArray();
         return rest.Insert(0, primary);
+    }
+
+    /// <summary>
+    /// Gives the media record the primary slot when an agent is the only thing that would otherwise win.
+    /// A playing track is what the user watches; the agent is background work (user request 2026-10-22).
+    /// </summary>
+    private ActivityRecord PreferMediaOverAgent(ActivityRecord best, ImmutableArray<ActivityRecord> visible)
+    {
+        // A pin is an explicit user choice and outranks the media preference (user decision 2026-10-22, option B).
+        if (_pinnedKey is not null || _pinOverrideKey is not null)
+        {
+            return best;
+        }
+
+        if (best.Kind != ActivityKind.Agent)
+        {
+            return best;
+        }
+
+        foreach (var record in visible)
+        {
+            if (record.Kind == ActivityKind.Media)
+            {
+                return record;
+            }
+        }
+
+        return best;
     }
 
     private void SetPrimary(ActivityRecord record, DateTimeOffset now)
     {
         if (_primaryKey != record.Key)
         {
+            LogPrimaryChange(_primaryKey, record.Key, _pinnedKey is { } pin && pin == record.Key ? "pin" : "order");
             _primaryKey = record.Key;
             _primarySince = now;
+        }
+    }
+
+    private static void LogPrimaryChange(ActivityKey? oldKey, ActivityKey newKey, string reason)
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PIN_DIAG"), "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        try
+        {
+            var frame = Environment.StackTrace.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).Take(3);
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "fluidbar-pin-diag.log"),
+                $"{DateTimeOffset.Now:O} | {oldKey?.ToString() ?? "none"} -> {newKey} | {reason} | {string.Join(" <- ", frame)}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
         }
     }
 

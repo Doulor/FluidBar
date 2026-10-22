@@ -28,10 +28,14 @@ public class PagerPolicyTests
         // prototype2 release: |distance| >= 0.75 pages decides by distance instead of nearest page.
         Assert.Equal(0.75, PagerConstants.LongDragPageFraction, Eps);
         Assert.Equal(14, PagerConstants.MaxReleaseVelocityPagesPerSecond, Eps);
-        Assert.Equal(140, PagerConstants.WheelNotchDip, Eps);
-        Assert.Equal(180, PagerConstants.WheelCooldownMs);
-        Assert.Equal(0.38, PagerConstants.SnapSpringPeriodSeconds, Eps);
-        Assert.Equal(0.94, PagerConstants.SnapSpringDampingRatio, Eps);
+        Assert.Equal(60, PagerConstants.WheelNotchDip, Eps);
+        Assert.Equal(60, PagerConstants.WheelDipPerNotch, Eps);
+        Assert.Equal(260, PagerConstants.WheelCooldownMs);
+        Assert.Equal(260, PagerConstants.WheelTransitionLockMs);
+        Assert.Equal(120, PagerConstants.WheelGestureIdleMs);
+        Assert.Equal(150, PagerConstants.WheelNewIntentMinMs);
+        Assert.Equal(0.35, PagerConstants.SnapSpringPeriodSeconds, Eps);
+        Assert.Equal(0.75, PagerConstants.SnapSpringDampingRatio, Eps);
         Assert.Equal(40, PagerConstants.ScrollChainOverscrollDip, Eps);
         Assert.Equal(120, PagerConstants.ScrollChainDwellMs);
         Assert.Equal(400, PagerConstants.ContentWidthDip, Eps);
@@ -298,7 +302,7 @@ public class PagerPolicyTests
     public void Wheel_OneNotchAdvancesOnePage()
     {
         var policy = new PagerWheelPolicy(TestPageCount);
-        var result = policy.Accumulate(140, T0);
+        var result = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0);
 
         Assert.Equal(1, result.PageDelta);
         Assert.True(result.Consumed);
@@ -310,7 +314,7 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_OneNotchNegativeGoesBackOnePage()
     {
-        var result = new PagerWheelPolicy(TestPageCount).Accumulate(-140, T0);
+        var result = new PagerWheelPolicy(TestPageCount).Accumulate(-PagerConstants.WheelDipPerNotch, T0);
         Assert.Equal(-1, result.PageDelta);
     }
 
@@ -319,11 +323,11 @@ public class PagerPolicyTests
     {
         var policy = new PagerWheelPolicy(TestPageCount);
 
-        var first = policy.Accumulate(80, T0);
+        var first = policy.Accumulate(30, T0);
         Assert.Equal(0, first.PageDelta);
-        Assert.Equal(80, first.AccumulatedDip, Eps);
+        Assert.Equal(30, first.AccumulatedDip, Eps);
 
-        var second = policy.Accumulate(60, T0.AddMilliseconds(10));
+        var second = policy.Accumulate(30, T0.AddMilliseconds(10));
         Assert.Equal(1, second.PageDelta);
         Assert.Equal(0, policy.AccumulatedDip, Eps);
     }
@@ -331,17 +335,18 @@ public class PagerPolicyTests
     [Fact]
     public void Wheel_CooldownBlocksResidualInertia()
     {
-        var policy = new PagerWheelPolicy(TestPageCount);
-        Assert.Equal(1, policy.Accumulate(140, T0).PageDelta);
+        var policy = new PagerWheelPolicy(TestPageCount, cooldownMs: PagerConstants.WheelCooldownMs);
+        Assert.Equal(1, policy.Accumulate(PagerConstants.WheelDipPerNotch, T0).PageDelta);
 
         // prototype2 keeps accumulating during the cooldown (a reversal drops the residual); only the
         // page commit is paced, so the event is consumed with CooldownBlocked and no page delta.
-        var blocked = policy.Accumulate(140, T0.AddMilliseconds(179));
+        var blocked = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0.AddMilliseconds(PagerConstants.WheelNewIntentMs - 1));
         Assert.Equal(0, blocked.PageDelta);
         Assert.True(blocked.CooldownBlocked);
         Assert.True(blocked.Consumed);
 
-        var allowed = policy.Accumulate(140, T0.AddMilliseconds(180));
+        var allowed = policy.Accumulate(PagerConstants.WheelDipPerNotch,
+            T0.AddMilliseconds(PagerConstants.WheelNewIntentMs + PagerConstants.WheelGestureIdleMs + 1));
         Assert.Equal(1, allowed.PageDelta);
     }
 
@@ -352,7 +357,8 @@ public class PagerPolicyTests
         var page = 0;
         for (var i = 0; i < 5; i++)
         {
-            var result = policy.Accumulate(140, T0.AddMilliseconds(i * 181));
+            var result = policy.Accumulate(PagerConstants.WheelDipPerNotch,
+                T0.AddMilliseconds(i * (PagerConstants.WheelCooldownMs + 1)));
             page = WheelDelta(page, result.PageDelta);
         }
 
@@ -366,7 +372,7 @@ public class PagerPolicyTests
         var page = 0;
         for (var i = 0; i < 5; i++)
         {
-            page = WheelDelta(page, policy.Accumulate(140, T0).PageDelta);
+            page = WheelDelta(page, policy.Accumulate(PagerConstants.WheelDipPerNotch, T0).PageDelta);
         }
 
         Assert.Equal(1, page);
@@ -377,10 +383,10 @@ public class PagerPolicyTests
     public void Wheel_IgnoresWheelWhenControlOwnsGesture()
     {
         var policy = new PagerWheelPolicy(TestPageCount);
-        Assert.Equal(0, policy.Accumulate(80, T0).PageDelta);
+        Assert.Equal(0, policy.Accumulate(30, T0).PageDelta);
         policy.Reset();
 
-        var suppressed = policy.Accumulate(140, T0.AddSeconds(1), controlOwnsGesture: true);
+        var suppressed = policy.Accumulate(PagerConstants.WheelDipPerNotch, T0.AddSeconds(1), controlOwnsGesture: true);
         Assert.True(suppressed.OwnerSuppressed);
         Assert.False(suppressed.Consumed);
         Assert.Equal(0, suppressed.PageDelta);
@@ -419,10 +425,10 @@ public class PagerPolicyTests
     public void SnapMotion_UsesMotionTabSpring()
     {
         var parameters = PagerSnapMotion.SpringParameters;
-        Assert.Equal(0.38, parameters.PeriodSeconds, Eps);
-        Assert.Equal(0.94, parameters.DampingRatio, Eps);
+        Assert.Equal(0.35, parameters.PeriodSeconds, Eps);
+        Assert.Equal(0.75, parameters.DampingRatio, Eps);
         Assert.NotEqual(MotionTokens.Tab.Spring, parameters);
-        Assert.Equal(273.3, parameters.Stiffness, 0.5);
+        Assert.Equal(322.27, parameters.Stiffness, 0.5);
     }
 
     [Fact]

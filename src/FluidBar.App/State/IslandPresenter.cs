@@ -215,6 +215,7 @@ public static class IslandPresenter
             PositionText = fallback?.PositionText ?? FormatTime(position),
             DurationText = fallback?.DurationText ?? FormatTime(duration),
             HasTimeline = fallback?.HasTimeline ?? (duration > TimeSpan.Zero),
+            CanSeek = fallback?.CanSeek ?? (duration > TimeSpan.Zero),
             // The platform snapshot wins over the activity flag: it is the only side that carries the
             // optimistic flip of a just-tapped play/pause button (the activity only says "still on").
             IsPlaying = fallback?.IsPlaying ?? primary.IsActive,

@@ -64,6 +64,10 @@ public static class NotificationContentMapper
             Source = source,
             TimeText = RelativeTime(entry.CreatedAt, now, localizer),
             VerificationCode = string.IsNullOrWhiteSpace(entry.VerificationCode) ? null : entry.VerificationCode,
+            AppIconPng = entry.AppIconPng,
+            AppIconKey = entry.AppIconPng is { Length: > 0 }
+                ? $"notif:{entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                : null,
         };
     }
 

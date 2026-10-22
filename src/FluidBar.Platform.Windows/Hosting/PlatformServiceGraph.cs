@@ -174,6 +174,7 @@ public sealed class PlatformServiceGraph : IAsyncDisposable
             Lyrics = new LyricsService(
                 new ILyricsProvider[]
                 {
+                    new QishuiLocalLyricsProvider(timeProvider: timeProvider, logger: Logger),
                     new NeteaseLyricsProvider(httpClient, Logger),
                     new KugouLyricsProvider(httpClient, Logger),
                 },

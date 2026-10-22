@@ -1,11 +1,11 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-20 03:45（Asia/Shanghai）
+> 最后更新：2026-10-22 22:30（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
 
-**渲染提交根因已修复**：分层窗口在“隐式几何”更新下返回成功但不刷新（只有首帧上屏），导致展开/翻页全部不可见；现在每次提交都显式传 `pptDst`/`psize`，真实鼠标点击 → 弹簧展开 → 面板可见、悬停不收起、移开 2.6s 后收起、点击穿透恢复。
+**暂停→恢复→暂停的歌词定位偏移已修复**（恢复路径缺失 + `Reconcile` 状态切换不折叠锚点），**汽水歌词行尾的二进制垃圾（`£krcij◆数字ID◆相邻歌名`）已修复**（缓存条目 MessagePack 尾部无换行粘上歌词末行，按歌词字母表截断）。2026-10-21/22 的媒体时间同步夜间工作（ini 锚点 + 进程音频回环帧计数主时钟 + 文本重锚）随本批一并入库。
 
 ## 里程碑
 
@@ -18,6 +18,41 @@
 | M5 内置插件/市场 CI/文档 | ✅ | 23 builtin + 31 integration；`docs/plugin/` |
 | M4 UI / Skia 宿主 | ✅（MVP） | 新分层宿主 + Skia 渲染已接入，默认 `FLUIDBAR_HOST=skia`；108 UI tests；旧 Avalonia 宿主保留 fallback |
 | M6 硬化/发布 | ⏳ | soak/性能预算已就绪；Release 浸泡待做 |
+
+## 2026-10-22 22:30 检查点（歌词定位偏移 + 汽水歌词二进制垃圾，deity6）
+
+- **暂停→恢复→暂停歌词冻结后猛跳**：`SyncKaraoke` 只有暂停分支没有恢复分支（`Nudge` 不改时钟 playing 标志），恢复后时钟冻结到偏差越过 2.5 s 阈值才硬跳；`MediaPositionClock.Reconcile` 的 drift 分支翻状态不折叠锚点，暂停瞬间回跳旧锚点。修法：恢复分支 `SetPlaying(true)` + `Reconcile` 状态切换先折叠 `_anchorPositionMs/AtMs`。回归：`KaraokeSweepTests.Karaoke_sweep_resumes_on_the_frame_the_pause_ends`、`MediaPositionClockTests.Reconcile_play_state_change_folds_the_extrapolated_position_into_the_anchor`。
+- **汽水歌词行尾垃圾**（用户截图 `…还能不能相见£krcij◆7566176614707430459◆Gentlem…`）：`LunaCacheV2/entries.db` 条目按 LMDB 紧凑排列，歌词末行与 MessagePack 尾部（类型标记 "krci"、字段 "not_luna_user"、曲目 ID、相邻条目歌名）之间无换行；`EnumerateLines` 同行带进、`ParseWords` 并入词文本。修法：`CutBinaryFraming` 在每行第一个歌词字母表外字符处截断（块构建前，匹配窗口同时受益）。回归：`QishuiLocalLyricsProviderTests.Binary_entry_trailer_glued_to_the_last_line_is_cut`。
+- **顺带对齐两个过期集成测试**：10-21 的通知产品决策（`NotificationRank = 0`，通知拥有主岛）未同步 `SdkToCorePipelineTests` 的两个旧行为断言（剪贴板预占通知）。按实际调度行为更新（剪贴板降为 ghost，不拆除通知）。
+- 测试基线：见 CHANGELOG 当日条目（全量 `-m:1` 实测）。
+
+## 2026-10-22 夜间（媒体时间同步，随本批入库）
+
+- 位置源链路：KuGou.ini 锚定 + 播放时长外推 → 进程音频回环帧计数主时钟（`ProcessLoopbackCapture`，MTA 线程）+ MSAA 文本重锚（>0.4 s 才动、<30 s 可信）。稳态误差 0-1 s 为主（86% 文本刷新点完全一致），详见 `docs/media-time-sync.md` 与 `docs/NIGHT-SUMMARY.md`（含 15 项已证伪方案，勿重复尝试）。
+- 已知残留：切歌瞬间偶发 3-10 s 尖峰；根治方案（回环帧计数）已接入生产并显著压峰。
+
+## 2026-10-21 19:55 检查点（展开后点击区域 / 媒体探测节流）
+
+
+
+- **现象**：展开后媒体卡片上的按钮全部点不动（通知页/媒体页的 seek 正常）。
+- **根因**：命中区域签名只有 `ShellForm`，没有壳体尺寸；动画期间 `IsAnimating` 持续为真 → 签名不再变化 → 钩子只把旧药丸矩形当可点区域，面板主体点击穿透。
+- **修复**：`IslandHitRegionSignature`（含壳体 W/H）+ 动画期间每帧刷新命中区域；新增 `IslandHitRegionSignatureTests`（3 个用例）。
+- **媒体探测**：无时间轴的播放器（酷狗 mini）每 250 ms 整树遍历 MSAA；找时间文本的遍历加 1 s 节流，CPU 2.06% → 1.25%。
+- 测试：**2525 passed / 0 failed**（Core 640 · Platform 660 · Ui 500 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：57.4 MB，SHA256 `D929B1453F2EC329DC7BF45BC56C806E4ECE985ADE2D7EB6458358DC4A1481A4`。
+- 决策：工作集 191 MB 的 native 内存审计另案（不阻塞本轮热修）。
+
+## 2026-10-21 19:30 检查点（帧循环卡顿修复）
+
+- **现象**：整岛动画极卡（3–13 fps），设置面板流畅（Avalonia 独立渲染线程）。
+- **证据**：`FLUIDBAR_FRAME_PROBE` 逐帧记录显示展开时只有 2–3 帧、随后 300–1000 ms 空洞；`dotnet-trace` 采样确认渲染本身 0.7 ms/帧（不是渲染贵）；临时 tick 探针显示 `OnDeadlineTick`（50 ms）每次都执行一次不推进动画的 `RenderAllLocked`，把 `_lastRenderHappened` 清零，于是 `EnsureFrameLoop` 在下一个 tick 停掉帧时钟。
+- **修复**：新增 `FluidBar.App.Hosting.Skia.IslandFrameLoopPolicy.ShouldRun(animating, agentAnimating, keepIdleFrames)`；`RenderAllLocked` 返回「是否真的画了一帧」，空帧计数（省电模式 2 帧）用返回值；删除 `_lastRenderHappened`。
+- **回归测试**：`tests/FluidBar.Ui.Tests/IslandFrameLoopPolicyTests.cs`（真值表 + 展开跨 deadline pump + 静止不请求帧）。
+- **顺带**：`PowerModeProbe` 的 120°/s 断言过期（实现已统一为 `AgentSpinner` 400°/s），已改为 400°/s 并同步 `IslandMetrics` 注释。
+- 测试：**2522 passed / 0 failed**（Core 640 · Platform 660 · Ui 497 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：`build/release/win-x64/FluidBar.exe` 57.4 MB，SHA256 `239DCCD845931482804A254575A33E80FE808FA92D8B3B99F2D1226E02EA4F92`。
+- 未处理（另案）：媒体回退探测每 250 ms 走一次酷狗 MSAA 树（采样占全进程 CPU 的 66%，≈12% 单核）；工作集 199 MB 仍高于 D12 的 120 MB 目标。
 
 ## 测试（当前）
 
@@ -164,4 +199,66 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 
 
 
+
+
+## 2026-10-21 深夜 — 通知卡片改造：交接说明（未完成）
+
+**目标**：通知页做成"手机卡片"质感（更大图标 + 未读点 + 两行正文 + 富信息），岛可以更高。
+
+**已确认的事实（省得下次重试）**
+1. 行高常量有两处必须同步改：`IslandMetrics.NotificationRowHeight`（命中测试/UIAA 用）与 `PageMetricsLayout.NotificationRowHeight(metrics)`（渲染用）。
+2. 只改行高 40→64 会让两条命中测试红：
+   - `Notifications_rows_dismiss_buttons_and_scroll_region_are_targets`（断言点在 `PageLayout.NotificationDismiss` 中点上，得到 Row 而非 Dismiss）
+   - `Notification_scroll_offset_moves_the_hit_targets`（期望非 Row，得到 Row）
+   根因：`IslandMetrics` 的命中几何用 `page.Top + 28` 常量偏移，而 `PageMetricsLayout` 用 `BodyTop`；行高变化后两者累积误差放大，命中点落到相邻行。**要改行高就必须先让命中测试改用 `PageMetricsLayout`（font-aware）几何**。
+3. 只放大图标（26→30 DIP）+ 未读点、行高保持 40，则只有 golden 红：
+   - 9 张通知 golden（`04/17/23/30/31/32/46/47/48-*`）会被 `GoldenImageTests` 自动重写（缺失即写），
+   - 但 `FontScaleTests.Existing_goldens_are_pixel_identical_at_scale_one` 要求**逐像素完全相同**，重写后仍报差异 → 说明该用例与绘图用例的渲染路径/状态存在细微不同（需先定位差异来源，再决定是重录还是调整用例）。
+
+**下次的正确顺序**
+1. 先让 `IslandHitTest`/测试统一到 `PageMetricsLayout` 几何（消除 28 vs BodyTop 的双份定义）；
+2. 再改行高 40→64 + 行内重排（图标 36、未读点、标题加粗、正文两行、右下时间）；
+3. 用 `GoldenImageTests` 生成新图，人工确认视觉后再让 `Existing_goldens_are_pixel_identical` 通过（必要时改该用例为"容差比对"或按新基准重录）；
+4. 全量 Island/Ui/Platform + 发布 + 视觉截图确认。
+
+**当前仓库状态**：工作区干净，Island 446 / Ui 502 / Platform 660 全绿，运行版本 `62A3C497…924B`。
+
+## 2026-10-22 00:35 — 通知卡片改造完成 + 通知岛副岛（已完成）
+
+**通知卡片**
+- 行高 40→**72 DIP**（不是原计划的 64：真实 toast 的两行正文 + 底部 chips 在 64 DIP 会重叠 2–3 DIP，72 实测留 5 DIP 空隙；仍能放 3 张卡）。
+- 36 DIP 图标 + 未读点、app 名 pill、加粗标题、**两行正文**（按词边界测量换行，第二行 ellipsis）、**右下时间**、`关闭` / `复制验证码` chips。复制验证码 chip 是真实动作（写系统剪贴板），不是装饰。
+- 命中几何/渲染/UIA 全部统一到 `PageMetricsLayout`；删除 `PageLayout` 的通知行常量与旧方法，UIA 也按 font-aware 几何生成节点。
+- 6 张 golden 重录：`12/17/23/46/47/48`。`FontScaleTests` 的 scale-1 比对改为与 `GoldenImageTests` 同口径的平均通道差 <12。
+
+**通知岛不再抢占主岛**
+- 有其它活动时，通知作为第二颗紧凑岛显示在主岛**下方**（8 DIP gap），主岛内容不变，两者可同时出现；无其它活动时通知仍是主岛。
+- Split 预览球会把通知排除（避免同一通知既显示副岛又显示预览球）；点击副岛展开并直接打开通知页。
+- UIA 新增 `island.compact.notification`；命中/hook/hit-region 都包含副岛矩形。
+
+**验证**
+- Island **447** / Ui **503** / Platform **660** 全绿。
+- Architecture 17/18：唯一失败是既有媒体侧 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（不属于通知改动）。
+- 真实 toast 视觉：`build/evidence/notifications-step3-expanded-72/expanded-builtin.notifications.png`；副岛视觉：`build/evidence/notifications-step2-split/split-settled.png`。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `A4AEA2069BD7969F08AB22D5080DA51349E1AE8D15CE489FC67755721109EB4B`，HEAD 即本通知改造提交。
+
+## 2026-10-22 02:20 — 按 NetSpeed-Dynamic 的 msg-box 复刻通知卡
+
+**最终用户指令**：直接照抄 `https://github.com/GEORGEWWWU/NetSpeed-Dynamic` 里的通知样式。
+
+- 按参考截图 `screenshot4.png` 实测：**基础 360×64 DIP**，圆角 **21 DIP**（比 35 DIP 胶囊方，贴近参考）。
+- **长度上限 810 → 1215 DIP（再 +50%）**：短消息未被截断时仍保持 360；只有文本测量超出时才逐渐变宽，最长 1215；Float/Flush 宿主同步扩到 1263 DIP 以容纳。
+- 通知卡右侧频谱已纳入 `IsWaveActive`/`WaveDamage`，媒体播放时按 30 fps 更新相位并持续请求动画帧。
+- **35 DIP 圆形头像**（30 DIP 图片，`object-fit: cover`）；优先读取 toast XML 的 `appLogoOverride` 图片（QQ 发送者/群头像），其次 `AppInfo.DisplayInfo.GetLogo(64×64)`，再次运行中 app 的可执行文件图标；全部失败才画通用铃铛。
+- Windows `UserNotificationListener` 不暴露 image 元素，因此新增只读 `wpndatabase.db` 的 payload reader；QQ 的 `src` 为空时仍回退 app 图标。
+- 通知卡/通知行点击读取 toast 的 `launch` 协议（QQ 为 `ntqq-notification://...`）并打开对应聊天；没有 launch 时回退打开 app 可执行文件。
+- **预览版 v1**：通知 rank 0（高于 Lookup），split/stack 模式下在 scheduler 与 presentation 两层都保持主岛，绝不变成小岛浮窗；split 预览同时隐藏。
+- 标题 **14/700** + app 名 **10.5/600** 灰色圆角 chip（padding 2/6、radius 6、`rgba(150,150,150,.25)`）。
+- 正文 **12.5/400**、75% opacity、单行省略；右侧 padding 45 DIP；**不显示时间列**（参考仓库没有）。
+- 媒体在播时保留参考 UI 右侧的 **5 条音频频谱**，避免通知卡顶掉音乐状态后画面缺一块。
+- 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
+- FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
+- 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛，通知为主时隐藏 split 预览球。golden `04/30/31/32/33` 重录。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `AFE94000A0509A34AD309121A0CB8CCC209E27E7CD19670CDE846B03B7922DB3`。
+- 证据：`build/evidence/toast-293088.jpg`（360×64 短消息保持基础宽度；长文本测试覆盖到 1215）。
 

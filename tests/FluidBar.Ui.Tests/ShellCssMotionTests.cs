@@ -57,14 +57,16 @@ public sealed class ShellCssMotionTests
         Assert.Equal(0, motion.ExpandedContentOpacity, 3);
         Assert.Equal(0, motion.ChromeOpacity, 3);
 
-        run.AdvanceTo(0.085);
-        Assert.Equal(0, motion.ExpandedContentOpacity, 3); // 90 ms delay
+        run.AdvanceTo(0.055);
+        Assert.Equal(0, motion.ExpandedContentOpacity, 3); // 60 ms delay
 
-        run.AdvanceTo(0.0983);
+        run.AdvanceTo(0.0900);
         Assert.Equal(0, motion.CompactContentOpacity, 3); // 90 ms ease-in complete
-        Assert.Equal(0.147, motion.ExpandedContentOpacity, 0.005);
-        run.AdvanceTo(0.100);
-        Assert.Equal(0.239, motion.ChromeOpacity, 0.005);
+        // 30 ms into the 220 ms content fade (ease-out, cubic-bezier(.2,.8,.3,1)): sampled 0.478.
+        Assert.Equal(0.478, motion.ExpandedContentOpacity, 0.02);
+        Assert.Equal(0, motion.ChromeOpacity, 3);         // chrome waits until 120 ms
+        run.AdvanceTo(0.1300);
+        Assert.InRange(motion.ChromeOpacity, 0.15, 0.35); // started 10 ms ago at 120 ms, sampled 0.24
 
         run.AdvanceTo(0.310);
         Assert.Equal(1, motion.ExpandedContentOpacity, 0.01);
@@ -177,6 +179,88 @@ public sealed class ShellCssMotionTests
         File.WriteAllLines(Path.Combine(reportDir, "shell-motion-frames.csv"), rows);
         Assert.True(rows.Count > 50);
         Assert.StartsWith("expand,383.3", rows[1 + 23]);
+    }
+
+    [Fact]
+    public void Writes_the_expand_choreography_report()
+    {
+        // Same-frame comparison of the three phases: container geometry vs page-content opacity vs
+        // chrome opacity. Sampled at the render clock (1/120 s) so the file is the exact frame data.
+        var motion = ExpandedMotion();
+        var run = new MotionRun(motion);
+        var rows = new List<string>
+        {
+            "frame,tMs,shellWidthDip,shellHeightDip,containerProgress,contentOpacity,chromeOpacity,containerMoving,contentMoving,chromeMoving",
+        };
+        var startWidth = motion.Width;
+        var startHeight = motion.Height;
+        var endWidth = 440.0;
+        var endHeight = 284.0;
+        var contentStart = -1.0;
+        var chromeStart = -1.0;
+        var containerStart = -1.0;
+        var previousContent = motion.ExpandedContentOpacity;
+        var previousChrome = motion.ChromeOpacity;
+
+        for (var frame = 0; frame <= 60; frame++)
+        {
+            var ms = frame * (1000.0 / 120.0);
+            if (frame > 0)
+            {
+                run.AdvanceTo(ms / 1000.0);
+            }
+
+            var content = motion.ExpandedContentOpacity;
+            var chrome = motion.ChromeOpacity;
+            var widthProgress = Math.Clamp(
+                (motion.Width - startWidth) / Math.Max(1e-6, endWidth - startWidth), 0, 1);
+            if (containerStart < 0 && motion.Width > startWidth + 1e-6)
+            {
+                containerStart = ms;
+            }
+
+            if (contentStart < 0 && content > previousContent + 1e-6)
+            {
+                contentStart = ms;
+            }
+
+            if (chromeStart < 0 && chrome > previousChrome + 1e-6)
+            {
+                chromeStart = ms;
+            }
+
+            rows.Add(string.Join(',',
+                frame.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ms.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                motion.Width.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
+                motion.Height.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
+                widthProgress.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
+                content.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
+                chrome.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture),
+                (containerStart >= 0 ? 1 : 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                (contentStart >= 0 ? 1 : 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                (chromeStart >= 0 ? 1 : 0).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            previousContent = content;
+            previousChrome = chrome;
+        }
+
+        rows.Add(string.Empty);
+        rows.Add("# measured starts (first frame the value moved):");
+        rows.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"# container {containerStart:0.0} ms, content {contentStart:0.0} ms, chrome {chromeStart:0.0} ms"));
+        rows.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"# stagger: content - container = {contentStart - containerStart:0.0} ms, chrome - content = {chromeStart - contentStart:0.0} ms"));
+
+        var root = FindRepoRoot();
+        var reportDir = Path.Combine(root, "build", "reports", "island-motion");
+        Directory.CreateDirectory(reportDir);
+        File.WriteAllLines(Path.Combine(reportDir, "expand-choreography.csv"), rows);
+
+        // The container must lead, then the content, then the chrome - never all at once.
+        Assert.True(containerStart < contentStart, "container must move before the content fades in");
+        Assert.True(contentStart < chromeStart, "chrome must start after the page content");
+        Assert.InRange(contentStart - containerStart, 55, 75);
+        Assert.InRange(chromeStart - containerStart, 115, 135);
     }
 
     private static string Row(string phase, double milliseconds, SkiaIslandMotion motion)

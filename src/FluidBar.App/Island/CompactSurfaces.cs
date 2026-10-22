@@ -191,41 +191,44 @@ public sealed class HudCompactSurface : CompactSurface
     }
 }
 
-/// <summary>Notification summary pill: bell + title/body + code chip (248×36).</summary>
+/// <summary>NetSpeed-Dynamic-style notification card: circular avatar + title/app chip + body (360×70).</summary>
 public sealed class NotificationCompactSurface : CompactSurface
 {
-    /// <summary>Pill width token (DIP).</summary>
-    public const double PillWidth = 248;
+    /// <summary>Card width token (DIP).</summary>
+    public const double PillWidth = 360;
 
-    /// <summary>Pill height token (DIP).</summary>
-    public const double PillHeight = 36;
+    /// <summary>Card height token (DIP).</summary>
+    public const double PillHeight = 64;
 
-    /// <summary>Trailing verification/badge chip width (DIP).</summary>
-    public const double ChipWidth = 46;
+    /// <summary>Verification-code chip width (DIP).</summary>
+    public const double ChipWidth = 40;
 
-    /// <summary>Fixed bell slot.</summary>
-    public static Rect IconRect => CompactPillLayout.IconRect(PillHeight);
+    /// <summary>Fixed 35 DIP circular avatar.</summary>
+    public static Rect IconRect => new(14, 14.5, 35, 35);
 
-    /// <summary>Text column (zero-width safe) for a pill with or without the trailing chip.</summary>
+    /// <summary>Text column (zero-width safe) for a card with or without a code chip.</summary>
     public static Rect TextColumn(bool hasChip)
-        => CompactPillLayout.TextColumn(PillWidth, PillHeight, hasChip ? ChipWidth : 0);
+    {
+        _ = hasChip;
+        return new Rect(61, 0, PillWidth - 61 - 45, PillHeight);
+    }
 
     /// <summary>Title line inside the text column.</summary>
     public static Rect TitleRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 4, column.Width, 16);
+        return new Rect(column.X, 13, column.Width, 20);
     }
 
     /// <summary>Body line inside the text column.</summary>
     public static Rect BodyRect(bool hasChip)
     {
         var column = TextColumn(hasChip);
-        return new Rect(column.X, 20, column.Width, 12);
+        return new Rect(column.X, 35, column.Width, 16);
     }
 
-    /// <summary>Trailing chip rectangle.</summary>
-    public static Rect ChipRect => CompactPillLayout.ChipRect(PillWidth, PillHeight, ChipWidth);
+    /// <summary>Bottom-left verification-code chip.</summary>
+    public static Rect ChipRect => new(61, 51, ChipWidth, 10);
 
     /// <inheritdoc />
     public override CompactAction HitTest(Point point, bool isPeeked) => CompactAction.Expand;

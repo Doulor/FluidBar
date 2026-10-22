@@ -55,6 +55,17 @@ public static class SkiaIslandStateBuilder
             ? (media.HasTimeline ? media.ProgressPercent : -1)
             : model.ProgressPercent ?? -1;
         var unread = kind == ActivityKind.Notification ? Math.Max(0, content.UnreadCount) : 0;
+        var showsAudioWave = kind == ActivityKind.Notification
+            && (content.Media?.IsPlaying == true
+                || island.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Media && ghost.IsActive));
+        var isNotification = kind == ActivityKind.Notification;
+        var notification = isNotification
+            ? FindNotification(content, model.SourceName, model.Title)
+                ?? (content.Notifications.IsDefaultOrEmpty ? null : content.Notifications[0])
+            : null;
+        var notificationTime = isNotification
+            ? notification?.TimeText ?? localizer.Get(LocKeys.Notifications.JustNow)
+            : null;
         // Lyric mode only replaces the two text rows; artwork/progress/wave stay exactly the same, and an
         // empty lyric falls back to the title form (never a blank line).
         var lyricLine = compactLyrics && kind == ActivityKind.Media && media is not null
@@ -78,6 +89,7 @@ public static class SkiaIslandStateBuilder
             Level = model.Level,
             BatteryPercent = model.BatteryPercent,
             UnreadCount = unread,
+            ShowsAudioWave = showsAudioWave,
             IsActive = model.IsActive,
             IsMuted = model.IsMuted,
             IsCharging = model.IsCharging,
@@ -88,8 +100,11 @@ public static class SkiaIslandStateBuilder
             LyricHighlight = media?.LyricHighlight ?? -1,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
+            AppIconPng = notification?.AppIconPng,
+            AppIconKey = notification?.AppIconKey,
             Icon = MapIcon(model.Icon),
             Status = MapTone(model.Tone),
+            TimeText = notificationTime,
         });
     }
 
@@ -173,6 +188,7 @@ public static class SkiaIslandStateBuilder
             LyricLine = media?.LyricLine,
             NextLyricLine = media?.NextLyricLine,
             LyricHighlight = media?.LyricHighlight ?? -1,
+            HasKaraokeSweep = media?.Karaoke is not null,
             VolumePercent = content.VolumePercent,
             HasVolume = content.VolumePercent is not null,
             IsMuted = content.IsMuted,
@@ -182,6 +198,7 @@ public static class SkiaIslandStateBuilder
             ProgressPercent = media?.ProgressPercent ?? 0,
             IsPlaying = media?.IsPlaying ?? false,
             HasTimeline = media?.HasTimeline ?? false,
+                CanSeek = media?.CanSeek ?? false,
             AccentHex = ArtworkAccent.For(media?.ArtworkKey, media?.Artwork) ?? media?.AccentHex,
             Artwork = media?.Artwork,
             ArtworkKey = media?.ArtworkKey,
@@ -203,9 +220,11 @@ public static class SkiaIslandStateBuilder
 
         var notificationsPage = new NotificationsPageModel
         {
-            Items = BuildNotifications(content.Notifications),
+            Items = BuildNotifications(content.Notifications, localizer),
             EmptyTitle = localizer.Get(LocKeys.Notifications.Empty),
             EmptyHint = localizer.Get(LocKeys.Notifications.EmptyHint),
+            DismissLabel = localizer.Get(LocKeys.Common.Close),
+            CopyCodeLabel = localizer.Get(LocKeys.Notifications.CopyCode),
         };
 
         var clipboardPage = new ClipboardPageModel
@@ -260,19 +279,25 @@ public static class SkiaIslandStateBuilder
         };
     }
 
-    private static NotificationItemModel[] BuildNotifications(IReadOnlyList<NotificationItemData> items)
+    private static NotificationItemModel[] BuildNotifications(
+        IReadOnlyList<NotificationItemData> items,
+        ILocalizer localizer)
     {
         var models = new NotificationItemModel[items.Count];
         for (var i = 0; i < models.Length; i++)
         {
             var item = items[i];
+            var code = NullIfEmpty(item.VerificationCode);
             models[i] = new NotificationItemModel
             {
                 AppName = NullIfEmpty(item.Source),
                 Title = item.Title,
                 Body = item.Body,
                 TimeText = item.TimeText,
-                VerificationCode = NullIfEmpty(item.VerificationCode),
+                VerificationCode = code,
+                CodeChipLabel = code is null
+                    ? null
+                    : localizer.Format(LocKeys.Notifications.VerificationCode, ("code", code)),
             };
         }
 
@@ -553,6 +578,37 @@ public static class SkiaIslandStateBuilder
             // quantise the sweep into visible jumps when content is re-synced.
             .Append(Math.Round(Math.Max(-1, media?.LyricHighlight ?? -1) * 500));
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Finds the toast record that produced the current notification activity, so the compact card can
+    /// reuse its relative time and real app logo bytes. Matching is deliberately source-first; the title
+    /// is only a tie-breaker because plugins may prefix/rewrite it.
+    /// </summary>
+    private static NotificationItemData? FindNotification(
+        IslandContent content,
+        string? source,
+        string? title)
+    {
+        foreach (var item in content.Notifications)
+        {
+            if (!string.IsNullOrWhiteSpace(source)
+                && !string.Equals(item.Source, source, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(item.Title)
+                && !title.Contains(item.Title, StringComparison.Ordinal)
+                && !item.Title.Contains(title, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return item;
+        }
+
+        return null;
     }
 
     /// <summary>Maps the App vector icon identity onto the renderer's path icon set.</summary>

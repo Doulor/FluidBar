@@ -61,6 +61,7 @@ public sealed class IslandRenderer : IDisposable
     private readonly SquirclePathCache _paths;
     private readonly ShadowCache _shadows;
     private readonly CompactRenderer _compact;
+    private readonly CompactRenderer _secondaryCompact;
     private readonly PageRenderer _pages;
     private readonly TransientStripRenderer _strip;
 
@@ -99,6 +100,7 @@ public sealed class IslandRenderer : IDisposable
         _paths = new SquirclePathCache(_options.PathCacheCapacity);
         _shadows = new ShadowCache(_options.ShadowCacheCapacity);
         _compact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
+        _secondaryCompact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
         _pages = new PageRenderer(_text, _accents, _art, _artwork, _numbers);
         _strip = new TransientStripRenderer(_text);
     }
@@ -202,6 +204,37 @@ public sealed class IslandRenderer : IDisposable
     }
 
     /// <summary>Renders to a new premultiplied BGRA bitmap (matching the layered host DIB).</summary>
+    /// <summary>Enter/exit slide of a page, in DIP, along the travel direction.</summary>
+    public const float PageEnterSlideDip = 6f;
+
+    /// <summary>Enter/exit shrink of a page at the far edge of the transition (1.8 %).</summary>
+    public const float PageEnterScaleDelta = 0.018f;
+
+    /// <summary>
+    /// Page enter/exit pose while the pager moves. The sign of <paramref name="pagePosition"/> - page
+    /// encodes the direction: an incoming page sits 6 DIP further along the travel direction and 1.8 %
+    /// smaller, so it slides/scales into place; the outgoing page does the opposite. The pose is a pure
+    /// function of the continuous page position, so a rapid second switch continues from the current
+    /// visual pose instead of snapping back.
+    /// </summary>
+    public static (float SlideDip, float Scale) PageEnterPose(double pagePosition, int page, bool reducedMotion = false)
+    {
+        if (reducedMotion || !double.IsFinite(pagePosition))
+        {
+            return (0f, 1f);
+        }
+
+        var relative = (float)Math.Clamp(pagePosition - page, -1.0, 1.0);
+        var distance = Math.Abs(relative);
+        return (-PageEnterSlideDip * relative, 1f - (PageEnterScaleDelta * distance));
+    }
+
+    /// <summary>Hover progress of the satellite glass under the pointer (0..1; diagnostics/tests).</summary>
+    public float SatelliteHoverProgress => _strip.HoverProgress;
+
+    /// <summary>Scale the hovered satellite glass is painted at (1..1.06; diagnostics/tests).</summary>
+    public float SatelliteHoverScale => _strip.HoverScale;
+
     public SKBitmap RenderToBitmap(in IslandRenderState state, float dpiScale)
     {
         var pixels = MeasurePixels(state, dpiScale);
@@ -248,6 +281,12 @@ public sealed class IslandRenderer : IDisposable
 
         var shell = IslandMetrics.ShellRect(state);
         var content = IslandMetrics.ContentRect(shell);
+
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        if (!secondary.IsEmpty && secondary.Contains(x, y))
+        {
+            return new IslandHitTarget(IslandHitKind.SecondaryCompact, state.PageIndex);
+        }
 
         if (state.Form == ShellForm.Expanded)
         {
@@ -408,8 +447,57 @@ public sealed class IslandRenderer : IDisposable
             canvas.Restore();
         }
 
+        DrawSecondaryCompact(canvas, state, opacity, dpiScale);
         _strip.Draw(canvas, state, shell);
         DrawFocusRing(canvas, state);
+    }
+
+    /// <summary>
+    /// Paints the secondary notification pill below the primary compact shell. The pill is a full
+    /// compact island (same material, shadow and content renderer as the primary) so a notification can
+    /// stay visible without displacing the activity the user is currently looking at.
+    /// </summary>
+    private void DrawSecondaryCompact(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
+    {
+        var rect = IslandMetrics.SecondaryShellRect(state);
+        if (rect.Width <= 0 || rect.Height <= 0 || state.SecondaryCompact is not { } activity)
+        {
+            return;
+        }
+
+        var secondary = state with
+        {
+            Form = ShellForm.Compact,
+            ShellOrigin = new VisualPoint(rect.Left, rect.Top),
+            ShellWidth = rect.Width,
+            ShellHeight = rect.Height,
+            ShellRadii = LayoutTokens.RadiiFor(ShellForm.Compact, state.Mode, rect.Height, kind: activity.Kind),
+            Compact = activity,
+            SecondaryCompact = null,
+            GhostCount = 0,
+            OverflowCount = 0,
+            SplitIslets = [],
+            SplitProgress = 0,
+            PressedControl = IslandPageControl.None,
+            PressedPage = -1,
+            PressedIndex = -1,
+            NudgeOffsetY = 0,
+        };
+
+        if (_options.EnableShadow)
+        {
+            DrawShadow(canvas, secondary, rect, dpiScale, opacity);
+        }
+
+        var path = _paths.Get(rect.Width, rect.Height, secondary.ShellRadii);
+        canvas.Save();
+        canvas.Translate(rect.Left, rect.Top);
+        DrawShellBody(canvas, secondary, path, opacity);
+        canvas.Save();
+        canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+        _secondaryCompact.Draw(canvas, secondary, opacity);
+        canvas.Restore();
+        canvas.Restore();
     }
 
     /// <summary>
@@ -530,6 +618,44 @@ public sealed class IslandRenderer : IDisposable
     /// circular album cover (or a neutral music-note fallback), and everything else gets one icon.
     /// No labels, badges, status dots, action buttons or decorative rings.
     /// </summary>
+    /// <summary>
+    /// Static end states of an agent satellite: a neutral check for Completed, a neutral cross for
+    /// Failed and a neutral dot for Cancelled. Never blue, never spinning.
+    /// </summary>
+    private void DrawAgentSettledState(SKCanvas canvas, SKRect rect, float radius, CompactStatus status, float alpha)
+    {
+        var ink = Alpha(_theme.ForegroundSecondary, alpha);
+        var thickness = Math.Max(IslandMetrics.SplitRingEndMarkStrokeDip, radius * 0.11f);
+        _stroke.Style = SKPaintStyle.Stroke;
+        _stroke.StrokeWidth = thickness;
+        _stroke.StrokeCap = SKStrokeCap.Round;
+        _stroke.Shader = null;
+        _stroke.Color = ink;
+        var c = radius * 0.42f;
+        if (status is CompactStatus.Success or CompactStatus.Warning)
+        {
+            using var path = new SKPath();
+            path.MoveTo(rect.MidX - c, rect.MidY);
+            path.LineTo(rect.MidX - (c * 0.15f), rect.MidY + (c * 0.75f));
+            path.LineTo(rect.MidX + c, rect.MidY - (c * 0.8f));
+            canvas.DrawPath(path, _stroke);
+        }
+        else if (status == CompactStatus.Danger)
+        {
+            canvas.DrawLine(rect.MidX - c, rect.MidY - c, rect.MidX + c, rect.MidY + c, _stroke);
+            canvas.DrawLine(rect.MidX + c, rect.MidY - c, rect.MidX - c, rect.MidY + c, _stroke);
+        }
+        else
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = ink;
+            canvas.DrawCircle(rect.MidX, rect.MidY, radius * 0.16f, _fill);
+        }
+
+        _stroke.StrokeCap = SKStrokeCap.Butt;
+    }
+
     private void DrawSplitIslets(SKCanvas canvas, in IslandRenderState state, float opacity, float dpiScale)
     {
         if (state.SplitIslets.Length == 0 || state.SplitProgress <= 0.01)
@@ -563,22 +689,29 @@ public sealed class IslandRenderer : IDisposable
 
             if (islet.Kind == ActivityKind.Agent)
             {
-                // The ring is the agent's entire content: 2 DIP, 180° arc, 900 ms linear clockwise.
-                var phase = (float)((state.AgentAnimationSeconds / 0.9) % 1.0);
-                if (phase < 0) { phase += 1f; }
-                var ringInset = Math.Max(1f, radius * 0.12f);
-                var ringRect = new SKRect(
-                    rect.Left + ringInset,
-                    rect.Top + ringInset,
-                    rect.Right - ringInset,
-                    rect.Bottom - ringInset);
-                _stroke.Style = SKPaintStyle.Stroke;
-                _stroke.StrokeWidth = 2f;
-                _stroke.StrokeCap = SKStrokeCap.Round;
-                _stroke.Shader = null;
-                _stroke.Color = Alpha(_theme.Info, alpha);
-                canvas.DrawArc(ringRect, phase * 360f, 180f, false, _stroke);
-                _stroke.StrokeCap = SKStrokeCap.Butt;
+                if (islet.Status == CompactStatus.Info)
+                {
+                    // Same ring language as the primary compact pill: a faint full circle plus the
+                    // 180° rotating arc with the compact stroke ratio (the old thick arc read as a
+                    // blobby halo on a 40 DIP ball — user report 2026-10-21).
+                    var rotation = state.AgentRingFrozenDegrees
+                        ?? AgentSpinner.RotationDegrees(state.AgentAnimationSeconds);
+                    var centreRadius = radius * IslandMetrics.SplitRingRadiusFactor;
+                    var centre = new SKPoint(rect.MidX, rect.MidY);
+                    _stroke.Style = SKPaintStyle.Stroke;
+                    _stroke.StrokeCap = SKStrokeCap.Butt;
+                    _stroke.StrokeWidth = IslandMetrics.SplitRingStrokeDip;
+                    _stroke.Shader = null;
+                    _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * alpha);
+                    canvas.DrawCircle(centre.X, centre.Y, centreRadius, _stroke);
+                    AgentSpinner.Draw(canvas, _stroke, centre, centreRadius, rotation,
+                        Alpha(_theme.Accent, alpha), IslandMetrics.SplitRingStrokeDip);
+                }
+                else
+                {
+                    DrawAgentSettledState(canvas, rect, radius, islet.Status, alpha);
+                }
+
                 continue;
             }
 
@@ -769,6 +902,18 @@ public sealed class IslandRenderer : IDisposable
 
             canvas.Save();
             canvas.ClipRect(pageRect);
+
+            // Enter/exit pose: 6 DIP slide along the travel direction plus a 1.8 % shrink, derived from the
+            // continuous page position (direction = sign of the pagePosition delta, continuity for free).
+            var (pageSlide, pageScale) = PageEnterPose(pagePosition, page, state.ReducedMotion);
+            if (pageSlide != 0 || pageScale != 1)
+            {
+                canvas.Translate(pageRect.MidX, pageRect.MidY);
+                canvas.Scale(pageScale, pageScale);
+                canvas.Translate(-pageRect.MidX, -pageRect.MidY);
+                canvas.Translate(pageSlide, 0);
+            }
+
             var slot = state.Pages.PageSlotAt(page);
             if (slot is { Kind: PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets })
             {
@@ -919,6 +1064,7 @@ public sealed class IslandRenderer : IDisposable
         _art.Dispose();
         _artwork.Dispose();
         _compact.Dispose();
+        _secondaryCompact.Dispose();
         _pages.Dispose();
         _strip.Dispose();
         _glassShader?.Dispose();

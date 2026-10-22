@@ -1,6 +1,11 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
+using Windows.Foundation;
+using Windows.Storage.Streams;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
@@ -32,7 +37,7 @@ public sealed class NotificationServiceOptions
     /// Poll interval used when <c>UserNotificationListener.NotificationChanged</c> cannot be subscribed
     /// on this machine (0x80070490); the same read path still returns the current toast list.
     /// </summary>
-    public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(1500);
+    public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>Whether to fall back to polling when the change event is unavailable.</summary>
     public bool EnablePollingFallback { get; init; } = true;
@@ -229,7 +234,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
         if (_options.SeedRecentFromExisting && notifications.Count > 0)
         {
-            SeedRecent(notifications);
+            await SeedRecentAsync(notifications).ConfigureAwait(false);
         }
 
         if (_pollingFallback)
@@ -276,7 +281,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             return;
         }
 
-        var interval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.FromMilliseconds(1500);
+        var interval = _options.PollInterval > TimeSpan.Zero ? _options.PollInterval : TimeSpan.FromSeconds(30);
         _pollTimer = TimeProvider.CreateTimer(
             static state => ((NotificationService)state!).OnPollTick(),
             this,
@@ -312,18 +317,33 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     }
 
     /// <summary>Fills the recent list from the toasts already present when the page opens.</summary>
-    private void SeedRecent(IReadOnlyList<UserNotification> notifications)
+    private async Task SeedRecentAsync(IReadOnlyList<UserNotification> notifications)
     {
         var max = Math.Max(1, _options.MaxRecentNotifications);
-        var entries = notifications
+        var candidates = notifications
             .Select(CreateCandidate)
             .Where(candidate => candidate is not null)
             .Select(candidate => candidate!)
             .OrderByDescending(candidate => candidate.CreatedAt)
             .Take(max)
+            .ToList();
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var source = notifications.FirstOrDefault(notification => notification.Id == candidates[i].Id);
+            if (source is not null)
+            {
+                candidates[i] = candidates[i] with
+                {
+                    AppIconPng = await TryLoadAppIconAsync(source).ConfigureAwait(false),
+                };
+            }
+        }
+
+        var entries = candidates
             .Select(candidate => new NotificationEntry(candidate.Id, candidate.AppName, candidate.Title,
                 candidate.Body, candidate.CreatedAt,
-                VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}")))
+                VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}"),
+                candidate.AppIconPng))
             .ToImmutableArray();
 
         var seeded = NotificationListReducer.Bounded(entries, max);
@@ -342,6 +362,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             "Notification page seeded with the existing toast list.", new Dictionary<string, object?>
             {
                 ["count"] = seeded.Length,
+                ["icons"] = seeded.Count(entry => entry.AppIconPng is { Length: > 0 }),
             });
     }
 
@@ -377,6 +398,23 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                 .ConfigureAwait(false);
             var candidates = notifications.Select(CreateCandidate).Where(candidate => candidate is not null)
                 .Select(candidate => candidate!).ToList();
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (!_history.IsNew(candidates[i].Id))
+                {
+                    continue;
+                }
+
+                var source = notifications.FirstOrDefault(notification => notification.Id == candidates[i].Id);
+                if (source is not null)
+                {
+                    candidates[i] = candidates[i] with
+                    {
+                        AppIconPng = await TryLoadAppIconAsync(source).ConfigureAwait(false),
+                    };
+                }
+            }
+
             var added = _history.Process(candidates);
 
             // Close sync: toasts the user removed from Action Center are no longer returned by the
@@ -405,6 +443,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                     ["removed"] = Math.Max(0, previousCount + added.Count - _recent.Length),
                     ["latestApp"] = added.Count > 0 ? added[^1].AppName : null,
                     ["verificationCode"] = added.Count > 0 && added[^1].VerificationCode is not null,
+                    ["icons"] = added.Count(entry => entry.AppIconPng is { Length: > 0 }),
                 });
         }
         catch (Exception ex)
@@ -417,6 +456,94 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         {
             Volatile.Write(ref _processing, 0);
         }
+    }
+
+    /// <summary>
+    /// Reads the source app's logo from its <c>AppDisplayInfo</c>. Win32 toasts (QQ included) often
+    /// expose no logo or an empty appLogoOverride; fall back to the running executable's real icon.
+    /// Windows toast payloads do not expose the sender's personal avatar, so the app icon is the
+    /// closest real identity available.
+    /// </summary>
+    private static async Task<byte[]?> TryLoadAppIconAsync(UserNotification notification)
+    {
+        // QQ/Win32 toasts put the real sender/group avatar in the toast XML image element; the
+        // WinRT UserNotification projection does not expose images, so read it from the toast payload.
+        var toastImage = NotificationToastImageReader.TryRead(notification.Id);
+        if (toastImage is { Length: > 0 })
+        {
+            return toastImage;
+        }
+
+        var appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? notification.AppInfo?.Id;
+        try
+        {
+            var display = notification.AppInfo?.DisplayInfo;
+            if (display is not null)
+            {
+                var logo = display.GetLogo(new global::Windows.Foundation.Size(64, 64));
+                using var stream = await logo.OpenReadAsync().AsTask().ConfigureAwait(false);
+                if (stream.Size is > 0 and <= 1024 * 1024)
+                {
+                    using var managed = stream.AsStreamForRead();
+                    using var buffer = new MemoryStream((int)stream.Size);
+                    await managed.CopyToAsync(buffer).ConfigureAwait(false);
+                    return buffer.ToArray();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Fall through to the executable icon below.
+        }
+
+        return TryLoadProcessIcon(appName);
+    }
+
+    /// <summary>Finds the running app's own executable and reads its icon as PNG bytes.</summary>
+    private static byte[]? TryLoadProcessIcon(string? appName)
+    {
+        if (string.IsNullOrWhiteSpace(appName))
+        {
+            return null;
+        }
+
+        var wanted = appName.Trim();
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                var processName = process.ProcessName;
+                if (!processName.Equals(wanted, StringComparison.OrdinalIgnoreCase)
+                    && !wanted.Contains(processName, StringComparison.OrdinalIgnoreCase)
+                    && !processName.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var path = process.MainModule?.FileName;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    continue;
+                }
+
+                using var icon = Icon.ExtractAssociatedIcon(path);
+                if (icon is null)
+                {
+                    continue;
+                }
+
+                using var bitmap = icon.ToBitmap();
+                using var png = new MemoryStream();
+                bitmap.Save(png, ImageFormat.Png);
+                return png.ToArray();
+            }
+            catch
+            {
+                // Access denied or process exited between enumeration and inspection; try the next.
+            }
+        }
+
+        return null;
     }
 
     private NotificationCandidate? CreateCandidate(UserNotification notification)

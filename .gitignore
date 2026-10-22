@@ -22,7 +22,11 @@ TestResults/
 # Prototype review artifacts (screenshots are regenerated on demand)
 docs/rewrite/prototype/_shots/
 
+# Generated sync screenshots
+artifacts-sync/
+
 # Misc
 *.zip
 example.txt
 
+third_party/

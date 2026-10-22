@@ -49,7 +49,7 @@ public sealed record ActivityRecord
     {
         ArgumentNullException.ThrowIfNull(payload);
         var kind = key.Kind;
-        var persistent = ActivityPriorityPolicy.IsPersistent(kind);
+        var persistent = ActivityPriorityPolicy.IsPersistent(kind, payload);
         var ttl = persistent ? null : ttlOverride ?? payload.Ttl ?? ActivityPriorityPolicy.DefaultTtl(kind);
         var pinned = payload.IsPinned;
         return new ActivityRecord
@@ -72,12 +72,16 @@ public sealed record ActivityRecord
     {
         ArgumentNullException.ThrowIfNull(payload);
         var pinned = payload.IsPinned || IsPinned;
-        var ttl = IsPersistent ? null : ttlOverride ?? payload.Ttl ?? ActivityPriorityPolicy.DefaultTtl(Kind);
+        // Persistence is payload-sensitive: running Agent/Media is persistent, but a completed Agent
+        // or paused Media must regain a finite TTL. Recompute it instead of inheriting the old flag.
+        var persistent = ActivityPriorityPolicy.IsPersistent(Kind, payload);
+        var ttl = persistent ? null : ttlOverride ?? payload.Ttl ?? ActivityPriorityPolicy.DefaultTtl(Kind);
         return this with
         {
             Payload = payload,
             Sequence = sequence,
-            ExpiresAt = IsPersistent ? null : ttl is { } duration ? now + duration : null,
+            ExpiresAt = persistent ? null : ttl is { } duration ? now + duration : null,
+            IsPersistent = persistent,
             IsPinned = pinned,
             Signature = ContentSignaturePolicy.Compute(Key, Kind, payload),
         };

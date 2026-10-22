@@ -88,8 +88,8 @@ public sealed class ScaledText
 
     /// <summary>Draws one line at the current scale.</summary>
     public void Draw(SKCanvas canvas, string? text, TextStyle style, SKRect area, SKColor color,
-        TextAlign align = TextAlign.Left, float opacity = 1f)
-        => _engine.Draw(canvas, text, Metrics.Style(style), area, color, align, opacity);
+        TextAlign align = TextAlign.Left, float opacity = 1f, SKMaskFilter? maskFilter = null)
+        => _engine.Draw(canvas, text, Metrics.Style(style), area, color, align, opacity, maskFilter);
 
     /// <summary>Draws a previously measured layout.</summary>
     public void DrawLayout(SKCanvas canvas, TextLayout layout, SKRect area, SKColor color, TextAlign align, float opacity = 1f)

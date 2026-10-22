@@ -41,7 +41,6 @@
     "Common.Connected": "Connected",
     "Common.Disconnected": "Disconnected",
     "Common.Unknown": "Unknown",
-
     "Island.Idle.Hint": "Click to expand",
     "Island.Idle.Battery": "{level}%",
     "Island.Peek.Hint": "Click to expand",
@@ -75,14 +74,12 @@
     "Island.Accessibility.SplitIsletHelp": "Press Enter to merge this preview ball back into the pill and open its page.",
     "Island.Accessibility.MoreActivities": "{0} more activities",
     "Island.Accessibility.MoreActivitiesHelp": "Press Enter to open the page of the oldest background activity.",
-
     "Rail.Home": "Home",
     "Rail.Media": "Media",
     "Rail.Notifications": "Notifications",
     "Rail.Clipboard": "Clipboard",
     "Rail.Agent": "Agent",
     "Rail.Widgets": "Widgets",
-
     "Activity.Lookup": "Lookup",
     "Activity.Clipboard": "Clipboard",
     "Activity.LockKeys": "Lock keys",
@@ -98,12 +95,10 @@
     "Activity.Timer": "Timer",
     "Activity.Media": "Now playing",
     "Activity.Idle": "FluidBar",
-
     "Hud.Volume": "Volume",
     "Hud.Brightness": "Brightness",
     "Hud.Muted": "Muted",
     "Hud.Value": "{value}%",
-
     "Media.Play": "Play",
     "Media.Pause": "Pause",
     "Media.Next": "Next",
@@ -118,7 +113,6 @@
     "Media.Lyrics": "Lyrics",
     "Media.TrackCount": "{count, plural, one {# track} other {# tracks}}",
     "Media.Seek": "Seek",
-
     "Notifications.Title": "Notifications",
     "Notifications.ClearAll": "Clear all",
     "Notifications.Empty": "No notifications",
@@ -128,7 +122,6 @@
     "Notifications.JustNow": "just now",
     "Notifications.MinutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",
     "Notifications.HoursAgo": "{count, plural, one {# hour ago} other {# hours ago}}",
-
     "Clipboard.Title": "Clipboard",
     "Clipboard.History": "History",
     "Clipboard.Empty": "Clipboard is empty",
@@ -136,7 +129,6 @@
     "Clipboard.Text": "Text",
     "Clipboard.Image": "Image",
     "Clipboard.Pinned": "Pinned",
-
     "Agent.Title": "Agents",
     "Agent.Running": "Running",
     "Agent.Completed": "Completed",
@@ -147,20 +139,17 @@
     "Agent.Session": "Session {id}",
     "Agent.DurationRunning": "Running {minutes}m {seconds}s",
     "Agent.DurationDone": "Took {minutes}m {seconds}s",
-
     "Timer.Title": "Timer",
     "Timer.Pomodoro": "Pomodoro",
     "Timer.Start": "Start",
     "Timer.Pause": "Pause",
     "Timer.Done": "Done",
     "Timer.Remaining": "{time} left",
-
     "Battery.Title": "Battery",
     "Battery.Low": "Battery low",
     "Battery.LowDetail": "{level}% remaining — plug in to keep working.",
     "Battery.Full": "Fully charged",
     "Battery.Remaining": "{time} left",
-
     "Page.Home.Title": "Control center",
     "Page.Home.GreetingMorning": "Good morning",
     "Page.Home.GreetingAfternoon": "Good afternoon",
@@ -173,7 +162,6 @@
     "Page.Home.FocusTime": "Focus",
     "Page.Home.FocusOff": "Focus off",
     "Page.Home.System": "System",
-
     "Page.Media.Title": "Now playing",
     "Page.Media.Source": "Source",
     "Page.Media.NoSession": "Play something to see it here.",
@@ -208,7 +196,6 @@
     "Page.Widgets.Weather.Snow": "Snow",
     "Page.Widgets.Weather.Thunderstorm": "Thunderstorm",
     "Page.Widgets.Weather.Unknown": "Weather",
-
     "Settings.Title": "Settings",
     "Settings.NavKicker": "Preferences",
     "Settings.VersionLine": "Interactive prototype — not a release build",
@@ -220,6 +207,10 @@
     "Settings.Island.Motion.Desc": "Reduced motion forces critical damping and skips spring transitions.",
     "Settings.Island.MotionStrength": "Motion strength",
     "Settings.Island.MotionStrengthHint": "Tunes the preview island's spring timing and travel.",
+    "Settings.Island.PowerMode": "Power mode",
+    "Settings.Island.PowerModeHint": "Performance keeps 60 fps and a warm frame loop; Saver uses 30 fps and stops idle frames.",
+    "Settings.Island.PowerPerformance": "Performance",
+    "Settings.Island.PowerSaver": "Saver",
     "Settings.Island.PeekOnTrackChangeHint": "Briefly peeks the island when the track changes.",
     "Settings.Island.Mode.Desc": "Float keeps the island on top; flush reads like the Windows notification centre; dock replaces the taskbar.",
     "Settings.Island.Anchor.Desc": "Aligns along the top edge in float mode; dragging still fine-tunes it.",
@@ -236,7 +227,6 @@
     "Settings.About.Title": "About FluidBar",
     "Settings.About.NavLabel": "About",
     "Settings.About.Description": "A dynamic island built for Windows. Community driven, built with .NET 10.",
-
     "Settings.Support.Title": "Agent support",
     "Settings.Support.Subtitle": "FluidBar reads the local state each agent already writes. No plugin, no hook, no configuration change — rows appear on the island only when the files exist.",
     "Settings.Support.Status.Native": "Native",
@@ -320,7 +310,6 @@
     "Settings.General.Hotkey.HoldToHide": "Hold to hide temporarily",
     "Settings.General.Hotkey.Unassigned": "Not assigned",
     "Settings.General.Hotkey.Conflict": "In use by another app — choose another shortcut.",
-
     "Settings.Appearance.Theme.Title": "Theme",
     "Settings.Appearance.Theme.Dark": "Dark",
     "Settings.Appearance.Theme.Light": "Light",
@@ -360,7 +349,6 @@
     "Settings.Appearance.PanelRadiusHint": "Compact pills keep a stadium radius at all times.",
     "Settings.Appearance.PreviewLabel": "Island preview",
     "Settings.Appearance.LiveHint": "The preview reflects palette, material, accent, radius, fill and text size live. The desktop theme and motion settings affect windows and animations only, never this preview.",
-
     "Settings.Island.Mode.Title": "Mode",
     "Settings.Island.Mode.Float": "Float",
     "Settings.Island.Mode.Flush": "Flush",
@@ -391,7 +379,6 @@
     "Settings.Island.DisplayOn.All": "All displays",
     "Settings.Island.DisplayOn.FollowMouse": "Display with pointer",
     "Settings.Island.DisplayOn.Specific": "Specific display",
-
     "Settings.Plugins.Installed": "Installed plugins",
     "Settings.Plugins.Builtin": "Built-in",
     "Settings.Plugins.Community": "Community",
@@ -408,7 +395,6 @@
     "Settings.Plugins.ErrorPlatformServiceUnavailable": "A required platform service is unavailable on this machine.",
     "Settings.Plugins.RestartRequired": "Restart FluidBar to finish unloading.",
     "Settings.Plugins.ConsentRequired": "This plugin needs your consent to run.",
-
     "Settings.Market.Featured": "Featured this week",
     "Settings.Market.Categories": "Categories",
     "Settings.Market.Category.All": "All",
@@ -441,7 +427,6 @@
     "Market.Stage.Extract": "Extracting package…",
     "Market.Stage.Activate": "Activating plugin…",
     "Market.Stage.Prepare": "Staging version…",
-
     "Settings.Marketplace.Community.Title": "Local community marketplace",
     "Settings.Marketplace.Community.Subtitle": "Submit a package, review it, install it, rate it. State is stored on this device in {root}.",
     "Settings.Marketplace.Community.Submit": "Submit .fbp…",
@@ -477,7 +462,6 @@
     "Settings.Marketplace.Community.Installing": "Installing {pluginId}: {stage}",
     "Settings.Marketplace.Community.Installed": "Installed {pluginId} {version}. Restart FluidBar to load it into the running host.",
     "Settings.Marketplace.Community.InstallFailed": "Install failed: {message}",
-
     "Settings.Marketplace.Community.InstallCount": "{count, plural, one {# install} other {# installs}}",
     "Settings.Advanced.DataFolder": "Data folder",
     "Settings.Advanced.OpenFolder": "Open data folder",
@@ -506,7 +490,6 @@
     "Settings.Advanced.ResetDone": "Settings were reset.",
     "Settings.Advanced.PluginApiVersion": "Plugin API",
     "Settings.Advanced.CrashGuard": "Crash guard",
-
     "Settings.About.Version": "Version {version}",
     "Settings.About.Build": "Build {build}",
     "Settings.About.License": "MIT License · source is open",
@@ -531,7 +514,6 @@
     "Settings.About.Website": "Website",
     "Settings.About.SourceCode": "Source code",
     "Settings.About.Acknowledgments": "Acknowledgments",
-
     "Market.Consent.Title": "Install {plugin}?",
     "Market.Consent.CapabilitiesTitle": "This plugin can:",
     "Market.Consent.Body": "This plugin can: {capabilities}. Plugins run with the same access as FluidBar. Only install plugins you trust.",
@@ -539,7 +521,6 @@
     "Market.Consent.Accept": "Install plugin",
     "Market.Consent.Decline": "Cancel",
     "Market.Consent.MachineTranslated": "Machine translated",
-
     "Capability.Network.Internet": "access the internet",
     "Capability.Network.Domains": "access the internet ({domains})",
     "Capability.Media": "read the current media session",
@@ -547,7 +528,7 @@
     "Capability.Clipboard": "read the clipboard",
     "Capability.Notifications": "read notifications",
     "Capability.Settings": "add settings controls",
-    "Capability.Commands": "register commands and hotkeys",
+    "Capability.Commands": "register commands",
     "Capability.Storage": "store data in its own folder",
     "Capability.FilesWrite": "write files outside its own folder",
     "Capability.ProcessSpawn": "start other processes",
@@ -557,7 +538,6 @@
     "Capability.UiHoverCard": "add hover cards",
     "Capability.UiSettings": "add settings pages",
     "Capability.UiWidgets": "add widgets",
-
     "Tray.Tooltip": "FluidBar — {status}",
     "Tray.Open": "Open FluidBar",
     "Tray.Settings": "Settings…",
@@ -567,20 +547,16 @@
     "Tray.Pause": "Pause activities",
     "Tray.Resume": "Resume activities",
     "Tray.Exit": "Exit FluidBar",
-
     "Mode.Float": "Floating",
     "Mode.Flush": "Top bar",
     "Mode.Dock": "Dock",
-
     "Locale.System": "System default",
     "Locale.English": "English",
     "Locale.Chinese": "中文",
     "Locale.Pseudo": "Pseudo (test)",
-
     "Dock.Apps": "Apps",
     "Dock.Tray": "System tray",
     "Dock.ShowDesktop": "Show desktop",
-
     "Error.Network.Timeout": "The network timed out. Try again shortly.",
     "Error.Network.Offline": "You're offline.",
     "Error.Signature.Invalid": "The package signature couldn't be verified, so it was not installed.",
@@ -589,8 +565,7 @@
     "Error.Plugin.LoadFailed": "The plugin failed to load and was disabled.",
     "Error.Install.Failed": "Install didn't finish. The previous version is still active.",
     "Error.Download.Failed": "Download failed.",
-    "Error.Generic": "Something went wrong. Details are in the logs."
-,
+    "Error.Generic": "Something went wrong. Details are in the logs.",
     "Settings.Plugins.SettingsButton": "Settings",
     "Settings.Plugins.Commands": "Commands",
     "Settings.Plugins.Detail.Empty": "This plugin has no settings yet.",
@@ -615,6 +590,8 @@
     "setting.media.showLyrics.title": "Show lyrics",
     "setting.media.compactLyrics.title": "Lyrics in the pill",
     "setting.media.compactLyrics.description": "Show the cover, the live lyric line and the wave in the pill instead of the title and artist",
+    "setting.media.lyricOffset.title": "Lyric offset",
+    "setting.media.lyricOffset.description": "Positive shows the words sooner (raise it when the lyric lags); negative delays them.",
     "setting.clipboard.enabled.title": "Track clipboard history",
     "setting.notifications.permission.title": "Notification access",
     "setting.notifications.verificationCode.title": "Detect verification codes",
@@ -649,21 +626,13 @@
     "command.agent.uninstall-hooks.description": "Remove installed agent hooks.",
     "command.devices.retract.title": "Dismiss device",
     "command.devices.retract.description": "Retract the device activity pill.",
-    "Capability.Media": "read the current media session",
-    "Capability.MediaControl": "control media playback",
-    "Capability.Clipboard": "read the clipboard",
-    "Capability.Notifications": "read notifications",
     "Capability.Network": "access the internet",
     "Capability.Files": "read and write files",
     "Capability.Background": "run in the background",
-    "Capability.Storage": "store data in its own folder",
-    "Capability.Commands": "register commands",
-    "Capability.UiIsland": "add island layouts",
-    "Capability.UiSettings": "add settings pages",
-    "Capability.UiWidgets": "add widgets",
-    "Capability.Registry": "write to the registry",
-    "Capability.ProcessSpawn": "start other processes",
-    "Capability.ShellExecute": "open links and files"
+    "Settings.Appearance.PowerMode.Title": "Power mode",
+    "Settings.Appearance.PowerMode.Desc": "Performance is smoother; saver uses less power.",
+    "Settings.Appearance.PowerMode.Performance": "Performance",
+    "Settings.Appearance.PowerMode.Saver": "Saver"
   },
   "_meta": {
     "comments": {

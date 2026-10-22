@@ -240,59 +240,93 @@ internal sealed class CompactRenderer : IDisposable
 
     private void DrawNotification(SKCanvas canvas, CompactModel model, float width, float height)
     {
-        // prototype2 .pill-notif: padding 0 10 0 8, gap 8; 20 DIP app glyph (radius 6, app colour, white
-        // icon), 11.5 DIP text (app 600 white · title secondary), 16 DIP accent badge with a dark 9/700
-        // number inset 10 DIP from the right edge.
-        var hasChip = !string.IsNullOrEmpty(model.VerificationCode);
-        var chipWidth = hasChip ? 46f : 0f;
-        var hasBadge = !hasChip && model.UnreadCount > 0;
-        var trailing = hasChip ? chipWidth + 8 : hasBadge ? 24 : 0;
-        var right = width - 10 - trailing;
-
-        var accent = _accents.Get(model.AccentHex, _theme.Accent);
-        var glyph = new SKRect(8, (height - 20) / 2, 28, (height + 20) / 2);
+        // Direct copy of NetSpeed-Dynamic's notification card (src/views/WidgetIsland.vue):
+        // 360×70 DIP, 35 DIP circular avatar (30 DIP image), title 14/700 + app-name chip 10.5/600,
+        // body 12.5/400 at 75% opacity, right padding 45 DIP. No time column.
+        var s = (float)_text.Scale;
+        var app = model.AppName ?? model.Subtitle;
+        var avatarSize = 35f * s;
+        var avatar = new SKRect(
+            14f * s,
+            (height - avatarSize) / 2,
+            14f * s + avatarSize,
+            (height + avatarSize) / 2);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(accent, _opacity);
-        canvas.DrawRoundRect(glyph, 6, 6, _fill);
-        DrawIcon(canvas, model.Icon ?? IconKind.Bell, glyph.Deflate(4), SKColors.White);
-
-        var area = new SKRect(36, 0, right, height);
-        var app = model.AppName;
-        if (!string.IsNullOrEmpty(app))
+        _fill.Shader = null;
+        var image = _artwork.Get(model.AppIconKey, model.AppIconPng);
+        if (image is not null && image.Width > 0 && image.Height > 0)
         {
-            var appLayout = _text.GetLayout(app, IslandType.CompactNoticeStrong, area.Width);
-            _text.DrawLayout(canvas, appLayout, new SKRect(area.Left, area.Top, area.Left + appLayout.Width, area.Bottom),
-                _theme.Foreground, TextAlign.Left, _opacity);
-            var separator = area.Left + appLayout.Width + 5;
-            if (separator < area.Right - 12)
-            {
-                _text.Draw(canvas, "·", IslandType.CompactNotice,
-                    new SKRect(separator, area.Top, separator + 8, area.Bottom), _theme.ForegroundSecondary,
-                    TextAlign.Left, _opacity);
-                _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNotice,
-                    new SKRect(separator + 8, area.Top, area.Right, area.Bottom), _theme.ForegroundSecondary,
-                    TextAlign.Left, _opacity);
-            }
+            var coverScale = Math.Max(avatar.Width / image.Width, avatar.Height / image.Height);
+            var drawWidth = image.Width * coverScale;
+            var drawHeight = image.Height * coverScale;
+            var destination = new SKRect(
+                avatar.MidX - (drawWidth / 2), avatar.MidY - (drawHeight / 2),
+                avatar.MidX + (drawWidth / 2), avatar.MidY + (drawHeight / 2));
+            canvas.Save();
+            canvas.ClipRoundRect(
+                new SKRoundRect(avatar, avatarSize / 2, avatarSize / 2),
+                SKClipOperation.Intersect, antialias: true);
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(image, destination, _fill);
+            canvas.Restore();
         }
         else
         {
-            _text.Draw(canvas, model.Title ?? model.Body, IslandType.CompactNoticeStrong, area,
-                _theme.Foreground, TextAlign.Left, _opacity);
+            _fill.Color = Alpha(_theme.Foreground, 0.12f * _opacity);
+            canvas.DrawCircle(avatar.MidX, avatar.MidY, avatarSize / 2, _fill);
+            DrawIcon(canvas, IconKind.Bell, avatar.Deflate(10f * s),
+                Alpha(_theme.ForegroundSecondary, _opacity));
         }
 
-        if (hasChip)
+        var textLeft = avatar.Right + (12f * s);
+        var textRight = width - (45f * s);
+        var textWidth = Math.Max(0, textRight - textLeft);
+        var titleHeight = 20f * s;
+        var bodyHeight = 17f * s;
+        var gap = 2f * s;
+        var top = (height - (titleHeight + gap + bodyHeight)) / 2;
+        var title = model.Title ?? model.Body ?? app ?? string.Empty;
+        var chipTextWidth = string.IsNullOrEmpty(app)
+            ? 0
+            : Math.Min(textWidth, _text.Measure(app, IslandType.CompactSmallSemiBold, textWidth));
+        var chipWidth = chipTextWidth > 0 ? Math.Min(textWidth, chipTextWidth + (12f * s)) : 0;
+        var titleMax = Math.Max(0, textWidth - chipWidth - (chipWidth > 0 ? 6f * s : 0));
+        var titleWidth = Math.Min(textWidth, _text.Measure(title, IslandType.NotificationTitle, titleMax));
+        _text.Draw(canvas, title, IslandType.NotificationTitle,
+            new SKRect(textLeft, top, textLeft + Math.Max(titleMax, titleWidth), top + titleHeight),
+            _theme.Foreground, TextAlign.Left, _opacity);
+
+        if (chipWidth > 0)
         {
-            var chip = new SKRect(width - 10 - chipWidth, (height - 20) / 2, width - 10, (height + 20) / 2);
-            DrawChip(canvas, model.VerificationCode, chip, _theme.Info, _theme.Foreground);
+            var chipHeight = 16f * s;
+            var chipX = textLeft + titleWidth + (6f * s);
+            var chip = new SKRect(
+                chipX, top + ((titleHeight - chipHeight) / 2),
+                chipX + chipWidth, top + ((titleHeight + chipHeight) / 2));
+            _fill.Color = Alpha(_theme.Foreground, 0.25f * _opacity);
+            canvas.DrawRoundRect(chip, 6f * s, 6f * s, _fill);
+            _text.Draw(canvas, app!, IslandType.CompactSmallSemiBold,
+                new SKRect(chip.Left + (6f * s), chip.Top, chip.Right - (6f * s), chip.Bottom), _theme.Foreground, TextAlign.Left, _opacity);
         }
-        else if (hasBadge)
+
+        if (!string.IsNullOrEmpty(model.Body))
         {
-            var badge = new SKRect(width - 10 - 16, (height - 16) / 2, width - 10, (height + 16) / 2);
+            _text.Draw(canvas, model.Body, IslandType.NotificationBody,
+                new SKRect(textLeft, top + titleHeight + gap, textRight, top + titleHeight + gap + bodyHeight),
+                _theme.ForegroundSecondary, TextAlign.Left, _opacity * 0.75f);
+        }
+
+        if (model.ShowsAudioWave)
+        {
+            var wave = new SKRect(width - (38f * s), (height - (18f * s)) / 2, width - (14f * s), (height + (18f * s)) / 2);
+            DrawWave(canvas, wave, new SKColor(0xB6, 0xE0, 0xEE), active: true);
+        }
+
+        if (_pressed)
+        {
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(_theme.Accent, _opacity);
-            canvas.DrawRoundRect(badge, 8, 8, _fill);
-            _text.Draw(canvas, _numbers.Number(model.UnreadCount), IslandType.CompactBadge, badge,
-                _theme.Background, TextAlign.Center, _opacity);
+            _fill.Color = Alpha(SKColors.White.WithAlpha(16), _opacity);
+            canvas.DrawRoundRect(new SKRect(0, 0, width, height), height / 2, height / 2, _fill);
         }
     }
 

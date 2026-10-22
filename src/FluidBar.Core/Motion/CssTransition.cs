@@ -164,8 +164,12 @@ public static class ShellTransition
     /// <summary>Expanded layer fade-in when expanding (220 ms, ease-out).</summary>
     public const double ExpandedFadeInSeconds = 0.220;
 
-    /// <summary>Expanded layer fade-in delay when expanding (90 ms).</summary>
-    public const double ExpandedFadeInDelaySeconds = 0.090;
+    /// <summary>
+    /// Expanded layer fade-in delay when expanding (60 ms). The container starts moving at 0, the page
+    /// content follows 60 ms later and the chrome 120 ms in, so the three phases read as one gesture.
+    /// prototype2 used 90/90 ms; the stagger is deliberate (see expand-choreography.csv).
+    /// </summary>
+    public const double ExpandedFadeInDelaySeconds = 0.060;
 
     /// <summary>Expanded layer fade-out when collapsing (140 ms, ease-out, no delay).</summary>
     public const double ExpandedFadeOutSeconds = 0.140;
@@ -173,8 +177,8 @@ public static class ShellTransition
     /// <summary>Chrome (title + collapse control) fade duration (160 ms).</summary>
     public const double ChromeFadeSeconds = 0.160;
 
-    /// <summary>Chrome fade-in delay when expanding (90 ms).</summary>
-    public const double ChromeFadeInDelaySeconds = 0.090;
+    /// <summary>Chrome fade-in delay when expanding (120 ms: 60 ms after the page content starts).</summary>
+    public const double ChromeFadeInDelaySeconds = 0.120;
 
     /// <summary>Prototype2 <c>--ease-shell</c>: <c>cubic-bezier(0.3, 0.8, 0.25, 1)</c>.</summary>
     public static CubicBezierEasing ShellEasing { get; } = new(0.3, 0.8, 0.25, 1);

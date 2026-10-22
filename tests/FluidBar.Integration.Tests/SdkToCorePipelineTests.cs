@@ -47,17 +47,21 @@ public class SdkToCorePipelineTests
     }
 
     [Fact]
-    public void Clipboard_preempts_transient_notification()
+    public void Clipboard_yields_to_the_notification_that_owns_the_primary_island()
     {
+        // Since 2026-10-21 the notification owns the primary island (NotificationRank = 0): a
+        // clipboard copy no longer tears the toast down mid-display — the copy drops to a ghost
+        // until the toast expires.
         using var pipeline = new CorePipelineHarness();
         pipeline.Publish(SdkEvents.Notification());
         Assert.Equal(ActivityKind.Notification, pipeline.View.Primary!.Kind);
 
         pipeline.Publish(SdkEvents.Clipboard());
 
-        Assert.Equal(ActivityKind.Clipboard, pipeline.View.Primary!.Kind);
-        Assert.Equal(1, pipeline.SchedulerState.ActivityCount);
-        Assert.Empty(pipeline.View.Ghosts);
+        Assert.Equal(ActivityKind.Notification, pipeline.View.Primary!.Kind);
+        Assert.Equal(2, pipeline.SchedulerState.ActivityCount);
+        Assert.Single(pipeline.View.Ghosts);
+        Assert.Equal(ActivityKind.Clipboard, pipeline.View.Ghosts[0].Kind);
     }
 
     [Fact]
@@ -222,7 +226,10 @@ public class SdkToCorePipelineTests
         pipeline.Advance(TimeSpan.FromSeconds(6));
         observed.Add(pipeline.View.Primary?.Kind.ToString() ?? "idle");
 
-        Assert.Equal(["Media", "Notification", "Clipboard", "Media"], observed);
+        // Clipboard no longer pre-empts the toast (notification owns the primary island,
+        // see Clipboard_yields_to_the_notification_that_owns_the_primary_island): the third
+        // publish stays on the toast, and after both transients expire the media returns.
+        Assert.Equal(["Media", "Notification", "Notification", "Media"], observed);
         Assert.True(pipeline.Updates.Count >= 4);
     }
 }

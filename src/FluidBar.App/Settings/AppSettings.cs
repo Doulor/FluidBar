@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluidBar.App.Theme;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Motion;
 
@@ -174,6 +175,9 @@ public sealed record AppSettings
     /// <summary>Island material tier.</summary>
     public IslandMaterial Material { get; init; } = IslandMaterial.Obsidian;
 
+    /// <summary>Island scheduling policy (<c>performance</c> by default, <c>saver</c> for low power).</summary>
+    public IslandPowerMode PowerMode { get; init; } = IslandPowerMode.Performance;
+
     /// <summary>Island palette token.</summary>
     public string Palette { get; init; } = "obsidian";
 
@@ -191,6 +195,13 @@ public sealed record AppSettings
 
     /// <summary>Text scale for island content (0.8–1.6).</summary>
     public double FontScale { get; init; } = 1.0;
+
+    /// <summary>
+    /// Karaoke lead/lag correction in milliseconds (-800..+800). Positive shows the words earlier.
+    /// Sources whose clock only has one-second resolution (the KuGou accessibility path) leave a
+    /// per-song residual that only the user can see, so it is tunable without a rebuild.
+    /// </summary>
+    public double LyricOffsetMs { get; init; }
 
     /// <summary>Reduced-motion preference.</summary>
     public ReducedMotionPreference ReducedMotion { get; init; } = ReducedMotionPreference.System;
@@ -402,6 +413,7 @@ public sealed record AppSettings
         FillOpacity = Math.Clamp(FillOpacity, LayoutTokens.MinFillOpacity, 1.0),
         PanelRadius = Math.Clamp(PanelRadius, 16, 36),
         FontScale = Math.Clamp(FontScale, 0.8, 1.6),
+            LyricOffsetMs = Math.Clamp(double.IsFinite(LyricOffsetMs) ? LyricOffsetMs : 0, -800, 800),
         ReducedMotion = Enum.IsDefined(ReducedMotion) ? ReducedMotion : ReducedMotionPreference.System,
         MotionStrength = Math.Clamp(MotionStrength, MotionProfile.MinStrength, MotionProfile.MaxStrength),
         Mode = Mode is "float" or "flush" or "dock" ? Mode : "float",
@@ -427,6 +439,14 @@ public sealed record AppSettings
         },
         Dock = Dock with { Height = Math.Clamp(Dock.Height, 40, 72) },
     };
+
+    private static IslandPowerMode ParsePowerMode(string? token, IslandPowerMode fallback)
+        => token?.Trim().ToLowerInvariant() switch
+        {
+            "saver" => IslandPowerMode.Saver,
+            "performance" => IslandPowerMode.Performance,
+            _ => fallback,
+        };
 
     /// <summary>Serializes settings to the spec-compatible JSON shape.</summary>
     public string ToJson()
@@ -454,9 +474,11 @@ public sealed record AppSettings
                 FillOpacity = FillOpacity,
                 PanelRadius = PanelRadius,
                 FontScale = FontScale,
+            LyricOffsetMs = LyricOffsetMs,
                 ReducedMotion = ReducedMotion.ToString().ToLowerInvariant(),
                 MotionStrength = MotionStrength,
             },
+            PowerMode = PowerMode.ToString().ToLowerInvariant(),
             Island = new IslandJson
             {
                 Mode = Mode,
@@ -531,8 +553,10 @@ public sealed record AppSettings
                 FillOpacity = document.Appearance?.FillOpacity ?? defaults.FillOpacity,
                 PanelRadius = document.Appearance?.PanelRadius ?? defaults.PanelRadius,
                 FontScale = document.Appearance?.FontScale ?? defaults.FontScale,
+            LyricOffsetMs = document.Appearance?.LyricOffsetMs ?? defaults.LyricOffsetMs,
                 ReducedMotion = ParseReducedMotion(document.Appearance?.ReducedMotion),
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
+                PowerMode = ParsePowerMode(document.PowerMode, defaults.PowerMode),
                 Mode = document.Island?.Mode ?? defaults.Mode,
                 Anchor = document.Island?.Anchor ?? defaults.Anchor,
                 Stacking = document.Island?.Stacking switch
@@ -701,6 +725,9 @@ internal sealed class SettingsJson
     public DockJson? Dock { get; set; }
     public PluginsJson? Plugins { get; set; }
     public AdvancedJson? Advanced { get; set; }
+
+    /// <summary>Island scheduling policy token (<c>performance</c>/<c>saver</c>).</summary>
+    public string? PowerMode { get; set; }
 }
 
 internal sealed class GeneralJson
@@ -731,6 +758,10 @@ internal sealed class AppearanceJson
     public double? FillOpacity { get; set; }
     public double? PanelRadius { get; set; }
     public double? FontScale { get; set; }
+
+    /// <summary>Karaoke offset in milliseconds (-800..+800).</summary>
+    public double? LyricOffsetMs { get; set; }
+
     public string? ReducedMotion { get; set; }
     public double? MotionStrength { get; set; }
 }

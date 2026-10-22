@@ -104,10 +104,11 @@ internal sealed partial class PageRenderer
 
         var m = _metrics;
         var rowHeight = PageMetricsLayout.NotificationRowHeight(m);
-        var body = PageLayout.ListBody(page);
-        var maxScroll = Math.Max(0, (count * (rowHeight + 4)) - 4 - PageMetricsLayout.BodyHeight);
+        var gap = PageMetricsLayout.NotificationGap;
+        var body = PageMetricsLayout.NotificationBody(page);
+        var maxScroll = PageMetricsLayout.MaxListScroll(count, rowHeight, gap);
         var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, maxScroll);
-        var first = rowHeight + 4 <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + 4));
+        var first = rowHeight + gap <= 0 ? 0 : (int)Math.Floor(scroll / (rowHeight + gap));
 
         canvas.Save();
         canvas.ClipRect(body);
@@ -116,8 +117,8 @@ internal sealed partial class PageRenderer
             var row = PageMetricsLayout.NotificationRow(page, i, scroll, m);
             if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
             {
-                // Real toasts made this visible: the list does not scroll (the wheel pages instead), so
-                // a row that only half fits the body would be painted as a clipped sliver forever.
+                // A card that only half fits the body would be painted as a clipped sliver; the wheel
+                // scrolls the list, so stop at the last fully visible card.
                 break;
             }
 
@@ -140,101 +141,179 @@ internal sealed partial class PageRenderer
         var hovered = index == model.HoverIndex;
         DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
 
-        // The row grows with the font scale; keep the 1.0 content block centred inside it.
-        var dy = (row.Height - 40f) / 2;
-        canvas.Save();
-        canvas.Translate(0, dy);
         var accent = _accents.Get(item.AccentHex, _theme.Info);
-        var glyph = new SKRect(row.Left + 10, row.Top + 7, row.Left + 36, row.Top + 33);
+        var icon = PageMetricsLayout.NotificationIcon(row);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(accent, 0.16f * _opacity);
-        canvas.DrawRoundRect(glyph, 7, 7, _fill);
-        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, glyph.Deflate(6), Alpha(accent, _opacity), _icon);
+        canvas.DrawRoundRect(icon, 10, 10, _fill);
+        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, icon.Deflate(8), Alpha(accent, _opacity), _icon);
 
-        var dismiss = new SKRect(row.Right - 30, row.Top + 10, row.Right - 10, row.Top + 30);
-        if (hovered)
+        // Unread cue: a coloured dot on the app glyph (phone-card read), never a separate hit target.
+        if (item.IsUnread)
         {
-            _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
-            canvas.DrawRoundRect(dismiss, 6, 6, _fill);
+            _fill.Color = Alpha(accent, _opacity);
+            canvas.DrawCircle(icon.Right - 3, icon.Top + 3, 3f, _fill);
         }
 
-        IconSet.Draw(
-            canvas,
-            IconKind.Close,
-            dismiss.Deflate(5),
-            Alpha(hovered ? _theme.ForegroundSecondary : _theme.ForegroundTertiary, _opacity),
-            _icon);
+        var contentLeft = icon.Right + 12;
+        var contentRight = row.Right - 16;
+        var titleHeight = _text.LineHeight(IslandType.RowTitle);
+        var bodyHeight = _text.LineHeight(IslandType.RowBody);
+        var metaHeight = _text.LineHeight(IslandType.RowMeta);
+        var titleTop = row.Top + 6;
+        var titleBottom = titleTop + titleHeight;
 
-        var hasCode = item.VerificationCode is { Length: > 0 };
-        var chip = hasCode
-            ? new SKRect(row.Right - 98, row.Top + 21, row.Right - 38, row.Top + 37)
-            : SKRect.Empty;
-
-        var lineTop = row.Top + 5;
-        var lineBottom = row.Top + 21;
+        // App name as a compact pill, then the bold title. A measured pill (not a fixed column) keeps
+        // the title wide; +10 absorbs the rounded ends and the shaper's fractional advance.
         var app = item.AppName;
-        // 70 DIP cut "Windows PowerShell" to "Windows Powers…"; 84 still leaves the title ~240 DIP.
-        // +2 DIP absorbs the shaper's fractional advance so a measured-to-fit label never ellipsizes.
-        var appWidth = string.IsNullOrEmpty(app) ? 0 : Math.Min(84, _text.Measure(app, IslandType.RowApp) + 2f);
+        var appWidth = string.IsNullOrEmpty(app)
+            ? 0
+            : Math.Min(84, _text.Measure(app, IslandType.RowApp) + 10f);
         if (appWidth > 0)
         {
-            _text.Draw(
-                canvas,
-                app,
-                IslandType.RowApp,
-                new SKRect(row.Left + 44, lineTop, row.Left + 44 + appWidth, lineBottom),
-                _theme.ForegroundTertiary,
-                TextAlign.Left,
-                _opacity);
+            var appHeight = _text.LineHeight(IslandType.RowApp) + 4;
+            var pill = new SKRect(
+                contentLeft,
+                titleTop + ((titleHeight - appHeight) / 2),
+                contentLeft + appWidth,
+                titleTop + ((titleHeight + appHeight) / 2));
+            _fill.Color = Alpha(_theme.Foreground, 0.07f * _opacity);
+            canvas.DrawRoundRect(pill, 5, 5, _fill);
+            _text.Draw(canvas, app, IslandType.RowApp, pill, _theme.ForegroundSecondary, TextAlign.Center, _opacity);
         }
 
-        // The time column is measured, not a fixed 46 DIP slot: at 1.6 "just now"/"20 min" ellipsized
-        // to "just n…"/"20 mi…". Reserve the real width (capped for long locales) and move the title
-        // boundary with it so neither line overlaps the dismiss button.
-        var timeWidth = string.IsNullOrEmpty(item.TimeText)
-            ? 0
-            : Math.Min(96, _text.Measure(item.TimeText, IslandType.RowMeta) + 2f);
-        var timeRight = row.Right - 36;
-        var timeLeft = timeRight - timeWidth;
-        var titleLeft = row.Left + 44 + (appWidth > 0 ? appWidth + 6 : 0);
+        var titleLeft = contentLeft + (appWidth > 0 ? appWidth + 6 : 0);
         _text.Draw(
             canvas,
             item.Title,
             IslandType.RowTitle,
-            new SKRect(titleLeft, lineTop, timeLeft - 6, lineBottom),
+            new SKRect(titleLeft, titleTop, contentRight, titleBottom),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
-        if (timeWidth > 0)
+
+        // Two body lines: the first break is measured at word boundaries; the shaper ellipsises the
+        // remainder of line two when the body is longer than both lines.
+        var bodyTop = titleBottom + 2;
+        var (line1, line2) = SplitTwoLines(item.Body, IslandType.RowBody, contentRight - contentLeft);
+        _text.Draw(
+            canvas,
+            line1,
+            IslandType.RowBody,
+            new SKRect(contentLeft, bodyTop, contentRight, bodyTop + bodyHeight),
+            _theme.ForegroundSecondary,
+            TextAlign.Left,
+            _opacity);
+        if (line2.Length > 0)
+        {
+            _text.Draw(
+                canvas,
+                line2,
+                IslandType.RowBody,
+                new SKRect(contentLeft, bodyTop + bodyHeight, contentRight, bodyTop + (bodyHeight * 2)),
+                _theme.ForegroundSecondary,
+                TextAlign.Left,
+                _opacity);
+        }
+
+        // Bottom row: action chips on the left, timestamp on the right (user request: "右下时间").
+        var dismiss = PageMetricsLayout.NotificationDismiss(row);
+        var dismissLabel = model.DismissLabel ?? "Close";
+        _fill.Color = Alpha(_theme.Foreground, (hovered ? 0.10f : 0.06f) * _opacity);
+        canvas.DrawRoundRect(dismiss, 6, 6, _fill);
+        _text.Draw(
+            canvas,
+            dismissLabel,
+            IslandType.Chip,
+            dismiss,
+            hovered ? _theme.Foreground : _theme.ForegroundSecondary,
+            TextAlign.Center,
+            _opacity);
+
+        if (item.VerificationCode is { Length: > 0 })
+        {
+            var copy = PageMetricsLayout.NotificationCopyCode(row);
+            _fill.Color = Alpha(_theme.Info, 0.16f * _opacity);
+            canvas.DrawRoundRect(copy, 6, 6, _fill);
+            var codeLabel = item.CodeChipLabel ?? item.VerificationCode;
+            _text.Draw(canvas, codeLabel, IslandType.Chip, copy, _theme.Info, TextAlign.Center, _opacity);
+        }
+
+        if (!string.IsNullOrEmpty(item.TimeText))
         {
             _text.Draw(
                 canvas,
                 item.TimeText,
                 IslandType.RowMeta,
-                new SKRect(timeLeft, lineTop, timeRight, lineBottom),
+                PageMetricsLayout.NotificationTime(row),
                 _theme.ForegroundTertiary,
                 TextAlign.Right,
                 _opacity);
         }
+    }
 
-        var bodyRight = hasCode ? chip.Left - 6 : row.Right - 36;
-        _text.Draw(
-            canvas,
-            item.Body,
-            IslandType.RowBody,
-            new SKRect(row.Left + 44, row.Top + 21, bodyRight, row.Top + 37),
-            _theme.ForegroundSecondary,
-            TextAlign.Left,
-            _opacity);
-
-        if (hasCode)
+    /// <summary>
+    /// Splits a body into the two lines a notification card paints. The first line breaks at the last
+    /// whitespace that still fits (CJK breaks between characters); the second is left to the shaper's
+    /// ellipsis. Pure text measurement: no allocation when the whole body already fits one line.
+    /// </summary>
+    private (string First, string Second) SplitTwoLines(string? text, TextStyle style, float maxWidth)
+    {
+        if (string.IsNullOrWhiteSpace(text))
         {
-            _fill.Color = Alpha(_theme.Info, 0.16f * _opacity);
-            canvas.DrawRoundRect(chip, 8, 8, _fill);
-            _text.Draw(canvas, item.VerificationCode, IslandType.Chip, chip, _theme.Info, TextAlign.Center, _opacity);
+            return (string.Empty, string.Empty);
         }
 
-        canvas.Restore();
+        var value = text.Trim();
+        if (maxWidth <= 1 || _text.Measure(value, style) <= maxWidth)
+        {
+            return (value, string.Empty);
+        }
+
+        var low = 1;
+        var high = value.Length;
+        var best = 1;
+        while (low <= high)
+        {
+            var mid = (low + high) / 2;
+            if (_text.Measure(value[..mid], style) <= maxWidth)
+            {
+                best = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        var cut = best;
+        for (var i = best - 1; i >= Math.Max(0, best - 16); i--)
+        {
+            if (char.IsWhiteSpace(value[i]))
+            {
+                cut = i;
+                break;
+            }
+        }
+
+        if (cut <= 0)
+        {
+            cut = best;
+        }
+
+        // Never split a surrogate pair (emoji) down the middle.
+        if (cut < value.Length && char.IsLowSurrogate(value[cut]))
+        {
+            cut--;
+        }
+
+        if (cut <= 0 || cut >= value.Length)
+        {
+            return (value, string.Empty);
+        }
+
+        return (value[..cut].TrimEnd(), value[cut..].TrimStart());
     }
 
     // ---------------------------------------------------------------- clipboard
@@ -470,20 +549,14 @@ internal sealed partial class PageRenderer
             // prototype2 .agent-state .spinner-ring: an 11×11 border ring (1.5px) whose top+right
             // seams spin 900ms linear, exactly like the compact capsule ring.
             const float spinnerRadius = (11f - AgentMotion.RingStrokeWidth) / 2f;
+            // Track ring (the 25 % base border) then the arc, both through the shared primitive.
             _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeCap = SKStrokeCap.Butt;
-            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
+            _stroke.StrokeCap = AgentSpinner.Cap;
+            _stroke.StrokeWidth = AgentSpinner.StrokeForRadius(spinnerRadius);
             _stroke.Color = Alpha(_theme.Accent, AgentMotion.SpinnerBaseAlpha * _opacity);
             canvas.DrawCircle(stateCenter.X, stateCenter.Y, spinnerRadius, _stroke);
-            var rotation = _reduced ? 0 : AgentMotion.RingRotationDegrees(_agentAnimationSeconds);
-            _stroke.Color = Alpha(tone, _opacity);
-            canvas.DrawArc(
-                new SKRect(stateCenter.X - spinnerRadius, stateCenter.Y - spinnerRadius,
-                    stateCenter.X + spinnerRadius, stateCenter.Y + spinnerRadius),
-                AgentMotion.ArcStartDegrees + (float)rotation,
-                AgentMotion.ArcSweepDegrees,
-                false,
-                _stroke);
+            var rotation = _reduced ? 0 : AgentSpinner.RotationDegrees(_agentAnimationSeconds);
+            AgentSpinner.Draw(canvas, _stroke, stateCenter, spinnerRadius, rotation, Alpha(tone, _opacity));
         }
         else if (item.Tone == CompactStatus.Success)
         {

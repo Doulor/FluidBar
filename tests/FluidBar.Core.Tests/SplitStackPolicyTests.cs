@@ -36,8 +36,10 @@ public sealed class SplitStackPolicyTests
     }
 
     [Fact]
-    public void Media_plus_waiting_agent_puts_agent_primary_then_restores_media_when_it_ends()
+    public void Media_keeps_the_pill_when_a_waiting_agent_appears()
     {
+        // Contract changed 2026-10-22 (user request): a playing track stays on the main pill and the agent
+        // moves to the preview balls. The old rule let a fresh "waiting" agent borrow the pill.
         var policy = new SplitStackPolicy();
         var media = Record(ActivityKind.Media, "media", T0);
         var waiting = Record(ActivityKind.Agent, "agent", T0.AddSeconds(3),
@@ -46,8 +48,8 @@ public sealed class SplitStackPolicyTests
         _ = policy.Order(ImmutableArray.Create(media), T0);
         var ordered = policy.Order(ImmutableArray.Create(media, waiting), T0.AddSeconds(3));
 
-        Assert.Equal(ActivityKind.Agent, ordered[0].Kind);
-        Assert.Equal(ActivityKind.Media, ordered[1].Kind);
+        Assert.Equal(ActivityKind.Media, ordered[0].Kind);
+        Assert.Equal(ActivityKind.Agent, ordered[1].Kind);
 
         // The agent resolves/disappears: the previous persistent primary is restored.
         var restored = policy.Order(ImmutableArray.Create(media), T0.AddSeconds(4));
@@ -138,4 +140,65 @@ public sealed class SplitStackPolicyTests
         Assert.True(policy.IsUserLocked(timer.Key, T0.AddSeconds(12)));
         Assert.False(policy.IsUserLocked(timer.Key, T0.AddSeconds(13.1)));
     }
+
+    [Fact]
+    public void Wheel_pin_survives_the_user_lock_window_and_ordinary_reordering()
+    {
+        var policy = new SplitStackPolicy();
+        var media = Record(ActivityKind.Media, "media", T0);
+        var agent = Record(ActivityKind.Agent, "agent", T0.AddSeconds(1), new ActivityPayload { Title = "Agent", IsActive = true, Badge = "running" });
+        var visible = ImmutableArray.Create(media, agent);
+        _ = policy.Order(visible, T0.AddSeconds(2));
+        _ = policy.Order(visible, T0.AddSeconds(2.1), wheelSteps: 1);
+        Assert.Equal(agent.Key, policy.PinnedKey);
+
+        var ordered = policy.Order(visible, T0.AddSeconds(20));
+        Assert.Equal(ActivityKind.Agent, ordered[0].Kind);
+        Assert.Equal(agent.Key, policy.PinnedKey);
+    }
+
+    [Fact]
+    public void Wheeling_to_another_item_retargets_the_pin()
+    {
+        var policy = new SplitStackPolicy();
+        var media = Record(ActivityKind.Media, "media", T0);
+        var timer = Record(ActivityKind.Timer, "timer", T0.AddSeconds(1));
+        var visible = ImmutableArray.Create(media, timer);
+        _ = policy.Order(visible, T0.AddSeconds(2));
+        _ = policy.Order(visible, T0.AddSeconds(2.1), wheelSteps: 1);
+        Assert.Equal(timer.Key, policy.PinnedKey);
+    }
+
+    [Fact]
+    public void Short_event_preempts_a_pin_then_returns_to_it()
+    {
+        var policy = new SplitStackPolicy();
+        var media = Record(ActivityKind.Media, "media", T0);
+        var agent = Record(ActivityKind.Agent, "agent", T0.AddSeconds(1), new ActivityPayload { Title = "Agent", IsActive = true, Badge = "running" });
+        var notify = Record(ActivityKind.Notification, "notify", T0.AddSeconds(3), new ActivityPayload { Title = "Ping" });
+        _ = policy.Order(ImmutableArray.Create(media, agent), T0.AddSeconds(2));
+        _ = policy.Order(ImmutableArray.Create(media, agent), T0.AddSeconds(2.1), wheelSteps: 1);
+
+        var withNotify = policy.Order(ImmutableArray.Create(media, agent, notify), T0.AddSeconds(4.2));
+        Assert.Equal(ActivityKind.Notification, withNotify[0].Kind);
+
+        var restored = policy.Order(ImmutableArray.Create(media, agent), T0.AddSeconds(5));
+        Assert.Equal(ActivityKind.Agent, restored[0].Kind);
+    }
+
+    [Fact]
+    public void Pin_releases_when_the_pinned_activity_ends()
+    {
+        var policy = new SplitStackPolicy();
+        var media = Record(ActivityKind.Media, "media", T0);
+        var timer = Record(ActivityKind.Timer, "timer", T0.AddSeconds(1));
+        _ = policy.Order(ImmutableArray.Create(media, timer), T0.AddSeconds(2));
+        _ = policy.Order(ImmutableArray.Create(media, timer), T0.AddSeconds(2.1), wheelSteps: 1);
+        Assert.Equal(timer.Key, policy.PinnedKey);
+
+        var afterEnd = policy.Order(ImmutableArray.Create(media), T0.AddSeconds(10));
+        Assert.Equal(ActivityKind.Media, afterEnd[0].Kind);
+        Assert.Null(policy.PinnedKey);
+    }
 }
+

@@ -19,7 +19,8 @@ public sealed record NotificationEntry(
     string Title,
     string Body,
     DateTimeOffset CreatedAt,
-    string? VerificationCode);
+    string? VerificationCode,
+    byte[]? AppIconPng = null);
 
 /// <summary>A raw toast candidate before filtering/deduplication (pure input for the history).</summary>
 public sealed record NotificationCandidate(
@@ -27,7 +28,8 @@ public sealed record NotificationCandidate(
     string AppName,
     string Title,
     string Body,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    byte[]? AppIconPng = null);
 
 /// <summary>Immutable notifications snapshot.</summary>
 /// <param name="Access">Current listener permission state.</param>
@@ -177,6 +179,15 @@ public sealed class NotificationHistory
         }
     }
 
+    /// <summary>Whether an id is still unseen (used to avoid loading app icons for old candidates).</summary>
+    public bool IsNew(uint id)
+    {
+        lock (_gate)
+        {
+            return _primed && id > _watermark && !_seen.Contains(id);
+        }
+    }
+
     /// <summary>Filters and converts candidates into new entries (oldest first, bounded batch).</summary>
     public IReadOnlyList<NotificationEntry> Process(IEnumerable<NotificationCandidate> candidates)
     {
@@ -210,7 +221,8 @@ public sealed class NotificationHistory
                 }
 
                 result.Add(new NotificationEntry(candidate.Id, candidate.AppName, candidate.Title, candidate.Body,
-                    candidate.CreatedAt, VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}")));
+                    candidate.CreatedAt, VerificationCodeDetector.Detect($"{candidate.Title}\n{candidate.Body}"),
+                    candidate.AppIconPng));
                 if (result.Count >= MaxBatch)
                 {
                     break;

@@ -21,7 +21,8 @@ public sealed record IslandSplitIslet(
     string? Badge = null,
     bool ShowAction = false,
     byte[]? Artwork = null,
-    string? ArtworkKey = null);
+    string? ArtworkKey = null,
+    CompactStatus Status = CompactStatus.Info);
 
 /// <summary>
 /// One immutable island frame: the animating shell geometry, the active surface, the page strip
@@ -176,6 +177,12 @@ public readonly record struct IslandRenderState
     /// <summary>Compact activity; null renders the idle pill.</summary>
     public CompactActivity? Compact { get; init; }
 
+    /// <summary>
+    /// Secondary compact notification island (drawn below the primary pill so a notification can appear
+    /// without displacing the current activity). Null when there is no notification to surface this way.
+    /// </summary>
+    public CompactActivity? SecondaryCompact { get; init; }
+
     /// <summary>Expanded page content (home/media models + page titles).</summary>
     public ExpandedPageContent Pages { get; init; }
 
@@ -196,6 +203,14 @@ public readonly record struct IslandRenderState
     /// advances while an agent is running, so an idle island requests no frames.
     /// </summary>
     public double AgentAnimationSeconds { get; init; }
+
+    /// <summary>
+    /// Agent ring angle (degrees) frozen at the moment the activity left Running/Waiting. While the
+    /// status stays live the renderer uses <see cref="AgentAnimationSeconds"/>; once the activity is
+    /// Completed/Failed/Cancelled the arc is removed and this value keeps the last painted angle so it
+    /// can never jump back to 0.
+    /// </summary>
+    public double? AgentRingFrozenDegrees { get; init; }
 
     /// <summary>
     /// Logical keyboard/UIA focus ring in host-local DIP (null when nothing is focused). The renderer
@@ -226,7 +241,7 @@ public readonly record struct IslandRenderState
         double fontScale = 1.0)
     {
         var size = LayoutTokens.CompactSizeFor(activity?.Kind, mode, fontScale);
-        var radii = LayoutTokens.RadiiFor(form, mode, size.Height);
+        var radii = LayoutTokens.RadiiFor(form, mode, size.Height, kind: activity?.Kind);
         var host = HostSurface.ForMode(mode);
         var origin = mode == IslandMode.Dock
             ? new VisualPoint(host.SidePadding, host.DockStripTopLocal)
@@ -475,11 +490,20 @@ public sealed record CompactModel
     /// <summary>Body/preview line (clipboard).</summary>
     public string? Body { get; init; }
 
+    /// <summary>Relative timestamp for the phone-style notification card ("now", "3 min").</summary>
+    public string? TimeText { get; init; }
+
     /// <summary>Trailing badge/chip text.</summary>
     public string? Badge { get; init; }
 
     /// <summary>Notification source app name.</summary>
     public string? AppName { get; init; }
+
+    /// <summary>Real app logo bytes for the phone-style notification tile (null = generic icon).</summary>
+    public byte[]? AppIconPng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="AppIconPng"/>.</summary>
+    public string? AppIconKey { get; init; }
 
     /// <summary>Idle clock text (HH:mm).</summary>
     public string? ClockText { get; init; }
@@ -510,6 +534,9 @@ public sealed record CompactModel
 
     /// <summary>Whether the media session is playing.</summary>
     public bool IsActive { get; init; }
+
+    /// <summary>Whether the notification card keeps the reference repo's right-side audio spectrum.</summary>
+    public bool ShowsAudioWave { get; init; }
 
     /// <summary>Whether the HUD is muted.</summary>
     public bool IsMuted { get; init; }
@@ -847,6 +874,13 @@ public sealed record MediaPageModel
     /// </summary>
     public double LyricHighlight { get; init; } = -1;
 
+    /// <summary>
+    /// Whether this track carries a karaoke timeline at all. The split style must follow the TRACK, not the
+    /// instantaneous sweep value: a single frame that arrived without one used to repaint the whole line in
+    /// the plain foreground colour ("整句突然变白一下").
+    /// </summary>
+    public bool HasKaraokeSweep { get; init; }
+
     /// <summary>Elapsed time text.</summary>
     public string? PositionText { get; init; }
 
@@ -861,6 +895,9 @@ public sealed record MediaPageModel
 
     /// <summary>Whether a real timeline is known (false hides the seek row).</summary>
     public bool HasTimeline { get; init; } = true;
+
+    /// <summary>Whether the source can seek; false paints the row read-only (no dead slider).</summary>
+    public bool CanSeek { get; init; } = true;
 
     /// <summary>Optional artwork accent hex.</summary>
     public string? AccentHex { get; init; }
@@ -912,8 +949,9 @@ public sealed record MediaPageModel
 }
 
 /// <summary>
-/// Expanded notifications page (page 2): a scrollable list of notification rows. The renderer paints
-/// up to five 40 DIP rows in the 368×216 body band; extra rows scroll by <see cref="ScrollOffset"/>.
+/// Expanded notifications page (page 2): a scrollable list of notification cards. Cards are 72 DIP at
+/// scale 1.0 and carry an app glyph, app pill, bold title, two body lines, a bottom-right timestamp and
+/// action chips; extra cards scroll by <see cref="ScrollOffset"/>.
 /// </summary>
 public sealed record NotificationsPageModel
 {
@@ -934,6 +972,12 @@ public sealed record NotificationsPageModel
 
     /// <summary>Empty-state hint override.</summary>
     public string? EmptyHint { get; init; }
+
+    /// <summary>Localized dismiss-chip label ("Close" / "关闭").</summary>
+    public string? DismissLabel { get; init; }
+
+    /// <summary>Localized fallback label for the copy-code chip ("Copy code" / "复制验证码").</summary>
+    public string? CopyCodeLabel { get; init; }
 }
 
 /// <summary>One notification row.</summary>
@@ -953,6 +997,9 @@ public sealed record NotificationItemModel
 
     /// <summary>Optional verification code rendered as a chip.</summary>
     public string? VerificationCode { get; init; }
+
+    /// <summary>Localized chip caption for <see cref="VerificationCode"/> ("Code 418302"); falls back to the code.</summary>
+    public string? CodeChipLabel { get; init; }
 
     /// <summary>Optional app accent colour hex for the leading glyph.</summary>
     public string? AccentHex { get; init; }

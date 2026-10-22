@@ -18,7 +18,7 @@ public sealed class ExpandedPageTests
         var state = IslandTestFixtures.Expanded(pageIndex);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
@@ -193,7 +193,10 @@ public sealed class ExpandedPageTests
             {
                 Notifications = pages.Notifications with
                 {
-                    ScrollOffset = PageLayout.MaxScroll(items.Count, PageLayout.NotificationRowHeight, PageLayout.NotificationRowGap),
+                    ScrollOffset = PageMetricsLayout.MaxListScroll(
+                        items.Count,
+                        PageMetricsLayout.NotificationRowHeight(FontScaleMetrics.One),
+                        PageMetricsLayout.NotificationGap),
                 },
             },
         };

@@ -46,6 +46,16 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
             return null;
         }
 
+        // An instrumental carries no words. Asking the catalogue anyway is what returned some other
+        // song's lyric and scrolled it under this track (user report 2026-10-22). The island then shows
+        // the title and artist, which is exactly what an instrumental should show.
+        if (InstrumentalDetector.LooksInstrumental(query.Title))
+        {
+            _logger.LogInfo(PlatformLogCategory.Media, "lyrics.instrumental",
+                $"No lyric lookup for instrumental track '{query.Title}'.");
+            return null;
+        }
+
         if (_cache.TryGet(query.TrackKey, out var cached))
         {
             return cached;
@@ -99,6 +109,14 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
                     document = await provider.FetchAsync(request.Query, request.Token)
                         .WaitAsync(_providerTimeout, request.Token)
                         .ConfigureAwait(false);
+                    if (document is { IsEmpty: false } && InstrumentalDetector.IsPlaceholder(document))
+                    {
+                        // KuGou ships "纯音乐，请欣赏" as the lyric of an instrumental; that is not a lyric.
+                        _logger.LogInfo(PlatformLogCategory.Media, "lyrics.instrumental-placeholder",
+                            $"Provider '{provider.Name}' returned an instrumental placeholder for '{request.Query.Title}'.");
+                        return;
+                    }
+
                     if (document is { IsEmpty: false })
                     {
                         _cache.Add(request.Query.TrackKey, document);

@@ -31,8 +31,8 @@ public static class ActivityPriorityPolicy
     /// <summary>Rank of <see cref="ActivityKind.Brightness"/>.</summary>
     public const int BrightnessRank = 8;
 
-    /// <summary>Rank of <see cref="ActivityKind.Notification"/>.</summary>
-    public const int NotificationRank = 9;
+    /// <summary>Rank of <see cref="ActivityKind.Notification"/> (highest: notifications always own the primary island).</summary>
+    public const int NotificationRank = 0;
 
     /// <summary>Rank of <see cref="ActivityKind.Agent"/> (lead-brief extension).</summary>
     public const int AgentRank = 10;
@@ -80,13 +80,18 @@ public static class ActivityPriorityPolicy
     /// "Persistent" kinds (spec 2.3 rule 2): when preempted they stay live in the background
     /// layer instead of being discarded.
     /// </summary>
-    public static bool IsPersistent(ActivityKind kind) => kind switch
+    public static bool IsPersistent(ActivityKind kind, ActivityPayload? payload = null) => kind switch
     {
         ActivityKind.Focus => true,
         ActivityKind.BatteryLow => true,
         ActivityKind.Progress => true,
         ActivityKind.Timer => true,
-        ActivityKind.Media => true,
+        // PlaybackStatus=Playing is authoritative; accept wave/badge fallback when a player omits
+        // IsActive on a heartbeat but still reports playing content. Paused media stays ordinary.
+        ActivityKind.Media => payload is null || payload.IsActive == true || payload.ShowsAudioWave == true ||
+            string.Equals(payload.Badge, "playing", StringComparison.OrdinalIgnoreCase),
+        // A running Agent session is persistent content; a waiting/idle agent is a short event.
+        ActivityKind.Agent => payload?.IsActive == true,
         _ => false,
     };
 
@@ -105,7 +110,8 @@ public static class ActivityPriorityPolicy
         ActivityKind.Volume => TimeSpan.FromSeconds(1.6),
         ActivityKind.Brightness => TimeSpan.FromSeconds(1.6),
         ActivityKind.Notification => TimeSpan.FromSeconds(5),
-        ActivityKind.Agent => TimeSpan.FromSeconds(5),
+        // Completed/failed Agent rows stay visible for a 3 s completion beat, then expire.
+        ActivityKind.Agent => TimeSpan.FromSeconds(3),
         ActivityKind.BatteryLow => null,
         ActivityKind.Progress => null,
         ActivityKind.Timer => null,

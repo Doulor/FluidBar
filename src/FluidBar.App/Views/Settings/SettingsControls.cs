@@ -349,7 +349,70 @@ internal static class SettingsControls
                 palette.LineBrush),
         };
 
-        return new Border
+        var content = new Border { Padding = padding, Child = child };
+        var stack = new Grid();
+        stack.Children.Add(content);
+        // Material L3: every card carries the 1.5 DIP top micro-highlight (white 5.1 % -> transparent).
+        stack.Children.Add(new Border
+        {
+            Height = SettingsPalette.TopHighlightHeightDip,
+            Background = palette.TopHighlightBrush,
+            CornerRadius = new CornerRadius(radius, radius, 0, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            IsHitTestVisible = false,
+        });
+
+        // Material L4 is painted as a gradient overlay: Avalonia 12 does not render BoxShadow.IsInset,
+        // so the pressed shade has to be a real layer inside the card (black 18 % top band, 8 DIP).
+        stack.Children.Add(new Border
+        {
+            Name = "MaterialPressedInset",
+            Height = SettingsPalette.PressedInsetTopDip,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            CornerRadius = new CornerRadius(radius, radius, 0, 0),
+            IsHitTestVisible = false,
+            Opacity = 0,
+            Background = new LinearGradientBrush
+            {
+                StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+                EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new Avalonia.Media.GradientStop(Color.FromArgb(46, 0, 0, 0), 0),
+                    new Avalonia.Media.GradientStop(Color.FromArgb(0, 0, 0, 0), 1),
+                },
+            },
+        });
+
+        if (kind == SettingsCardKind.Row)
+        {
+            // Press-only top highlight: 1.5 DIP white band above the L4 shade, so the card reads as
+            // "lifted" at the edge while the 8 DIP shade darkens the body underneath.
+            stack.Children.Add(new Border
+            {
+                Name = "MaterialPressHighlight",
+                Height = SettingsPalette.TopHighlightHeightDip,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+                CornerRadius = new CornerRadius(radius, radius, 0, 0),
+                IsHitTestVisible = false,
+                Opacity = 0,
+                Background = new LinearGradientBrush
+                {
+                    StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+                    EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new Avalonia.Media.GradientStop(Color.FromArgb(28, 255, 255, 255), 0),
+                        new Avalonia.Media.GradientStop(Color.FromArgb(0, 255, 255, 255), 1),
+                    },
+                },
+            });
+        }
+
+        var card = new Border
         {
             CornerRadius = new CornerRadius(radius),
             MinHeight = minHeight,
@@ -357,8 +420,111 @@ internal static class SettingsControls
             BorderBrush = border,
             BorderThickness = new Thickness(1),
             ClipToBounds = kind == SettingsCardKind.Featured,
-            Child = new Border { Padding = padding, Child = child },
+            Child = stack,
         };
+        SettingsMaterialStates.Attach(card);
+        return card;
+    }
+
+
+    /// <summary>
+    /// Material interaction states shared by every card and button: idle (no shadow), hover (1 DIP soft
+    /// outer glow) and pressed (L4 inset: black 18 %, blur 4, y offset 8, negative spread so the shade
+    /// enters from the top edge). One implementation, reused by all cards.
+    /// </summary>
+    internal static class SettingsMaterialStates
+    {
+        private static readonly BoxShadows Hover = new(new BoxShadow
+        {
+            Blur = 10,
+            Spread = 0,
+            OffsetY = 0,
+            Color = Color.FromArgb(20, 255, 255, 255),
+        });
+
+        private static readonly BoxShadows Pressed = new(new BoxShadow
+        {
+            Blur = 4,
+            Spread = -8,
+            OffsetY = 8,
+            IsInset = true,
+            Color = Color.FromArgb(46, 0, 0, 0),
+        });
+
+        /// <summary>Wires hover/pressed material states onto a card border.</summary>
+        /// <param name="card">Card container to decorate.</param>
+        /// <summary>Pressed-state shadow (test/diagnostic access to the production values).</summary>
+        internal static BoxShadows PressedShadow => Pressed;
+
+        /// <summary>Hover-state shadow (test/diagnostic access to the production values).</summary>
+        internal static BoxShadows HoverShadow => Hover;
+
+        /// <summary>Shows or hides the L4 pressed overlay inside a card.</summary>
+        /// <param name="card">Card container.</param>
+        /// <param name="pressed">True to show the shade.</param>
+        public static void SetPressedOverlay(Border card, bool pressed)
+        {
+            if (card.Child is not Grid stack)
+            {
+                return;
+            }
+
+            foreach (var overlay in stack.Children.OfType<Border>()
+                .Where(border => border.Name == "MaterialPressedInset"))
+            {
+                overlay.Opacity = pressed ? 1 : 0;
+            }
+
+            var highlight = stack.Children.OfType<Border>()
+                .FirstOrDefault(border => border.Name == "MaterialPressHighlight");
+            if (highlight is null)
+            {
+                return; // tiles/featured keep their look: press feedback is Row-only
+            }
+
+            highlight.Opacity = pressed ? 1 : 0;
+            // Draw-only scale: the layout size never changes (no reflow, no scroll jump).
+            card.RenderTransformOrigin = Avalonia.RelativePoint.Center;
+            card.RenderTransform = pressed ? new ScaleTransform(0.99, 0.99) : null;
+        }
+
+        public static void Attach(Border card)
+        {
+            card.PointerEntered += (_, _) =>
+            {
+                card.BoxShadow = Hover;
+                if (card.Child is Grid grid && grid.Children.OfType<Border>()
+                    .Any(border => border.Name == "MaterialPressHighlight"))
+                {
+                    // Row hover: L2 4 % white tint + a draw-only 0.99 scale (layout untouched).
+                    card.Background = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
+                    card.RenderTransformOrigin = Avalonia.RelativePoint.Center;
+                    card.RenderTransform = new ScaleTransform(0.99, 0.99);
+                }
+            };
+            card.PointerExited += (_, _) =>
+            {
+                card.BoxShadow = default;
+                card.Classes.Remove("pressed");
+                if (card.Child is Grid grid && grid.Children.OfType<Border>()
+                    .Any(border => border.Name == "MaterialPressHighlight"))
+                {
+                    card.Background = null;
+                    card.RenderTransform = null;
+                }
+            };
+            card.PointerPressed += (_, _) =>
+            {
+                SetPressedOverlay(card, true);
+                card.Classes.Add("pressed");
+            };
+            card.PointerReleased += (_, _) =>
+            {
+                SetPressedOverlay(card, false);
+                card.BoxShadow = Hover;
+                card.Classes.Remove("pressed");
+            };
+        }
     }
 
     // ---- fields -------------------------------------------------------------------------------

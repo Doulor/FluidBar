@@ -148,7 +148,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private PlatformMessageHost? _mouseHookHost;
     private IslandMouseHook? _mouseHook;
     private MonitorService? _monitorService;
-    private RegionSignature _regionSignature;
+    private IslandHitRegionSignature _regionSignature;
 
     // Reused buffer for the global-hook rectangles: they are rebuilt every frame while the preview
     // rail springs, so the animated pills stay inside the click-consuming envelope without allocating.
@@ -401,6 +401,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _emptyFrameStreak = 0;
         _probeAdvanceAlloc = 0;
         _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
@@ -803,7 +804,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             new LayeredHostOptions
             {
                 Pacing = LayeredPacingMode.TargetFrameRate,
-                TargetFramesPerSecond = _options.ResolvedFrameRate,
+                TargetFramesPerSecond = _controller.PowerProfile.FrameRate,
                 MergeDirtyRects = true,
                 WindowTitle = "FluidBar Island",
             },
@@ -813,7 +814,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _time);
 
         host.Create(monitor.ToPlatform(), layeredMode);
-        host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _options.ResolvedFrameRate);
+        host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _controller.PowerProfile.FrameRate);
         host.AttachAccessibility(_uiaSource, _uiaSource);
 
         var entry = new WindowEntry(host, monitor);
@@ -1241,7 +1242,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             return;
         }
 
-        if (!_controller.IsAnimating && !_controller.IsAgentAnimating)
+        var profile = _controller.PowerProfile;
+        // The power table's idle-frame allowance applies only while a split-agent ring is actually
+        // painted. With no ring the island must not keep a timer alive even in Performance mode.
+        var keepIdleFrames = profile.KeepIdleFrames && _controller.RenderState.IsVisible
+            && _controller.HasSpinningSplitRing;
+        if (!IslandFrameLoopPolicy.ShouldRun(_controller.IsAnimating, _controller.IsAgentAnimating, keepIdleFrames))
         {
             if (_frameClock.IsRunning)
             {
@@ -1266,10 +1272,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         if (!_frameClock.IsRunning)
         {
             _frameClock.Start(OnFrame);
-        }    }
+        }
+    }
 
     private SkiaIslandRenderChange _lastChange;
-    private bool _lastRenderHappened;
+    private int _emptyFrameStreak;
+    private TimeSpan _lastLoggedFrameInterval;
+    private long _frameNumber;
+    private readonly bool _frameLogEnabled = Environment.GetEnvironmentVariable("FLUIDBAR_FRAME_LOG") == "1";
 
     private void OnFrame(TimeSpan delta)
     {
@@ -1282,32 +1292,92 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var perfStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
         {
+            if (_frameClock is SkiaFrameClock liveClock)
+            {
+                // Re-read every tick: a settings switch must apply without waiting for a restart.
+                var interval = _controller.PreferredFrameInterval;
+                liveClock.SetInterval(interval);
+                if (interval != _lastLoggedFrameInterval)
+                {
+                    _lastLoggedFrameInterval = interval;
+                    _logger.Information(LogCategories.Render, "island.skia.frame-policy",
+                        "Frame interval changed.",
+                        data: new Dictionary<string, object?>
+                        {
+                            ["powerMode"] = _controller.PowerMode.ToString(),
+                            ["intervalMs"] = interval.TotalMilliseconds,
+                            ["ring"] = _controller.HasSpinningSplitRing,
+                            ["hover"] = _controller.IsPointerInside,
+                        });
+                }
+            }
+
             _controller.PumpTimers();
             _controller.Advance(delta);
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
-            RenderAllLocked(forceFull: false);
+            var painted = RenderAllLocked(forceFull: false);
+            var profile = _controller.PowerProfile;
+            var stopThreshold = _controller.HasSpinningSplitRing
+                ? profile.EmptyFrameStopThreshold
+                : 2;
+            if (stopThreshold > 0)
+            {
+                if (!painted)
+                {
+                    _emptyFrameStreak++;
+                }
+                else
+                {
+                    _emptyFrameStreak = 0;
+                }
+
+                if (_emptyFrameStreak >= stopThreshold)
+                {
+                    _frameClock.Stop();
+                    _emptyFrameStreak = 0;
+                }
+            }
+            else
+            {
+                _emptyFrameStreak = 0;
+            }
+
+            if (_frameLogEnabled)
+            {
+                _logger.Information(LogCategories.Render, "island.skia.frame",
+                    "Frame tick.",
+                    data: new Dictionary<string, object?>
+                    {
+                        ["frameNo"] = _frameNumber,
+                        ["timestamp"] = Stopwatch.GetTimestamp(),
+                        ["ring"] = _controller.HasSpinningSplitRing,
+                        ["powerMode"] = _controller.PowerMode.ToString(),
+                        ["intervalMs"] = _controller.PreferredFrameInterval.TotalMilliseconds,
+                    });
+            }
+
             if (SkiaFrameTrace.Enabled && _windows.Count > 0)
             {
                 SkiaFrameTrace.Frame(
-                    _lastRenderHappened ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
+                    ++_frameNumber,
+                    _controller.PowerMode,
+                    painted ? (_lastChange.FullFrame ? "full" : "dirty") : "none",
                     _controller.RenderState,
                     _controller.Motion,
                     _controller.IsAgentAnimating,
+                    _controller.HasSpinningSplitRing,
                     _lastChange);
             }
 
             if (_controller.IsAnimating || _controller.IsAgentAnimating)
             {
-                // The preview rail springs move the pills a few DIP during a page turn; keep the
-                // hook envelope on the painted geometry instead of the start-of-animation one.
-                var state = _controller.RenderState;
-                if (state.Archipelago.Visible)
-                {
-                    RebuildHookRects(state);
-                }
+                // Follow the painted shell every frame: the expand/collapse transition, the pager and
+                // the preview-rail springs all move the clickable geometry. The region is a plain
+                // in-memory model (no Win32 calls), so refreshing it per frame is cheap.
+                UpdateHitRegions(force: false);
             }
-            else
+            else if (!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
             {
                 _frameClock.Stop();
                 UpdateHitRegions(force: false);
@@ -1333,6 +1403,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _rendering = true;
+        _emptyFrameStreak = 0;
         _probeAdvanceAlloc = 0;
         _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
         try
@@ -1734,12 +1805,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
     }
 
-    private void RenderAllLocked(bool forceFull)
+    private bool RenderAllLocked(bool forceFull)
     {
-        _lastRenderHappened = false;
         if (_windows.Count == 0)
         {
-            return;
+            return false;
         }
 
         SkiaIslandRenderChange change;
@@ -1750,11 +1820,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
         else if (!_controller.TakeInvalidation(out change))
         {
-            return;
+            return false;
         }
 
         _lastChange = change;
-        _lastRenderHappened = true;
         var state = _controller.RenderState;
         double totalRenderMs = 0;
         foreach (var entry in _windows)
@@ -1768,6 +1837,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _perfProbe.RecordFrame(totalRenderMs, change.FullFrame, _probeAdvanceAlloc, renderAlloc);
             _probeAdvanceAlloc = 0;
         }
+
+        return true;
     }
 
     private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
@@ -1906,7 +1977,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var state = _controller.RenderState;
-        var signature = new RegionSignature(state.Form, state.IsVisible, state.Archipelago.Visible, state.PageIndex, _controller.IsAnimating);
+        // The clickable region must track the painted shell, not just the shell *form*: the expand /
+        // collapse transitions change the size every frame, and a stale region makes the body of the
+        // panel ignore every click (only the old compact pill stays interactive).
+        var signature = IslandHitRegionSignature.From(state, _controller.IsAnimating);
         if (!force && signature.Equals(_regionSignature))
         {
             return;
@@ -1963,6 +2037,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     placement.Y + (shell.Top - slackDip) * scale,
                     placement.X + (shell.Right + slackDip) * scale,
                     placement.Y + (shell.Bottom + slackDip) * scale));
+
+                var secondary = IslandMetrics.SecondaryShellRect(state);
+                if (!secondary.IsEmpty)
+                {
+                    _hookRects.Add(new IslandMouseHook.Rect(
+                        placement.X + (secondary.Left - slackDip) * scale,
+                        placement.Y + (secondary.Top - slackDip) * scale,
+                        placement.X + (secondary.Right + slackDip) * scale,
+                        placement.Y + (secondary.Bottom + slackDip) * scale));
+                }
 
                 foreach (var ball in IslandMetrics.SplitIsletRects(state))
                 {
@@ -2047,6 +2131,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         Span<VisualRect> rects = stackalloc VisualRect[LayeredHitRegion.MaxInteractiveRects];
         var count = 0;
+        // The secondary notification pill sits outside the primary shell, so it needs its own
+        // interactive rectangle; the gap between the two pills stays click-through.
+        AddRect(rects, ref count, IslandMetrics.SecondaryShellRect(state));
         // Split previews live outside the shell, so each ball gets its own interactive rect (clicks
         // between the balls stay transparent/click-through).
         foreach (var ball in IslandMetrics.SplitIsletRects(state))
@@ -2130,6 +2217,23 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // Frame statistics is an opt-in render-path recorder (spec §9.3); toggling it takes effect
         // immediately instead of waiting for the next restart.
         _frameStats.SetEnabled(current.Advanced.FrameStats);
+        if (previous.PowerMode != current.PowerMode)
+        {
+            // Next tick reads the new table; applying immediately also starts/stops the idle clock.
+            if (_frameClock is SkiaFrameClock clock)
+            {
+                clock.SetInterval(_controller.PreferredFrameInterval);
+            }
+
+            var fps = _controller.PowerProfile.FrameRate;
+            foreach (var entry in _windows)
+            {
+                entry.Host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, fps);
+            }
+
+            EnsureFrameLoop();
+        }
+
         if (previous.DisplayOn == current.DisplayOn)
         {
             return;
@@ -2185,13 +2289,6 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         data.SaveTo(stream);
         return true;
     }
-
-    private readonly record struct RegionSignature(
-        ShellForm Form,
-        bool Visible,
-        bool ArchipelagoVisible,
-        int Page,
-        bool Animating);
 
     /// <summary>Drop placement waiting for Core's <c>PersistPlacement</c> effect.</summary>
     private sealed record PendingDrop(

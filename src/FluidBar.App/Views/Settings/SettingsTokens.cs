@@ -38,12 +38,12 @@ internal static class SettingsMetrics
     public const double NavPadY = 14;
     public const double NavPadX = 10;
     public const double NavGap = 2;
-    public const double NavItemHeight = 36;
+    public const double NavItemHeight = 40;
     public const double NavItemRadius = 8;
     public const double NavItemPadX = 10;
     public const double NavItemGap = 9;
-    public const double NavIcon = 16;
-    public const double NavLabelSize = 12;
+    public const double NavIcon = 18;
+    public const double NavLabelSize = 13;
     public const double NavCountHeight = 16;
     public const double NavCountRadius = 5;
     public const double NavCountPadX = 4;
@@ -75,14 +75,20 @@ internal static class SettingsMetrics
     public const double DescLineHeight = 1.55;
     public const double DescMarginBottom = 18;
     public const double DescMaxWidth = 560;
-    public const double CaptionSize = 9;
-    public const double CaptionTracking = 0.12;
+    public const double CaptionSize = 11;
+    public const double CaptionTracking = 0.036; // 11 x 0.036 ~= +0.4 DIP letter-spacing
     public const double CaptionMarginTop = 20;
     public const double CaptionMarginBottom = 2;
     public const double RowMinHeight = 53;
     public const double RowPadY = 8;
     public const double RowGap = 18;
-    public const double RowTitleSize = 12;
+    public const double RowTitleSize = 13;
+
+    /// <summary>Row description line ("说明") size.</summary>
+    public const double RowDescriptionSize = 11.5;
+
+    /// <summary>Standard settings row height.</summary>
+    public const double RowHeight = 48;
     public const double RowTitleLineHeight = 1.35;
     public const double RowDescSize = 10;
     public const double RowDescLineHeight = 1.45;
@@ -311,12 +317,13 @@ public sealed class SettingsPalette
         IsLight = theme == AppTheme.Light;
         if (IsLight)
         {
+            // Material L0 (container) / L1 (card, 60 % overlay, radius 12) / L2 (separator, 9 %).
             Window = Color.Parse("#F9FAFC");
-            Raised = Color.FromArgb(14, 17, 24, 39);
-            RaisedHover = Color.FromArgb(22, 17, 24, 39);
+            Raised = Color.FromArgb(153, 255, 255, 255);
+            RaisedHover = Color.FromArgb(179, 255, 255, 255);
             Field = Color.FromArgb(9, 17, 24, 39);
-            Line = Color.FromArgb(20, 17, 24, 39);
-            LineStrong = Color.FromArgb(33, 17, 24, 39);
+            Line = Color.FromArgb(23, 17, 24, 39);
+            LineStrong = Color.FromArgb(31, 17, 24, 39);
             Foreground = Color.Parse("#151A21");
             Secondary = Color.Parse("#59626F");
             Tertiary = Color.Parse(TextTokens.TertiaryLight);
@@ -325,12 +332,13 @@ public sealed class SettingsPalette
         }
         else
         {
-            Window = Color.Parse("#0C0C0F");
-            Raised = Color.FromArgb(13, 255, 255, 255);
-            RaisedHover = Color.FromArgb(22, 255, 255, 255);
+            // Material L0 (near-black container) / L1 (#141418 at 60 %, radius 12) / L2 (white 9 %).
+            Window = Color.Parse("#08080A");
+            Raised = Color.FromArgb(153, 20, 20, 24);
+            RaisedHover = Color.FromArgb(179, 24, 24, 30);
             Field = Color.FromArgb(9, 255, 255, 255);
-            Line = Color.FromArgb(17, 255, 255, 255);
-            LineStrong = Color.FromArgb(28, 255, 255, 255);
+            Line = Color.FromArgb(23, 255, 255, 255);
+            LineStrong = Color.FromArgb(31, 255, 255, 255);
             Foreground = Color.Parse("#F4F4F6");
             Secondary = Color.Parse("#9B9BA5");
             Tertiary = Color.Parse(TextTokens.TertiaryDark);
@@ -338,6 +346,21 @@ public sealed class SettingsPalette
             ActiveForeground = Color.Parse("#0B0B0D");
         }
 
+        // Material L3 top micro-highlight (white 5.1 %, 1.5 DIP fading to transparent) and
+        // L4 pressed inset (black 18 %, top inset 8 DIP, sigma 4).
+        // Material L3 highlight colour: white 5.1 % (#0DFFFFFF) in both themes, per the shared tokens.
+        var highlightTop = Color.FromArgb(13, 255, 255, 255);
+        TopHighlightBrush = new LinearGradientBrush
+        {
+            StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+            EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+            GradientStops =
+            {
+                new Avalonia.Media.GradientStop(highlightTop, 0),
+                new Avalonia.Media.GradientStop(Color.FromArgb(0, 255, 255, 255), 1),
+            },
+        };
+        PressedInsetColor = Color.FromArgb(46, 0, 0, 0);
         WindowBrush = new SolidColorBrush(Window);
         RaisedBrush = new SolidColorBrush(Raised);
         RaisedHoverBrush = new SolidColorBrush(RaisedHover);
@@ -413,6 +436,34 @@ public sealed class SettingsPalette
     public IBrush TertiaryBrush { get; }
     public IBrush ActiveBrush { get; }
     public IBrush ActiveForegroundBrush { get; }
+
+    /// <summary>Material L3: top micro-highlight gradient (white 5.1 % -> transparent).</summary>
+    public IBrush TopHighlightBrush { get; }
+
+    /// <summary>Material L4: pressed inset colour (black 18 %).</summary>
+    public Color PressedInsetColor { get; }
+
+    /// <summary>Material L3 highlight height in DIP.</summary>
+    public const double TopHighlightHeightDip = 1.5;
+
+    /// <summary>Material L4 pressed inset: top offset in DIP.</summary>
+    public const double PressedInsetTopDip = 8;
+
+    /// <summary>Material L4 pressed inset: blur sigma in DIP.</summary>
+    public const double PressedInsetSigmaDip = 4;
+
+    /// <summary>Material L1 card corner radius in DIP.</summary>
+    public const double CardCornerRadiusDip = 12;
+
+    /// <summary>
+    /// Projects this palette onto the material surface record so <c>AppSurfaceMaterial.Validate</c> can
+    /// self-check the settings surfaces (L0 container, L1 card, L2 separator) without touching the theme
+    /// palette owned by the theme line.
+    /// </summary>
+    /// <returns>The surfaces consumed by the material self-check.</returns>
+    public Theme.AppSurfaceColors ToSurfaces() => new(
+        Window, Raised, Raised, RaisedHover, Field, Line, LineStrong,
+        Foreground, Secondary, Tertiary, Active, ActiveForeground);
 
     /// <summary>Prototype <c>--ui-active</c> chip used by the marketplace install button.</summary>
     public IBrush InstallBrush => ActiveBrush;

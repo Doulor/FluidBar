@@ -1,5 +1,6 @@
 using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
+using FluidBar.Core.Motion;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -37,6 +38,11 @@ internal sealed class TransientStripRenderer : IDisposable
     private readonly SKRect[] _dotsRight = new SKRect[MaxDots];
 
     private MiniRailFrame _frame;
+
+    // Satellite hover: one progress drives the hover alpha and the 6 % grow, so entering and leaving
+    // are monotonic instead of a one-frame colour swap (the old path jumped straight to HoverGlass).
+    private readonly CssTransition _hoverFade = new(0);
+    private MiniRailSlot _hoverTarget = MiniRailSlot.None;
     private string _label = string.Empty;
     private string _labelFrom = string.Empty;
     private int _trackedPage = -1;
@@ -54,6 +60,12 @@ internal sealed class TransientStripRenderer : IDisposable
 
     /// <summary>Current capsule width in DIP (64..104, morphs while the pager moves).</summary>
     public float CapsuleWidth => _frame.CapsuleWidth;
+
+    /// <summary>Hover progress of the satellite under the pointer (0..1; diagnostics/tests).</summary>
+    internal float HoverProgress => (float)Math.Clamp(_hoverFade.Value, 0, 1);
+
+    /// <summary>Scale the hovered satellite is drawn at (1..1.06; diagnostics/tests).</summary>
+    internal float HoverScale => 1f + (0.06f * HoverProgress);
 
     /// <summary>Copies the current fixed-buffer layout into a public snapshot (allocates; not per frame).</summary>
     public IslandStripLayout ToLayout()
@@ -79,9 +91,23 @@ internal sealed class TransientStripRenderer : IDisposable
     }
 
     /// <summary>Recomputes the rail layout for a shell rectangle and state.</summary>
-    public void Update(in IslandRenderState state, SKRect shell)
+    /// <param name="deltaSeconds">Frame delta for the hover fade (the host renders at up to 120 Hz).</param>
+    public void Update(in IslandRenderState state, SKRect shell, double deltaSeconds = 1.0 / 120.0)
     {
         _frame = MiniRailLayout.Measure(state, shell, _dotsLeft, _dotsRight);
+
+        var hover = _frame.Hover is MiniRailSlot.Previous or MiniRailSlot.Next
+            ? _frame.Hover
+            : MiniRailSlot.None;
+        if (hover != _hoverTarget)
+        {
+            _hoverTarget = hover;
+            // Enter 120 ms, leave 160 ms (both ease-out): a single progress, never a per-frame flip.
+            _hoverFade.Retarget(hover == MiniRailSlot.None ? 0 : 1,
+                hover == MiniRailSlot.None ? 0.160 : 0.120, ShellTransition.EaseOut);
+        }
+
+        _hoverFade.Step(Math.Clamp(deltaSeconds, 0, 0.25));
         var label = state.Pages?.ShortTitle(_frame.Page)
             ?? ExpandedPageContent.DefaultPageTitles[Math.Clamp(_frame.Page, 0, ExpandedPageContent.DefaultPageTitles.Length - 1)];
         if (_frame.Page != _trackedPage)
@@ -309,10 +335,24 @@ internal sealed class TransientStripRenderer : IDisposable
 
     private void DrawNeighbour(SKCanvas canvas, SKRect rect, int page, float alpha, float pulse, MiniRailSlot slot)
     {
-        DrawGlass(canvas, rect, alpha, MiniRailLayout.GlassFor(slot, _frame.Hover, _frame.Pressed));
-        var size = (float)IslandMetrics.MiniNeighbourIconSize;
-        var icon = new SKRect(rect.MidX - (size / 2f), rect.MidY - (size / 2f),
-            rect.MidX + (size / 2f), rect.MidY + (size / 2f));
+        var hover = slot == _hoverTarget ? HoverProgress : 0f;
+        var scale = 1f + (0.06f * hover);
+        var glass = new SKRect(
+            rect.MidX - (rect.Width / 2f * scale),
+            rect.MidY - (rect.Height / 2f * scale),
+            rect.MidX + (rect.Width / 2f * scale),
+            rect.MidY + (rect.Height / 2f * scale));
+        var pressed = _frame.Pressed == slot;
+        DrawGlass(canvas, glass, alpha, pressed ? MiniRailLayout.PressedGlass : MiniRailLayout.Glass);
+        if (hover > 0.001f)
+        {
+            // Same paint, colour only: the hover glass fades in with the shared progress.
+            DrawGlass(canvas, glass, alpha * 0.62f * hover, MiniRailLayout.HoverGlass);
+        }
+
+        var size = (float)IslandMetrics.MiniNeighbourIconSize * scale;
+        var icon = new SKRect(glass.MidX - (size / 2f), glass.MidY - (size / 2f),
+            glass.MidX + (size / 2f), glass.MidY + (size / 2f));
         // `.mini-content` colour rgba(255,255,255,.56) with the 0.9 icon opacity and the 150 ms
         // content pulse (0.35 → 1) the prototype plays when the icon changes.
         var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(pulse));

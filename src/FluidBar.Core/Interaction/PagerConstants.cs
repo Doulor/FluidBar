@@ -42,25 +42,47 @@ public static class PagerConstants
     public const double MaxReleaseVelocityPagesPerSecond = 14;
 
     /// <summary>
-    /// Wheel/trackpad delta (DIP) a page step consumes; prototype2's <c>PAGER.wheelStep</c> (140).
+    /// Wheel/trackpad delta (DIP) a page step consumes. Lowered from 140 so a light scroll already
+    /// turns one page (feel pass 2026-10-21: "后摇" inertia, threshold band 55-70).
     /// </summary>
-    public const double WheelNotchDip = 140;
+    public const double WheelNotchDip = 60;
 
     /// <summary>
-    /// DIP produced by ONE physical wheel notch (70). The host maps a notch's raw 120 to this value,
-    /// so two notches make one <see cref="WheelNotchDip"/> page step — the same cadence as
-    /// prototype2, whose 100 px Chrome notch needs 1.4 notches per 140 px step.
+    /// DIP produced by ONE physical wheel notch (140). One notch is one page step; the host maps
+    /// the raw 120 delta directly to this value so scrolling feels immediate, not accumulated.
     /// </summary>
-    public const double WheelDipPerNotch = WheelNotchDip / 2;
+    public const double WheelDipPerNotch = WheelNotchDip;
 
-    /// <summary>Minimum time between two wheel-driven page changes (pager v2).</summary>
-    public const int WheelCooldownMs = 180;
+    /// <summary>Minimum time between two wheel-driven page changes (page-turn cooldown: 260 ms).</summary>
+    public const int WheelCooldownMs = 260;
 
-    /// <summary>Snap spring period T in seconds for the pager (pager v2, stronger damping).</summary>
-    public const double SnapSpringPeriodSeconds = 0.38;
+    /// <summary>Minimum gap before a new wheel intent may start a fresh page turn (150 ms).</summary>
+    public const int WheelNewIntentMinMs = 150;
 
-    /// <summary>Snap spring damping ratio ζ for the pager (pager v2, stronger damping).</summary>
-    public const double SnapSpringDampingRatio = 0.94;
+    /// <summary>
+    /// Idle gap (ms) that ends a wheel gesture. Notches closer than this belong to the same gesture
+    /// and are ignored once a page step fired, so one flick can never flip several pages.
+    /// </summary>
+    public const int WheelGestureIdleMs = 120;
+
+    /// <summary>
+    /// Minimum gap (ms) before a *new* deliberate gesture may turn the next page. Deliberate repeat
+    /// scrolls (&gt; 150 ms apart) therefore chain pages, while the 260 ms transition lock keeps one
+    /// continuous gesture capped at a single page.
+    /// </summary>
+    public const int WheelNewIntentMs = 150;
+
+    /// <summary>
+    /// Hard lock (ms) inside a gesture after a page step: notches arriving within this window of the
+    /// step are dropped unqueued (the transition is still running).
+    /// </summary>
+    public const int WheelTransitionLockMs = 260;
+
+    /// <summary>Snap spring period T in seconds for the pager (feel pass: 0.35 s, "后摇" overshoot).</summary>
+    public const double SnapSpringPeriodSeconds = 0.35;
+
+    /// <summary>Snap spring damping ratio ζ for the pager (feel pass: 0.75, a slight overshoot).</summary>
+    public const double SnapSpringDampingRatio = 0.75;
 
     /// <summary>Default retarget frame delta used by <see cref="PagerSnapMotion"/> for velocity clamping.</summary>
     public const double RetargetFrameSeconds = 1.0 / 120.0;

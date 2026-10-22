@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Globalization;
 using FluidBar.App.Island;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
+using FluidBar.Core.Configuration;
 using FluidBar.Core.Diagnostics;
 using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Agent;
@@ -43,6 +45,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly ILocalizer? _localizer;
     private readonly TimeProvider _time;
     private readonly IAppLogger _logger;
+
+    private long _lastSyncTextLogMs;
     private readonly IPlatformLogger _platformLogger;
     private readonly PlatformCounters _counters;
     private readonly PlatformMessageHost _messageHost;
@@ -74,6 +78,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private DateOnly _calendarMonth;
     private ITimer? _clockTimer;
     private ITimer? _mediaTick;
+    private TimeSpan _mediaTickInterval;
     private LyricsDocument? _lyricsDocument;
     private string _lyricsTrackKey = string.Empty;
     private int _started;
@@ -126,7 +131,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             new ArtworkTempStoreOptions { DirectoryPath = Path.Combine(Path.GetTempPath(), "FluidBar", "art") },
             _platformLogger,
             time);
-        _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time);
+        _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time,
+            powerModeProvider: () => _settings.Current.PowerMode);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
 
         // Agent inbox: hook scripts drop one JSON file per Claude Code / Codex event here. Read-only
@@ -157,6 +163,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 // The player's own cache wins: it is offline and exactly the lyric the player shows,
                 // which removes the "wrong song" matches the online catalogues produce for KuGou.
                 new KugouLocalLyricsProvider(timeProvider: time, logger: _platformLogger),
+                new QishuiLocalLyricsProvider(timeProvider: time, logger: _platformLogger),
                 new NeteaseLyricsProvider(_lyricsHttp, _platformLogger),
                 new KugouLyricsProvider(_lyricsHttp, _platformLogger),
             },
@@ -396,6 +403,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// </summary>
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.PowerMode != current.PowerMode)
+        {
+            EnsureMediaTick();
+        }
+
         if (previous.Theme != current.Theme)
         {
             Changed?.Invoke(this, EventArgs.Empty);
@@ -449,18 +461,29 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var media = _media.Current;
         var playing = media is { IsEmpty: false, IsPlaying: true };
+        var interval = _settings.Current.PowerMode == IslandPowerMode.Saver
+            ? TimeSpan.FromSeconds(2)
+            : TimeSpan.FromSeconds(1);
         if (playing)
         {
-            _mediaTick ??= _time.CreateTimer(
+            if (_mediaTick is not null && _mediaTickInterval == interval)
+            {
+                return;
+            }
+
+            _mediaTick?.Dispose();
+            _mediaTickInterval = interval;
+            _mediaTick = _time.CreateTimer(
                 static state => ((SkiaPlatformActions)state!).OnMediaTick(),
                 this,
-                TimeSpan.FromSeconds(1),
-                TimeSpan.FromSeconds(1));
+                interval,
+                interval);
             return;
         }
 
         _mediaTick?.Dispose();
         _mediaTick = null;
+        _mediaTickInterval = TimeSpan.Zero;
     }
 
     private void OnMediaTick()
@@ -566,9 +589,56 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 
+    /// <summary>True when the lyric document describes the track that is playing.</summary>
+    private static bool LyricsBelongToTrack(LyricsDocument document, MediaSnapshot media)
+    {
+        var title = (document.Title ?? string.Empty).Trim();
+        var artist = (document.Artist ?? string.Empty).Trim();
+        if (title.Length == 0)
+        {
+            return true;
+        }
+
+        var wanted = (media.Title ?? string.Empty).Trim();
+        var wantedArtist = (media.Artist ?? string.Empty).Trim();
+        var titleOk = Mentions(title, wanted) || Mentions(wanted, title);
+        var artistOk = artist.Length == 0 || wantedArtist.Length == 0
+            || Mentions(artist, wantedArtist) || Mentions(wantedArtist, artist);
+        return titleOk && artistOk;
+    }
+
+    private static bool Mentions(string haystack, string needle)
+        => needle.Length > 0 && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
     private (string? Current, string? Next, double Highlight, FluidBar.Island.KaraokeTrack? Karaoke) ResolveLyrics(
         MediaSnapshot media, TimeSpan position)
     {
+        // Instrumentals have nothing to sing: show the title and artist instead of whatever the catalogue
+        // matched for that title (user report 2026-10-22: "纯音乐随机取了别的歌的歌词").
+        if (FluidBar.Platform.Windows.Media.Lyrics.InstrumentalDetector.LooksInstrumental(media.Title))
+        {
+            return (null, null, -1, null);
+        }
+
+        // The player's own KRC file comes FIRST: it is exactly what KuGou is showing (word-level timing)
+        // and cannot be another song. It used to be consulted after the "no online document" early
+        // return, so a track without an online lyric never reached it (user report 2026-10-21).
+        var localDocument = FluidBar.Platform.Windows.Media.Lyrics.KugouLyricCache.TryFind(media.Title, media.Artist);
+        if (FluidBar.Platform.Windows.Media.Lyrics.InstrumentalDetector.IsPlaceholder(localDocument))
+        {
+            // The player's own lyric for this file is the "纯音乐，请欣赏" placeholder: treat it as no lyric.
+            return (null, null, -1, null);
+        }
+
+        if (localDocument is { IsEmpty: false })
+        {
+            var localSelection = LyricsTimelineSelector.SelectDetailed(localDocument, position, media.Title, media.Artist);
+            _logger.Information(LogCategories.Platform, "lyrics.local",
+                $"Local lyric used: '{localDocument.Title}' by '{localDocument.Artist}' lines={localDocument.Lines.Length} track='{media.Title}'.");
+            return (localSelection.Current, localSelection.Next, localSelection.Highlight,
+                ToKaraokeTrack(localSelection.Line, localDocument));
+        }
+
         var document = _lyricsDocument;
         if (document is null || document.IsEmpty
             || !string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
@@ -577,6 +647,16 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         // SelectDetailed also returns the karaoke sweep of the current line (KRC word timeline).
+        // The catalogue search is fuzzy: a cover, a same-titled single or a mistyped window title
+        // returns another song's lyrics, which then scroll against the wrong track. Reject a document
+        // whose metadata does not describe this track (user report 2026-10-21).
+        if (!LyricsBelongToTrack(document, media))
+        {
+            _logger.Information(LogCategories.Platform, "lyrics.rejected",
+                $"Rejected lyrics '{document.Title}' by '{document.Artist}' ({document.Source}) for '{media.Title}'.");
+            return (null, null, -1, null);
+        }
+
         var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
         return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line, document));
     }
@@ -670,6 +750,17 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var duration = media.Duration > TimeSpan.Zero ? media.Duration : LyricDurationFor(media);
 
+        // The track length from the player's own clock is the least reliable number we have: the text it
+        // comes from freezes with the window. The lyric timeline (local KRC: last line end; online: the
+        // duration the provider reports) is stable and cannot be minutes off, so it wins whenever the two
+        // disagree by more than a tolerance (user report 2026-10-21: "时长不匹配").
+        var lyricDuration = LyricDurationFor(media);
+        if (lyricDuration > TimeSpan.Zero
+            && (duration <= TimeSpan.Zero || Math.Abs((duration - lyricDuration).TotalSeconds) > 3))
+        {
+            duration = lyricDuration;
+        }
+
         // Optimistic play state (see SetOptimisticPlaying): until the source agrees, publish the flip.
         var sourcePlaying = media.IsPlaying;
         var isPlaying = _optimisticPlay.Resolve(sourcePlaying, _time.GetUtcNow());
@@ -696,6 +787,19 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         var position = ResolvePosition(media, duration, isPlaying);
 
+        // Anchor provenance: what the platform sampled and what we published. One line per poll makes a
+        // "the time is off" report attributable without guesswork.
+        if (Environment.TickCount64 - _lastSyncTextLogMs > 5000)
+        {
+            _lastSyncTextLogMs = Environment.TickCount64;
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
+                $"sync.island {position.TotalSeconds,7:0.0}s text='{(int)(position.TotalSeconds / 60)}:{(int)(position.TotalSeconds % 60):00}' title='{media.Title}'");
+        }
+
+        _logger.Information(LogCategories.Platform, "position.anchor",
+            $"sampled={media.Position.TotalMilliseconds:0}ms published={position.TotalMilliseconds:0}ms " +
+            $"duration={duration.TotalMilliseconds:0}ms playing={isPlaying} title='{media.Title}'");
+
         var progress = duration.TotalMilliseconds > 0
             ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
             : 0;
@@ -703,6 +807,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var artwork = _artworkCache.TryGet(media.TrackKey, out var artworkEntry) && artworkEntry is not null
             ? artworkEntry.Data
             : null;
+        if (artwork is not null)
+        {
+            _lastArtworkTitle = CoreTitle(media.Title);
+            _lastArtworkEntry = artworkEntry;
+        }
+        else if (_lastArtworkEntry is not null
+                 && _lastArtworkTitle.Length > 0
+                 && string.Equals(_lastArtworkTitle, CoreTitle(media.Title), StringComparison.OrdinalIgnoreCase))
+        {
+            // The identity key can change for a cosmetic reason (caption refinement, artist field filled in
+            // a beat later). Reusing the cover we already decoded keeps it on screen instead of flashing
+            // placeholder -> cover -> placeholder ("封面获取到了又丢失了", user report 2026-10-22).
+            artwork = _lastArtworkEntry.Data;
+        }
 
         var (lyricLine, nextLyricLine, lyricHighlight, karaoke) = ResolveLyrics(media, position);
 
@@ -721,6 +839,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             PositionText = hasElapsed ? FormatTime(position) : "—",
             DurationText = hasDuration ? FormatTime(duration) : "—",
             HasTimeline = hasDuration,
+            CanSeek = media.CanSeek && hasDuration,
             IsPlaying = isPlaying,
             Artwork = artwork,
             ArtworkKey = artwork is null ? null : media.TrackKey,
@@ -735,6 +854,28 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             TrackIndex = 0,
             TrackCount = 0,
         };
+    }
+
+    /// <summary>Last artwork shown, reused while the track (by title core) is unchanged.</summary>
+    private string _lastArtworkTitle = string.Empty;
+    private ArtworkEntry? _lastArtworkEntry;
+
+    /// <summary>Title without decorations ("Song (Live)" -> "song"), used to recognise the same track.</summary>
+    private static string CoreTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return string.Empty;
+        }
+
+        var text = title.Trim();
+        var cut = text.IndexOfAny(['(', '（', '[', '【']);
+        if (cut > 0)
+        {
+            text = text[..cut];
+        }
+
+        return text.Trim().ToLowerInvariant();
     }
 
     /// <summary>Monotonic playback position shared by every media mapping (progress, lyrics, karaoke).</summary>
@@ -833,7 +974,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         {
             _positionSample = media.Position;
             _positionSampleAt = media.PositionUpdatedAtUtc;
-            _positionClock.Reconcile(media.Position.TotalMilliseconds, nowMs, isPlaying);
+            // The sample carries the instant it was taken. Anchoring it at "now" adds the transport delay
+            // (platform poll + dispatch) to every frame, which is what kept the island a second or two
+            // ahead of the player. Age the sample forward instead.
+            var sampleAgeMs = media.PositionUpdatedAtUtc > DateTimeOffset.MinValue
+                ? Math.Clamp((DateTimeOffset.UtcNow - media.PositionUpdatedAtUtc).TotalMilliseconds, 0, 5000)
+                : 0;
+            var sampledPositionMs = media.Position.TotalMilliseconds + (isPlaying ? sampleAgeMs : 0);
+            _positionClock.Reconcile(sampledPositionMs, nowMs, isPlaying);
         }
         else
         {
@@ -1085,9 +1233,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 "no audio-output picker service exists (needs an IAudioOutputService over IMMDeviceEnumerator)"),
             IslandPlatformActionKind.MediaQueue => Unsupported(
                 "no media queue service exists (the GSMTC snapshot exposes no queue)"),
-            IslandPlatformActionKind.NotificationActivate => Defer(
-                action, "no public Windows API activates another app's toast; open the toast from Action Center instead"),
+            IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
+            IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -1152,7 +1300,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         try
         {
-            await Task.Delay(220).ConfigureAwait(false);
+            await Task.Delay(900).ConfigureAwait(false);
             RequestSourceReread(force: true);
         }
         catch (Exception)
@@ -1352,6 +1500,77 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// </summary>
     private static string BuildAgentHookCommand(string inboxDirectory)
         => "pwsh -NoProfile -Command \"$j=@{schemaVersion=1;agent='claude-code';event='Stop';title='Claude Code';timestamp=(Get-Date).ToString('o')}|ConvertTo-Json -Compress;Set-Content -LiteralPath (Join-Path '" + inboxDirectory + "' ('claude-'+[guid]::NewGuid().ToString('N')+'.json')) -Value $j\"";
+
+    /// <summary>
+    /// Copies a notification's detected verification code to the clipboard. The code travels in
+    /// <see cref="IslandPlatformAction.Text"/> so the platform seam never needs the toast snapshot.
+    /// </summary>
+    private IslandActionResult CopyNotificationCode(in IslandPlatformAction action)
+    {
+        if (string.IsNullOrWhiteSpace(action.Text))
+        {
+            return Unsupported("the notification row has no verification code to copy");
+        }
+
+        var copyText = action.Text;
+        _ = RunAsync(() => _clipboard.SetTextAsync(copyText), "island.actions.notification-copy-code");
+        return IslandActionResult.Handled;
+    }
+
+    /// <summary>
+    /// Opens the notification's originating app/action. WinRT cannot activate another app's toast,
+    /// but the toast XML carries the app's <c>launch</c> protocol URI (QQ uses a ntqq:// deep link);
+    /// use it first, then fall back to the running app's executable.
+    /// </summary>
+    private IslandActionResult ActivateNotification(int index)
+    {
+        var recent = _notifications.Current?.Recent ?? ImmutableArray<NotificationEntry>.Empty;
+        if (index < 0 || index >= Math.Min(PageNotificationLimit, recent.Length))
+        {
+            return Unsupported("the notification row no longer exists");
+        }
+
+        var entry = recent[index];
+        var launch = NotificationToastImageReader.TryReadLaunch(entry.Id);
+        if (!string.IsNullOrWhiteSpace(launch))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(launch) { UseShellExecute = true });
+                return IslandActionResult.Handled;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Platform, "island.actions.notification-launch-failed",
+                    $"Launching notification URI '{launch}' failed; falling back to the app executable.", ex);
+            }
+        }
+
+        try
+        {
+            foreach (var process in Process.GetProcesses())
+            {
+                if (!process.ProcessName.Equals(entry.AppName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var path = process.MainModule?.FileName;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                    return IslandActionResult.Handled;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.actions.notification-app-launch-failed",
+                "Opening the notification app executable failed.", ex);
+        }
+
+        return Unsupported("the notification has no launch URI and no running app executable");
+    }
 
     /// <summary>
     /// Removes one notification row. Windows has no public API to dismiss another app's toast, so this

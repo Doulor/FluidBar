@@ -45,7 +45,7 @@ public sealed class SplitCapsuleStyleTests
             Assert.Equal(IslandMetrics.SplitIsletDiameter(state), ball.Width, 0.001);
             Assert.Equal(ball.Width, ball.Height, 0.001);
             Assert.Equal(shell.MidY, ball.MidY, 0.001);
-            Assert.True(ball.Left >= 0 && ball.Right <= LayoutTokens.HostSurfaceWidth);
+            Assert.True(ball.Left >= 0 && ball.Right <= LayoutTokens.HostSurfaceFloatWidth);
         }
     }
 

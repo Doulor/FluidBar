@@ -1,4 +1,5 @@
 using FluidBar.App.Island;
+using FluidBar.Core.Activities;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
 using FluidBar.Island;
@@ -22,6 +23,51 @@ public sealed class AgentAnimationTests
         TimeText = time,
         Kind = AgentKind.Claude,
     };
+
+    [Fact]
+    public void Compact_agent_keeps_spinning_when_the_pointer_leaves()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Settle();
+        fixture.Controller.PublishActivity(ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Claude Code",
+            IsActive = true,
+        }, 1, "agent-animation-test");
+        fixture.Settle();
+
+        var compact = fixture.Controller.RenderState.Compact!.Value;
+        Assert.Equal(ActivityKind.Agent, compact.Kind);
+        Assert.Equal(CompactStatus.Info, compact.Model.Status);
+        Assert.True(fixture.Controller.IsAgentAnimating, "a running agent pill must request frames");
+
+        // The pill is the primary island: moving the pointer away must not freeze the ring
+        // (user report 2026-10-21: it only spun while hovered).
+        fixture.Controller.HandlePointerLeft();
+        Assert.False(fixture.Controller.IsPointerInside);
+        Assert.True(fixture.Controller.IsAgentAnimating, "leaving the pill must keep the ring spinning");
+
+        var before = fixture.Controller.RenderState.AgentAnimationSeconds;
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.Equal(before + 0.1, fixture.Controller.RenderState.AgentAnimationSeconds, 3);
+    }
+
+    [Fact]
+    public void Compact_completed_agent_stops_the_frame_loop()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Settle();
+        fixture.Controller.PublishActivity(ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Claude Code",
+            IsActive = false,
+        }, 1, "agent-animation-test");
+        fixture.Settle();
+
+        var compact = fixture.Controller.RenderState.Compact!.Value;
+        Assert.Equal(CompactStatus.Success, compact.Model.Status);
+        Assert.False(fixture.Controller.IsAgentAnimating);
+    }
 
     [Fact]
     public void Running_agent_page_advances_the_agent_clock()

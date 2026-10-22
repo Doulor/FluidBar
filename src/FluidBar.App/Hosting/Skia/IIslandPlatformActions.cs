@@ -43,6 +43,9 @@ public enum IslandPlatformActionKind
     /// <summary>Dismiss a notification row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     NotificationDismiss,
 
+    /// <summary>Copy a notification's verification code; <see cref="IslandPlatformAction.Text"/> is the code.</summary>
+    NotificationCopyCode,
+
     /// <summary>Copy a clipboard row; <see cref="IslandPlatformAction.Text"/> is the row text.</summary>
     ClipboardCopy,
 

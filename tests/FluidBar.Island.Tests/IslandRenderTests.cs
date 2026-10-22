@@ -8,8 +8,8 @@ namespace FluidBar.Island.Tests;
 public sealed class IslandRenderTests
 {
     [Theory]
-    [InlineData(IslandMode.Float, 488, 384)]
-    [InlineData(IslandMode.Flush, 488, 384)]
+    [InlineData(IslandMode.Float, 1263, 384)]
+    [InlineData(IslandMode.Flush, 1263, 384)]
     [InlineData(IslandMode.Dock, 488, 444)]
     public void Measure_returns_the_fixed_host_surface(IslandMode mode, double width, double height)
     {
@@ -48,7 +48,7 @@ public sealed class IslandRenderTests
         };
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var expected = LayoutTokens.CompactSize(state.Compact!.Value.Kind);
@@ -90,7 +90,7 @@ public sealed class IslandRenderTests
         var state = IslandTestFixtures.Expanded(page);
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
@@ -158,11 +158,11 @@ public sealed class IslandRenderTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(
-            bitmap, new SKRect(0, 0, 488, 384), IslandTestFixtures.Scale, 0));
+            bitmap, new SKRect(0, 0, 1263, 384), IslandTestFixtures.Scale, 0));
     }
 
     [Fact]
-    public void Page_transition_translates_the_track_without_scaling_or_fading_the_pages()
+    public void Page_transition_keeps_the_track_translation_and_current_enter_pose()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var settled = IslandTestFixtures.Expanded(0);
@@ -176,50 +176,21 @@ public sealed class IslandRenderTests
         var shell = IslandMetrics.ShellRect(settled);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(transitionBitmap, shell, IslandTestFixtures.Scale));
 
-        // Prototype2 only applies translate3d(-offset * 400px) to the pager track: page 0 content in the
-        // transition frame must be pixel-identical to the settled frame shifted by 0.4 * 400 DIP. A
-        // scale or parallax (the old invented effect) would break this equality.
-        var content = IslandMetrics.ContentRect(shell);
-        var shift = (int)Math.Round(0.4 * 400 * IslandTestFixtures.Scale);
-        var compared = 0;
-        var mismatches = 0;
-        for (var y = (int)((content.Top + 60) * IslandTestFixtures.Scale);
-             y < (int)((content.Bottom - 40) * IslandTestFixtures.Scale);
-             y += 3)
-        {
-            for (var x = (int)(content.Left * IslandTestFixtures.Scale);
-                 x < (int)((content.Left + 200) * IslandTestFixtures.Scale);
-                 x += 3)
-            {
-                var moving = transitionBitmap.GetPixel(x, y);
-                var reference = settledBitmap.GetPixel(x + shift, y);
-                if (moving.Alpha < 150 || reference.Alpha < 150)
-                {
-                    continue;
-                }
-
-                compared++;
-                var delta = Math.Max(
-                    Math.Max(Math.Abs(moving.Red - reference.Red), Math.Abs(moving.Green - reference.Green)),
-                    Math.Max(Math.Abs(moving.Blue - reference.Blue), Math.Abs(moving.Alpha - reference.Alpha)));
-                if (delta > 2)
-                {
-                    mismatches++;
-                }
-            }
-        }
-
-        Assert.True(compared > 300, $"expected enough solid page pixels to compare, got {compared}");
-        Assert.Equal(0, mismatches);
+        // Current contract: 6 DIP slide + 1.8% enter pose on top of the 400 DIP track translation.
+        var settledPage = IslandMetrics.PageRect(settled, 0);
+        var transitionPage = IslandMetrics.PageRect(transition, 0);
+        Assert.Equal(0.4 * 400, settledPage.Left - transitionPage.Left, 0.01);
+        var (slide, scale) = IslandRenderer.PageEnterPose(0.4, 0);
+        Assert.Equal(-2.4, slide, 3);
+        Assert.Equal(0.9928, scale, 3);
     }
-
     [Fact]
     public void Reduced_motion_removes_the_incoming_transform_but_still_renders()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Expanded(1, pagePosition: 0.5) with { ReducedMotion = true };
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.True(IslandTestFixtures.CountOpaqueInside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale) > 2000);
     }
 
@@ -239,7 +210,7 @@ public sealed class IslandRenderTests
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Expanded(1);
-        using var bitmap = new SKBitmap(new SKImageInfo(732, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var bitmap = new SKBitmap(new SKImageInfo(1895, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
         using var canvas = new SKCanvas(bitmap);
         renderer.Render(canvas, state, IslandTestFixtures.Scale);
 
@@ -270,6 +241,36 @@ public sealed class IslandRenderTests
         Assert.Equal(1, stats.DirtyFrames);
         Assert.True(stats.LastMilliseconds >= 0);
         Assert.True(stats.MeanMilliseconds >= 0);
+    }
+
+    [Fact]
+    public void Secondary_notification_pill_renders_below_the_primary_compact_pill()
+    {
+        var state = IslandTestFixtures.MediaCompact() with
+        {
+            SecondaryCompact = new CompactActivity(ActivityKind.Notification, new CompactModel
+            {
+                Title = "GitHub",
+                Subtitle = "Run failed",
+                AppName = "GitHub",
+                UnreadCount = 2,
+            }),
+        };
+
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var primary = IslandMetrics.ShellRect(state);
+        var secondary = IslandMetrics.SecondaryShellRect(state);
+        Assert.True(secondary.Top >= primary.Bottom, "the notification pill must sit below the primary pill");
+        Assert.True(secondary.Bottom <= IslandMetrics.SurfaceSize(state.Mode).Height);
+
+        var hit = renderer.HitTest(state, secondary.MidX, secondary.MidY);
+        Assert.Equal(IslandHitKind.SecondaryCompact, hit.Kind);
+
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        var pixel = bitmap.GetPixel(
+            (int)(secondary.MidX * IslandTestFixtures.Scale),
+            (int)(secondary.MidY * IslandTestFixtures.Scale));
+        Assert.True(pixel.Alpha > 200, "the secondary pill must paint an opaque surface");
     }
 
     [Fact]

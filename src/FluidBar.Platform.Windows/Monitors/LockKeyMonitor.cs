@@ -71,7 +71,7 @@ public sealed class LockKeyTracker
 /// </summary>
 public sealed class LockKeyMonitor : PlatformMonitor<LockKeysSnapshot>
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
 
     private readonly PlatformMessageHost _host;
     private readonly IPlatformLogger _logger;

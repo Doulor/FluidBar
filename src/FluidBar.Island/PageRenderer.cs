@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -7,6 +8,39 @@ namespace FluidBar.Island;
 /// battery) and media (artwork/metadata/lyrics/seek/transport) pages at the 400×260 content size, plus
 /// a compact placeholder for the remaining pages and the shared title/collapse chrome.
 /// </summary>
+/// <summary>
+/// Lyric line-change motion. The timings are a design contract (asserted by MediaLyricTransitionTests):
+/// the incoming line is visible on the exact frame its start time is reached, and the outgoing line fades
+/// in parallel instead of holding the stage.
+/// </summary>
+public static class LyricTransition
+{
+    /// <summary>How long the outgoing line takes to slide up and fade out.</summary>
+    public const float OutMs = 180;
+
+    /// <summary>How long the incoming line takes to reach full opacity.</summary>
+    public const float InMs = 180;
+
+    /// <summary>Delay before the incoming line starts (0 = it appears on the switch frame).</summary>
+    public const float StaggerMs = 0;
+
+    /// <summary>Opacity the incoming line starts at, so its first frame is never empty.</summary>
+    public const float StartOpacity = 0.3f;
+
+    /// <summary>Vertical travel of the outgoing line (DIP).</summary>
+    public const float SlideDip = 6;
+
+    /// <summary>Test/evidence override for the four timing values (null = the shipped contract).</summary>
+    public static (float OutMs, float InMs, float StaggerMs, float StartOpacity)? Override { get; set; }
+
+    /// <summary>Clock in milliseconds; tests inject a synthetic clock.</summary>
+    public static Func<double>? Clock { get; set; }
+
+    /// <summary>Resolves the timings in effect.</summary>
+    internal static (float OutMs, float InMs, float StaggerMs, float StartOpacity) Resolve()
+        => Override ?? (OutMs, InMs, StaggerMs, StartOpacity);
+}
+
 internal sealed partial class PageRenderer : IDisposable
 {
     private readonly ScaledText _text;
@@ -25,6 +59,13 @@ internal sealed partial class PageRenderer : IDisposable
     private double _agentAnimationSeconds;
     private bool _reduced;
     private FontScaleMetrics _metrics = FontScaleMetrics.One;
+    private double _mediaNowMs;
+    private double _mediaDtMs = 16.7;
+    private bool _mediaClockStarted;
+    private string? _lyricShown;
+    private string? _lyricOutgoing;
+    private double _lyricChangedAt = double.NegativeInfinity;
+
     private IslandPageControl _pressedControl;
     private int _pressedPage = -1;
     private PageSlotKind _pressedKind = PageSlotKind.Plugin;
@@ -148,6 +189,7 @@ internal sealed partial class PageRenderer : IDisposable
     private void DrawHome(SKCanvas canvas, HomePageModel home, SKRect page)
     {
         var m = _metrics;
+        TickMediaClock();
         _text.Draw(canvas, home.ClockText ?? "00:00", IslandType.Clock, PageMetricsLayout.HomeClock(page, m),
             _theme.Foreground, TextAlign.Left, _opacity);
         _text.Draw(canvas, home.DateText, IslandType.Date, PageMetricsLayout.HomeDate(page, m),
@@ -306,6 +348,64 @@ internal sealed partial class PageRenderer : IDisposable
 
     // ------------------------------------------------------------------ media
 
+    /// <summary>Advances the media motion clock by one frame and returns the delta in milliseconds.</summary>
+    private double TickMediaClock()
+    {
+        var now = LyricTransition.Clock?.Invoke() ?? (Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency);
+        _mediaDtMs = _mediaClockStarted ? Math.Clamp(now - _mediaNowMs, 0, 100) : 1000.0 / 60.0;
+        _mediaClockStarted = true;
+        _mediaNowMs = now;
+        return _mediaDtMs;
+    }
+
+    private static double SmoothStep(double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return t * t * (3 - (2 * t));
+    }
+
+    /// <summary>
+    /// Paints the current lyric line with the line-change motion: both lines run in parallel, the incoming
+    /// one starting at <see cref="LyricTransition.StartOpacity"/> on the switch frame (never an empty line).
+    /// </summary>
+    private void DrawLyricLineTransition(SKCanvas canvas, MediaPageModel media, SKRect lineBox,
+        SKColor baseColor, SKColor sungColor)
+    {
+        if (!string.Equals(media.LyricLine, _lyricShown, StringComparison.Ordinal))
+        {
+            _lyricOutgoing = _lyricShown;
+            _lyricShown = media.LyricLine;
+            _lyricChangedAt = _mediaNowMs;
+        }
+
+        var timing = LyricTransition.Resolve();
+        var elapsed = _mediaNowMs - _lyricChangedAt;
+        var window = Math.Max(timing.OutMs, timing.StaggerMs + timing.InMs);
+        if (_lyricOutgoing is not null && elapsed < window)
+        {
+            var outT = Math.Clamp(elapsed / timing.OutMs, 0, 1);
+            if (outT < 1)
+            {
+                var moved = new SKRect(lineBox.Left, lineBox.Top - (LyricTransition.SlideDip * (float)SmoothStep(outT)),
+                    lineBox.Right, lineBox.Bottom - (LyricTransition.SlideDip * (float)SmoothStep(outT)));
+                KaraokeText.Draw(_text, canvas, _lyricOutgoing, -1, IslandType.Lyric, moved, baseColor, sungColor,
+                    TextAlign.Left, _opacity * (float)(1 - outT));
+            }
+
+            var inT = Math.Clamp((elapsed - timing.StaggerMs) / timing.InMs, 0, 1);
+            var alpha = timing.StartOpacity + ((1 - timing.StartOpacity) * (float)SmoothStep(inT));
+            var incoming = new SKRect(lineBox.Left,
+                lineBox.Top + (LyricTransition.SlideDip * (float)(1 - SmoothStep(inT))), lineBox.Right,
+                lineBox.Bottom + (LyricTransition.SlideDip * (float)(1 - SmoothStep(inT))));
+            KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric, incoming,
+                baseColor, sungColor, TextAlign.Left, _opacity * alpha);
+            return;
+        }
+
+        KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric, lineBox,
+            baseColor, sungColor, TextAlign.Left, _opacity);
+    }
+
     private void DrawMedia(SKCanvas canvas, MediaPageModel media, SKRect page)
     {
         if (!media.HasSession)
@@ -342,12 +442,16 @@ internal sealed partial class PageRenderer : IDisposable
             var lyricBottom = lyricTop + 17 + m.LineGrow(IslandType.Lyric);
             // Karaoke sweep from the KRC word timeline; a line without word timing paints as a plain line
             // in the primary colour, exactly like before.
-            var baseColor = media.LyricHighlight < 0
-                ? _theme.Foreground
-                : KaraokeText.UnsungColor(_theme.Foreground);
-            var sungColor = media.LyricHighlight < 0
-                ? accent
-                : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
+            // The split style is a property of the TRACK (does it carry word timing), not of the frame:
+            // keying it on the instantaneous highlight painted the whole line in the plain foreground
+            // colour whenever a single frame arrived without a sweep ("整句突然变白一下").
+            var hasSweep = media.HasKaraokeSweep || media.LyricHighlight >= 0;
+            var baseColor = hasSweep
+                ? KaraokeText.UnsungColor(_theme.Foreground)
+                : _theme.Foreground;
+            var sungColor = hasSweep
+                ? KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent))
+                : accent;
             KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
                 new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
                 baseColor, sungColor, TextAlign.Left, _opacity);
@@ -386,10 +490,14 @@ internal sealed partial class PageRenderer : IDisposable
         {
             var seek = PageMetricsLayout.MediaSeekTrack(page, m);
             var progress = Math.Clamp(media.ProgressPercent / 100.0, 0, 1);
-            DrawTrack(canvas, seek, progress, accent, _theme.LineStrong);
+            // A source that cannot seek (KuGou: no SMTC session) gets a read-only row: the position is
+            // still informative, but a full-strength track with a knob invited dragging that could never
+            // work (user report 2026-10-21).
+            var seekAlpha = media.CanSeek ? _opacity : _opacity * 0.45f;
+            DrawTrack(canvas, seek, progress, Alpha(accent, seekAlpha), Alpha(_theme.LineStrong, seekAlpha));
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(accent, _opacity);
-            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, 4, _fill);
+            _fill.Color = Alpha(accent, seekAlpha);
+            canvas.DrawCircle(seek.Left + (float)(seek.Width * progress), seek.MidY, media.CanSeek ? 4 : 2.5f, _fill);
 
             _text.Draw(canvas, media.PositionText, IslandType.SeekTime,
                 new SKRect(seekRow.Left, seekTextTop, seekRow.Left + seekTimeWidth, seekTextTop + seekTextHeight),

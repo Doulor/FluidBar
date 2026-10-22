@@ -141,7 +141,9 @@ internal sealed record WindowMediaCandidate(
     bool HasTimeline = false,
     bool IsMuted = false,
     PlayerTimelineSource TimelineSource = PlayerTimelineSource.None,
-    bool? IsPlayingHint = null);
+    bool? IsPlayingHint = null,
+    bool TextFlipped = false,
+    TimeSpan TextShown = default);
 
 /// <summary>
 /// Fallback media source for players that never register with Windows SMTC (e.g. KuGou). It finds the
@@ -157,6 +159,9 @@ internal static class MediaWindowFallback
     [
         new("kugou", ["酷狗音乐", "酷狗"], PlaylistFirst: true),
         new("kgmusic", ["酷狗音乐", "酷狗"], PlaylistFirst: true),
+        // Soda's caption never carries the track name (see QishuiQueueReader), so the rule exists only
+        // to make FindCandidate pick the process up; the metadata comes from the player's queue cache.
+        new("sodamusic", ["汽水音乐"], PlaylistFirst: false),
         new("qqmusic", ["QQ音乐", "QQ 音乐"], PlaylistFirst: false),
         new("cloudmusic", ["网易云音乐", "网易云"], PlaylistFirst: false),
         new("netease", ["网易云音乐"], PlaylistFirst: false),
@@ -169,6 +174,66 @@ internal static class MediaWindowFallback
     ];
 
     /// <summary>Finds the loudest active known player and parses its window title, or null.</summary>
+    /// <summary>True when at least one render session is active; <paramref name="peak"/> is its level.</summary>
+    public static bool TryGetAudioOutput(out float peak)
+    {
+        peak = 0;
+        if (!AudioSessionProbe.TryGetActiveRenderSessions(out var sessions) || sessions.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var session in sessions)
+        {
+            peak = Math.Max(peak, session.Peak);
+        }
+
+        return true;
+    }
+
+    /// <summary>Peak level of the sessions owned by one process (0 when it renders nothing).</summary>
+    /// <remarks>
+    /// The device-wide meter includes every other application, so a browser tab or a system sound kept the
+    /// island "playing" after KuGou was paused. This isolates the player (user report 2026-10-21).
+    /// </remarks>
+    /// <summary>True when the process still owns a render session (even a silent one).</summary>
+    public static bool HasSession(int processId)
+    {
+        if (processId <= 0 || !AudioSessionProbe.TryGetActiveRenderSessions(out var sessions))
+        {
+            return false;
+        }
+
+        foreach (var session in sessions)
+        {
+            if (session.ProcessId == processId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static float GetProcessPeak(int processId)
+    {
+        if (processId <= 0 || !AudioSessionProbe.TryGetActiveRenderSessions(out var sessions))
+        {
+            return 0;
+        }
+
+        var peak = 0f;
+        foreach (var session in sessions)
+        {
+            if (session.ProcessId == processId)
+            {
+                peak = Math.Max(peak, session.Peak);
+            }
+        }
+
+        return peak;
+    }
+
     public static WindowMediaCandidate? FindCandidate()
     {
         var ok = AudioSessionProbe.TryGetActiveRenderSessions(out var sessions);
@@ -193,6 +258,24 @@ internal static class MediaWindowFallback
             if (FindRule(processName) is not { } rule)
             {
                 continue;
+            }
+
+            // Soda exposes no track name in any caption; its queue cache is the identity source.
+            if (IsSodaRule(rule))
+            {
+                var fromQueue = QishuiQueueReader.TryRead();
+                if (fromQueue is null)
+                {
+                    continue;
+                }
+
+                return new WindowMediaCandidate(
+                    "sodamusic",
+                    fromQueue.Title,
+                    fromQueue.Artist,
+                    "win|sodamusic|" + fromQueue.Title + "|" + fromQueue.Artist,
+                    ProcessId: process.Id,
+                    Duration: fromQueue.Duration);
             }
 
             string windowTitle;
@@ -271,6 +354,12 @@ internal static class MediaWindowFallback
             return null;
         }
 
+        // "下一首" / "暂停" … are transport verbs KuGou puts in its caption for a moment during a switch.
+        if (rule is not null && IsKugouRule(rule) && KugouWindowTitle.IsPlayerCommand(title))
+        {
+            return null;
+        }
+
         return new WindowMediaCandidate(
             processName.ToLowerInvariant(),
             title,
@@ -328,6 +417,39 @@ internal static class MediaWindowFallback
         var rule = FindRule(processName);
         return rule is not null && IsKugouRule(rule);
     }
+
+    /// <summary>True for the Soda Music rule (caption-less player; identity comes from its queue cache).</summary>
+    internal static bool IsQishuiProcessName(string processName)
+    {
+        var rule = FindRule(processName);
+        return rule is not null && IsSodaRule(rule);
+    }
+
+    /// <summary>True when the process id belongs to a Soda Music player (best-effort name lookup).</summary>
+    internal static bool IsQishuiPid(int processId)
+    {
+        if (processId <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return IsQishuiProcessName(process.ProcessName);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSodaRule(PlayerRule rule)
+        => rule.Process.Contains("sodamusic", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsKugouRule(PlayerRule rule)
         => rule.Process.Contains("kugou", StringComparison.OrdinalIgnoreCase)

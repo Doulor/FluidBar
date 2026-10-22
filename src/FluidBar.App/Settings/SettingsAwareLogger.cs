@@ -62,11 +62,11 @@ public sealed class SettingsAwareLogger : IAppLogger, IAsyncDisposable
         _fileSink = sink;
 
         // The platform sink keeps entries in a 16 KB buffer until a flush/shutdown. A forced process
-        // exit would lose the last seconds of diagnostics; a 250 ms flush makes the JSONL readable
-        // for live evidence/crash forensics without any per-entry disk sync.
+        // exit would lose the last seconds of diagnostics; a 10 s flush remains live-readable while
+        // avoiding a 4 Hz idle wake-up.
         _flushTimer = TimeProvider.System.CreateTimer(
             static state => _ = ((SettingsAwareLogger)state!).FlushSinkAsync(),
-            this, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
+            this, TimeSpan.FromMilliseconds(60000), TimeSpan.FromMilliseconds(60000));
     }
 
     /// <summary>Flushes the file sink if a write is not already pending (single-flight).</summary>

@@ -153,28 +153,31 @@ public sealed class MediaFeedbackTests
     }
 
     [Fact]
-    public void Optimistic_pause_ignores_one_stale_read_and_follows_two_consistent_ones()
+    public void Optimistic_pause_survives_stale_glyph_reads_and_follows_four_consistent_ones()
     {
-        // The accessibility poll keeps returning the pre-tap glyph for a while: a single stale read must
-        // not flip the icon back (that is the reported "paused but still shows playing" bug).
+        // A fallback player repaints its transport glyph ~0.5-1 s after the tap, so the first polls after
+        // a toggle still carry the PRE-tap state. They must not flip the icon back (reported bug: the
+        // style changed to paused and snapped back to playing about a second later).
         var state = new OptimisticPlayState();
         var now = new DateTimeOffset(2026, 10, 20, 2, 0, 0, TimeSpan.Zero);
         state.Set(playing: false, now);
 
-        // Inside the stale-read guard: ignored entirely.
+        // Inside the stale-read guard (1.2 s): ignored entirely.
         Assert.False(state.Resolve(actual: true, now.AddMilliseconds(80)));
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(900)));
         Assert.Equal(0, state.Disagreements);
 
-        // First consistent disagreement: still holding the user's intent.
-        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(320)));
-        Assert.Equal(1, state.Disagreements);
+        // Consistent disagreements after the guard: the intent holds for the first three.
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(1300)));
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(1550)));
+        Assert.False(state.Resolve(actual: true, now.AddMilliseconds(1800)));
+        Assert.Equal(3, state.Disagreements);
         Assert.False(state.LastResolveRolledBack);
 
-        // Second consistent disagreement: the source really is playing, so follow it once.
-        Assert.True(state.Resolve(actual: true, now.AddMilliseconds(520)));
+        // Fourth consistent disagreement: the source really is playing, so follow it once.
+        Assert.True(state.Resolve(actual: true, now.AddMilliseconds(2050)));
         Assert.True(state.LastResolveRolledBack);
         Assert.False(state.IsPending);
-        Assert.True(state.Resolve(actual: true, now.AddMilliseconds(700)));
     }
 
     [Fact]
@@ -196,8 +199,9 @@ public sealed class MediaFeedbackTests
         var now = new DateTimeOffset(2026, 10, 20, 2, 0, 0, TimeSpan.Zero);
         state.Set(playing: true, now);
 
-        // The hold window is 2–3 s (the user must see their intent for a moment), but never longer.
-        Assert.InRange(OptimisticPlayState.HoldWindow, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3));
+        // The hold window is 5-7 s (the player can take a second or two to repaint its glyph), but never
+        // unbounded: a source that never agrees still wins in the end.
+        Assert.InRange(OptimisticPlayState.HoldWindow, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(7));
 
         // A single disagreeing read inside the window keeps the user's intent (the current rule:
         // one stale poll is ignored; two consistent reads are the truth)...

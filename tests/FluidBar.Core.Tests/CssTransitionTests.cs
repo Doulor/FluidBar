@@ -45,27 +45,27 @@ public sealed class CssTransitionTests
     /// <summary>Prototype2 expanded-layer fade (220 ms ease-out, 90 ms delay).</summary>
     public static TheoryData<double, double> PanelFadeSamples => new()
     {
-        { 98.3, 0.147 },
-        { 120.8, 0.488 },
-        { 143.8, 0.710 },
-        { 165.8, 0.832 },
-        { 189.4, 0.907 },
-        { 212.3, 0.950 },
-        { 234.0, 0.974 },
-        { 279.9, 0.997 },
+        { 98.3, 0.574 },
+        { 120.8, 0.756 },
+        { 143.8, 0.863 },
+        { 165.8, 0.922 },
+        { 189.4, 0.959 },
+        { 212.3, 0.981 },
+        { 234.0, 0.992 },
+        { 279.9, 1.000 },
         { 303.5, 1.000 },
     };
 
     /// <summary>Prototype2 chrome fade (160 ms ease-out, 90 ms delay).</summary>
     public static TheoryData<double, double> ChromeFadeSamples => new()
     {
-        { 100.0, 0.239 },
-        { 122.8, 0.640 },
-        { 145.7, 0.835 },
-        { 168.9, 0.927 },
-        { 192.2, 0.971 },
-        { 214.1, 0.991 },
-        { 237.1, 0.999 },
+        { 100.0, 0.000 },
+        { 122.8, 0.069 },
+        { 145.7, 0.542 },
+        { 168.9, 0.792 },
+        { 192.2, 0.907 },
+        { 214.1, 0.959 },
+        { 237.1, 0.986 },
     };
 
     /// <summary>Prototype2 compact-layer fade-in on collapse (140 ms ease-out, 40 ms delay).</summary>
@@ -155,7 +155,7 @@ public sealed class CssTransitionTests
 
         Assert.True(transition.Step(0.05));
         Assert.Equal(0, transition.Value, 9);
-        Assert.True(transition.Step(0.039));
+        Assert.True(transition.Step(0.005));
         Assert.Equal(0, transition.Value, 9);
     }
 
@@ -273,10 +273,10 @@ public sealed class CssTransitionTests
         Assert.Equal(0.140, ShellTransition.CompactFadeInSeconds, 9);
         Assert.Equal(0.040, ShellTransition.CompactFadeInDelaySeconds, 9);
         Assert.Equal(0.220, ShellTransition.ExpandedFadeInSeconds, 9);
-        Assert.Equal(0.090, ShellTransition.ExpandedFadeInDelaySeconds, 9);
+        Assert.Equal(0.060, ShellTransition.ExpandedFadeInDelaySeconds, 9);
         Assert.Equal(0.140, ShellTransition.ExpandedFadeOutSeconds, 9);
         Assert.Equal(0.160, ShellTransition.ChromeFadeSeconds, 9);
-        Assert.Equal(0.090, ShellTransition.ChromeFadeInDelaySeconds, 9);
+        Assert.Equal(0.120, ShellTransition.ChromeFadeInDelaySeconds, 9);
         Assert.Equal(0.3, ShellTransition.ShellEasing.X1, 9);
         Assert.Equal(0.8, ShellTransition.ShellEasing.Y1, 9);
         Assert.Equal(0.25, ShellTransition.ShellEasing.X2, 9);

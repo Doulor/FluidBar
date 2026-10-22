@@ -25,7 +25,8 @@ public class ActivitySchedulerTests
     [Fact]
     public void HigherPriorityActivity_PreemptsTransientPrimary()
     {
-        var state = TestData.BuildState(_scheduler, TestData.Notification("notif", "notification"));
+        var state = TestData.BuildState(_scheduler, IslandEvent.New(
+            TestData.Key(ActivityKind.Agent), TestData.Payload("Agent"), 1));
         var volume = IslandEvent.New(Key(ActivityKind.Volume), TestData.Payload("vol"), 1);
 
         var update = _scheduler.Update(state, volume, TestData.Now);
@@ -95,6 +96,48 @@ public class ActivitySchedulerTests
         Assert.Equal(42, update.State.Primary!.Payload.ProgressPercent);
         Assert.Equal("Track", update.State.Primary.Payload.Title);
         Assert.Single(update.State.Visible);
+    }
+
+    [Fact]
+    public void PlayingMediaStaysPersistentAndVisibleAcrossEightHeartbeats()
+    {
+        var key = TestData.Key(ActivityKind.Media, "media:gsmtc");
+        var state = TestData.BuildState(_scheduler, TestData.Media());
+        for (var beat = 1; beat <= 8; beat++)
+        {
+            var heartbeat = IslandEvent.New(key, TestData.Payload("Track") with { IsActive = true, ShowsAudioWave = true }, beat + 1);
+            state = _scheduler.Update(state, heartbeat, TestData.Now.AddSeconds(beat * 2)).State;
+            Assert.True(state.Primary!.IsPersistent, $"beat {beat}");
+            Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+        }
+    }
+
+    [Fact]
+    public void PlayingMediaWaveFallbackRemainsPersistentWhenIsActiveIsOmitted()
+    {
+        var key = TestData.Key(ActivityKind.Media, "media:wave");
+        var media = IslandEvent.New(key, TestData.Payload("Track") with { IsActive = false, ShowsAudioWave = true }, 1);
+        var state = TestData.BuildState(_scheduler, media);
+        Assert.True(state.Primary!.IsPersistent);
+        Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+    }
+
+    [Fact]
+    public void CompletedAgentExpiresAfterThreeSecondCompletionBeat()
+    {
+        var key = TestData.Key(ActivityKind.Agent, "agent:test");
+        var running = IslandEvent.New(key, TestData.Payload("working") with { IsActive = true, Badge = "running" }, 1);
+        var state = TestData.BuildState(_scheduler, running);
+        Assert.True(state.Primary!.IsPersistent);
+
+        var completed = IslandEvent.New(key, TestData.Payload("done") with { IsActive = false, Badge = "completed" }, 2);
+        var update = _scheduler.Update(state, completed, TestData.Now.AddSeconds(1));
+        Assert.False(update.State.Primary!.IsPersistent);
+        Assert.NotNull(update.State.Primary.ExpiresAt);
+
+        var expired = _scheduler.Tick(update.State, TestData.Now.AddSeconds(4.1));
+        Assert.Empty(expired.State.Visible);
+        Assert.Null(expired.State.Primary);
     }
 
     [Fact]
@@ -297,5 +340,64 @@ public class ActivitySchedulerTests
         var b = ContentSignaturePolicy.Compute(key, ActivityKind.Media, payloadB);
         Assert.True(a.DiffersFrom(b));
         Assert.False(a.DiffersFrom(ContentSignaturePolicy.Compute(key, ActivityKind.Media, payloadA)));
+    }
+
+    [Fact]
+    public void HeartbeatReplacement_PreservesTheSessionPin()
+    {
+        var initial = TestData.BuildState(_scheduler, TestData.Media());
+        var key = initial.Primary!.Key;
+        var pinned = _scheduler.SetPinned(initial, key, true).State;
+        Assert.True(pinned.Primary!.IsPinned);
+
+        var heartbeat = IslandEvent.New(key, TestData.Payload("heartbeat"), 2);
+        var update = _scheduler.Update(pinned, heartbeat, TestData.Now.AddSeconds(2));
+
+        Assert.Equal(ActivityUpdateKind.ReplacedInPlace, update.Kind);
+        Assert.True(update.State.Primary!.IsPinned);
+        Assert.Equal(key, update.State.Primary.Key);
+    }
+    [Fact]
+    public void PlayingMedia_ReservesVisibleSlotAgainstThreeTransientActivities()
+    {
+        var state = TestData.BuildState(_scheduler,
+            TestData.Media(),
+            TestData.NewEvent(ActivityKind.Notification, "notif", "notice", 2),
+            TestData.NewEvent(ActivityKind.Clipboard, "clip", "copy", 3),
+            TestData.NewEvent(ActivityKind.LockKeys, "lock", "caps", 4));
+
+        Assert.Contains(state.Visible, r => r.Kind == ActivityKind.Media);
+        Assert.Equal(3, state.Visible.Length);
+    }
+
+    [Fact]
+    public void PausedMedia_DoesNotReserveVisibleSlot()
+    {
+        var paused = IslandEvent.New(
+            TestData.Key(ActivityKind.Media, "media:paused"),
+            TestData.Payload("paused") with { IsActive = false }, 1);
+        var state = TestData.BuildState(_scheduler,
+            paused,
+            TestData.NewEvent(ActivityKind.Notification, "notif", "notice", 2),
+            TestData.NewEvent(ActivityKind.Clipboard, "clip", "copy", 3),
+            TestData.NewEvent(ActivityKind.LockKeys, "lock", "caps", 4));
+
+        Assert.DoesNotContain(state.Visible, r => r.Kind == ActivityKind.Media);
+    }
+
+    [Fact]
+    public void PersistentOverflow_UsesPinnedThenRankThenArrival()
+    {
+        var pinnedTimer = IslandEvent.New(
+            TestData.Key(ActivityKind.Timer, "timer"),
+            TestData.Payload("timer").Pinned(), 1);
+        var media = TestData.Media("media:one", "song", 2);
+        var progress = TestData.NewEvent(ActivityKind.Progress, "progress", "export", 3);
+        var focus = TestData.NewEvent(ActivityKind.Focus, "focus", "focus", 4);
+
+        var state = TestData.BuildState(_scheduler, pinnedTimer, media, progress, focus);
+        Assert.Equal(ActivityKind.Timer, state.Visible[0].Kind);
+        Assert.True(state.Visible[0].IsPinned);
+        Assert.Equal(3, state.Visible.Length);
     }
 }

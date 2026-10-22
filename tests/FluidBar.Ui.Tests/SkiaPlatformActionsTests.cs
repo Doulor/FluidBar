@@ -193,21 +193,16 @@ public sealed class SkiaPlatformActionsTests
     }
 
     [Fact]
-    public async Task AppOwnedActions_AreDeferredAndRaisedAsEvents()
+    public async Task NotificationActivate_WithoutAListenerRow_IsUnsupported()
     {
         var settings = CreateSettings();
         await using var actions = new SkiaPlatformActions(settings);
-        IslandPlatformAction? raised = null;
-        actions.DeferredActionRequested += action => raised = action;
 
-        // Notification dismissal is handled locally now (the toast list is real); activation still has
-        // no public Windows API and stays an App-owned deferred action.
+        // No listener row exists in this fixture; activation must report unsupported instead of
+        // pretending to open an app.
         var result = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, Index: 2));
 
-        Assert.Equal(IslandActionOutcome.Deferred, result.Outcome);
-        Assert.NotNull(raised);
-        Assert.Equal(IslandPlatformActionKind.NotificationActivate, raised!.Value.Kind);
-        Assert.Equal(2, raised.Value.Index);
+        Assert.Equal(IslandActionOutcome.Unsupported, result.Outcome);
 
         settings.Dispose();
     }

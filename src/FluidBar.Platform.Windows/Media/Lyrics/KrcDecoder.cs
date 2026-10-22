@@ -7,8 +7,12 @@ namespace FluidBar.Platform.Windows.Media.Lyrics;
 
 /// <summary>Lyrics decoded from a KuGou <c>.krc</c> file.</summary>
 /// <param name="Document">Timed lyric document.</param>
-/// <param name="ApproximateDuration">End of the last timed line (the file carries no total duration).</param>
-public sealed record KrcLyrics(LyricsDocument Document, TimeSpan ApproximateDuration);
+/// <param name="ApproximateDuration">End of the last timed line when the file carries no total.</param>
+/// <param name="DeclaredTotal">
+/// The <c>[total:ms]</c> header, i.e. the length of the audio file the lyric belongs to. Zero when the
+/// header is missing or empty (many files ship <c>[total:0]</c>).
+/// </param>
+public sealed record KrcLyrics(LyricsDocument Document, TimeSpan ApproximateDuration, TimeSpan DeclaredTotal);
 
 /// <summary>
 /// Decodes KuGou's local <c>.krc</c> lyric files into timed lines.
@@ -111,6 +115,7 @@ public static class KrcDecoder
         var artist = string.Empty;
         var builder = ImmutableArray.CreateBuilder<LyricsLine>();
         var duration = TimeSpan.Zero;
+        var declaredTotal = TimeSpan.Zero;
 
         foreach (var rawLine in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
@@ -172,6 +177,14 @@ public static class KrcDecoder
                 case "ar":
                     artist = value;
                     break;
+                case "total":
+                    // Milliseconds, and the only field that is the SONG length rather than a lyric span.
+                    if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var totalMs)
+                        && totalMs > 0)
+                    {
+                        declaredTotal = TimeSpan.FromMilliseconds(totalMs);
+                    }
+                    break;
             }
         }
 
@@ -181,8 +194,12 @@ public static class KrcDecoder
         }
 
         builder.Sort(static (left, right) => left.Time.CompareTo(right.Time));
-        var document = new LyricsDocument(title, artist, "kugou-krc", builder.ToImmutable(), duration);
-        return new KrcLyrics(document, duration);
+        // A malformed last line can carry the whole song length in its span field (measured on 145 of the
+        // 277 files that declare a total: start + span ends at twice the song length). The declared total
+        // is authoritative, so it wins whenever the two disagree.
+        var effective = declaredTotal > TimeSpan.Zero ? declaredTotal : duration;
+        var document = new LyricsDocument(title, artist, "kugou-krc", builder.ToImmutable(), effective);
+        return new KrcLyrics(document, duration, declaredTotal);
     }
 
     /// <summary>

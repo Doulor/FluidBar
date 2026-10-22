@@ -2,6 +2,76 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-22 — 修复暂停→恢复→暂停时歌词定位偏移 + 歌词行尾二进制垃圾
+
+### 暂停→恢复→暂停，歌词冻结数秒后猛跳
+
+- **根因**（两处，都在播放状态的切换路径上）：
+  1. `SkiaIslandController.SyncKaraoke` 只在暂停时调 `_karaokeClock.SetPlaying(false)`，**恢复时没有任何路径把时钟拨回播放**——`Nudge` 保持 playing 标志不动。时钟保持冻结，而真实播放继续推进；偏差累积到 2.5 s（`SeekThresholdMs`）才当作 seek 硬跳。表现：每次暂停→恢复，歌词/时间文本先冻结 ~10 s（250 ms 轮询 × 10）然后猛跳 2.5 s。
+  2. `MediaPositionClock.Reconcile` 的 drift 分支直接改 `_playing` 却不折叠锚点：暂停瞬间 `PositionAt` 立即切到暂停分支、返回**旧锚点**（回跳整个外推量），恢复后又把暂停时长算进推进。`SkiaPlatformActions.ResolvePosition` 走这条路径（进度条/时间文本的数据源）。
+- **修法**：`SyncKaraoke` 暂停分支补上对称的恢复分支（`IsAdvancing == false` 时 `SetPlaying(true)`，把冻结位置折叠进锚点）；`Reconcile` 在播放状态变化时先 `_anchorPositionMs = PositionAt(now)`、`_anchorAtMs = now` 再翻转标志。
+- **回归测试**：`KaraokeSweepTests.Karaoke_sweep_resumes_on_the_frame_the_pause_ends`（恢复帧必须立即恢复推进且无跳变）、`MediaPositionClockTests.Reconcile_play_state_change_folds_the_extrapolated_position_into_the_anchor`。
+
+### 歌词行尾拼接 `£krcij◆数字ID◆相邻歌名` 垃圾文本（汽水音乐）
+
+- **根因**：汽水本地歌词缓存（`%APPDATA%\SodaMusic\LunaCacheV2\entries.db`）是 LMDB 存储，条目按二进制紧凑排列：**一条歌词的最后一行与该条目的 MessagePack 尾部之间没有换行**。实测字节（2026-10-22，用户截图 `…还能不能相见£krcij◆7566176614707430459◆Gentlem…`）：`徊`之后直接跟 `C2 A3`（lossy 解码为 £）、`6B 72 63 69`（"krci"）、`AD`（fixstr13 "not_luna_user"）、`B3`（fixstr19 曲目 ID）、`A6`（相邻条目歌名）。`QishuiLocalLyricsProvider.EnumerateLines` 按 `\n` 分行，垃圾与歌词同行；`KrcDecoder.ParseWords` 把 `<off,len,0>` 标签之后的整段 run 当作词文本——垃圾全部并进最后一行，岛上原样渲染。
+- **修法**：`CutBinaryFraming`——每行在第一个「歌词字母表之外」的字符（非 ASCII/中日韩/中文标点/全角形）处截断；歌词正文不可能含框架字节，因此只可能去掉垃圾尾巴。截断发生在块构建之前，`Score` 匹配窗口与词级 span 同时受益。
+- **回归测试**：`QishuiLocalLyricsProviderTests.Binary_entry_trailer_glued_to_the_last_line_is_cut`（按实测字节构造条目，断言末行干净）。
+
+- 基线：**2587 passed / 0 failed**（Core 647 · Platform 704 · Ui 508 · Island 448 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18），`dotnet test FluidBar.sln -m:1` 实测；顺带给架构规则补了后台线程豁免标记（`bg-thread-ok`，音频采集循环的专用 MTA 线程上 `Thread.Sleep` 是正确原语），并把 10-21 通知主岛决策漏改的两个集成测试对齐到实际调度行为（剪贴板降为 ghost，不拆除通知）。
+
+## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）
+
+- **根因**：`SkiaIslandHost.EnsureFrameLoop` 把「上一次渲染尝试有没有画出像素」(`_lastRenderHappened`) 当作停止条件；50 ms 的 `OnDeadlineTick` 每个 tick 都会走一次不推进动画的 `RenderAllLocked`，于是每 ~50 ms 把 60 fps 帧时钟停掉一次。展开/悬停/波浪动画只能画 2–3 帧就冻住，整岛实际帧率 3–13 fps；Avalonia 设置窗口有独立渲染线程，所以不受影响。
+- **修法**：帧时钟只由动画状态决定（新增 `IslandFrameLoopPolicy.ShouldRun(animating, agentAnimating, keepIdleFrames)`）；`RenderAllLocked` 改为返回「是否真的画了一帧」，空帧计数只用这个返回值，`_lastRenderHappened` 字段删除。
+- **实测**（published exe，真实鼠标点击）：展开 380 ms 动画 24 帧、frame interval p50 **15.9 ms**（修复前 3–13 fps、最长 1 s 空洞）；展开/收起几何逐帧连续（132×36 → 440×284 → 236×36）；空闲 CPU 12.8% → **2.1%**，工作集 330 MB → 199 MB。
+- **回归测试**：`tests/FluidBar.Ui.Tests/IslandFrameLoopPolicyTests.cs`（帧时钟真值表 + 展开动画跨 deadline tick 不中断 + 静止后不再请求帧）。
+- 顺带修正过期基线：`PowerModeProbe` 仍断言小岛环 120°/s，实际已统一为 `AgentSpinner` 的 400°/s（0.9 s/圈）；`IslandMetrics.SplitRingPeriodSeconds` 注释同步。
+- 基线：**2522 passed / 0 failed**（Core 640 · Platform 660 · Ui 497 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+
+## 2026-10-21 — 修复展开后媒体卡片按钮全部点不动（点击区域不跟随动画壳体）
+
+- **根因**：可点击区域（分层窗口命中模型 + 全局鼠标钩子矩形）只在 `RegionSignature` 变化时重建，而签名里只有 `ShellForm`，**没有壳体尺寸**。展开动画 380 ms 里壳体每帧在变大，签名却不变；只要媒体/Agent 动画让 `IsAnimating` 一直为真，签名就再也不变 —— 钩子仍然只把旧药丸那一小块当可点区域，面板主体的按钮（媒体卡播放/上一首/下一首、开关、列表行）全部穿透到桌面。
+- **修法**：签名抽成 `IslandHitRegionSignature`（含壳体宽高，单位 0.1 DIP）；动画期间每帧刷新命中区域（`UpdateHitRegions` 是纯内存模型，无 Win32 调用）。
+- **证据**（临时输入探针，已删除）：修复前点媒体卡播放键根本没有 `hook-down`；修复后同一坐标得到 `PageControl(PlayPause)` → `MediaTogglePlay`。通知页/媒体页 seek 一直正常，只有壳体扩大后的按钮受影响。
+- **回归测试**：`tests/FluidBar.Ui.Tests/IslandHitRegionSignatureTests.cs`（展开改变签名 / 过渡期每帧改变 / 相同状态签名稳定）。
+- **顺带**：媒体回退探测（酷狗无 SMTC）原来每个 250 ms tick 都整树遍历 MSAA（约 900 节点跨进程调用，采样占全进程 66%）。给"找时间文本"的整树遍历加 1 s 节流（按钮已缓存，不受影响）：整机 CPU 2.06% → **1.25%**。
+- 基线：**2525 passed / 0 failed**（Core 640 · Platform 660 · Ui 500 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：`build/release/win-x64/FluidBar.exe` 57.4 MB，SHA256 `D929B1453F2EC329DC7BF45BC56C806E4ECE985ADE2D7EB6458358DC4A1481A4`。
+- 决策：工作集 ~191 MB 高于 D12 的 120 MB 目标，属原生内存（Skia/DIB/字体），单独一轮 native 审计，不在本次热修范围。
+
+## 2026-10-21 — 分裂小岛：点哪个岛就开哪张卡
+
+- **现象**：分裂模式下主岛显示的是音乐，点开却是 Agent 卡片。
+- **原因**：`IslandHitKind.Compact` 只发了 `IslandInput.PrimaryClick()`，展开页由调度器的 `PrimaryPage` 决定；当后台刚来了一个更新的活动（Agent），调度器的主页就是它，和药丸**实际画的内容**不一致。
+- **修复**：点击时先取药丸当前绘制内容的 `_compact.Kind.ToPage()`，展开后若与 `State.Page` 不同，追加 `PageRequested` + `HandlePageRequest`，与副岛（`ActivateSplitIslet`）同一套逻辑。
+- 测试：Ui 502 全绿。发布 `EFE77288…936B`。
+## 2026-10-21 — 崩溃修复：插件页返回后整程序退出（"启动后没有灵动岛"）
+
+- **根因**：`SettingsSectionBuilder.BuildPlugins` 的 `ShowList()` 每次都 `new Border { Child = search }`。从插件详情返回列表时，`search` 仍挂在旧 Border 上，Avalonia 抛 `InvalidOperationException: The Control already has a parent`，未捕获 → 进程退出（Windows 事件日志 CLR20r3 / .NET Runtime 已确认）。
+- 连续两次崩溃后 `CrashGuard` 进入 safe mode，用户看到的就是"程序启动了但没有灵动岛"。
+- **修复**：搜索框宿主 Border 只创建一次（`searchHost`），`ShowList` 复用它，不再重新挂父级。
+- **运维**：清掉 `%LOCALAPPDATA%\FluidBar\state\crash-guard.json` 复位安全模式；已重新发布并确认岛窗口存在（hwnd rect 609,-12,488x384，visible=True）。
+- 测试：Ui 502 全绿。
+- 教训：本地化 JSON 与 Avalonia 的"控件只能有一个父级"都属于**运行期才炸**的坑，改设置页后手动点一遍"插件 → 详情 → 返回"。
+## 2026-10-21 — 媒体链路：卡拉OK 精度 + 只读进度条
+
+- **秒跳变中点锚定**：酷狗的无障碍时间文本只有 1 秒分辨率，旧实现把"读到 13"当成"此刻=13.000s"，平均偏晚半个轮询（~125 ms）且方向恒定，正是"歌词总比唱的慢"的来源。`PlayerTimeline` 新增 `Age`，秒数跳变时按两次读数的中点回填，`PositionSampledAtUtc` 相应前移。
+- **歌词偏移**：`AppSettings.LyricOffsetMs`（±800 ms，50 ms 步进），在 `SyncKaraoke` 锚点时叠加，用于补偿每首歌残余的压制偏移。设置 → 岛屿 分组新增「歌词偏移」滑杆（中英双语，`Settings.Island.LyricOffset`），也可直接改 `settings.ui.json` 的 `appearance.lyricOffsetMs`。
+- **只读进度条**：`MediaSessionData`/`MediaPageModel` 新增 `CanSeek`（来自 `MediaSnapshot.CanSeek`）。不可 seek 的音源（酷狗，无 SMTC）进度条降到 45% 不透明度、旋钮缩小，`SkiaIslandControlRouter` 不再产出 `MediaSeek` —— 不再假装能拖。
+- 测试：Island 446（新增 `MediaSeekReadOnlyTests`）· Ui 502 · Platform 660 全绿。
+- 教训：本地化 JSON 手改漏逗号会让整套 Avalonia 测试全线失败（解析期抛错），改完必须 `JSON.parse` 校验一次。
+## 2026-10-21 — 媒体配色/Agent 小岛/播放态/设置窗口 四个修正
+
+- **配色**：封面主色改为「主色调聚类 + 可用性归一化」（`ArtworkAccent`）。原来对所有像素做加权平均，彩色封面会被平均成米灰（波形条发白灰），饱和度 <0.18 又让逐字高亮退回主题粉。现在按色相聚类取占比最大的簇，并把饱和度提到 ≥0.55、明度夹到 0.62–0.92；逐字高亮与波形条都吃这个颜色。
+- **Agent 主岛**：`IsAgentAnimating` 原来在指针离开且无副岛环时直接返回 false → 主岛圆环冻结、只有悬停才转。现在主岛自身是运行中的 Agent 时始终请求帧。
+- **Agent 副岛**：副岛环改用主岛药丸的细环比例（1.5/9.25 ≈ 0.162，原来用 0.3158 显得肥厚），并补一圈 0.18 透明度的底环，和主岛同一个圆环语言。
+- **播放态**：酷狗类回退源在 MSAA 读写含糊时（播放/暂停两个字形同时可见）会用峰值启发式猜状态，导致图标偶尔反了；现在保留上一次确认的字形状态，启发式只用于首帧。
+- **设置窗口**：窗口已存在但被最小化时，`BringToFront` 只 `Activate()`，Windows 不会还原 → 点设置像没反应。现在先 `WindowState = Normal` 再激活（必要时 `Show()`）。
+- **Agent 主岛帧率**：主岛环常转后按 `IsAgentOnly` 把帧率压到 30 fps（20 DIP 的环在 30 fps 下看不出差别，60 fps 白烧一倍 CPU）。
+- 测试：**2527 passed / 0 failed**（Core 640 · Platform 660 · Ui 502 · Island 445 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 31 · Architecture 18）。
+- Release：57.4 MB，SHA256 `6D0B2466706DC02BC9FD6F136E91090AFFA457D86EAA38EDE4F74F92329BA62E`。
+
 ## 2026-10-18
 
 ### 方向与文档

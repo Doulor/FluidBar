@@ -3,6 +3,7 @@ using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Settings;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Diagnostics;
+using FluidBar.Core.Layout;
 using FluidBar.Island;
 using SkiaSharp;
 
@@ -148,8 +149,9 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(2);
 
         var page = Page(2, fixture);
-        Click(fixture, PageLayout.NotificationRow(page, 0));
-        Click(fixture, PageLayout.NotificationDismiss(page, 1));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.NotificationRow(page, 0, 0, metrics));
+        Click(fixture, PageMetricsLayout.NotificationDismiss(page, 1, 0, metrics));
 
         Assert.Equal(2, actions.Calls.Count);
         Assert.Equal(IslandPlatformActionKind.NotificationActivate, actions.Calls[0].Kind);
@@ -275,7 +277,8 @@ public sealed class SkiaIslandControlTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(2);
 
-        Click(fixture, PageLayout.NotificationRow(Page(2, fixture), 0));
+        var metrics = FontScaleMetrics.From(fixture.Controller.RenderState.FontScale);
+        Click(fixture, PageMetricsLayout.NotificationRow(Page(2, fixture), 0, 0, metrics));
 
         Assert.True(fixture.Logger.HasEvent("island.skia.control-deferred"));
         Assert.False(fixture.Logger.HasEvent("island.skia.control-unsupported"));
@@ -329,12 +332,138 @@ public sealed class SkiaIslandControlTests
 
         var state = fixture.Controller.RenderState;
         var page = IslandMetrics.PageRect(state, 2);
-        // Row index 3 does not exist (three notification rows): the click is a scroll-region hit.
-        var row = PageLayout.NotificationRow(page, 3);
-        var hit = SkiaIslandHitTest.Hit(state, row.MidX, row.MidY);
+        // Row index 3 does not exist (three notification rows); the empty band below the last card is
+        // still the list's scroll region.
+        var body = PageMetricsLayout.NotificationBody(page);
+        var hit = SkiaIslandHitTest.Hit(state, body.MidX, body.Bottom - 2);
 
         Assert.Equal(IslandHitKind.PageControl, hit.Kind);
         Assert.Equal(IslandPageControl.Scroll, hit.Control);
+    }
+
+    [Fact]
+    public void Notification_takes_the_normal_island_position_and_activates_the_source_app()
+    {
+        var actions = new RecordingIslandPlatformActions();
+        using var fixture = ControllerFixture.Create(actions: actions);
+        fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
+        {
+            Title = "Midnight City",
+            Subtitle = "M83",
+            IsActive = true,
+            ProgressPercent = 42,
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "GitHub",
+            Body = "Run failed: Export Live Data",
+            SourceName = "GitHub",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(ActivityKind.Notification, state.Compact?.Kind);
+        Assert.Null(state.SecondaryCompact);
+        var primary = IslandMetrics.ShellRect(state);
+
+        fixture.Controller.HandlePointerPressed(primary.MidX, primary.MidY);
+        fixture.Controller.HandlePointerReleased(primary.MidX, primary.MidY);
+        fixture.RunToRest();
+
+        var action = Assert.Single(actions.Calls);
+        Assert.Equal(IslandPlatformActionKind.NotificationActivate, action.Kind);
+        Assert.Equal(0, action.Index);
+        Assert.Equal(ShellForm.Compact, fixture.Controller.RenderState.Form);
+    }
+
+    [Fact]
+    public void Notification_width_grows_only_for_long_text_up_to_the_1215_cap()
+    {
+        using var shortFixture = ControllerFixture.Create();
+        shortFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "Hi",
+            Body = "短消息",
+            SourceName = "QQ",
+        }, 1, "test");
+        shortFixture.RunToRest();
+        shortFixture.Settle();
+        Assert.Equal(LayoutTokens.NotificationMinWidth, shortFixture.Controller.RenderState.ShellWidth, 1);
+
+        using var longFixture = ControllerFixture.Create();
+        longFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "Long notification",
+            Body = new string('长', 200),
+            SourceName = "QQ",
+        }, 1, "test");
+        longFixture.RunToRest();
+        longFixture.Settle();
+        var state = longFixture.Controller.RenderState;
+        Assert.Equal(LayoutTokens.NotificationMaxWidth, state.ShellWidth, 1);
+        Assert.True(IslandMetrics.ShellRect(state).Right <= HostSurface.Float.Width + 0.5f);
+    }
+
+    [Fact]
+    public void Notification_spectrum_phase_advances_while_media_is_playing()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
+        {
+            Title = "Midnight City",
+            Subtitle = "M83",
+            IsActive = true,
+            ShowsAudioWave = true,
+            ProgressPercent = 42,
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "QQ",
+            Body = "New message",
+            SourceName = "QQ",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var before = fixture.Controller.RenderState.MotionPhase;
+        for (var i = 0; i < 4; i++)
+        {
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(16));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        }
+
+        Assert.True(fixture.Controller.RenderState.MotionPhase > before);
+    }
+
+    [Theory]
+    [InlineData(StackingStrategySetting.Split)]
+    [InlineData(StackingStrategySetting.Stacked)]
+    public void Notification_stays_primary_when_a_higher_rank_activity_is_present(StackingStrategySetting stacking)
+    {
+        using var fixture = ControllerFixture.Create(
+            settings: AppSettings.Default with { Stacking = stacking, AutoCollapseMs = 0, AutoHideMs = 0 });
+
+        fixture.Controller.PublishActivity(ActivityKind.Clipboard, new ActivityPayload
+        {
+            Title = "Copied",
+            Body = "npm run build",
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "QQ",
+            Body = "New message",
+            SourceName = "QQ",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(ActivityKind.Notification, state.Compact?.Kind);
+        Assert.Empty(state.SplitIslets);
     }
 
     private static SKRect Page(int page, ControllerFixture fixture)

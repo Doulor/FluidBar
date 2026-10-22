@@ -4,10 +4,10 @@ namespace FluidBar.Island;
 
 /// <summary>
 /// Font-scale aware geometry for the expanded pages. Every function reduces to the exact prototype
-/// 1.0 rectangle when <see cref="FontScaleMetrics.One"/> is passed (the golden images and hit targets
-/// stay pixel-identical), and grows the text-bearing containers by the measured line-height delta at
-/// larger scales. Drawing, hit-testing and UI Automation all consume these rectangles so a painted
-/// control and its click target can never drift.
+/// rectangle at <see cref="FontScaleMetrics.One"/> and grows the text-bearing containers by the measured
+/// line-height delta at larger scales. One approved deviation: notification cards are 72 DIP phone-style
+/// cards (2026-10-22) instead of the prototype's 40 DIP rows. Drawing, hit-testing and UI Automation all
+/// consume these rectangles so a painted control and its click target can never drift.
 /// </summary>
 public static class PageMetricsLayout
 {
@@ -291,9 +291,17 @@ public static class PageMetricsLayout
 
     // ---------------------------------------------------------------- lists
 
-    /// <summary>Notification row height (40 at 1.0; grows with the two text lines).</summary>
+    /// <summary>Notification card height (72 at 1.0; grows with the title, two body lines and meta row).</summary>
     public static float NotificationRowHeight(in FontScaleMetrics metrics)
-        => 40 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowBody);
+        => 72 + metrics.LineGrow(IslandType.RowTitle) + (2 * metrics.LineGrow(IslandType.RowBody))
+            + metrics.LineGrow(IslandType.RowMeta);
+
+    /// <summary>Gap between notification cards (4 DIP).</summary>
+    public const float NotificationGap = 4;
+
+    /// <summary>Painted list body for notification cards (16 DIP side insets).</summary>
+    public static SKRect NotificationBody(SKRect page)
+        => new(page.Left + 16, page.Top + BodyTop, page.Right - 16, page.Bottom);
 
     /// <summary>Clipboard row height (48 at 1.0).</summary>
     public static float ClipboardRowHeight(in FontScaleMetrics metrics)
@@ -303,26 +311,36 @@ public static class PageMetricsLayout
     public static float AgentRowHeight(in FontScaleMetrics metrics)
         => 44.6f + metrics.LineGrow(IslandType.AgentTask) + metrics.LineGrow(IslandType.RowMeta);
 
-    /// <summary>Notification row rectangle for an index at a scroll offset.</summary>
+    /// <summary>Notification card rectangle for an index at a scroll offset.</summary>
     public static SKRect NotificationRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
-        var top = page.Top + BodyTop + (index * (NotificationRowHeight(metrics) + 4)) - scrollOffset;
+        var top = page.Top + BodyTop + (index * (NotificationRowHeight(metrics) + NotificationGap)) - scrollOffset;
         return new SKRect(page.Left + 16, top, page.Right - 16, top + NotificationRowHeight(metrics));
     }
 
-    /// <summary>Notification dismiss button (vertically centred in the row).</summary>
-    public static SKRect NotificationDismiss(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
-    {
-        var row = NotificationRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 30, row.MidY - 10, row.Right - 10, row.MidY + 10);
-    }
+    /// <summary>Leading app glyph (36 DIP, vertically centred in the card).</summary>
+    public static SKRect NotificationIcon(SKRect row)
+        => new(row.Left + 10, row.MidY - 18, row.Left + 46, row.MidY + 18);
 
-    /// <summary>Notification verification-code chip.</summary>
+    /// <summary>Dismiss chip at the bottom-left of the card.</summary>
+    public static SKRect NotificationDismiss(SKRect row)
+        => new(row.Left + 58, row.Bottom - 20, row.Left + 102, row.Bottom - 4);
+
+    /// <summary>Copy-verification-code chip, immediately right of the dismiss chip.</summary>
+    public static SKRect NotificationCopyCode(SKRect row)
+        => new(row.Left + 108, row.Bottom - 20, row.Left + 184, row.Bottom - 4);
+
+    /// <summary>Bottom-right timestamp slot.</summary>
+    public static SKRect NotificationTime(SKRect row)
+        => new(row.Right - 88, row.Bottom - 20, row.Right - 16, row.Bottom - 4);
+
+    /// <summary>Notification dismiss chip for an index at a scroll offset.</summary>
+    public static SKRect NotificationDismiss(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+        => NotificationDismiss(NotificationRow(page, index, scrollOffset, metrics));
+
+    /// <summary>Notification verification-code chip for an index at a scroll offset.</summary>
     public static SKRect NotificationCodeChip(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
-    {
-        var row = NotificationRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 98, row.Bottom - 19, row.Right - 38, row.Bottom - 3);
-    }
+        => NotificationCopyCode(NotificationRow(page, index, scrollOffset, metrics));
 
     /// <summary>Clipboard row rectangle for an index at a scroll offset.</summary>
     public static SKRect ClipboardRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
@@ -448,10 +466,14 @@ public static class PageMetricsLayout
         return Math.Clamp(value, 0, max);
     }
 
+    /// <summary>Maximum scroll offset for a metric list (0 when every row fits the body).</summary>
+    public static float MaxListScroll(int count, float rowHeight, float gap)
+        => count <= 0 ? 0 : Math.Max(0, (count * (rowHeight + gap)) - gap - BodyHeight);
+
     /// <summary>Clamps a list scroll offset against the metric row height.</summary>
-    private static float ClampListScroll(int count, float rowHeight, float gap, float scrollOffset)
+    public static float ClampListScroll(int count, float rowHeight, float gap, float scrollOffset)
     {
-        var max = Math.Max(0, (count * (rowHeight + gap)) - gap - BodyHeight);
+        var max = MaxListScroll(count, rowHeight, gap);
         var value = float.IsFinite(scrollOffset) ? scrollOffset : 0;
         return Math.Clamp(value, 0, max);
     }
@@ -548,20 +570,29 @@ public static class PageMetricsLayout
                 return IslandPageControl.None;
             case PageSlotKind.Notifications:
                 {
-                    var body = Body(pageRect);
+                    var body = NotificationBody(pageRect);
                     if (!body.Contains(x, y))
                     {
                         return IslandPageControl.None;
                     }
 
                     var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampListScroll(count, NotificationRowHeight(metrics), 4, scrollOffset);
+                    var scroll = ClampListScroll(count, NotificationRowHeight(metrics), NotificationGap, scrollOffset);
                     for (var i = 0; i < count; i++)
                     {
                         if (NotificationDismiss(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;
                             return IslandPageControl.Dismiss;
+                        }
+                    }
+
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (NotificationCodeChip(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.Copy;
                         }
                     }
 

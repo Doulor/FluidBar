@@ -22,6 +22,16 @@ public readonly record struct LyricPair(string? Current, string? Next)
 /// </remarks>
 public static class LyricsTimelineSelector
 {
+    /// <summary>
+    /// How early a line may become the current one before its first word. The player's clock text is the
+    /// displayed second (floored), so the island runs up to a second behind the audio; without a lead the
+    /// next line showed up with its first characters already sung (user report 2026-10-22).
+    /// </summary>
+    private static readonly TimeSpan Lead = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How long after a line finishes the next one takes over (the singing restarts there).</summary>
+    private static readonly TimeSpan HandOverWindow = TimeSpan.FromMilliseconds(1200);
+
     /// <summary>Selects the current and next line at <paramref name="position"/>.</summary>
     public static LyricPair Select(LyricsDocument? document, TimeSpan position)
         => Select(document, position, null, null);
@@ -43,17 +53,40 @@ public static class LyricsTimelineSelector
         }
 
         var lines = document.Lines;
-        var index = document.FindLineIndex(position);
+
+        // Advance the whole selection (and the sweep) by a small lead: the player's clock only exposes whole
+        // seconds, so the island runs a fraction of a second behind the audio and every line used to appear
+        // with its first characters already sung (user report 2026-10-22).
+        var effective = position + Lead;
+        var index = document.FindLineIndex(effective);
         var currentIndex = FindLine(lines, index, forward: false, title, artist);
         if (currentIndex < 0)
         {
             var first = FindLine(lines, index + 1, forward: true, title, artist);
-            return first < 0
-                ? default
-                : new LyricSelection(null, lines[first].Text, LyricKaraoke.NoWordTiming);
+            if (first < 0)
+            {
+                return default;
+            }
+
+            // Before the first line: show it (unsung) instead of an empty card.
+            return new LyricSelection(lines[first].Text, null, LyricKaraoke.NoWordTiming, lines[first]);
         }
 
         var current = lines[currentIndex];
+        // Lyric files leave a gap between lines: holding the finished line until the next timestamp hid
+        // the first words of every next line (user report 2026-10-21). Hand over as soon as the sweep
+        // completes, no matter how far away the next timestamp is — during an instrumental break the next
+        // line should already be waiting on screen (user report 2026-10-22).
+        if (LyricKaraoke.Progress(current, effective) >= 1)
+        {
+            var following = FindLine(lines, currentIndex + 1, forward: true, title, artist);
+            if (following >= 0)
+            {
+                currentIndex = following;
+                current = lines[currentIndex];
+            }
+        }
+
         var nextIndex = FindLine(lines, currentIndex + 1, forward: true, title, artist);
         var next = nextIndex < 0 ? null : lines[nextIndex].Text;
         if (next is not null && string.Equals(next.Trim(), current.Text.Trim(), StringComparison.Ordinal))
@@ -64,7 +97,7 @@ public static class LyricsTimelineSelector
         return new LyricSelection(
             current.Text,
             next,
-            LyricKaraoke.Progress(current, position),
+            LyricKaraoke.Progress(current, effective),
             current);
     }
 

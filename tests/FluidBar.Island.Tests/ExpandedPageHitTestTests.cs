@@ -27,15 +27,16 @@ public sealed class ExpandedPageHitTestTests
             },
         };
         var page = IslandMetrics.PageRect(state, 2);
+        var metrics = FontScaleMetrics.From(state.FontScale);
 
-        var row = PageLayout.NotificationRow(page, 0);
+        var row = PageMetricsLayout.NotificationRow(page, 0, 0, metrics);
         var rowHit = Hit(state, row.MidX, row.MidY);
         Assert.Equal(IslandHitKind.PageControl, rowHit.Kind);
         Assert.Equal(IslandPageControl.Row, rowHit.Control);
         Assert.Equal(0, rowHit.Index);
         Assert.Equal(2, rowHit.PageIndex);
 
-        var dismiss = PageLayout.NotificationDismiss(page, 1);
+        var dismiss = PageMetricsLayout.NotificationDismiss(page, 1, 0, metrics);
         var dismissHit = Hit(state, dismiss.MidX, dismiss.MidY);
         Assert.Equal(IslandPageControl.Dismiss, dismissHit.Control);
         Assert.Equal(1, dismissHit.Index);
@@ -56,18 +57,19 @@ public sealed class ExpandedPageHitTestTests
         {
             Pages = baseState.Pages with
             {
-                Notifications = baseState.Pages.Notifications with { Items = items, ScrollOffset = 30 },
+                Notifications = baseState.Pages.Notifications with { Items = items, ScrollOffset = 70 },
             },
         };
 
         var page = IslandMetrics.PageRect(state, 2);
-        var row1 = PageLayout.NotificationRow(page, 1, 30);
+        var metrics = FontScaleMetrics.From(state.FontScale);
+        var row1 = PageMetricsLayout.NotificationRow(page, 1, 70, metrics);
         var hit = Hit(state, row1.MidX, row1.MidY);
         Assert.Equal(IslandPageControl.Row, hit.Control);
         Assert.Equal(1, hit.Index);
 
         // Row 0 is scrolled above the body band and is no longer clickable.
-        var row0 = PageLayout.NotificationRow(page, 0, 30);
+        var row0 = PageMetricsLayout.NotificationRow(page, 0, 70, metrics);
         var above = Hit(state, row0.MidX, row0.MidY);
         Assert.NotEqual(IslandPageControl.Row, above.Control);
     }

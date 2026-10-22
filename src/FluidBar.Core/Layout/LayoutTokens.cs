@@ -50,6 +50,9 @@ public static class LayoutTokens
     /// <summary>Fixed per-monitor host surface width (488 DIP) for every mode.</summary>
     public const double HostSurfaceWidth = ExpandedWidth + (2 * WindowPadding);
 
+    /// <summary>Float/flush host surface width (1263 DIP): room for the 1215 DIP notification cap.</summary>
+    public const double HostSurfaceFloatWidth = NotificationMaxWidth + (2 * WindowPadding);
+
     /// <summary>
     /// Fixed float/flush host surface height (488x384 DIP): shell envelope 332 + the detached
     /// Page Archipelago band 52 (gap 8 + strip 32 + bottom padding 12). The host surface is the
@@ -327,7 +330,18 @@ public static class LayoutTokens
     private static readonly VisualSize IdleSize = new(132, 36);
     private static readonly VisualSize MediaSize = new(226, 40);
     private static readonly VisualSize HudSize = new(208, 40);
-    private static readonly VisualSize NotificationSize = new(248, 36);
+    // NetSpeed-Dynamic message card (screenshot4.png measured): 360×64 DIP, ~21 DIP radius,
+    // i.e. clearly squarer than the 35 DIP stadium a 70-high card would produce.
+    private static readonly VisualSize NotificationSize = new(360, 64);
+
+    /// <summary>Minimum notification-card width (short, unclipped messages stay here).</summary>
+    public const double NotificationMinWidth = 360;
+
+    /// <summary>Maximum notification-card width after the requested +50% cap (810 → 1215).</summary>
+    public const double NotificationMaxWidth = 1215;
+
+    /// <summary>Squarer notification-card radius measured from the reference screenshot (~43 px at 2×).</summary>
+    public const double NotificationCornerRadius = 21;
     private static readonly VisualSize ClipboardSize = new(264, 36);
     // Prototype2 .island[data-view="agent"]: 236×36 with an action/session title, not the brand name.
     private static readonly VisualSize AgentSize = new(236, 36);
@@ -398,8 +412,14 @@ public static class LayoutTokens
     /// flush has square top corners; dock uses the 12/16 radii.
     /// </summary>
     public static CornerRadii RadiiFor(ShellForm form, IslandMode mode, double height,
-        double expandedRadius = ExpandedRadius)
+        double expandedRadius = ExpandedRadius, Activities.ActivityKind? kind = null)
     {
+        if (kind == Activities.ActivityKind.Notification && mode == IslandMode.Float
+            && (form is ShellForm.Compact or ShellForm.Peek))
+        {
+            return CornerRadii.Uniform(NotificationCornerRadius);
+        }
+
         var compactRadius = Math.Min(height / 2, CompactRadiusCap);
         return form switch
         {

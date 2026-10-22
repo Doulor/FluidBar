@@ -134,4 +134,23 @@ public sealed class MediaPositionClockTests
 
         Assert.Equal(35_000, clock.PositionAt(30_000), 3);
     }
+
+    [Fact]
+    public void Reconcile_play_state_change_folds_the_extrapolated_position_into_the_anchor()
+    {
+        // ResolvePosition flips the play flag inside Reconcile (fresh sample + new state). The frozen
+        // position must be the extrapolated value: keeping the old anchor rewound the picture to it on
+        // pause and dropped the pause length on resume (pause → resume → pause jump, 2026-10-22).
+        var clock = new MediaPositionClock();
+        clock.Anchor(10_000, nowMs: 1_000, playing: true);
+
+        clock.Reconcile(10_500, nowMs: 1_500, playing: false);
+        Assert.Equal(10_500, clock.PositionAt(2_000), 3);
+        Assert.Equal(10_500, clock.PositionAt(6_000), 3);
+
+        // Resume with the same sample: playback continues from the frozen position.
+        clock.Reconcile(10_500, nowMs: 6_000, playing: true);
+        Assert.Equal(10_500, clock.PositionAt(6_000), 3);
+        Assert.Equal(10_600, clock.PositionAt(6_100), 3);
+    }
 }

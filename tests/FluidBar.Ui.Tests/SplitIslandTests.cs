@@ -1,6 +1,7 @@
 using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Settings;
 using FluidBar.Core.Activities;
+using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
 
@@ -49,7 +50,7 @@ public sealed class SplitIslandTests
     }
 
     [Fact]
-    public void Waiting_agent_takes_primary_then_media_restores_when_it_resolves()
+    public void Waiting_agent_stays_in_the_preview_ball_while_media_plays()
     {
         using var fixture = Create();
         fixture.Settle();
@@ -63,7 +64,9 @@ public sealed class SplitIslandTests
             Title = "Agent", Badge = "waiting", IsActive = true,
         }, 2);
         Settle(fixture);
-        Assert.Equal(ActivityKind.Agent, fixture.Controller.RenderState.Compact.Value.Kind);
+        // Contract changed 2026-10-22 (user decision, option B): a playing track keeps the pill and the
+        // waiting agent only appears as a preview ball; the user's explicit pin still outranks media.
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
 
         fixture.Controller.RetractActivity(ActivityKind.Agent, 3, "test");
         Settle(fixture);
@@ -167,6 +170,92 @@ public sealed class SplitIslandTests
     }
 
     [Fact]
+    public void Stacked_wheel_pin_survives_heartbeats_and_new_ordinary_activity()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            Stacking = StackingStrategySetting.Stacked,
+        });
+        fixture.Settle();
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload { Title = "Agent", Badge = "running", IsActive = true }, 1, "agent");
+        Settle(fixture);
+        Publish(fixture, ActivityKind.Media, new ActivityPayload { Title = "Song", IsActive = true }, 2, "media");
+        Settle(fixture);
+
+        Assert.True(fixture.Controller.HandleWheel(-60, horizontal: false, shift: false).Consumed);
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        for (var beat = 0; beat < 8; beat++)
+        {
+            fixture.Time.Advance(TimeSpan.FromSeconds(2));
+            Publish(fixture, ActivityKind.Agent, new ActivityPayload
+            {
+                Title = "Agent", Badge = "running", IsActive = true, Body = "heartbeat " + beat,
+            }, 10 + beat, "agent");
+            Settle(fixture);
+        }
+
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        Publish(fixture, ActivityKind.Timer, new ActivityPayload { Title = "Pomodoro", Level = 8 }, 30, "timer");
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+    }
+
+    [Fact]
+    public void Wheel_pin_survives_activity_heartbeats_through_the_controller()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            Stacking = StackingStrategySetting.Split,
+        });
+        fixture.Settle();
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload { Title = "Agent", Badge = "running", IsActive = true }, 1, "agent");
+        Settle(fixture);
+        Publish(fixture, ActivityKind.Media, new ActivityPayload { Title = "Song", IsActive = true }, 2, "media");
+        Settle(fixture);
+
+        // Wheel until media owns the main pill.
+        var mediaPinned = false;
+        for (var i = 0; i < 4; i++)
+        {
+            fixture.Controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+            Settle(fixture);
+            if (fixture.Controller.RenderState.Compact.Value.Kind == ActivityKind.Media)
+            {
+                mediaPinned = true;
+                break;
+            }
+        }
+        Assert.True(mediaPinned, "the wheel must be able to put media in the primary slot");
+        var order = fixture.Controller.RenderState.SplitIslets.Select(i => i.Kind).ToArray();
+
+        // Eight heartbeat re-publishes (16 s) of the same agent key: policy must keep the wheel pin.
+        for (var beat = 0; beat < 8; beat++)
+        {
+            fixture.Time.Advance(TimeSpan.FromSeconds(2));
+            Publish(fixture, ActivityKind.Agent, new ActivityPayload
+            {
+                Title = "Agent", Badge = "running", IsActive = true, Body = "heartbeat " + beat,
+            }, 10 + beat, "agent");
+            Settle(fixture);
+        }
+
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+        Assert.Equal(order, fixture.Controller.RenderState.SplitIslets.Select(i => i.Kind).ToArray());
+
+        // A new ordinary/persistent activity must not steal the wheel pin either.
+        Publish(fixture, ActivityKind.Timer, new ActivityPayload { Title = "Pomodoro", Level = 8 }, 20, "timer");
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Media, fixture.Controller.RenderState.Compact.Value.Kind);
+    }
+
+    [Fact]
     public void Only_the_ball_rectangles_are_interactive()
     {
         using var fixture = Create();
@@ -209,5 +298,36 @@ public sealed class SplitIslandTests
         Assert.True(fixture.Controller.Pager.SelectedIndex >= 0);
         Assert.InRange(fixture.Controller.RenderState.SplitProgress, 0, 0.02);
     }
+    [Fact]
+    public void Completed_agent_leaves_visible_and_clears_satellite_after_three_seconds()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            Stacking = StackingStrategySetting.Split,
+        });
+        fixture.Settle();
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Agent", Badge = "running", IsActive = true,
+        }, 1, "agent");
+        Settle(fixture);
+
+        Publish(fixture, ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Agent", Badge = "completed", IsActive = false,
+        }, 2, "agent");
+        Settle(fixture);
+        Assert.Equal(ActivityKind.Agent, fixture.Controller.RenderState.Compact.Value.Kind);
+
+        fixture.Time.Advance(TimeSpan.FromSeconds(3.1));
+        Settle(fixture);
+        Assert.Empty(fixture.Controller.SchedulerState.Visible);
+        Assert.Empty(fixture.Controller.RenderState.SplitIslets);
+        Assert.Null(fixture.Controller.RenderState.Compact.Value.Model.Title);
+    }
 }
+
+
 
