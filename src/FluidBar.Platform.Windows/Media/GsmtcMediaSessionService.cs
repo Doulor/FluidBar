@@ -145,10 +145,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
-    /// <summary>Last published position, used to guarantee the clock never stalls while playing.</summary>
-    private TimeSpan _lastPublishedPosition;
-    private DateTimeOffset _lastPublishedAt = DateTimeOffset.MinValue;
-
     /// <summary>Consecutive polls where the audio meter reported silence.</summary>
     private int _audioSilentPolls;
     private volatile bool _fallbackActive;
@@ -527,7 +523,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _fallbackLastSnapshot = snapshot;
         _fallbackLastPid = candidate.ProcessId;
         _fallbackLastSeenMs = _timeProviderNow().ToUnixTimeMilliseconds();
-        PublishGuarded(snapshot);
+        Publish(snapshot);
         }
     }
 
@@ -536,34 +532,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// accessibility tree carries the live "mm:ss/mm:ss" text, which is both finer-grained (updated
     /// every second) and more accurate (real duration) than the position it persists every 30 s.
     /// </summary>
-    /// <summary>
-    /// Publishes a snapshot, guaranteeing that a playing song never shows a frozen position.
-    /// </summary>
-    /// <remarks>
-    /// Every estimate here can stall: the state file is rewritten every ~30 s, the accessibility text can
-    /// freeze for minutes, and the frame capture can lose its stream. Any of those used to leave the island
-    /// stuck on one value while the song kept playing (measured 74 s frozen, 2026-10-22). A short stall is
-    /// simply filled with wall time; a real pause is unaffected because it publishes IsPlaying = false.
-    /// </remarks>
-    private void PublishGuarded(MediaSnapshot snapshot)
-    {
-        var now = _timeProviderNow();
-        if (snapshot.IsPlaying
-            && _lastPublishedAt > DateTimeOffset.MinValue
-            && snapshot.Position <= _lastPublishedPosition)
-        {
-            var stalled = now - _lastPublishedAt;
-            if (stalled > TimeSpan.FromMilliseconds(1200) && stalled < TimeSpan.FromSeconds(5))
-            {
-                snapshot = snapshot with { Position = _lastPublishedPosition + stalled };
-            }
-        }
-
-        _lastPublishedPosition = snapshot.Position;
-        _lastPublishedAt = now;
-        Publish(snapshot);
-    }
-
     /// <summary>
     /// Resolves a disagreement between the accessibility clock and the player's state file in favour of the
     /// one that can prove when it was sampled.
@@ -1131,7 +1099,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             }
 
             MediaDiagnostics.Log($"publish source=gsmtc app={aumid} title={properties.Title} playing={snapshot.IsPlaying}");
-            PublishGuarded(snapshot);
+            Publish(snapshot);
 
             if (changed || !_artworkCache.TryGet(trackKey, out _))
             {
