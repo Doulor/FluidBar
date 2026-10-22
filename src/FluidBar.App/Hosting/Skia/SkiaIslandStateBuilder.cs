@@ -240,7 +240,9 @@ public static class SkiaIslandStateBuilder
             Items = BuildClipboard(content.Clipboard, localizer),
             PinnedLabel = localizer.Get(LocKeys.Clipboard.Pinned),
             FilterLabel = content.ClipboardFilterLabel,
-            SearchLabel = localizer.Get(LocKeys.Clipboard.Search),
+            SearchLabel = content.ClipboardFilterLabel is null
+                ? null
+                : localizer.Get(LocKeys.Clipboard.Search),
             EmptyTitle = localizer.Get(LocKeys.Clipboard.Empty),
             EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };
