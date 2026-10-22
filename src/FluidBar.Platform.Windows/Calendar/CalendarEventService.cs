@@ -71,7 +71,7 @@ public sealed class CalendarEventService : IAsyncDisposable
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // AppointmentStore.GetDefaultAsync is commonly denied for unpackaged processes.
             _logger.LogDebug(PlatformLogCategory.Monitor, "widgets.calendar", "Calendar events unavailable.");

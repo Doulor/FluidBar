@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **preview.3 发布修复**：`CalendarEventService` 捕获块残留未使用的 `Exception ex`，在 `-warnaserror` 发布门禁下是 CS0168，直接阻断 preview.3；改成无变量 catch 后本地 publish 成功（zip 19.62 MB、exe 60.3 MB、无 PDB）。
 - **Agent 聚焦防误伤**：`AgentWindowFocus` 现在只接受终端/编辑器进程（WindowsTerminal、pwsh、Code、Cursor 等）的窗口；浏览器标题碰巧含项目名时不会再被误拉到前台。新增 `IsEligibleProcessName` 单测。
 - **缩略图缓存回归测试**：新增 `ArtworkImageCacheTests`，断言 8 张不同剪贴板图片全部留在缓存（旧容量 4 时只能留 4 张且第 5 张整表清空）。
 - **封面/缩略图缓存容量**：`ArtworkImageCache` 默认容量 4，剪贴板页最多画 8 张图片 + 媒体页封面，缓存每次填满就整表清空，导致后续帧反复解码前几行；默认容量提高到 16（256 px 上限下约 <4 MB），覆盖整页可见缩略图。
