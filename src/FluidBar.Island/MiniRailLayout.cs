@@ -303,13 +303,22 @@ public static class MiniRailLayout
 
         var maxInlinePages = (ArchipelagoState.MaxDotsPerSide * 2) + 1;
         var showOverflow = pageCount > maxInlinePages;
-        var overflowLeft = showOverflow
+
+        // A "more pages" chip may only exist on a side that actually HAS more pages. Both chips used to
+        // be painted whenever the page count exceeded the inline capacity, so page 01 carried a dead
+        // "•••" on its left and the last page on its right — three dots that cannot lead anywhere
+        // (user report 2026-10-22).
+        var pagesBeyondLeft = page - 2 - leftDots;
+        var pagesBeyondRight = (pageCount - 1) - (page + 2 + rightDots);
+        var showLeftOverflow = showOverflow && pagesBeyondLeft >= 0;
+        var showRightOverflow = showOverflow && pagesBeyondRight >= 0;
+        var overflowLeft = showLeftOverflow
             ? new SKRect(leftClusterCentre - (leftWidth / 2f) - 24f, dotTop - 3f, leftClusterCentre - (leftWidth / 2f) - 4f, dotTop + dotSize + 3f)
             : SKRect.Empty;
-        var overflowRight = showOverflow
+        var overflowRight = showRightOverflow
             ? new SKRect(rightClusterCentre + (rightWidth / 2f) + 4f, dotTop - 3f, rightClusterCentre + (rightWidth / 2f) + 24f, dotTop + dotSize + 3f)
             : SKRect.Empty;
-        if (showOverflow)
+        if (showLeftOverflow || showRightOverflow)
         {
             halfWidth = Math.Max(halfWidth, centreX - overflowLeft.Left);
             halfWidth = Math.Max(halfWidth, overflowRight.Right - centreX);
