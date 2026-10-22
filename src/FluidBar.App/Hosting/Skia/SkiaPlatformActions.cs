@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using FluidBar.App.Island;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -73,6 +76,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly WeatherService _weather;
     private readonly TaskListService _tasks;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
+    private readonly Dictionary<uint, string> _pinKeyCache = new();
+    private readonly string _clipboardPinsPath;
     private bool _weatherCityLockedByEnvironment;
     private INotificationSource? _pluginNotificationSource;
     private DateOnly _calendarMonth;
@@ -111,11 +116,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger, TimeProvider? timeProvider,
         IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null,
         WeatherServiceOptions? weatherOptions = null, TaskListOptions? taskOptions = null,
-        string? weatherCity = null)
+        string? weatherCity = null, string? clipboardPinsPath = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer;
+        _clipboardPinsPath = clipboardPinsPath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar", "clipboard-pins.json");
         _logger = logger ?? NullAppLogger.Instance;
+        LoadClipboardPins();
         _platformLogger = new AppLoggerPlatformAdapter(_logger);
         _counters = new PlatformCounters();
         var time = timeProvider ?? TimeProvider.System;
@@ -1023,6 +1031,87 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         };
     }
 
+    /// <summary>
+    /// Stable, privacy-preserving pin identity. Only a SHA-256 digest is persisted; clipboard text and
+    /// file paths never leave the process. Image hashes are cached by sequence because a 4K DIB is
+    /// tens of megabytes and the page snapshot is rebuilt on every change.
+    /// </summary>
+    private string PinKey(ClipboardEntry entry)
+    {
+        if (_pinKeyCache.TryGetValue(entry.Sequence, out var cached))
+        {
+            return cached;
+        }
+
+        var payload = entry.Kind switch
+        {
+            ClipboardContentKind.Text => entry.Text ?? string.Empty,
+            ClipboardContentKind.Files => string.Join('\u001F', entry.FilePaths),
+            ClipboardContentKind.Image => entry.ImageDib is { Length: > 0 } dib
+                ? $"{dib.Length}:{Convert.ToHexString(SHA256.HashData(dib))}"
+                : string.Empty,
+            _ => string.Empty,
+        };
+        var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{(int)entry.Kind}:{payload}")));
+        if (_pinKeyCache.Count > 256)
+        {
+            _pinKeyCache.Clear();
+        }
+
+        _pinKeyCache[entry.Sequence] = key;
+        return key;
+    }
+
+    private void LoadClipboardPins()
+    {
+        try
+        {
+            if (!File.Exists(_clipboardPinsPath))
+            {
+                return;
+            }
+
+            var keys = JsonSerializer.Deserialize<string[]>(File.ReadAllText(_clipboardPinsPath));
+            if (keys is null)
+            {
+                return;
+            }
+
+            foreach (var key in keys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    _pinnedClipboard.Add(key);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // A corrupt/old pin file must never prevent the island from starting.
+            _logger.Warning(LogCategories.Platform, "island.clipboard-pins.load-failed",
+                "Could not load clipboard pins.", ex);
+        }
+    }
+
+    private void SaveClipboardPins()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(_clipboardPinsPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(_clipboardPinsPath, JsonSerializer.Serialize(_pinnedClipboard.ToArray()));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.clipboard-pins.save-failed",
+                "Could not save clipboard pins.", ex);
+        }
+    }
+
     private static string ClipboardPreview(ClipboardEntry entry)
     {
         var preview = entry.Kind switch
@@ -1037,17 +1126,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private IslandActionResult ToggleClipboardPin(int index)
     {
-        var history = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
-        if (index < 0 || index >= Math.Min(8, history.Length))
+        var history = DisplayedClipboard();
+        if (index < 0 || index >= history.Count)
         {
             return Unsupported("the clipboard row no longer exists");
         }
 
-        var preview = ClipboardPreview(history[index]);
-        if (!_pinnedClipboard.Add(preview))
+        var key = PinKey(history[index]);
+        if (!_pinnedClipboard.Add(key))
         {
-            _pinnedClipboard.Remove(preview);
+            _pinnedClipboard.Remove(key);
         }
+        SaveClipboardPins();
 
         Changed?.Invoke(this, EventArgs.Empty);
         return IslandActionResult.Handled;
@@ -1674,7 +1764,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Rows exactly as painted: pinned first, then newest; capped at the page limit.</summary>
     private IReadOnlyList<ClipboardEntry> DisplayedClipboard()
         => _clipboard.GetHistory()
-            .OrderByDescending(entry => _pinnedClipboard.Contains(ClipboardPreview(entry)))
+            .OrderByDescending(entry => _pinnedClipboard.Contains(PinKey(entry)))
             .ThenByDescending(entry => entry.CapturedAtUtc)
             .Take(8)
             .ToArray();

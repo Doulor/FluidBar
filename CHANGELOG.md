@@ -17,7 +17,7 @@
 - **剪贴板图片/文件复制**：图片条目捕获原始 `CF_DIB`（上限 64 MB、历史最多保留 5 张图）；文件条目保留 `CF_HDROP` 路径。点击图片/文件行的复制按钮现在分别写回 `CF_DIB` / `CF_HDROP`，不再把文件路径当文本、也不再对图片直接报 unsupported。
 - **开发多实例**：`FLUIDBAR_ALLOW_MULTI_INSTANCE=1` 可绕过单实例 mutex（只给本地 smoke/验收用，生产不设置）。
 - **发布包瘦身**：`build/publish.ps1` 与 `tools/release/publish.ps1` 在压缩前删除 `*.pdb`；此前 zip 里带 `libSkiaSharp.pdb`（84 MB）+ `libHarfBuzzSharp.pdb`（20 MB）。`release.yml` 的 `contents` 权限从 read 改为 write，`gh release create` 不再必然 403。
-- **剪贴板置顶排序**：固定行现在排到列表最前面（此前点 Pin 只换图标、位置不动）。仍不跨进程持久化，下一步再接 pin 存储。
+- **剪贴板置顶排序**：固定行现在排到列表最前面（此前点 Pin 只换图标、位置不动）；pin 身份用 SHA-256 摘要持久化到 `%APPDATA%\FluidBar\clipboard-pins.json`，不保存明文剪贴板内容。
 - **插件发现测试**：新增 `PluginDiscoveryLayoutTests`，锁住「数据目录 / local 容器不应被当成损坏包」的行为。
 - **插件目录误报**：`PluginDiscoverer` 现在把 `<id>/data` + `<id>/settings.json` 这类插件数据目录、以及包含实际包的 `local` 容器目录识别为合法布局并静默跳过，不再每次启动打 5 条 `Plugin package rejected during discovery`，也不再在插件页生成 5 个幽灵 invalid 条目。
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
