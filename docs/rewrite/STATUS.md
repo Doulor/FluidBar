@@ -15,6 +15,7 @@
 - **全屏抑制**：新增 `FullscreenDetector`（矩形覆盖 + `WS_POPUP`/无 `WS_CAPTION` 判定，普通最大化不误判）；每秒轮询，进入/退出全屏通过 `SuppressionChanged` 隐藏/恢复岛。
 - **单实例 / 空态**：`SingleInstanceGuard` 阻止第二个岛并向后一个进程发送 `ActivateMessage` 打开设置；平台 seam 失败/ Avalonia fallback 改用 `EmptyIslandDataSource`，不再显示虚假的 Spotify/Teams/剪贴板。
 - **电源/GC**：所有帧循环停止路径走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution 与默认 GC latency；修复前首次动画后系统 timer 停在 1 ms（实测 `NtQueryTimerResolution`）。
+- **首页真实状态**：Wi-Fi/蓝牙开关改用 Radio 服务的真实 `IsEnabled`（不再用 `IsOnline`/硬编码 false）；首页天气 chip 复用小组件页的真实天气；禁用的 Focus 磁贴不再产生点击动作。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*` 并新增独立隐藏项；`Ctrl+Alt+H` 走 `HandleHideHotkey`；`MOD_NOREPEAT` 修复长按重复。
 - **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2578 passed / 3 failed**。3 个失败均为既有：Architecture 的 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（STATUS 已记录）与 Integration 的 notification rank 顺序断言（预览版通知 rank 0 导致，非本轮改动）。Core 647 · Platform 700 · Ui 507 · Island 447 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 29/31 · Architecture 17/18。
 - **构建**：`dotnet build FluidBar.sln` 0 errors。

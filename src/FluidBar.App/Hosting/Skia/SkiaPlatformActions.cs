@@ -342,6 +342,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             NetworkName = NetworkAdapterSelector.DisplayName(
                 network, Localized(LocKeys.Common.Disconnected, "Disconnected")),
             IsOnline = network?.IsConnected ?? true,
+            IsWifiEnabled = _wifi.Current?.IsEnabled,
+            IsBluetoothEnabled = _bluetooth.Current?.IsEnabled,
             FocusOn = focus?.IsActive ?? false,
             FocusAvailable = focus?.CanToggle ?? false,
             VolumePercent = volume is { HasDevice: true } ? volume.Percent : null,

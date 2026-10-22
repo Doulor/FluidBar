@@ -136,12 +136,17 @@ public static class SkiaIslandStateBuilder
             DateText = culture.TwoLetterISOLanguageName == "zh"
                 ? now.ToString("M月d日 ddd", culture)
                 : now.ToString("ddd, MMM d", culture),
-            // TODO(skia-mvp): IslandContent carries no weather source yet; keep the chip hidden.
-            ShowWeather = false,
+            // The widgets page already receives real weather; the dashboard chip is the same data,
+            // not a second source.
+            ShowWeather = !string.IsNullOrWhiteSpace(content.WeatherTemp),
+            WeatherTemp = content.WeatherTemp,
+            WeatherCondition = content.WeatherConditionText,
             Toggles =
             [
-                new HomeToggleModel(IslandIcon.Wifi, content.NetworkName ?? "Wi-Fi", content.IsOnline),
-                new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth), false),
+                new HomeToggleModel(IslandIcon.Wifi, content.NetworkName ?? "Wi-Fi",
+                    content.IsWifiEnabled ?? content.IsOnline),
+                new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth),
+                    content.IsBluetoothEnabled ?? false),
                 new HomeToggleModel(
                     IslandIcon.Focus,
                     localizer.Get(LocKeys.Page.Home.FocusTime),

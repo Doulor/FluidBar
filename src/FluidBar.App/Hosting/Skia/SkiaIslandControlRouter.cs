@@ -49,7 +49,15 @@ public static class SkiaIslandControlRouter
                     IslandPlatformActionKind.BrightnessSet,
                     Value: Fraction(PageLayout.HomeBrightnessTrack(page), pointerXDip));
             case IslandPageControl.QuickToggle:
-                return hit.Index is >= 0 and <= (int)IslandQuickToggle.Theme
+                // A disabled tile (Focus on ordinary Windows) is painted at 45% opacity; it must not
+                // remain a live hit target that only writes a control-unsupported log line.
+                if (hit.Index < 0 || hit.Index >= state.Pages.Home.Toggles.Count
+                    || !state.Pages.Home.Toggles[hit.Index].IsEnabled)
+                {
+                    return null;
+                }
+
+                return hit.Index <= (int)IslandQuickToggle.Theme
                     ? new IslandPlatformAction(
                         IslandPlatformActionKind.QuickToggle,
                         Index: hit.Index,

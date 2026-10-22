@@ -227,6 +227,12 @@ public sealed record IslandContent
     /// <summary>Whether the battery is charging.</summary>
     public bool IsCharging { get; init; }
 
+    /// <summary>Real Wi-Fi radio state; null when the radio service is unavailable.</summary>
+    public bool? IsWifiEnabled { get; init; }
+
+    /// <summary>Real Bluetooth radio state; null when the radio service is unavailable.</summary>
+    public bool? IsBluetoothEnabled { get; init; }
+
     /// <summary>Localized network name.</summary>
     public string? NetworkName { get; init; }
 
