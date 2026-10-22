@@ -547,14 +547,26 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             if (!string.Equals(_frameTrackTitle, candidate.Title, StringComparison.Ordinal))
             {
                 _frameTrackTitle = candidate.Title;
-                _frameAnchorPosition = statePosition;
                 var sinceWrite = _timeProviderNow() - state.SampledAtUtc;
-                if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(45))
+                if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(10))
                 {
                     sinceWrite = TimeSpan.Zero;
                 }
 
-                _frameAnchorAudio = audio - sinceWrite;
+                // A new title means a new song, which starts at zero. The state file may still hold the
+                // PREVIOUS track's position for a few seconds, so only trust it when the reading agrees that
+                // we are not at the very beginning (a 223 s jump was measured on this path, 2026-10-22).
+                var justStarted = candidate.Position >= TimeSpan.Zero && candidate.Position < TimeSpan.FromSeconds(20);
+                if (justStarted && statePosition > TimeSpan.FromSeconds(25))
+                {
+                    _frameAnchorPosition = TimeSpan.Zero;
+                    _frameAnchorAudio = audio;
+                }
+                else
+                {
+                    _frameAnchorPosition = statePosition;
+                    _frameAnchorAudio = audio - sinceWrite;
+                }
             }
 
             var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
