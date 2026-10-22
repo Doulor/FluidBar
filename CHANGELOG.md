@@ -24,7 +24,7 @@
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
-- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2580 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2581 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
 
 
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）
