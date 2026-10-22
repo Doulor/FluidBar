@@ -133,6 +133,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private string? _frameTrackTitle;
     private TimeSpan _frameAnchorAudio;
     private TimeSpan _frameAnchorPosition;
+    private long _lastFrameLogTick;
 
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
@@ -571,6 +572,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 _frameAnchorAudio = audio;
                 _frameAnchorPosition = candidate.Position;
                 position = candidate.Position;
+            }
+
+            if (Environment.TickCount64 - _lastFrameLogTick > 4500)
+            {
+                _lastFrameLogTick = Environment.TickCount64;
+                MediaDiagnostics.LogAlways(
+                    $"sync.frame pos={position.TotalSeconds:0.0}s text={candidate.Position.TotalSeconds:0.0}s "
+                    + $"ini={statePosition.TotalSeconds:0.0}s ageS={( _timeProviderNow() - state.SampledAtUtc).TotalSeconds:0.0} "
+                    + $"anchor={_frameAnchorPosition.TotalSeconds:0.0}s title='{candidate.Title}'");
             }
 
             return candidate with
