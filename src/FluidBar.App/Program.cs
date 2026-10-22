@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
+using FluidBar.App.Hosting;
 
 namespace FluidBar.App;
 
@@ -14,7 +15,22 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // One island per session: a second launch would create a second layered window, a second
+        // WH_MOUSE_LL hook and a second tray icon, and both processes would overwrite settings.
+        if (!SingleInstanceGuard.TryAcquire())
+        {
+            SingleInstanceGuard.SignalExistingInstance();
+            return;
+        }
+
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            SingleInstanceGuard.Release();
+        }
     }
 
     /// <summary>Builds the Avalonia app with the composition backend required for per-pixel alpha.</summary>

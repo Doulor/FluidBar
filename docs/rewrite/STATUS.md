@@ -1,11 +1,23 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-21 19:55（Asia/Shanghai）
+> 最后更新：2026-10-22 18:16（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
 ## 一句话状态
 
 **灵动岛动画卡顿已修复**：60 fps 帧时钟原来被 50 ms 截止计时器每个 tick 停掉（`_lastRenderHappened` 参与停止判定），展开/悬停/波浪只能画 2–3 帧。现在帧时钟只由动画状态决定（`IslandFrameLoopPolicy`），实测展开 380 ms 走 24 帧、interval p50 15.9 ms，空闲 CPU 12.8% → 2.1%。
+
+
+## 2026-10-22 18:16 检查点（预览版 v1 第一轮硬化：输入 / 全屏 / 单实例 / 空态）
+
+- **鼠标钩子状态机**：抽成纯 `IslandMouseHook.GestureTracker`。岛内按下、岛外松开现在产生 `Released + Left`，不再残留 `_pressed`；普通移动不会再变成幽灵拖拽（旧行为：页面自己乱翻、下一次点击丢 release）。看门狗改为对比「钩子最后上报位置」，本机 43 分钟 55 次 `island.mouse-hook-reinstalled` 不再出现；重装同时复位手势。
+- **命中区 / 拖拽 / 滚轮**：`OnPlacementRequested` 强制刷新 hook 矩形，切锚点/模式不再在旧位置留「吃点击」区；pager 拖拽可越过壳边缘继续；滚轮保留小数 notch，触摸板小增量不再被整数除法吞掉。
+- **全屏抑制**：新增 `FullscreenDetector`（矩形覆盖 + `WS_POPUP`/无 `WS_CAPTION` 判定，普通最大化不误判）；每秒轮询，进入/退出全屏通过 `SuppressionChanged` 隐藏/恢复岛。
+- **单实例 / 空态**：`SingleInstanceGuard` 阻止第二个岛并向后一个进程发送 `ActivateMessage` 打开设置；平台 seam 失败/ Avalonia fallback 改用 `EmptyIslandDataSource`，不再显示虚假的 Spotify/Teams/剪贴板。
+- **电源/GC**：所有帧循环停止路径走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution 与默认 GC latency；修复前首次动画后系统 timer 停在 1 ms（实测 `NtQueryTimerResolution`）。
+- **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*` 并新增独立隐藏项；`Ctrl+Alt+H` 走 `HandleHideHotkey`；`MOD_NOREPEAT` 修复长按重复。
+- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2578 passed / 3 failed**。3 个失败均为既有：Architecture 的 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（STATUS 已记录）与 Integration 的 notification rank 顺序断言（预览版通知 rank 0 导致，非本轮改动）。Core 647 · Platform 700 · Ui 507 · Island 447 · Sdk 167 · PluginHost 39 · Builtin 25 · Integration 29/31 · Architecture 17/18。
+- **构建**：`dotnet build FluidBar.sln` 0 errors。
 
 ## 里程碑
 

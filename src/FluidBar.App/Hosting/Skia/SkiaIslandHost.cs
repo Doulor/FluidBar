@@ -161,6 +161,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private string? _cursorMonitorId;
     private ITimer? _followMouseTimer;
     private ITimer? _idleTrimTimer;
+    private ITimer? _fullscreenTimer;
+    private bool _fullscreenSuppressed;
     private GCLatencyMode? _savedLatencyMode;
     private bool _timerResolutionRaised;
     private int _idleTrimCount;
@@ -171,6 +173,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private bool _disposed;
     private bool _rendering;
     private bool _hookDragActive;
+    private WindowEntry? _hookDragWindow;
     private float _hookDragX;
     private float _hookDragY;
     private long _frames;
@@ -357,6 +360,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Simulates the toggle hotkey.</summary>
     public void SimulateToggleHotkey() => _controller.HandleToggleHotkey();
 
+    /// <summary>Simulates the hide hotkey (hide without toggling).</summary>
+    public void SimulateHideHotkey() => _controller.HandleHideHotkey();
+
     /// <summary>Simulates a page request (keyboard/gutter).</summary>
     /// <param name="page">Target page.</param>
     public void SimulatePageRequested(PageRef page) => _controller.HandlePageRequest(page);
@@ -489,6 +495,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 await _mouseHook.StartAsync(cancellationToken).ConfigureAwait(true);
             }
 
+            StartFullscreenWatch();
+
             _frameStats.SetEnabled(settings.Advanced.FrameStats);
             if (_perfProbe is not null)
             {
@@ -534,6 +542,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _perfTicker = null;
         _followMouseTimer?.Dispose();
         _followMouseTimer = null;
+        _fullscreenTimer?.Dispose();
+        _fullscreenTimer = null;
         _pendingDrop = null;
         _options.Settings.Changed -= OnSettingsChanged;
         _controller.StateChanged -= OnStateChanged;
@@ -1106,6 +1116,41 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// posts when the monitor actually changed. Display changes refresh the cursor monitor
     /// immediately instead of waiting for the next tick.
     /// </summary>
+    /// <summary>
+    /// Polls once per second whether a foreground window covers its monitor and hides the island while
+    /// it does. One second is deliberately cheap and coarser than the animation clock; entering a game
+    /// or F11 video is a human-scale event, not a per-frame one.
+    /// </summary>
+    private void StartFullscreenWatch()
+    {
+        if (_fullscreenTimer is not null || _disposed)
+        {
+            return;
+        }
+
+        _fullscreenTimer = _time.CreateTimer(static state => ((SkiaIslandHost)state!).PollFullscreen(), this,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void PollFullscreen()
+    {
+        var suppressed = FluidBar.Platform.Windows.Display.FullscreenDetector.IsForegroundFullscreen();
+        _dispatcher.Post(() =>
+        {
+            if (_disposed || suppressed == _fullscreenSuppressed)
+            {
+                return;
+            }
+
+            _fullscreenSuppressed = suppressed;
+            _logger.Information(LogCategories.Render, "island.fullscreen-suppression",
+                suppressed ? "A fullscreen foreground window hid the island." : "Fullscreen window left; the island is back.");
+            _controller.HandleSuppressionChanged(suppressed);
+            EnsureFrameLoop();
+            RenderNow(forceFull: true);
+        });
+    }
+
     private void EnsureFollowMousePolling()
     {
         if (CurrentSettings().DisplayOn != DisplayTarget.FollowMouse)
@@ -1171,6 +1216,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private void OnPlacementRequested()
     {
         ApplyPlacementAll();
+        // The hook rectangles are absolute screen coordinates. Anchor/mode changes move the window
+        // without changing the shell signature, so the old rects would keep eating clicks at the
+        // previous position while the new position stayed deaf.
+        UpdateHitRegions(force: true);
         RenderNow(forceFull: true);
     }
 
@@ -1235,6 +1284,25 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     // ------------------------------------------------------------------ frame loop
 
+    /// <summary>
+    /// Stops the frame clock and undoes the costs the animation loop installed: 1 ms system timer
+    /// granularity, SustainedLowLatency GC mode, and the idle memory trim. Every stop path must use
+    /// this helper; calling <see cref="SkiaFrameClock.Stop"/> directly left the process at 1 ms timer
+    /// resolution after the first animation.
+    /// </summary>
+    private void StopFrameLoopForIdle()
+    {
+        if (_frameClock.IsRunning)
+        {
+            _frameClock.Stop();
+        }
+
+        _emptyFrameStreak = 0;
+        RestoreLatencyMode();
+        LowerTimerResolution();
+        ScheduleIdleTrim();
+    }
+
     private void EnsureFrameLoop()
     {
         if (_disposed || !_started)
@@ -1249,14 +1317,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             && _controller.HasSpinningSplitRing;
         if (!IslandFrameLoopPolicy.ShouldRun(_controller.IsAnimating, _controller.IsAgentAnimating, keepIdleFrames))
         {
-            if (_frameClock.IsRunning)
-            {
-                _frameClock.Stop();
-            }
-
-            RestoreLatencyMode();
-            LowerTimerResolution();
-            ScheduleIdleTrim();
+            StopFrameLoopForIdle();
             return;
         }
 
@@ -1334,8 +1395,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
                 if (_emptyFrameStreak >= stopThreshold)
                 {
-                    _frameClock.Stop();
-                    _emptyFrameStreak = 0;
+                    StopFrameLoopForIdle();
                 }
             }
             else
@@ -1379,10 +1439,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
             else if (!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
             {
-                _frameClock.Stop();
+                // The normal end of an animation: restore 15.6 ms timer granularity and the default
+                // GC latency mode here too. Stopping only the clock left timeBeginPeriod(1) and
+                // SustainedLowLatency active for the rest of the process after the first animation.
+                StopFrameLoopForIdle();
                 UpdateHitRegions(force: false);
                 RefreshAccessibility();
-                ScheduleIdleTrim();
             }
         }
         catch (Exception ex)
@@ -1637,6 +1699,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
 
             _hookDragActive = false;
+            _hookDragWindow = null;
             _controller.HandleDragEnded(_hookDragX, _hookDragY, NowMs());
             EnsureFrameLoop();
         });
@@ -1653,16 +1716,37 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     {
         _dispatcher.Post(() =>
         {
-            if (_disposed || !TryMapHookPoint(screenX, screenY, out var x, out var y))
+            if (_disposed)
             {
                 return;
             }
+
+            // A pager drag keeps its originating window: once the pointer leaves the shell (labels,
+            // panel edges, even the transparent host bleed) the gesture must continue in screen space
+            // instead of ending at the shell boundary. That was why a full-page drag from the middle
+            // of the panel could never reach the page threshold.
+            WindowEntry? entry;
+            if (_hookDragActive && _hookDragWindow is not null)
+            {
+                entry = _hookDragWindow;
+            }
+            else
+            {
+                entry = FindHookWindow(screenX, screenY);
+                if (entry is null)
+                {
+                    return;
+                }
+            }
+
+            MapHookPoint(entry, screenX, screenY, out var x, out var y);
 
             _hookDragX = x;
             _hookDragY = y;
             if (!_hookDragActive)
             {
                 _hookDragActive = _controller.HandleDragStarted(x, y, NowMs()) == SkiaDragKind.Pager;
+                _hookDragWindow = _hookDragActive ? entry : null;
             }
 
             if (_hookDragActive)
@@ -1673,31 +1757,33 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         });
     }
 
-    private bool TryMapHookPoint(float screenX, float screenY, out float xDip, out float yDip)
+    private WindowEntry? FindHookWindow(float screenX, float screenY)
     {
         foreach (var entry in _windows)
         {
             var placement = entry.Host.Placement.WindowPixel;
-            var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
-            if (screenX < placement.X || screenX >= placement.X + placement.Width
-                || screenY < placement.Y || screenY >= placement.Y + placement.Height)
+            if (screenX >= placement.X && screenX < placement.X + placement.Width
+                && screenY >= placement.Y && screenY < placement.Y + placement.Height)
             {
-                continue;
+                return entry;
             }
-
-            xDip = (float)((screenX - placement.X) / scale);
-            yDip = (float)((screenY - placement.Y) / scale);
-            return true;
         }
 
-        xDip = 0;
-        yDip = 0;
-        return false;
+        return null;
     }
 
-    private void OnHookWheel(int notches)
+    private static void MapHookPoint(WindowEntry entry, float screenX, float screenY,
+        out float xDip, out float yDip)
     {
-        if (notches == 0)
+        var placement = entry.Host.Placement.WindowPixel;
+        var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
+        xDip = (float)((screenX - placement.X) / scale);
+        yDip = (float)((screenY - placement.Y) / scale);
+    }
+
+    private void OnHookWheel(double notches)
+    {
+        if (Math.Abs(notches) < 0.0001)
         {
             return;
         }
@@ -1709,6 +1795,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 return;
             }
 
+            // Fractional deltas are intentional: PagerWheelPolicy accumulates them, so a precision
+            // touchpad's 40/80-unit steps are not rounded away before they reach the pager.
             _controller.HandleWheel(
                 -notches * FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch,
                 horizontal: false,
@@ -1755,6 +1843,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 return;
             }
 
+            // Leaving the shell ends any pager drag inside the controller; clear the host-side flag
+            // too so a later release cannot be misread as the end of a still-active drag.
+            _hookDragActive = false;
+            _hookDragWindow = null;
             _controller.HandlePointerLeft();
             EnsureDeadlineTicker();
             EnsureFrameLoop();

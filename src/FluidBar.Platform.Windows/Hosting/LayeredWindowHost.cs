@@ -44,6 +44,9 @@ public sealed partial class LayeredWindowHost : IDisposable
     /// <summary>Window class name registered once per process.</summary>
     public const string WindowClassName = "FluidBar.LayeredIslandHost";
 
+    /// <summary>Posted by a second process to ask this instance to surface its settings.</summary>
+    public const uint ActivateMessage = 0x8000 + 0x51;
+
     private readonly LayeredHostOptions _options;
     private readonly IslandWindowInterop? _interop;
     private readonly IPlatformLogger _logger;
@@ -182,6 +185,9 @@ public sealed partial class LayeredWindowHost : IDisposable
 
     /// <summary>Drag gesture (press, move, release, cancel) in screen pixels.</summary>
     public event Action<LayeredDragEvent>? Dragged;
+
+    /// <summary>Raised when another FluidBar process asks this instance to open its settings.</summary>
+    public event Action? ActivateRequested;
 
     /// <summary>The host rebuilt its surface for a new DPI; a full frame is required next.</summary>
     public event Action<LayeredDpiChange>? LayeredDpiChanged;

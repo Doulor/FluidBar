@@ -40,6 +40,7 @@ internal sealed class AppBootstrap
     private LocalizationService? _localizer;
     private SettingsController? _settings;
     private DesignIslandDataSource? _data;
+    private EmptyIslandDataSource? _emptyData;
     private IslandHost? _host;
     private SkiaIslandHost? _skiaHost;
     private SkiaShellIntegration? _shell;
@@ -85,6 +86,7 @@ internal sealed class AppBootstrap
             LocalizationRuntime.Current = _localizer;
 
             _data = new DesignIslandDataSource(_localizer);
+            _emptyData = new EmptyIslandDataSource();
             _lifetime.Exit += (_, _) => DisposeServices();
 
             // "Follow the system" values (theme / reduced motion / accent) are probed once off the UI
@@ -394,7 +396,10 @@ internal sealed class AppBootstrap
                 {
                     Localizer = _localizer!,
                     Settings = _settings!,
-                    Data = (IIslandDataSource?)_platformActions ?? _data!,
+                    // Never fall back to DesignIslandDataSource in production: it contains a fake
+                    // Spotify track, Teams notifications and clipboard rows. A failed platform seam
+                    // must render an honest empty state, not convincing fiction.
+                    Data = (IIslandDataSource?)_platformActions ?? _emptyData!,
                     Logger = _logger,
                     PlatformActions = _platformActions,
                     PageRegistry = _pageRegistry,
@@ -424,7 +429,7 @@ internal sealed class AppBootstrap
         {
             Localizer = _localizer!,
             Settings = _settings!,
-            Data = _data!,
+            Data = _emptyData!,
             Logger = _logger,
         });
         _host.SettingsRequested += OpenSettings;
@@ -795,6 +800,7 @@ internal sealed class AppBootstrap
         {
             _shell = new SkiaShellIntegration(
                 toggle: () => Dispatcher.UIThread.Post(() => _skiaHost?.SimulateToggleHotkey()),
+                hide: () => Dispatcher.UIThread.Post(() => _skiaHost?.SimulateHideHotkey()),
                 settings: () => Dispatcher.UIThread.Post(OpenSettings),
                 market: () => Dispatcher.UIThread.Post(OpenMarket),
                 exit: () => Dispatcher.UIThread.Post(Shutdown),
@@ -803,7 +809,8 @@ internal sealed class AppBootstrap
                     Toggle = _settings!.Current.HotkeyToggle,
                     Hide = _settings.Current.HotkeyHide,
                     Settings = _settings.Current.HotkeySettings,
-                });
+                },
+                localizer: _localizer);
             await _shell.StartAsync(_settings!.Current.TrayIcon).ConfigureAwait(true);
             _settings!.Changed += OnSettingsChanged;
         }
@@ -1198,6 +1205,9 @@ internal sealed class AppBootstrap
         _platformActions?.DisposeInBackground();
         _platformActions = null;
         _data?.Dispose();
+        _data = null;
+        _emptyData?.Dispose();
+        _emptyData = null;
 
         // Force the debounced settings write before the process exits (spec §8.1).
         if (_settingsStore is not null)

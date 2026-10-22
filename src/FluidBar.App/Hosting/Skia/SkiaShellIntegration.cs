@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FluidBar.App.Localization;
 using FluidBar.Core.Settings;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Shell;
@@ -17,9 +18,11 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     private readonly TrayIconService _tray;
     private readonly HotkeyService _hotkeys;
     private readonly Action _toggle;
+    private readonly Action _hide;
     private readonly Action _settings;
     private readonly Action _market;
     private readonly Action _exit;
+    private readonly ILocalizer? _localizer;
     private HotkeySettings _bindings;
     private bool _trayStarted;
     private int _disposed;
@@ -27,16 +30,20 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     /// <summary>Creates the shell integration; call <see cref="StartAsync"/> once.</summary>
     public SkiaShellIntegration(
         Action toggle,
+        Action hide,
         Action settings,
         Action market,
         Action exit,
         HotkeySettings? bindings = null,
+        ILocalizer? localizer = null,
         TimeProvider? timeProvider = null)
     {
         _toggle = toggle ?? throw new ArgumentNullException(nameof(toggle));
+        _hide = hide ?? throw new ArgumentNullException(nameof(hide));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _market = market ?? throw new ArgumentNullException(nameof(market));
         _exit = exit ?? throw new ArgumentNullException(nameof(exit));
+        _localizer = localizer;
         _bindings = bindings ?? new HotkeySettings();
 
         var logger = new PlatformLoggerAdapter();
@@ -104,20 +111,22 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
 
     private async Task StartTrayAsync(CancellationToken cancellationToken)
     {
+        var tooltip = _localizer?.Format(LocKeys.Tray.Tooltip, ("status", "FluidBar 2.0")) ?? "FluidBar 2.0";
         await _tray.StartAsync(new TrayIconOptions
         {
-            ToolTip = "FluidBar 2.0",
+            ToolTip = tooltip,
             IconFilePath = TryExtractTrayIcon(),
         }, cancellationToken).ConfigureAwait(false);
         _tray.SetMenuItems(
         [
-            new TrayMenuItem("toggle", "显示 / 隐藏灵动岛"),
-            new TrayMenuItem("settings", "设置"),
-            new TrayMenuItem("market", "插件市场"),
+            new TrayMenuItem("toggle", L(LocKeys.Tray.Open, "Open FluidBar")),
+            new TrayMenuItem("hide", L(LocKeys.Page.Home.HideIsland, "Hide island")),
+            new TrayMenuItem("settings", L(LocKeys.Tray.Settings, "Settings…")),
+            new TrayMenuItem("market", L(LocKeys.Tray.Market, "Plugin market…")),
             TrayMenuItem.Separator,
-            new TrayMenuItem("exit", "退出 FluidBar"),
+            new TrayMenuItem("exit", L(LocKeys.Tray.Exit, "Exit FluidBar")),
         ]);
-        await _tray.SetToolTipAsync("FluidBar 2.0", cancellationToken).ConfigureAwait(false);
+        await _tray.SetToolTipAsync(tooltip, cancellationToken).ConfigureAwait(false);
         _trayStarted = true;
     }
 
@@ -131,6 +140,8 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         await RegisterAsync("hide", _bindings.Hide, cancellationToken).ConfigureAwait(false);
         await RegisterAsync("settings", _bindings.Settings, cancellationToken).ConfigureAwait(false);
     }
+    private string L(string key, string fallback) => _localizer?.Get(key) ?? fallback;
+
     private async Task RegisterAsync(string name, string gesture, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(gesture))
@@ -217,7 +228,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
                 _toggle();
                 break;
             case "hide":
-                _toggle();
+                _hide();
                 break;
             case "settings":
                 _settings();

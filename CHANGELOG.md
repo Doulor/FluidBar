@@ -2,6 +2,21 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-22 — 预览版 v1 第一轮硬化：输入状态机 / 全屏 / 单实例 / 空态回退
+
+- **鼠标钩子按下态**：`IslandMouseHook` 抽出可测试的 `GestureTracker`；岛内按下、岛外松开现在一定产生 `Released + Left`，不再把 `_pressed` 留到下一次普通移动（旧行为：幽灵拖拽、页面自己乱翻、下一次点击丢失 release）。
+- **看门狗误判**：健康判断从「10 秒前采样位置」改为「与钩子最后上报的位置比较」。本机日志 43 分钟出现 55 次 `island.mouse-hook-reinstalled`（约 47 秒一次）；修复后只有钩子真的没有回调才重装。重装同时复位手势与光标基准。
+- **命中区跟随放置**：`OnPlacementRequested` 现在 `UpdateHitRegions(force:true)`。切锚点/模式后旧位置的「隐形吃点击区」消失。
+- **拖拽出壳**：pager 拖拽记住起始窗口并按屏幕坐标继续映射，拖过面板边缘不再提前结算；松开/离开时清理 `_hookDragActive` / `_hookDragWindow`。
+- **滚轮亚档**：钩子保留 `mouseData / 120.0` 的小数，`OnHookWheel` 接受 `double`，触摸板 40/80 单位滚动不再被整数除法吞掉。
+- **全屏抑制**：新增 `FullscreenDetector`（前台窗口矩形覆盖显示器 + 无 `WS_CAPTION`/有 `WS_POPUP`）；`SkiaIslandHost` 每秒轮询并通过 `SuppressionChanged` 隐藏/恢复岛。普通最大化窗口不会误判。
+- **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
+- **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
+- **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2578 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+
+
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）
 
 - **根因**：`SkiaIslandHost.EnsureFrameLoop` 把「上一次渲染尝试有没有画出像素」(`_lastRenderHappened`) 当作停止条件；50 ms 的 `OnDeadlineTick` 每个 tick 都会走一次不推进动画的 `RenderAllLocked`，于是每 ~50 ms 把 60 fps 帧时钟停掉一次。展开/悬停/波浪动画只能画 2–3 帧就冻住，整岛实际帧率 3–13 fps；Avalonia 设置窗口有独立渲染线程，所以不受影响。

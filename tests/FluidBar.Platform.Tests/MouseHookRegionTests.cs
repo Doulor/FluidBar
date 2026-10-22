@@ -49,4 +49,77 @@ public sealed class MouseHookRegionTests
     {
         Assert.Equal(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.Classify([], [], 150, 150));
     }
+
+    [Fact]
+    public void PressedInside_ReleasedOutside_ProducesReleaseAndLeft_AndResetsPressed()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+
+        var down = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+        Assert.True(down.Consume);
+        Assert.True(down.Pressed);
+        Assert.True(gestures.IsPressed);
+
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonUp);
+        Assert.False(up.Consume);
+        Assert.True(up.Released);
+        Assert.True(up.Left);
+        Assert.False(gestures.IsPressed);
+        Assert.False(gestures.IsInside);
+    }
+
+    [Fact]
+    public void PressedInside_ReleasedOutside_ThenPlainMoveDoesNotDrag()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+        gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonUp);
+
+        var move = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmMouseMove);
+        Assert.True(move.Moved);
+        Assert.False(move.Dragged); // the old code left _pressed set and emitted a phantom drag here
+    }
+
+    [Fact]
+    public void PressStartingOnDesktop_NeverClaimsTheIsland()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        var down = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonDown);
+        Assert.False(down.Pressed);
+        Assert.False(gestures.IsPressed);
+
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonUp);
+        Assert.False(up.Released);
+    }
+
+    [Fact]
+    public void PressInside_ReleaseInWatchBand_ProducesReleaseAndClearsPressed()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Watch, IslandMouseHook.WmLButtonUp);
+        Assert.True(up.Released);
+        Assert.False(gestures.IsPressed);
+    }
+
+    [Fact]
+    public void WatchBandMoveWhilePressed_IsReportedAsDrag()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+
+        var move = gestures.Route(IslandMouseHook.HookRegionKind.Watch, IslandMouseHook.WmMouseMove);
+        Assert.True(move.Moved);
+        Assert.True(move.Dragged);
+    }
+
+    [Fact]
+    public void WheelRoutePreservesFractionalNotches()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        var route = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmMouseWheel, 0.25);
+        Assert.True(route.Consume);
+        Assert.Equal(0.25, route.WheelNotches);
+    }
 }

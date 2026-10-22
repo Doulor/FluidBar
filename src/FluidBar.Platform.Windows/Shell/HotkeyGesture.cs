@@ -215,7 +215,7 @@ public readonly record struct HotkeyGesture(HotkeyModifiers Modifiers, uint Virt
     }
 
     /// <summary>Maps to the Win32 <c>MOD_*</c> value (always includes <c>MOD_NOREPEAT</c> when registering).</summary>
-    public uint ToNativeModifiers() => (uint)Modifiers;
+    public uint ToNativeModifiers() => (uint)Modifiers | NativeMethods.MOD_NOREPEAT;
 }
 
 /// <summary>Formats virtual-key codes back to stable names.</summary>

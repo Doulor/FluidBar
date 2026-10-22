@@ -955,6 +955,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Applies the hide hotkey.</summary>
     public void HandleHideHotkey() => ApplyInput(IslandInput.HideHotkey());
 
+    /// <summary>Suppresses the island while a fullscreen foreground window owns the screen.</summary>
+    public void HandleSuppressionChanged(bool suppressed) => ApplyInput(IslandInput.SuppressionChanged(suppressed));
+
     /// <summary>Raises <see cref="SettingsRequested"/> (tray/hotkey seam).</summary>
     public void RequestSettings() => SettingsRequested?.Invoke();
 

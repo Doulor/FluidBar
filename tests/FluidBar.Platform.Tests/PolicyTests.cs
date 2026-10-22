@@ -140,7 +140,8 @@ public sealed class HotkeyGestureTests
     public void ToNativeModifiers_MirrorsWin32Flags()
     {
         var gesture = new HotkeyGesture(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x44);
-        Assert.Equal(3u, gesture.ToNativeModifiers());
+        // Low bits mirror MOD_CONTROL | MOD_ALT; MOD_NOREPEAT stops auto-repeat while the key is held.
+        Assert.Equal(3u | 0x4000u, gesture.ToNativeModifiers());
     }
 
     [Fact]

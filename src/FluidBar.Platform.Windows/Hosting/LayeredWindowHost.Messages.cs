@@ -178,6 +178,10 @@ public sealed partial class LayeredWindowHost
                 NativeMethods.User32.SetWindowLongPtr(hwnd, NativeMethods.GWLP_USERDATA, IntPtr.Zero);
                 return NativeMethods.User32.DefWindowProcW(hwnd, message, wParam, lParam);
 
+            case ActivateMessage:
+                ActivateRequested?.Invoke();
+                return IntPtr.Zero;
+
             default:
                 return NativeMethods.User32.DefWindowProcW(hwnd, message, wParam, lParam);
         }
