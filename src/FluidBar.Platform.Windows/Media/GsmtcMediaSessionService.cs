@@ -644,6 +644,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 }
 
                 _pendingTrackAnchor = true;
+                // The player usually restarts its audio stream on a track change; the old capture then yields
+                // nothing and the position freezes, so reopen it for the new song.
+                _loopback.Reset();
             }
 
             var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
