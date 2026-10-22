@@ -186,7 +186,7 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void AgentRows_MapToAgentActivate()
+    public void AgentRows_DoNotDispatchUntilSessionActivationExists()
     {
         var actions = new RecordingIslandPlatformActions();
         using var fixture = ControllerFixture.Create(actions: actions);
@@ -195,9 +195,7 @@ public sealed class SkiaIslandControlTests
 
         Click(fixture, PageLayout.AgentRow(Page(4, fixture), 1));
 
-        var call = Assert.Single(actions.Calls);
-        Assert.Equal(IslandPlatformActionKind.AgentActivate, call.Kind);
-        Assert.Equal(1, call.Index);
+        Assert.Empty(actions.Calls);
     }
 
     [Fact]

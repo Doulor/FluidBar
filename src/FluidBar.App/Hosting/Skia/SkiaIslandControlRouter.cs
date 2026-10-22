@@ -119,9 +119,10 @@ public static class SkiaIslandControlRouter
                 // A clipboard row click copies the row (Windows clipboard-history behaviour).
                 return TryClipboardCopy(state, hit.Index);
             case PageSlotKind.Agent:
-                return HasRow(state.Pages.Agent.Items, hit.Index)
-                    ? new IslandPlatformAction(IslandPlatformActionKind.AgentActivate, hit.Index)
-                    : null;
+                // No platform service can focus/resume an agent session yet. Leaving the row in the
+                // hit map made every click a no-op (the action is only deferred with no subscriber),
+                // so keep the list scrollable but do not advertise a dead activation target.
+                return null;
             default:
                 return null;
         }
