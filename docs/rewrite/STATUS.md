@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **搜索窗口 a11y**：窗口/文本框 Name + HelpText。
 - **设置 deadline UI**：SettingsDeadlineTests。
 - **preview.6**：最新代码本地 publish 成功（zip 19.62 MB、无 PDB，exe `66F843D4...`）。
 - **剪贴板 pin 缓存**：snapshot 时裁掉已淘汰 sequence。

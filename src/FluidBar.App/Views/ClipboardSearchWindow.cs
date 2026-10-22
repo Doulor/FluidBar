@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -39,6 +40,9 @@ internal sealed class ClipboardSearchWindow : Window
             Padding = new Thickness(10, 8),
             Margin = new Thickness(0, 10, 0, 0),
         };
+        AutomationProperties.SetName(this, title);
+        AutomationProperties.SetName(_query, watermark);
+        AutomationProperties.SetHelpText(_query, hint);
         _query.Text = initialQuery ?? string.Empty;
         _query.TextChanged += (_, _) => _onQuery(_query.Text);
 
