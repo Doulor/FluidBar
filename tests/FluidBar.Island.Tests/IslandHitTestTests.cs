@@ -218,10 +218,10 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandHitKind.DotLeft, leftDot.Kind);
         Assert.Equal(0, leftDot.PageIndex);
 
-        // Every dot in a cluster jumps to the farthest page in that direction (prototype far-dot rule).
+        // Each dot stands for its own page: from page 2 the nearest right dot is page 4, the next one 5.
         var rightDot = renderer.HitTest(state, layout.DotsRight[0].MidX, layout.DotsRight[0].MidY);
         Assert.Equal(IslandHitKind.DotRight, rightDot.Kind);
-        Assert.Equal(5, rightDot.PageIndex);
+        Assert.Equal(4, rightDot.PageIndex);
 
         var farRight = renderer.HitTest(state, layout.DotsRight[1].MidX, layout.DotsRight[1].MidY);
         Assert.Equal(IslandHitKind.DotRight, farRight.Kind);
@@ -263,9 +263,10 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandHitKind.DotRight, hit.Kind);
         Assert.Equal(5, hit.PageIndex);
 
-        // The prototype hit area is 7×15: 7 DIP above the centre still hits, 8 DIP does not.
-        Assert.Equal(IslandHitKind.DotRight, renderer.HitTest(state, dot.MidX, dot.MidY + 7).Kind);
-        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 8).Kind);
+        // The hit area is 7×22 DIP: 10 DIP above the centre still hits, 12 DIP does not (22 DIP keeps the
+        // 3 DIP dots reachable by hand).
+        Assert.Equal(IslandHitKind.DotRight, renderer.HitTest(state, dot.MidX, dot.MidY + 10).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 12).Kind);
     }
 
     [Fact]

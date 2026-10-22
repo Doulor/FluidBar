@@ -35,24 +35,24 @@ public sealed class SkiaRailNavigationTests
     }
 
     [Fact]
-    public void FarDots_JumpToTheFarthestPage()
+    public void FarDots_JumpToThePageTheyStandFor()
     {
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
         fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
         fixture.Settle();
 
-        // Page 01: the right cluster owns the far pages, so any right dot jumps to 06.
+        // Page 01: the right cluster covers pages 03-05, so its farthest dot jumps to 05 (not 06).
         var strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
         Assert.Equal(0, strip.Page);
         Assert.NotEmpty(strip.DotsRight);
         Press(fixture, strip.DotsRight[^1].MidX, strip.DotsRight[^1].MidY);
         fixture.RunToRest();
-        Assert.Equal(5, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(4, fixture.Controller.Pager.SelectedIndex);
 
-        // Page 06: the left cluster jumps back to 01.
+        // Page 05: the left cluster covers pages 03-01, so its farthest dot jumps back to 01.
         strip = SkiaIslandHitTest.MeasureStrip(fixture.Controller.RenderState);
-        Assert.Equal(5, strip.Page);
+        Assert.Equal(4, strip.Page);
         Assert.NotEmpty(strip.DotsLeft);
         Press(fixture, strip.DotsLeft[^1].MidX, strip.DotsLeft[^1].MidY);
         fixture.RunToRest();

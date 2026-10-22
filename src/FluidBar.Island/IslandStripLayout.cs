@@ -44,17 +44,16 @@ public sealed record IslandStripLayout
     public required SKRect[] DotsRight { get; init; }
 
     /// <summary>
-    /// Target page for a left dot (or -1 when the cluster is empty). Every dot in a cluster jumps to
-    /// the farthest page in that direction — the prototype sends the left cluster to page 0 (01 Home).
+    /// Target page for a left dot (or -1 when the cluster is empty). Nearest dot first: dot 0 is the page
+    /// just before the previous pill, so a cluster of three stands for three different pages. Every dot
+    /// used to share one far target, which made them look inert (user report 2026-10-22).
     /// </summary>
-    public int LeftDotPage(int index) => index >= 0 && index < DotsLeft.Length ? 0 : -1;
+    public int LeftDotPage(int index)
+        => index >= 0 && index < DotsLeft.Length ? Math.Max(0, Page - 2 - index) : -1;
 
-    /// <summary>
-    /// Target page for a right dot (or -1 when the cluster is empty). The right cluster always jumps to
-    /// the last page (06 Widgets).
-    /// </summary>
+    /// <summary>Target page for a right dot (or -1 when the cluster is empty); mirror of <see cref="LeftDotPage"/>.</summary>
     public int RightDotPage(int index)
-        => index >= 0 && index < DotsRight.Length ? PageCount - 1 : -1;
+        => index >= 0 && index < DotsRight.Length ? Math.Min(PageCount - 1, Page + 2 + index) : -1;
 
     /// <summary>Hit-tests the rail layout (tests/host hit-region building).</summary>
     public IslandHitTarget HitTest(float x, float y)

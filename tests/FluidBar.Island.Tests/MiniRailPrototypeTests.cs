@@ -165,41 +165,31 @@ public sealed class MiniRailPrototypeTests
     }
 
     [Fact]
-    public void EveryDotJumpsToTheFarthestPage_AndNeighboursNeverStealTheClick()
+    public void EveryDotJumpsToItsOwnPage_AndNeighboursNeverStealTheClick()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        for (var page = 0; page < FluidBar.Core.Activities.PageRef.BuiltinPages.Count; page++)
+        var pageCount = FluidBar.Core.Activities.PageRef.BuiltinPages.Count;
+        for (var page = 0; page < pageCount; page++)
         {
             var state = State(page);
             var layout = renderer.MeasureStrip(state);
 
-            foreach (var dot in layout.DotsLeft)
+            // Nearest dot first: the page just before the previous pill / just after the next one, so a
+            // cluster of three dots stands for three DIFFERENT pages (they used to share one far target).
+            for (var i = 0; i < layout.DotsLeft.Length; i++)
             {
-                var hit = renderer.HitTest(state, dot.MidX, dot.MidY);
+                var hit = renderer.HitTest(state, layout.DotsLeft[i].MidX, layout.DotsLeft[i].MidY);
                 Assert.Equal(IslandHitKind.DotLeft, hit.Kind);
-                Assert.Equal(0, hit.PageIndex);
+                Assert.Equal(Math.Max(0, page - 2 - i), hit.PageIndex);
+                Assert.Equal(hit.PageIndex, layout.LeftDotPage(i));
             }
 
-            foreach (var dot in layout.DotsRight)
+            for (var i = 0; i < layout.DotsRight.Length; i++)
             {
-                var hit = renderer.HitTest(state, dot.MidX, dot.MidY);
+                var hit = renderer.HitTest(state, layout.DotsRight[i].MidX, layout.DotsRight[i].MidY);
                 Assert.Equal(IslandHitKind.DotRight, hit.Kind);
-                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, hit.PageIndex);
-            }
-
-            // The last dot (the prototype's far/wide dot) must jump to 01/06, never to its neighbour.
-            if (layout.DotsLeft.Length > 0)
-            {
-                var far = layout.DotsLeft[^1];
-                Assert.Equal(0, renderer.HitTest(state, far.MidX, far.MidY).PageIndex);
-                Assert.Equal(0, layout.LeftDotPage(layout.DotsLeft.Length - 1));
-            }
-
-            if (layout.DotsRight.Length > 0)
-            {
-                var far = layout.DotsRight[^1];
-                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, renderer.HitTest(state, far.MidX, far.MidY).PageIndex);
-                Assert.Equal(FluidBar.Core.Activities.PageRef.BuiltinPages.Count - 1, layout.RightDotPage(layout.DotsRight.Length - 1));
+                Assert.Equal(Math.Min(pageCount - 1, page + 2 + i), hit.PageIndex);
+                Assert.Equal(hit.PageIndex, layout.RightDotPage(i));
             }
 
             // The 8 DIP island gaps and the dot gaps are transparent.
@@ -213,15 +203,16 @@ public sealed class MiniRailPrototypeTests
     }
 
     [Fact]
-    public void DotHitArea_IsSevenByFifteen_WithoutOverlap()
+    public void DotHitArea_IsSevenWideByTwentyTwoTall_WithoutOverlap()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = State(4);
         var layout = renderer.MeasureStrip(state);
         var dot = layout.DotsLeft[1];
 
-        Assert.Equal(IslandHitKind.DotLeft, renderer.HitTest(state, dot.MidX, dot.MidY + 7).Kind);
-        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 8).Kind);
+        // 22 DIP tall: ±10 DIP around the 3 DIP dot still hits, ±12 DIP does not.
+        Assert.Equal(IslandHitKind.DotLeft, renderer.HitTest(state, dot.MidX, dot.MidY + 10).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 12).Kind);
         Assert.Equal(IslandHitKind.DotLeft, renderer.HitTest(state, dot.Left + 0.5f, dot.MidY).Kind);
 
         // Pitch is 7 DIP, the hit area 7 DIP wide: neighbouring targets touch but never overlap.
@@ -230,7 +221,7 @@ public sealed class MiniRailPrototypeTests
         var between = (dot.Left + neighbour.Right) / 2f;
         var betweenHit = renderer.HitTest(state, between, dot.MidY);
         Assert.Equal(IslandHitKind.DotLeft, betweenHit.Kind);
-        Assert.Equal(0, betweenHit.PageIndex);
+        Assert.Equal(Math.Max(0, layout.Page - 2 - 1), betweenHit.PageIndex);
     }
 
 
