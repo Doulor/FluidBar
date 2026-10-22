@@ -129,14 +129,23 @@ public sealed class ProcessUpdateInstallerLauncher : IUpdateInstallerLauncher
         => File.WriteAllText(path, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
     /// <summary>Builds the self-replace helper script; pure so escaping is unit-testable.</summary>
-    internal static string BuildSelfReplaceScript(string installerPath, string currentPath, int pid)
-        => string.Join(Environment.NewLine,
+    internal static string BuildSelfReplaceScript(string installerPath, string currentPath, int pid, bool restart = true)
+    {
+        var lines = new List<string>
+        {
             "$ErrorActionPreference = 'Stop'",
             $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue",
             "Start-Sleep -Milliseconds 800",
             $"Copy-Item -LiteralPath '{EscapePowerShellLiteral(installerPath)}' -Destination '{EscapePowerShellLiteral(currentPath)}' -Force",
-            $"Start-Process -FilePath '{EscapePowerShellLiteral(currentPath)}'",
-            "Remove-Item -LiteralPath $PSCommandPath -Force");
+        };
+        if (restart)
+        {
+            lines.Add($"Start-Process -FilePath '{EscapePowerShellLiteral(currentPath)}'");
+        }
+
+        lines.Add("Remove-Item -LiteralPath $PSCommandPath -Force");
+        return string.Join(Environment.NewLine, lines);
+    }
 
     private static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
 }

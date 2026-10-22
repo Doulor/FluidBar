@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FluidBar.Platform.Windows.Update;
 
 namespace FluidBar.Platform.Tests;
@@ -18,6 +19,41 @@ public sealed class UpdateSelfReplaceTests
         Assert.Contains(@"-Destination 'C:\Program Files\FluidBar\FluidBar.exe'", script);
         Assert.Contains("Start-Process -FilePath 'C:\\Program Files\\FluidBar\\FluidBar.exe'", script);
         Assert.Contains("Remove-Item -LiteralPath $PSCommandPath -Force", script);
+    }
+
+    [Fact]
+    public void Script_copies_the_download_to_the_target_without_restarting_it()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "FluidBarTests", "self-replace", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "download.txt");
+            var target = Path.Combine(root, "FluidBar.exe");
+            var scriptPath = Path.Combine(root, "update.ps1");
+            File.WriteAllText(source, "new-build");
+            File.WriteAllText(target, "old-build");
+            ProcessUpdateInstallerLauncher.WriteSelfReplaceScript(
+                scriptPath,
+                ProcessUpdateInstallerLauncher.BuildSelfReplaceScript(source, target, 999999, restart: false));
+
+            var start = new ProcessStartInfo("powershell.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+            };
+            using var process = Process.Start(start);
+            Assert.NotNull(process);
+            Assert.True(process.WaitForExit(10_000), "self-replace helper timed out");
+            Assert.Equal(0, process.ExitCode);
+            Assert.Equal("new-build", File.ReadAllText(target));
+            Assert.False(File.Exists(scriptPath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
