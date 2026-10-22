@@ -16,7 +16,7 @@ internal sealed class ClipboardSearchWindow : Window
     private readonly TextBox _query;
     private readonly Action<string?> _onQuery;
 
-    public ClipboardSearchWindow(Action<string?> onQuery, string title, string watermark, string hint)
+    public ClipboardSearchWindow(Action<string?> onQuery, string title, string watermark, string hint, string? initialQuery = null)
     {
         _onQuery = onQuery ?? throw new ArgumentNullException(nameof(onQuery));
         Title = title;
@@ -35,6 +35,7 @@ internal sealed class ClipboardSearchWindow : Window
             Padding = new Thickness(10, 8),
             Margin = new Thickness(0, 10, 0, 0),
         };
+        _query.Text = initialQuery ?? string.Empty;
         _query.TextChanged += (_, _) => _onQuery(_query.Text);
 
         Content = new Border

@@ -1149,7 +1149,8 @@ internal sealed class AppBootstrap
             query => _platformActions?.SetClipboardSearchQuery(query),
             $"{label} — FluidBar",
             label,
-            _localizer?.Get(LocKeys.Clipboard.SearchHint) ?? "Esc closes and clears the filter");
+            _localizer?.Get(LocKeys.Clipboard.SearchHint) ?? "Esc closes and clears the filter",
+            _platformActions?.ClipboardSearchQuery);
         window.Closed += (_, _) =>
         {
             _clipboardSearchWindow = null;

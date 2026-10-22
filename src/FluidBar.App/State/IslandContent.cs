@@ -284,6 +284,9 @@ public sealed record IslandContent
     /// <summary>Localized label for the active clipboard type filter (null hides the header chip).</summary>
     public string? ClipboardFilterLabel { get; init; }
 
+    /// <summary>Active clipboard search query (null when search is closed/cleared).</summary>
+    public string? ClipboardSearchQuery { get; init; }
+
     /// <summary>Agent session rows.</summary>
     public ImmutableArray<AgentItemData> Agents { get; init; } = [];
 

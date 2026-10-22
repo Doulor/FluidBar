@@ -242,7 +242,9 @@ public static class SkiaIslandStateBuilder
             FilterLabel = content.ClipboardFilterLabel,
             SearchLabel = content.ClipboardFilterLabel is null
                 ? null
-                : localizer.Get(LocKeys.Clipboard.Search),
+                : string.IsNullOrWhiteSpace(content.ClipboardSearchQuery)
+                    ? localizer.Get(LocKeys.Clipboard.Search)
+                    : content.ClipboardSearchQuery,
             EmptyTitle = localizer.Get(LocKeys.Clipboard.Empty),
             EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };

@@ -380,6 +380,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = DisplayedClipboard().Select(MapClipboard).ToImmutableArray(),
             ClipboardFilterLabel = _clipboard.GetHistory().Count > 0 ? ClipboardFilterLabel() : null,
+            ClipboardSearchQuery = _clipboardSearchQuery,
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
@@ -1715,6 +1716,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         ClipboardFilter.Files => LocKeys.Clipboard.File,
         _ => LocKeys.Clipboard.All,
     }) ?? _clipboardFilter.ToString();
+
+    /// <summary>Current clipboard search query (null when not searching).</summary>
+    public string? ClipboardSearchQuery => _clipboardSearchQuery;
 
     /// <summary>Updates the text query used by the clipboard page; null/empty clears it.</summary>
     public void SetClipboardSearchQuery(string? query)
