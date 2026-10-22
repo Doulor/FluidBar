@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **封面临时路径有界**：`ArtworkTempStore.Sweep()` 删除文件后没有清理 `_pathsByKey`，长播放会话会为每张被淘汰的封面保留一个失效路径；现在 sweep 同时移除文件已不存在的 key。
 - **媒体时长缓存有界**：`GsmtcMediaSessionService._durationCache` 与 `KugouDurationCatalog._cache` 之前会按曲目无限增长；现在超过 512 条清空重建，长播放会话不再永久保留每个 track key。
 - **通知已读 id 有界**：`_readIds` 之前只增不减；现在在 seed/merge/remove/clear 后按当前 `_recent` 裁剪，并在服务启动时清空，避免长会话里已读 id 集合无限增长。
 - **SafeMode 重建后关闭旧设置窗**：设置窗口捕获了旧的 marketplace/plugin 服务；运行时重建后继续操作会调用已 dispose 的对象。现在重建完成后关闭旧窗口，下次打开绑定新运行时。

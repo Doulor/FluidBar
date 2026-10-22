@@ -162,6 +162,16 @@ public sealed class ArtworkTempStore : IDisposable
 
             lock (_gate)
             {
+                // Sweep deletes files behind the map's back; drop entries whose file is gone too,
+                // otherwise a long media session retains one stale path per evicted track.
+                foreach (var key in _pathsByKey
+                             .Where(pair => !System.IO.File.Exists(pair.Value))
+                             .Select(pair => pair.Key)
+                             .ToArray())
+                {
+                    _pathsByKey.Remove(key);
+                }
+
                 _totalBytes = keptBytes;
                 _writesSinceSweep = 0;
             }
