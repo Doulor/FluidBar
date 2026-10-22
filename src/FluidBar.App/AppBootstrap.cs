@@ -485,9 +485,9 @@ internal sealed class AppBootstrap
             if (Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE_SAFE_MODE") == "1")
             {
                 _settings?.Update(s => s with { Advanced = s.Advanced with { SafeMode = true } });
-                await Task.Delay(1500).ConfigureAwait(true);
+                await Task.Delay(8000).ConfigureAwait(true);
                 _settings?.Update(s => s with { Advanced = s.Advanced with { SafeMode = false } });
-                await Task.Delay(1500).ConfigureAwait(true);
+                await Task.Delay(4000).ConfigureAwait(true);
                 log.AppendLine("smoke-safe-mode-toggle-done");
             }
         }
@@ -892,20 +892,42 @@ internal sealed class AppBootstrap
                 return;
             }
 
-            var old = _pluginRuntime;
-            _pluginRuntime = null;
-            if (old is not null)
+            try
             {
-                await old.DisposeAsync().ConfigureAwait(true);
-                _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-old-disposed",
-                    "The old plugin runtime was disposed.");
+                await _pluginRuntimeRetirement.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true);
+            }
+            catch (TimeoutException)
+            {
+                _logger.Warning(LogCategories.Plugin, "plugin.runtime.retire-timeout",
+                    "The previous plugin runtime did not retire within ten seconds; continuing.");
             }
 
+            var old = _pluginRuntime;
+            _pluginRuntime = null;
             _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose",
                 "Composing the replacement plugin runtime.");
             await StartPluginRuntimeAsync().ConfigureAwait(true);
             _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose-complete",
                 "The replacement plugin runtime composition returned.");
+
+            if (_pluginRuntime is null)
+            {
+                // Keep the previous runtime usable when composition fails; do not leave the app
+                // without plugin pages because a safe-mode toggle could not be applied live.
+                _pluginRuntime = old;
+                _logger.Warning(LogCategories.Plugin, "plugin.runtime.rebuild-restored",
+                    "The replacement plugin runtime failed; keeping the previous runtime.");
+                return;
+            }
+
+            if (old is not null)
+            {
+                // Compose the replacement before retiring the old runtime. Disposing first can
+                // leave the plugin host in a state where the next composition never returns.
+                _pluginRuntimeRetirement = old.DisposeInBackgroundAsync();
+                _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-old-retiring",
+                    "The old plugin runtime is retiring in the background.");
+            }
 
             // The settings window captured the old marketplace/plugin services in its context. Closing
             // it forces the next open to bind the rebuilt runtime instead of calling disposed objects.
@@ -1285,6 +1307,7 @@ internal sealed class AppBootstrap
     }
     private bool _clipboardSearchWasPinned;
     private readonly SemaphoreSlim _pluginRuntimeRebuildGate = new(1, 1);
+    private Task _pluginRuntimeRetirement = Task.CompletedTask;
     private bool _shutdownStarted;
     private int _servicesDisposed;
 

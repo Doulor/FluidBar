@@ -533,9 +533,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         => _builtins.FirstOrDefault(entry => string.Equals(entry.Descriptor.Id, pluginId, StringComparison.Ordinal))?.Session;
 
     /// <summary>Disposes the runtime without blocking the caller (App shutdown path).</summary>
-    public void DisposeInBackground()
-    {
-        _ = Task.Run(async () =>
+    public void DisposeInBackground() => _ = DisposeInBackgroundAsync();
+
+    /// <summary>Starts a background dispose and returns a task that completes when it finishes.</summary>
+    public Task DisposeInBackgroundAsync()
+        => Task.Run(async () =>
         {
             try
             {
@@ -546,7 +548,6 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
                 _logger.Error("<host>", $"Plugin runtime shutdown failed: {exception.GetType().FullName}: {exception.Message}");
             }
         });
-    }
 
     public async ValueTask DisposeAsync()
     {
@@ -564,7 +565,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
                 entry.Session.StateChanged -= OnHostStateChanged;
                 try
                 {
-                    await entry.Session.DisposeAsync().ConfigureAwait(false);
+                    await entry.Session.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    _logger.Warn(entry.Descriptor.Id, "Built-in plugin shutdown timed out; continuing.");
                 }
                 catch (Exception exception)
                 {
@@ -576,7 +581,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         _builtins.Clear();
         try
         {
-            await Host.DisposeAsync().ConfigureAwait(false);
+            await Host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            _logger.Warn("<host>", "Plugin host shutdown timed out; continuing.");
         }
         catch (Exception exception)
         {
@@ -587,7 +596,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         {
             try
             {
-                await _localHost.DisposeAsync().ConfigureAwait(false);
+                await _localHost.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                _logger.Warn("<local-host>", "Local plugin host shutdown timed out; continuing.");
             }
             catch (Exception exception)
             {
