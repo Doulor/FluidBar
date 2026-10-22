@@ -141,6 +141,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     /// <summary>Set when playback resumes: the next cross-check re-anchors on the clock text.</summary>
     private bool _forceReanchor;
+
+    /// <summary>True right after a track change until the player writes the new song's position.</summary>
+    private bool _pendingTrackAnchor;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -639,6 +642,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     _frameAnchorPosition = TimeSpan.Zero;
                     _frameAnchorAudio = audio;
                 }
+
+                _pendingTrackAnchor = true;
             }
 
             var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
@@ -652,6 +657,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // Re-anchor on every fresh reading, not only on big jumps: the text is authoritative at the
             // instant it repaints, so following it keeps the residual error at the text's own 1 s rounding
             // instead of letting the anchor's error persist for the whole 30 s window.
+            // A track change leaves the anchor on "start of song" until the player writes the new position,
+            // which happens within a couple of seconds. Adopting that write is the silent equivalent of the
+            // user's pause/resume trick and removes the ~2 s offset a new song otherwise carries.
+            if (_pendingTrackAnchor)
+            {
+                var writeAge = _timeProviderNow() - state.SampledAtUtc;
+                if (writeAge >= TimeSpan.Zero && writeAge < TimeSpan.FromSeconds(5))
+                {
+                    _frameAnchorAudio = audio - writeAge;
+                    _frameAnchorPosition = statePosition;
+                    position = statePosition + writeAge;
+                    _pendingTrackAnchor = false;
+                }
+            }
+
             // Playback resuming is a perfect synchronisation point: the player restarts exactly where it
             // stopped, so adopting its reading then (even before the text repaints) clears the accumulated
             // offset. This automates the pause/resume trick the user discovered on 2026-10-22.
