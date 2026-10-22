@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
 - **日历刷新可注入测试**：`CalendarEventService` 支持注入 `readStarts`，新增 `RefreshForTestAsync` 测试，覆盖首次刷新写入 counts/触发 Changed、同样数据二次刷新不重复触发。
 - **SafeMode 设置开关测试**：`SettingsSafeModeTests` 通过真实 `SettingsWindow` + `SettingsSwitch` 点击 Advanced 页开关，断言 `controller.Current.Advanced.SafeMode` 写入 true，覆盖 UI→SettingsController 路径。
 - **搜索 Esc 关闭测试**：`ClipboardSearchWindowTests` 在 headless 下 Show 后发送 Escape，断言窗口 `IsVisible=false`，锁住键盘关闭路径。

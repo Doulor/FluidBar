@@ -1265,6 +1265,7 @@ internal sealed class AppBootstrap
             return;
         }
 
+        _shutdownStarted = true;
         _pluginRuntime?.DisposeInBackground();
         _pluginRuntime = null;
         // The single notification listener is owned (and disposed exactly once) by _platformActions.
