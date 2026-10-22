@@ -44,8 +44,11 @@ public sealed record IslandPreviewModel
     /// <summary>User fill opacity (island <c>FillOpacity</c> token).</summary>
     public required double FillOpacity { get; init; }
 
-    /// <summary>True when the shell renders the simulated-glass tier (island material).</summary>
+    /// <summary>True when the shell renders a translucent tier (simulated glass or liquid glass).</summary>
     public required bool Glass { get; init; }
+
+    /// <summary>True when the shell renders the Tier 2 liquid-glass finish.</summary>
+    public required bool LiquidGlass { get; init; }
 
     /// <summary>Panel corner radius in DIP (<c>--island-radius</c>).</summary>
     public required double PanelRadius { get; init; }
@@ -56,17 +59,24 @@ public sealed record IslandPreviewModel
     /// <summary>Palette id (<c>obsidian</c>…<c>nord</c>).</summary>
     public required string Palette { get; init; }
 
-    /// <summary>Material id (<c>obsidian</c>/<c>acrylic</c>).</summary>
+    /// <summary>Material id (<c>obsidian</c>/<c>acrylic</c>/<c>liquid-glass</c>).</summary>
     public required string Material { get; init; }
 
     /// <summary>Resolved accent as <c>#RRGGBB</c> (for the meta line).</summary>
     public required string AccentHex { get; init; }
 
-    /// <summary>Glass tier paints a fixed translucent fill (renderer parity: 0.72).</summary>
+    /// <summary>Simulated-glass tier paints a fixed translucent fill (renderer parity: 0.72).</summary>
     public const double GlassFillOpacity = 0.72;
 
-    /// <summary>Fill opacity actually painted (glass overrides the slider, like the renderer).</summary>
-    public double EffectiveFillOpacity => Glass ? GlassFillOpacity : Math.Clamp(FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+    /// <summary>Liquid-glass tier paints a fixed translucent fill (renderer parity: 0.68).</summary>
+    public const double LiquidGlassFillOpacity = LiquidGlassTokens.FillOpacity;
+
+    /// <summary>Fill opacity actually painted (translucent tiers override the slider, like the renderer).</summary>
+    public double EffectiveFillOpacity => LiquidGlass
+        ? LiquidGlassFillOpacity
+        : Glass
+            ? GlassFillOpacity
+            : Math.Clamp(FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
 
     /// <summary>Corner radius clamped to the preview shell height.</summary>
     /// <param name="shellHeight">Rendered shell height.</param>
@@ -94,11 +104,18 @@ public sealed record IslandPreviewModel
             ArtEnd = ToColor(theme.ArtEnd),
             Accent = ToColor(theme.Accent),
             FillOpacity = theme.FillOpacity,
-            Glass = theme.Material == IslandMaterialTier.SimulatedGlass,
+            Glass = theme.Material is IslandMaterialTier.SimulatedGlass or IslandMaterialTier.LiquidGlass,
+            LiquidGlass = theme.Material == IslandMaterialTier.LiquidGlass,
             PanelRadius = settings.PanelRadius,
             FontScale = Math.Clamp(settings.FontScale, 0.8, 1.6),
             Palette = string.IsNullOrWhiteSpace(settings.Palette) ? "obsidian" : settings.Palette,
-            Material = settings.Material == AppMaterial.Acrylic ? "acrylic" : "obsidian",
+            // Report the material the shell will actually paint (safe mode degrades to obsidian).
+            Material = theme.Material switch
+            {
+                IslandMaterialTier.SimulatedGlass => "acrylic",
+                IslandMaterialTier.LiquidGlass => "liquid-glass",
+                _ => "obsidian",
+            },
             AccentHex = "#" + theme.Accent.Red.ToString("X2") + theme.Accent.Green.ToString("X2") + theme.Accent.Blue.ToString("X2"),
         };
     }

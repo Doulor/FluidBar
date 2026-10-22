@@ -68,11 +68,15 @@ Rules enforced by the code and the headless tests:
 | page dots | 6 dots, active = 20×5 DIP pill, inactive = 5×5 | bottom-centre overlay; clickable |
 | title / chevron overlays | title top-left, collapse chevron top-right | drawn by `ExpandedPanel` overlay (not by pages) |
 
-Materials (final spike, 2026-10-18): **Tier 0 Obsidian is the default**. Native pill-acrylic is
-NO-GO on Avalonia 12 (whole-window rectangular blur). Tier 1 = self-drawn simulated glass
-(gradient + top highlight, lower fill alpha) behind the `IslandMaterial.Acrylic` setting; Tier 2
-(experimental whole-window `AcrylicBlur`) remains a diagnostic-only path. The island fill never goes
-below 0.85 opacity for text-bearing states.
+Materials (revised 2026-10-23): **Tier 0 Obsidian is the default**. Native pill-acrylic is NO-GO on
+Avalonia 12 / the layered host (whole-window rectangular blur, and layered windows bypass DWM's
+compositor path). Tier 1 = self-drawn simulated glass (gradient + top highlight, fill 0.72) behind the
+`IslandMaterial.Acrylic` setting. **Tier 2 = Liquid Glass** (`IslandMaterial.LiquidGlass`, fill 0.68):
+lensing rim band, specular top edge, caustic bottom bounce, low-alpha chromatic dispersion, static sheen
+and pointer illumination, all self-drawn by `LiquidGlassPainter` and baked into a bounded image cache.
+For both glass tiers the baked shadow is cut out of the shell silhouette so the fill actually shows the
+desktop. Detail + measured numbers: [../research/liquid-glass.md](../research/liquid-glass.md). The
+Obsidian fill never goes below 0.85 opacity for text-bearing states.
 
 ---
 

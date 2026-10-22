@@ -14,7 +14,9 @@ namespace FluidBar.App.Hosting.Skia;
 /// <para>
 /// Material: the approved design keeps the island "Obsidian" in every desktop theme. The App's
 /// <c>Acrylic</c> tier has no real blur behind a layered window, so it degrades to the renderer's
-/// simulated-glass tint (Tier 1) — documented fallback, not a silent no-op.
+/// simulated-glass tint (Tier 1) — documented fallback, not a silent no-op. <c>LiquidGlass</c> maps to
+/// the renderer's Tier 2 finish (lensing rim + specular edge + dispersion), which is drawn rather than
+/// sampled, so it needs no compositor support and stays available on every Windows version.
 /// </para>
 /// <para>
 /// Palette: the four curated palettes port the same background tokens the Avalonia host already used
@@ -47,9 +49,14 @@ public static class SkiaIslandThemeMapper
         theme = ApplyPalette(theme, settings.Palette);
 
         // Safe mode forces the Tier 0 opaque material (spec §8.4).
-        if (settings.Material == AppMaterial.Acrylic && !settings.Advanced.SafeMode)
+        if (!settings.Advanced.SafeMode)
         {
-            theme = theme.WithMaterial(IslandThemeMaterial.SimulatedGlass);
+            theme = settings.Material switch
+            {
+                AppMaterial.Acrylic => theme.WithMaterial(IslandThemeMaterial.SimulatedGlass),
+                AppMaterial.LiquidGlass => theme.WithMaterial(IslandThemeMaterial.LiquidGlass),
+                _ => theme,
+            };
         }
 
         var accentHex = SystemSettingResolution.ResolveAccent(

@@ -346,6 +346,17 @@ public sealed class SkiaIslandHostMappingTests
         var acrylic = SkiaIslandThemeMapper.Map(AppSettings.Default with { Material = AppMaterial.Acrylic });
         Assert.Equal(IslandMaterial.SimulatedGlass, acrylic.Material);
 
+        var liquid = SkiaIslandThemeMapper.Map(AppSettings.Default with { Material = AppMaterial.LiquidGlass });
+        Assert.Equal(IslandMaterial.LiquidGlass, liquid.Material);
+
+        // Safe mode is the crash-recovery tier: every translucent material degrades to opaque obsidian.
+        var liquidSafe = SkiaIslandThemeMapper.Map(AppSettings.Default with
+        {
+            Material = AppMaterial.LiquidGlass,
+            Advanced = new AdvancedSettings { SafeMode = true },
+        });
+        Assert.Equal(IslandMaterial.Obsidian, liquidSafe.Material);
+
         var accent = SkiaIslandThemeMapper.Map(AppSettings.Default with { AccentMode = "custom", AccentFallback = "#112233" });
         Assert.Equal(new SKColor(0x11, 0x22, 0x33), accent.Accent);
 

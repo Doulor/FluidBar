@@ -642,6 +642,38 @@ body[data-material="acrylic"] .island {
   -webkit-backdrop-filter: blur(22px) saturate(155%);
 }
 
+/* Liquid Glass (Tier 2): translucent body + lensing rim + specular top edge + caustic bottom.
+   The real renderer (LiquidGlassPainter) draws these as baked optical layers; CSS can only
+   approximate them with inset shadows and one fixed sheen band. Tokens mirror LiquidGlassTokens. */
+body[data-material="liquid"] .island {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.11) 0%,
+      rgba(255, 255, 255, 0.03) 38%,
+      rgba(255, 255, 255, 0) 62%,
+      rgba(0, 0, 0, 0.10) 100%),
+    rgba(8, 8, 10, calc(var(--island-fill, 0.97) * 0.68));
+  backdrop-filter: blur(16px) saturate(175%);
+  -webkit-backdrop-filter: blur(16px) saturate(175%);
+  box-shadow:
+    inset 0 0 14px 0 rgba(255, 255, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 6px -3px rgba(255, 255, 255, 0.28),
+    0 18px 44px -16px rgba(0, 0, 0, 0.78),
+    0 3px 10px -4px rgba(0, 0, 0, 0.42);
+}
+body[data-material="liquid"] .island::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(118deg,
+    rgba(255, 255, 255, 0) 8%,
+    rgba(255, 255, 255, 0.06) 44%,
+    rgba(255, 255, 255, 0) 78%);
+}
+
 /* Optional hover preview (settings → island → hover preview). */
 body[data-hover="on"] .island[data-expanded="false"]:hover { transform: scale(1.022); }
 
@@ -2602,6 +2634,22 @@ body[data-material="acrylic"] .ap-shell {
   background: rgba(18, 18, 22, calc(var(--ap-fill, 0.96) * 0.65));
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
+}
+body[data-material="liquid"] .ap-shell {
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.11),
+      rgba(255, 255, 255, 0.02) 42%,
+      rgba(0, 0, 0, 0.10)),
+    rgba(18, 18, 22, calc(var(--ap-fill, 0.96) * 0.68));
+  border-color: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+  box-shadow:
+    inset 0 0 10px rgba(255, 255, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.60),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 36px -18px rgba(0, 0, 0, 0.8);
 }
 .ap-art { width: 34px; height: 34px; border-radius: 8px; flex: none; }
 .ap-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

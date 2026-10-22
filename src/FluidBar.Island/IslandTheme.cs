@@ -23,6 +23,12 @@ public enum IslandMaterial
 
     /// <summary>Tier 1: simulated glass (lighter fill + one top highlight; no blur).</summary>
     SimulatedGlass,
+
+    /// <summary>
+    /// Tier 2: liquid glass — a lensing rim, specular top edge, caustic bounce, chromatic dispersion,
+    /// sheen and pointer illumination drawn over a translucent fill (layered windows get no backdrop blur).
+    /// </summary>
+    LiquidGlass,
 }
 
 /// <summary>

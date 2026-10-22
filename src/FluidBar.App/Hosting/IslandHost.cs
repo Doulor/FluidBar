@@ -547,7 +547,7 @@ public sealed class IslandHost : IDisposable
             ghosts,
             settings.Colors,
             settings.FillOpacity,
-            settings.Material == IslandMaterial.Acrylic,
+            settings.Material != IslandMaterial.Obsidian,
             state.Kind == IslandStateKind.Hidden,
             mode == IslandMode.Dock ? IslandWindow.DockWindowHeight : UiMetrics.WindowHeight);
     }

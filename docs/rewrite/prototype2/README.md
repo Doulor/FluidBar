@@ -178,7 +178,7 @@ A **900 × 620** modal (`role="dialog"`, `aria-modal`, focus moved into the dial
 | section | contents |
 | --- | --- |
 | **通用 / General** | language (zh/en), launch at startup, auto-update, tray icon, four global shortcut rows |
-| **外观 / Appearance** | desktop theme, island material (Obsidian / Acrylic), five accent swatches, panel radius 16–36 px, fill opacity 85–100 %, **live island preview** |
+| **外观 / Appearance** | desktop theme, island material (Obsidian / Acrylic / Liquid Glass), five accent swatches, panel radius 16–36 px, fill opacity 85–100 %, **live island preview** |
 | **灵动岛 / Island** | mode (float/flush/dock), anchor (center/left/right), display strategy (stack/latest), hover preview, motion (normal/reduced), auto-collapse 0.4–3.6 s, motion strength ×0.5–1.5 |
 | **插件 / Plugins** | 6 installed plugins with badges, author, permission chips, settings button, enable switch, search, plugin-folder note |
 | **插件市场 / Market** | featured card, search, six category chips, **10 plugin cards**, install progress + toast |
@@ -189,6 +189,7 @@ A **900 × 620** modal (`role="dialog"`, `aria-modal`, focus moved into the dial
 
 - `--accent` (swatches), `--island-fill` (opacity), `--panel-radius` (large-panel radius).
 - `body[data-material="acrylic"]` adds a translucent fill + `backdrop-filter` to the shell and preview.
+- `body[data-material="liquid"]` adds the Tier 2 approximation: translucent body + inset lensing rim + specular top edge + caustic bottom + one fixed sheen band (CSS cannot bend light; the real renderer bakes the optical layers instead).
 - theme/material/anchor/hover are body datasets, so the desktop, console, island and modal all follow.
 - The expanded island's radius follows `--panel-radius` (verified: 22 px after the control moves to 22, including flush `0 0 22 22` and dock `22`).
 
@@ -210,7 +211,7 @@ All optional; combine freely.
 | `theme` | `dark` \| `light` | desktop/console/settings theme |
 | `lang` | `zh` \| `en` | UI language |
 | `motion` | `normal` \| `reduced` | spring vs instant |
-| `material` | `obsidian` \| `acrylic` | island material |
+| `material` | `obsidian` \| `acrylic` \| `liquid` | island material |
 | `accent` | `aqua` \| `mint` \| `amber` \| `rose` \| `blue` | accent color |
 | `radius` | 16–36 | large-panel radius |
 | `opacity` | 85–100 | island fill opacity |

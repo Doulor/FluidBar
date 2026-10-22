@@ -5,6 +5,7 @@ using Avalonia.Media;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Theme;
+using FluidBar.Island;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -32,6 +33,9 @@ public sealed class IslandPreview : Control
     /// <summary>Current preview model (settings → island tokens).</summary>
     public IslandPreviewModel Model { get; private set; }
 
+    /// <summary>Completed render passes (test seam: proves the painter actually ran).</summary>
+    internal int RenderCount { get; private set; }
+
     /// <summary>Raised after every model rebuild so callers can refresh derived chrome (meta line).</summary>
     public event Action<IslandPreviewModel>? ModelChanged;
 
@@ -53,6 +57,7 @@ public sealed class IslandPreview : Control
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
+        RenderCount++;
         var width = Bounds.Width;
         var height = Bounds.Height;
         _ = _localizer;
@@ -123,7 +128,11 @@ public sealed class IslandPreview : Control
             radius);
 
         // Simulated glass: same top highlight the renderer paints (white 0x20 → transparent at 35%).
-        if (model.Glass)
+        if (model.LiquidGlass)
+        {
+            DrawLiquidGlass(context, shell, radius);
+        }
+        else if (model.Glass)
         {
             context.DrawRectangle(new LinearGradientBrush
             {
@@ -215,4 +224,72 @@ public sealed class IslandPreview : Control
 
     private static Color WithAlpha(Color color, double alpha)
         => Color.FromArgb((byte)Math.Clamp(Math.Round(alpha * 255), 0, 255), color.R, color.G, color.B);
+
+    /// <summary>
+    /// Tier 2 preview finish: veil, lensing rim, specular top edge and sheen drawn with the island's own
+    /// <see cref="LiquidGlassTokens"/> so the 300×62 preview cannot drift from the real shell.
+    /// </summary>
+    private static void DrawLiquidGlass(DrawingContext context, Rect shell, double radius)
+    {
+        var band = LiquidGlassTokens.RimBandFor(shell.Height) * 2;
+
+        using (context.PushClip(new RoundedRect(shell, radius)))
+        {
+            // Body veil: white at the top, shade at the bottom.
+            context.DrawRectangle(new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.VeilTopAlpha, 0xFF, 0xFF, 0xFF), 0),
+                    new GradientStop(Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF), 0.38),
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.62),
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.BodyShadeAlpha, 0x00, 0x00, 0x00), 1),
+                },
+            }, null, shell, radius, radius);
+
+            // Lensing rim: a thick gradient stroke clipped to the inside edge.
+            context.DrawRectangle(null, new Pen(new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.RimLightTopAlpha, 0xFF, 0xFF, 0xFF), 0),
+                    new GradientStop(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF), 0.26),
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.55),
+                    new GradientStop(Color.FromArgb(0x22, 0x00, 0x00, 0x00), 0.84),
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.RimShadeBottomAlpha, 0x00, 0x00, 0x00), 1),
+                },
+            }, band), shell, radius, radius);
+
+            // Specular top edge.
+            context.DrawRectangle(null, new Pen(new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.SpecularTopAlpha, 0xFF, 0xFF, 0xFF), 0),
+                    new GradientStop(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF), 0.02),
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.12),
+                },
+            }, 1.15), shell, radius, radius);
+
+            // Sheen band.
+            context.DrawRectangle(new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0.72, 1, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.08),
+                    new GradientStop(Color.FromArgb(LiquidGlassTokens.SheenAlpha, 0xFF, 0xFF, 0xFF), 0.44),
+                    new GradientStop(Color.FromArgb(0, 0xFF, 0xFF, 0xFF), 0.78),
+                },
+            }, null, shell, radius, radius);
+        }
+    }
+
 }

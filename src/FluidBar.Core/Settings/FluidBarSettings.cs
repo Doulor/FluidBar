@@ -31,6 +31,10 @@ public enum IslandMaterial
     /// <summary>Tier 1: acrylic backdrop behind the rounded shell.</summary>
     [JsonStringEnumMemberName("acrylic")]
     Acrylic,
+
+    /// <summary>Tier 2: liquid glass (lensing rim + specular edge, drawn; layered hosts have no backdrop blur).</summary>
+    [JsonStringEnumMemberName("liquid-glass")]
+    LiquidGlass,
 }
 
 /// <summary>Curated dark palettes + porcelain (spec 3.3).</summary>
@@ -597,6 +601,7 @@ public static class SettingsJson
         };
         options.Converters.Add(new IslandModeJsonConverter());
         options.Converters.Add(new IslandAnchorJsonConverter());
+        options.Converters.Add(new IslandMaterialJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
         return options;
     }

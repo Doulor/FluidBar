@@ -30,6 +30,9 @@ public enum IslandMaterial
 
     /// <summary>Tier 1: compositor acrylic blur behind the island.</summary>
     Acrylic,
+
+    /// <summary>Tier 2: liquid glass (lensing rim, specular edge, chromatic fringe; drawn, no backdrop blur).</summary>
+    LiquidGlass,
 }
 
 /// <summary>Stacking strategy for concurrent activities.</summary>
@@ -468,7 +471,12 @@ public sealed record AppSettings
             Appearance = new AppearanceJson
             {
                 Theme = Theme.ToString().ToLowerInvariant(),
-                Material = Material.ToString().ToLowerInvariant(),
+                Material = Material switch
+                {
+                    IslandMaterial.Acrylic => "acrylic",
+                    IslandMaterial.LiquidGlass => "liquid-glass",
+                    _ => "obsidian",
+                },
                 Palette = Palette,
                 Accent = new AccentJson { Mode = AccentMode, Fallback = AccentFallback },
                 FillOpacity = FillOpacity,
@@ -546,7 +554,7 @@ public sealed record AppSettings
                 HotkeyHide = document.General?.HotkeyHide ?? defaults.HotkeyHide,
                 HotkeySettings = document.General?.HotkeySettings ?? defaults.HotkeySettings,
                 Theme = ParseTheme(document.Appearance?.Theme),
-                Material = document.Appearance?.Material == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
+                Material = ParseMaterial(document.Appearance?.Material),
                 Palette = document.Appearance?.Palette ?? defaults.Palette,
                 AccentMode = document.Appearance?.Accent?.Mode ?? defaults.AccentMode,
                 AccentFallback = document.Appearance?.Accent?.Fallback ?? defaults.AccentFallback,
@@ -619,6 +627,17 @@ public sealed record AppSettings
         var text = value?.Trim();
         return string.IsNullOrWhiteSpace(text) ? fallback : text;
     }
+
+    /// <summary>
+    /// Parses the persisted material token. <c>liquid-glass</c> is the shipped token; the compact and
+    /// legacy spellings are accepted so a hand-edited settings file never silently resets to Obsidian.
+    /// </summary>
+    private static IslandMaterial ParseMaterial(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "acrylic" => IslandMaterial.Acrylic,
+        "liquid-glass" or "liquidglass" or "liquid" or "glass" => IslandMaterial.LiquidGlass,
+        _ => IslandMaterial.Obsidian,
+    };
 
     private static AppTheme ParseTheme(string? theme) => theme switch
     {

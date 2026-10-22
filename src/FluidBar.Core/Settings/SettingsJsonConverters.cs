@@ -31,6 +31,37 @@ internal sealed class IslandModeJsonConverter : JsonConverter<IslandMode>
     }
 }
 
+/// <summary>
+/// Serializes <see cref="IslandMaterial"/> with the shipped tokens (obsidian / acrylic / liquid-glass).
+/// Reading also accepts the compact and legacy spellings so a hand-edited settings file can never
+/// silently reset a glass material back to obsidian.
+/// </summary>
+internal sealed class IslandMaterialJsonConverter : JsonConverter<IslandMaterial>
+{
+    public override IslandMaterial Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var text = reader.GetString();
+        return text?.Trim().ToLowerInvariant() switch
+        {
+            "obsidian" => IslandMaterial.Obsidian,
+            "acrylic" => IslandMaterial.Acrylic,
+            "liquid-glass" or "liquidglass" or "liquid" or "glass" => IslandMaterial.LiquidGlass,
+            _ => throw new JsonException($"Unknown island material '{text}'."),
+        };
+    }
+
+    public override void Write(Utf8JsonWriter writer, IslandMaterial value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value switch
+        {
+            IslandMaterial.Obsidian => "obsidian",
+            IslandMaterial.Acrylic => "acrylic",
+            IslandMaterial.LiquidGlass => "liquid-glass",
+            _ => throw new JsonException($"Unknown island material '{value}'."),
+        });
+    }
+}
+
 /// <summary>Serializes <see cref="IslandAnchor"/> with the spec tokens (top-center, bottom-left...).</summary>
 internal sealed class IslandAnchorJsonConverter : JsonConverter<IslandAnchor>
 {

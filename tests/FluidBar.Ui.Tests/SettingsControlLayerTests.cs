@@ -30,6 +30,31 @@ public sealed class SettingsControlLayerTests
         return Palette;
     }
 
+    [Fact]
+    public async Task AppearancePane_OffersThreeIslandMaterials()
+    {
+        var materials = await AvaloniaTest.Run(() =>
+        {
+            var localizer = TestFixtures.CreateLocalizer("en-US");
+            var (controller, _) = TestFixtures.CreateSettings(AppSettings.Default);
+            var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Appearance);
+            window.Show();
+            try
+            {
+                var segmented = window.GetVisualDescendants().OfType<SegmentedControl>()
+                    .First(control => control.Items.Any(item => item.Value == "obsidian"));
+                return segmented.Items.Select(item => (item.Label, item.Value)).ToArray();
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.Equal(["obsidian", "acrylic", "liquid-glass"], materials.Select(m => m.Value).ToArray());
+        Assert.Contains(materials, m => m is { Value: "liquid-glass", Label: "Liquid Glass" });
+    }
+
     [Theory]
     [InlineData(SettingsWindowSection.General)]
     [InlineData(SettingsWindowSection.Appearance)]

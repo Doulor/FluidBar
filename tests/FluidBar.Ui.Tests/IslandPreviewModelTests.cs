@@ -74,6 +74,28 @@ public sealed class IslandPreviewModelTests
             DarkAppearance);
         Assert.False(safe.Glass);
         Assert.Equal(0.9, safe.EffectiveFillOpacity, 3);
+
+        // Tier 2: liquid glass stays translucent, but at its own fill level and with its own id.
+        var liquid = IslandPreviewModel.From(
+            Baseline with { Material = IslandMaterial.LiquidGlass, FillOpacity = 0.9 }, DarkAppearance);
+        Assert.True(liquid.Glass);
+        Assert.True(liquid.LiquidGlass);
+        Assert.False(acrylic.LiquidGlass);
+        Assert.Equal("liquid-glass", liquid.Material);
+        Assert.Equal(IslandPreviewModel.LiquidGlassFillOpacity, liquid.EffectiveFillOpacity, 3);
+        Assert.True(liquid.EffectiveFillOpacity < acrylic.EffectiveFillOpacity,
+            "liquid glass should be clearer than acrylic");
+
+        var liquidSafe = IslandPreviewModel.From(
+            Baseline with
+            {
+                Material = IslandMaterial.LiquidGlass,
+                Advanced = Baseline.Advanced with { SafeMode = true },
+            },
+            DarkAppearance);
+        Assert.False(liquidSafe.Glass);
+        Assert.False(liquidSafe.LiquidGlass);
+        Assert.Equal("obsidian", liquidSafe.Material);
     }
 
     [Fact]
@@ -132,6 +154,41 @@ public sealed class IslandPreviewModelTests
         Assert.Equal(dark.Background, light.Background);
         Assert.Equal(dark.Foreground, light.Foreground);
         Assert.Equal(dark.Accent, light.Accent);
+    }
+
+    [Fact]
+    public async Task PreviewControl_RendersTheLiquidGlassTierWithoutThrowing()
+    {
+        // The headless session has no pixels, but the render pass still runs the control's
+        // DrawingContext calls — a broken gradient pen / clip would throw here instead of in the
+        // settings window.
+        var rendered = await AvaloniaTest.Run(() =>
+        {
+            var preview = new IslandPreview();
+            preview.Update(
+                Baseline with { Material = IslandMaterial.LiquidGlass, PanelRadius = 28 },
+                TestFixtures.CreateLocalizer("en-US"));
+            var window = new Window { Width = 620, Height = 180, Content = preview };
+            window.Show();
+            window.Measure(new Size(620, 180));
+            window.Arrange(new Rect(0, 0, 620, 180));
+
+            // Force a real drawing pass through the Avalonia render target (headless drawing otherwise
+            // skips Render entirely, which would make this test vacuous).
+            using (var target = new RenderTargetBitmap(new PixelSize(620, 180)))
+            {
+                target.Render(preview);
+            }
+
+            var model = preview.Model;
+            var passes = preview.RenderCount;
+            window.Close();
+            return (Model: model, Passes: passes);
+        });
+
+        Assert.True(rendered.Passes > 0, "the liquid-glass preview never executed a render pass");
+        Assert.True(rendered.Model.LiquidGlass);
+        Assert.Equal("liquid-glass", rendered.Model.Material);
     }
 
     [Fact]

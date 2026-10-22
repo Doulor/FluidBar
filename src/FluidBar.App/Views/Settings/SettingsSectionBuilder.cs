@@ -144,12 +144,13 @@ public static class SettingsSectionBuilder
     }
 
     private static Control SegmentedRow(SettingsWindowContext context, string label, string? description,
-        (string Label, string Value)[] options, string current, Action<string> changed, bool small = false)
+        (string Label, string Value)[] options, string current, Action<string> changed, bool small = false,
+        double? width = null)
     {
         var palette = context.Palette;
         var segmented = new SegmentedControl
         {
-            ControlWidth = small ? SettingsMetrics.SegmentedSmallWidth : SettingsMetrics.SegmentedWidth,
+            ControlWidth = width ?? (small ? SettingsMetrics.SegmentedSmallWidth : SettingsMetrics.SegmentedWidth),
             Fill = palette.RaisedBrush,
             Hairline = palette.LineBrush,
             ActiveFill = palette.ActiveBrush,
@@ -346,8 +347,8 @@ public static class SettingsSectionBuilder
     {
         var settings = ctx.Settings.Current;
         var palette = ctx.Palette;
-        // Same rule the mapper applies: acrylic degrades to obsidian in safe mode.
-        var acrylic = settings.Material == IslandMaterial.Acrylic && !settings.Advanced.SafeMode;
+        // Same rule the mapper applies: every translucent tier degrades to obsidian in safe mode.
+        var translucent = settings.Material != IslandMaterial.Obsidian && !settings.Advanced.SafeMode;
         var preview = new IslandPreview();
 
         var swatchList = new List<(AccentSwatch Swatch, string Hex)>();
@@ -447,12 +448,25 @@ public static class SettingsSectionBuilder
                     [
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Obsidian), "obsidian"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Acrylic), "acrylic"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.LiquidGlass), "liquid-glass"),
                     ],
-                    settings.Material == IslandMaterial.Acrylic ? "acrylic" : "obsidian",
+                    settings.Material switch
+                    {
+                        IslandMaterial.Acrylic => "acrylic",
+                        IslandMaterial.LiquidGlass => "liquid-glass",
+                        _ => "obsidian",
+                    },
                     value => ctx.Settings.Update(s => s with
                     {
-                        Material = value == "acrylic" ? IslandMaterial.Acrylic : IslandMaterial.Obsidian,
-                    })),
+                        Material = value switch
+                        {
+                            "acrylic" => IslandMaterial.Acrylic,
+                            "liquid-glass" => IslandMaterial.LiquidGlass,
+                            _ => IslandMaterial.Obsidian,
+                        },
+                    }),
+                    // Three segments need more room than the two-segment default.
+                    width: 216),
                 // Palette moved here from the advanced pane: it is a 1:1 island token (the preview
                 // repaints on every switch) and belongs next to the material.
                 SegmentedRow(ctx, ctx.Localizer.Get("Settings.Appearance.PowerMode.Title"),
@@ -490,12 +504,12 @@ public static class SettingsSectionBuilder
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacity),
                     // Acrylic pins the fill to 72% in the renderer, so the slider is disabled with an
                     // explanation instead of silently doing nothing.
-                    acrylic
-                        ? ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityAcrylicHint)
+                    translucent
+                        ? ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityGlassHint)
                         : ctx.Localizer.Get(LocKeys.Settings.Appearance.FillOpacityHint),
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
                     value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }),
-                    enabled: !acrylic),
+                    enabled: !translucent),
                 // Text size moved here: it is an island token, so the preview clock scales live.
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
                     0.8, 1.6, 0.05, settings.FontScale,
@@ -529,9 +543,12 @@ public static class SettingsSectionBuilder
             meta.Text = ctx.Localizer.Format(
                 LocKeys.Settings.Appearance.Meta,
                 ("palette", PaletteLabel(ctx, model.Palette)),
-                ("material", model.Glass
-                    ? ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Acrylic)
-                    : ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Obsidian)),
+                ("material", model.Material switch
+                {
+                    "acrylic" => ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Acrylic),
+                    "liquid-glass" => ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.LiquidGlass),
+                    _ => ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Obsidian),
+                }),
                 ("radius", $"{model.PanelRadius:0}"),
                 ("opacity", $"{model.EffectiveFillOpacity * 100:0}"),
                 ("scale", $"{model.FontScale:0.00}"));

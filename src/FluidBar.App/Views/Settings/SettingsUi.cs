@@ -50,6 +50,9 @@ public sealed class SegmentedControl : Control
     /// <summary>Current value.</summary>
     public string SelectedValue => _selected;
 
+    /// <summary>Items currently offered (tests/diagnostics).</summary>
+    internal IReadOnlyList<(string Label, string Value)> Items => _items;
+
     /// <summary>Replaces the items and the selection.</summary>
     public void SetItems(IEnumerable<(string Label, string Value)> items, string selected)
     {

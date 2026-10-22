@@ -71,6 +71,8 @@ public sealed class IslandRenderer : IDisposable
     private readonly SKPaint _clear = new() { IsAntialias = false, BlendMode = SKBlendMode.Src };
     private readonly SKPaint _glassPaint = new() { IsAntialias = true };
 
+    private readonly LiquidGlassPainter _liquidGlass = new();
+
     private IslandTheme _theme;
     private SKShader? _glassShader;
     private float _glassHeight;
@@ -119,6 +121,12 @@ public sealed class IslandRenderer : IDisposable
 
     /// <summary>Bounded shadow image cache (diagnostics).</summary>
     public int ShadowCacheCount => _shadows.Count;
+
+    /// <summary>Baked liquid-glass overlays retained (diagnostics; bounded by the painter).</summary>
+    public int LiquidGlassOverlayCount => _liquidGlass.OverlayCount;
+
+    /// <summary>Retained bytes of the baked liquid-glass overlays (diagnostics).</summary>
+    public long LiquidGlassOverlayBytes => _liquidGlass.OverlayBytes;
 
     /// <summary>
     /// Retained-cache accounting for the working-set audit: image caches, text layouts and paths.
@@ -387,16 +395,16 @@ public sealed class IslandRenderer : IDisposable
             canvas.Translate(-shell.MidX, -shell.MidY);
         }
 
+        var path = _paths.Get(state.ShellWidth, state.ShellHeight, state.ShellRadii);
+
         if (_options.EnableShadow && state.Form is not ShellForm.Expanded)
         {
             // The expanded host window is deliberately much larger than the 440x284 panel (the
             // transparent margin is click-through padding). Painting the large shell shadow into
             // that margin makes the layered window show a translucent grey block on the desktop,
             // so the expanded panel is shadowless; compact/peek keep the prototype shadow.
-            DrawShadow(canvas, state, shell, dpiScale, opacity);
+            DrawShadow(canvas, state, shell, dpiScale, opacity, path);
         }
-
-        var path = _paths.Get(state.ShellWidth, state.ShellHeight, state.ShellRadii);
 
         // Multi-island stacking: with the "stacked" strategy the scheduler keeps up to two preempted
         // activities alive as ghost layers; they are painted as smaller copies of the compact pill above
@@ -484,12 +492,13 @@ public sealed class IslandRenderer : IDisposable
             NudgeOffsetY = 0,
         };
 
+        var path = _paths.Get(rect.Width, rect.Height, secondary.ShellRadii);
+
         if (_options.EnableShadow)
         {
-            DrawShadow(canvas, secondary, rect, dpiScale, opacity);
+            DrawShadow(canvas, secondary, rect, dpiScale, opacity, path);
         }
 
-        var path = _paths.Get(rect.Width, rect.Height, secondary.ShellRadii);
         canvas.Save();
         canvas.Translate(rect.Left, rect.Top);
         DrawShellBody(canvas, secondary, path, opacity);
@@ -543,9 +552,11 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var materialGlass = _theme.Material == IslandMaterial.SimulatedGlass;
-        var fillOpacity = materialGlass
-            ? 0.72f
-            : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+        var fillOpacity = _theme.Material == IslandMaterial.LiquidGlass
+            ? (float)LiquidGlassTokens.FillOpacity
+            : materialGlass
+                ? 0.72f
+                : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
         var offsets = new[] { LayoutTokens.GhostOffsetY1, LayoutTokens.GhostOffsetY2 };
         var scales = new[] { LayoutTokens.GhostScale1, LayoutTokens.GhostScale2 };
         var opacities = new[] { LayoutTokens.GhostOpacity1, LayoutTokens.GhostOpacity2 };
@@ -570,6 +581,12 @@ public sealed class IslandRenderer : IDisposable
             _fill.Color = Alpha(_theme.Background,
                 fillOpacity * layerOpacity * compactOpacity);
             canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _fill);
+            if (_theme.Material == IslandMaterial.LiquidGlass)
+            {
+                _liquidGlass.DrawRoundRect(
+                    canvas, ghost, ghostHeight / 2, fillOpacity * layerOpacity * compactOpacity);
+            }
+
             // Key line: without it the ghost silhouette disappears into the dark shell/desktop
             // (prototype README: "softened fills and key lines"). Legacy Avalonia shell used the same
             // LineStrong hairline for its ghost pills.
@@ -664,9 +681,11 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var finals = IslandMetrics.SplitIsletRects(state);
-        var fillOpacity = _theme.Material == IslandMaterial.SimulatedGlass
-            ? 0.72f
-            : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+        var fillOpacity = _theme.Material == IslandMaterial.LiquidGlass
+            ? (float)LiquidGlassTokens.FillOpacity
+            : _theme.Material == IslandMaterial.SimulatedGlass
+                ? 0.72f
+                : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
         for (var i = 0; i < finals.Length && i < state.SplitIslets.Length; i++)
         {
             var progress = (float)IslandMetrics.SplitIsletProgress(state, i);
@@ -686,6 +705,11 @@ public sealed class IslandRenderer : IDisposable
             _fill.Color = SplitFillColor(fillOpacity, alpha);
             canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
             _fill.BlendMode = SKBlendMode.SrcOver;
+
+            if (_theme.Material == IslandMaterial.LiquidGlass)
+            {
+                _liquidGlass.DrawCircle(canvas, new SKPoint(rect.MidX, rect.MidY), radius, alpha);
+            }
 
             if (islet.Kind == ActivityKind.Agent)
             {
@@ -781,9 +805,12 @@ public sealed class IslandRenderer : IDisposable
     private void DrawShellBody(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity)
     {
         var materialGlass = _theme.Material == IslandMaterial.SimulatedGlass;
-        var fillOpacity = materialGlass
-            ? 0.72f
-            : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
+        var materialLiquid = _theme.Material == IslandMaterial.LiquidGlass;
+        var fillOpacity = materialLiquid
+            ? (float)LiquidGlassTokens.FillOpacity
+            : materialGlass
+                ? 0.72f
+                : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
 
         // While split capsules are visible they share the primary's exact material. Using Src for
         // both interiors means the capsule and the pill have byte-identical background colour/alpha
@@ -806,6 +833,27 @@ public sealed class IslandRenderer : IDisposable
             _glassPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(0x20 * opacity, 0, 255));
             canvas.DrawPath(path, _glassPaint);
             _glassPaint.Shader = null;
+        }
+        else if (materialLiquid)
+        {
+            // Tier 2 paints its own veil, lensing rim, specular/caustic edges, dispersion and sheen.
+            var shell = IslandMetrics.ShellRect(state);
+            var pointerX = state.HasPointer && double.IsFinite(state.PointerX)
+                ? (float)state.PointerX - (float)shell.Left
+                : float.NaN;
+            var pointerY = state.HasPointer && double.IsFinite(state.PointerY)
+                ? (float)state.PointerY - (float)shell.Top
+                : float.NaN;
+            _liquidGlass.Draw(
+                canvas,
+                path,
+                new SKRect(0, 0, (float)state.ShellWidth, (float)state.ShellHeight),
+                opacity,
+                pointerX,
+                pointerY,
+                state.HasPointer,
+                state.ShellRadii.GetHashCode(),
+                state.ShellMorphing);
         }
 
         // Prototype2 declares `.island { border: 0 }`: the shell has no rim/outline at all. The old
@@ -831,7 +879,13 @@ public sealed class IslandRenderer : IDisposable
         return _glassShader;
     }
 
-    private void DrawShadow(SKCanvas canvas, in IslandRenderState state, SKRect shell, float dpiScale, float opacity)
+    private void DrawShadow(
+        SKCanvas canvas,
+        in IslandRenderState state,
+        SKRect shell,
+        float dpiScale,
+        float opacity,
+        SKPath? shellPath = null)
     {
         var dock = state.Mode == IslandMode.Dock;
         ShadowLayer primary;
@@ -870,7 +924,26 @@ public sealed class IslandRenderer : IDisposable
             primary,
             secondary,
             state.ShellMorphing ? ShadowCache.MorphBucketDip : 0);
+
+        // A translucent shell would show the blurred shadow *through* the fill and read as an opaque
+        // plate. Cut the silhouette out of the shadow so glass keeps the desktop visible and the shadow
+        // becomes a halo around the island.
+        var hollow = shellPath is not null
+            && _theme.Material is IslandMaterial.LiquidGlass or IslandMaterial.SimulatedGlass;
+        if (hollow)
+        {
+            canvas.Save();
+            canvas.Translate(shell.Left, shell.Top);
+            canvas.ClipPath(shellPath!, SKClipOperation.Difference, antialias: true);
+            canvas.Translate(-shell.Left, -shell.Top);
+        }
+
         _shadows.Draw(canvas, image, shell, opacity);
+
+        if (hollow)
+        {
+            canvas.Restore();
+        }
     }
 
     private void DrawExpanded(SKCanvas canvas, in IslandRenderState state, float layerOpacity, float chromeOpacity)
@@ -1069,6 +1142,7 @@ public sealed class IslandRenderer : IDisposable
         _strip.Dispose();
         _glassShader?.Dispose();
         _glassShader = null;
+        _liquidGlass.Dispose();
         _fill.Dispose();
         _stroke.Dispose();
         _clear.Dispose();

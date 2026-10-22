@@ -2,6 +2,25 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 新增第三种材质「液态玻璃」（Tier 2）
+
+- **材质**：`IslandMaterial.LiquidGlass`（Tier 2），设置 → 外观 → 材质 第三个选项「液态玻璃 / Liquid Glass」。
+  持久化 token 为 `liquid-glass`（读取兼容 `liquidglass`/`liquid`/`glass`）。
+- **外观**：自绘光学结果——透镜边缘（4.5–15 DIP 随高度缩放）、顶部 1 DIP 高光 + bloom、底部焦散、
+  边缘青/品红色散（≤12%）、静态斜向光泽、指针跟随照明；填充 0.68（亚克力 0.72、黑曜石 0.97），
+  实测壳体中心 alpha 176 vs 亚克力 183，桌面透出约 1/3。
+- **阴影修正**：玻璃类材质的烘焙阴影改为从壳体轮廓挖空（`ClipOperation.Difference`）。此前阴影透过
+  半透明填充显示，玻璃实际接近不透明——亚克力同样受益。
+- **性能**：静态层按 (宽,高,DPI,圆角) 烘焙进 ≤4 张有界缓存，稳定帧 1 次 blit + 悬停 1 次径向光斑；
+  Release/150% DPI 实测展开面板 0.62–0.68 ms mean、0 B/frame 分配（Obsidian 0.38–0.44 ms）；
+  展开弹簧帧前半段 2.11 ms（Obsidian 1.66，阴影烘焙占大头）、后半段 0.91 ms；首帧烘焙 5 ms（一次性）。
+- **设置预览**：300×62 实时预览同步液态玻璃（同一套 `LiquidGlassTokens`），meta 行显示 `liquid-glass`。
+- **文档**：新增 [docs/rewrite/research/liquid-glass.md](docs/rewrite/research/liquid-glass.md)（17 个液态玻璃仓库 + emilkowalski/skills = 18 个参考仓库 +
+  参数表 + 实测）与 [对照截图](docs/rewrite/research/liquid-glass-shots/README.md)，更新 `contracts/ui.md` 材质段
+  与 `DECISIONS.md` I15。
+- **测试**：Island 458 全绿（新增 `LiquidGlassTests` 7 条：透明度排序、顶部亮/底部焦散、中性色、指针光晕、
+  帧预算/零分配、缓存有界、渲染冒烟）、Core 653（含 `liquid-glass` 往返与别名）、UI 525（映射/预览/SafeMode 降级）。
+
 ## 2026-10-22 — 预览版 v1 第一轮硬化：输入状态机 / 全屏 / 单实例 / 空态回退
 
 - **鼠标钩子按下态**：`IslandMouseHook` 抽出可测试的 `GestureTracker`；岛内按下、岛外松开现在一定产生 `Released + Left`，不再把 `_pressed` 留到下一次普通移动（旧行为：幽灵拖拽、页面自己乱翻、下一次点击丢失 release）。

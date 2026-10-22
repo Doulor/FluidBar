@@ -239,7 +239,12 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 CoreTheme.Light => AppAppearance.AppTheme.Light,
                 _ => AppAppearance.AppTheme.System,
             },
-            Material = core.Appearance.Material == CoreMaterial.Acrylic ? AppAppearance.IslandMaterial.Acrylic : AppAppearance.IslandMaterial.Obsidian,
+            Material = core.Appearance.Material switch
+            {
+                CoreMaterial.Acrylic => AppAppearance.IslandMaterial.Acrylic,
+                CoreMaterial.LiquidGlass => AppAppearance.IslandMaterial.LiquidGlass,
+                _ => AppAppearance.IslandMaterial.Obsidian,
+            },
             Palette = core.Appearance.Palette switch
             {
                 CorePalette.Graphite => "graphite",
@@ -343,7 +348,12 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                     AppAppearance.AppTheme.Light => CoreTheme.Light,
                     _ => CoreTheme.System,
                 },
-                Material = app.Material == AppAppearance.IslandMaterial.Acrylic ? CoreMaterial.Acrylic : CoreMaterial.Obsidian,
+                Material = app.Material switch
+                {
+                    AppAppearance.IslandMaterial.Acrylic => CoreMaterial.Acrylic,
+                    AppAppearance.IslandMaterial.LiquidGlass => CoreMaterial.LiquidGlass,
+                    _ => CoreMaterial.Obsidian,
+                },
                 Palette = app.Palette switch
                 {
                     "graphite" => CorePalette.Graphite,

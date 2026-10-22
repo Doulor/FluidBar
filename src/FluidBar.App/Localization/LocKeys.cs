@@ -759,6 +759,8 @@ public static partial class LocKeys
             /// <summary><c>Settings.Appearance.FillOpacityHint</c></summary>
             /// <summary><c>Settings.Appearance.FillOpacityAcrylicHint</c></summary>
             public const string FillOpacityAcrylicHint = "Settings.Appearance.FillOpacityAcrylicHint";
+            /// <summary><c>Settings.Appearance.FillOpacityGlassHint</c></summary>
+            public const string FillOpacityGlassHint = "Settings.Appearance.FillOpacityGlassHint";
             public const string FillOpacityHint = "Settings.Appearance.FillOpacityHint";
             /// <summary><c>Settings.Appearance.FontScale</c></summary>
             public const string FontScale = "Settings.Appearance.FontScale";
@@ -803,6 +805,8 @@ public static partial class LocKeys
                 public const string Obsidian = "Settings.Appearance.Material.Obsidian";
                 /// <summary><c>Settings.Appearance.Material.Acrylic</c></summary>
                 public const string Acrylic = "Settings.Appearance.Material.Acrylic";
+                /// <summary><c>Settings.Appearance.Material.LiquidGlass</c></summary>
+                public const string LiquidGlass = "Settings.Appearance.Material.LiquidGlass";
                 /// <summary><c>Settings.Appearance.Material.AcrylicUnavailable</c></summary>
                 public const string AcrylicUnavailable = "Settings.Appearance.Material.AcrylicUnavailable";
                 /// <summary><c>Settings.Appearance.Material.Desc</c></summary>

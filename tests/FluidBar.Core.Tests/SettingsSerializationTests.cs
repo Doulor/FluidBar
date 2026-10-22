@@ -81,6 +81,33 @@ public class SettingsSerializationTests
     }
 
     [Fact]
+    public void Json_RoundTripsTheLiquidGlassMaterialToken()
+    {
+        var settings = FluidBarSettings.CreateDefault() with
+        {
+            Appearance = FluidBarSettings.CreateDefault().Appearance with
+            {
+                Material = IslandMaterial.LiquidGlass,
+            },
+        };
+
+        var json = SettingsJson.Serialize(settings);
+        Assert.Contains("\"material\":\"liquid-glass\"", json);
+        Assert.True(SettingsJson.TryDeserialize(json, out var parsed, out var error), error);
+        Assert.Equal(IslandMaterial.LiquidGlass, parsed!.Appearance.Material);
+    }
+
+    [Fact]
+    public void Json_AcceptsTheLegacyCompactLiquidGlassSpelling()
+    {
+        const string json = """
+        { "schemaVersion": 1, "appearance": { "material": "liquidglass" } }
+        """;
+        Assert.True(SettingsJson.TryDeserialize(json, out var parsed, out var error), error);
+        Assert.Equal(IslandMaterial.LiquidGlass, parsed!.Appearance.Material);
+    }
+
+    [Fact]
     public void Json_MissingFieldsUseDefaults()
     {
         Assert.True(SettingsJson.TryDeserialize("{\"schemaVersion\":2}", out var parsed, out var error), error);

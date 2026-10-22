@@ -371,7 +371,8 @@
 
       'appearance.title': '外观', 'appearance.desc': '桌面主题与灵动岛材质。浅色桌面下灵动岛仍保持 Obsidian 黑，以确保内容对比度。',
       'appearance.theme': '桌面主题', 'appearance.themeDesc': '只影响桌面、控制台与设置窗口。',
-      'appearance.material': '灵动岛材质', 'appearance.materialDesc': '亚克力会实时采样桌面背景，可能略微增加 GPU 占用。',
+      'appearance.material': '灵动岛材质', 'appearance.materialDesc': '亚克力是轻微雾面；液态玻璃额外有透镜边缘、顶部高光与轻微色散。两者都会透出桌面。',
+      'material.obsidian': '黑曜石', 'material.acrylic': '亚克力', 'material.liquid': '液态玻璃',
       'appearance.accent': '强调色', 'appearance.accentDesc': '用于开关、进度与选中态；媒体页始终使用封面取色。',
       'appearance.radius': '大面板圆角', 'appearance.radiusDesc': '小胶囊始终保持 stadium 半径。',
       'appearance.opacity': '填充不透明度', 'appearance.opacityDesc': '默认 97%；低于 90% 时亚克力会自动增加模糊。',
@@ -576,7 +577,8 @@
 
       'appearance.title': 'Appearance', 'appearance.desc': 'Desktop theme and island material. The island stays Obsidian black on light desktops for contrast.',
       'appearance.theme': 'Desktop theme', 'appearance.themeDesc': 'Affects the desktop, console and settings window only.',
-      'appearance.material': 'Island material', 'appearance.materialDesc': 'Acrylic samples the wallpaper live and may slightly increase GPU usage.',
+      'appearance.material': 'Island material', 'appearance.materialDesc': 'Acrylic is a light frost; Liquid Glass adds a lensing rim, specular edge and a faint chromatic fringe. Both show the wallpaper.',
+      'material.obsidian': 'Obsidian', 'material.acrylic': 'Acrylic', 'material.liquid': 'Liquid Glass',
       'appearance.accent': 'Accent color', 'appearance.accentDesc': 'Used for toggles, progress and selection. Media always derives color from artwork.',
       'appearance.radius': 'Large panel radius', 'appearance.radiusDesc': 'The compact pill always keeps its stadium radius.',
       'appearance.opacity': 'Fill opacity', 'appearance.opacityDesc': '97% by default. Acrylic adds more blur below 90%.',
@@ -2077,7 +2079,9 @@
     else if (motion === 'normal') S.motion = 'normal';
     else if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) S.motion = 'reduced';
 
-    if (material === 'acrylic' || material === 'obsidian') S.material = material;
+    if (material === 'acrylic' || material === 'obsidian' || material === 'liquid' || material === 'liquid-glass') {
+      S.material = material === 'liquid-glass' ? 'liquid' : material;
+    }
     if (accent && ACCENTS[accent]) S.accentKey = accent;
     if (radius >= 16 && radius <= 36) S.radius = radius;
     if (opacity >= 85 && opacity <= 100) S.opacity = opacity;
@@ -2229,7 +2233,7 @@
         settingRow('appearance.theme', 'appearance.themeDesc',
           segControl('theme', [['dark', t('theme.dark')], ['light', t('theme.light')]], S.theme)) +
         settingRow('appearance.material', 'appearance.materialDesc',
-          segControl('material', [['obsidian', 'Obsidian'], ['acrylic', 'Acrylic']], S.material)) +
+          segControl('material', [['obsidian', t('material.obsidian')], ['acrylic', t('material.acrylic')], ['liquid', t('material.liquid')]], S.material)) +
         settingRow('appearance.accent', 'appearance.accentDesc', '<div class="accent-row">' + swatches + '</div>') +
         settingRow('appearance.radius', 'appearance.radiusDesc', settingRange('radius', S.radius)) +
         settingRow('appearance.opacity', 'appearance.opacityDesc', settingRange('opacity', S.opacity)) +

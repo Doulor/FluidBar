@@ -144,6 +144,16 @@ public sealed class SettingsEffectsTests
             Advanced = new AdvancedSettings { SafeMode = true },
         });
         Assert.Equal(FluidBar.Island.IslandMaterial.Obsidian, safe.Material);
+
+        var liquid = SkiaIslandThemeMapper.Map(AppSettings.Default with { Material = AppMaterial.LiquidGlass });
+        Assert.Equal(FluidBar.Island.IslandMaterial.LiquidGlass, liquid.Material);
+
+        var liquidSafe = SkiaIslandThemeMapper.Map(AppSettings.Default with
+        {
+            Material = AppMaterial.LiquidGlass,
+            Advanced = new AdvancedSettings { SafeMode = true },
+        });
+        Assert.Equal(FluidBar.Island.IslandMaterial.Obsidian, liquidSafe.Material);
     }
 
     [Fact]

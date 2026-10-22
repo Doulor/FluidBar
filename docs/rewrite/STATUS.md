@@ -8,6 +8,19 @@
 **灵动岛动画卡顿已修复**：60 fps 帧时钟原来被 50 ms 截止计时器每个 tick 停掉（`_lastRenderHappened` 参与停止判定），展开/悬停/波浪只能画 2–3 帧。现在帧时钟只由动画状态决定（`IslandFrameLoopPolicy`），实测展开 380 ms 走 24 帧、interval p50 15.9 ms，空闲 CPU 12.8% → 2.1%。
 
 
+## 2026-10-23 02:35 检查点（第三种材质：液态玻璃）
+
+- **需求**：用户要求在海报岛现有两种材质（Obsidian / 亚克力）之外新增「液态玻璃」。
+- **调研**：拉取 17 个液态玻璃仓库 + emilkowalski/skills（共 18 个）到 `third_party/liquid-glass-references/`（含 iOS 26 参考文档、
+  Swift/SwiftUI、React/CSS/SVG、Compose、Flutter、合成器插件、emilkowalski/skills 的 apple-design skill），
+  结论见 `docs/rewrite/research/liquid-glass.md`。
+- **实现**：`IslandMaterial.LiquidGlass`（Tier 2）+ `LiquidGlassPainter`（透镜边缘/顶部高光/底部焦散/
+  边缘色散/静态光泽/指针光晕），静态层烘焙进 ≤4 张有界缓存；morph 期间 1/4 分辨率 + 8 DIP 桶。
+- **顺带修复**：玻璃类材质的烘焙阴影从壳体轮廓挖空，修正「半透明填充把阴影显示成深色板、玻璃实际不透明」。
+- **实测**（Release / 150% DPI / 440×284）：稳定帧 0.65 ms（Obsidian 0.41）、p95 0.81、分配 0 B/frame；
+  展开弹簧帧 mean 0.94 / max 2.06 ms；壳体中心 alpha 166（亚克力 183、黑曜石 251）。
+- **测试**：Island 458 绿（新增 7 条液态玻璃用例）、Core 653 绿、UI 525 绿。
+
 ## 2026-10-22 18:16 检查点（预览版 v1 第一轮硬化：输入 / 全屏 / 单实例 / 空态）
 
 - **鼠标钩子状态机**：抽成纯 `IslandMouseHook.GestureTracker`。岛内按下、岛外松开现在产生 `Released + Left`，不再残留 `_pressed`；普通移动不会再变成幽灵拖拽（旧行为：页面自己乱翻、下一次点击丢 release）。看门狗改为对比「钩子最后上报位置」，本机 43 分钟 55 次 `island.mouse-hook-reinstalled` 不再出现；重装同时复位手势。

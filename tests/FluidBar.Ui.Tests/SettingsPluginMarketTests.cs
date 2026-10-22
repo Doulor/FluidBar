@@ -73,6 +73,19 @@ public sealed class CoreSettingsAdapterTests
     }
 
     [Fact]
+    public void LiquidGlassMaterial_RoundTripsThroughTheCoreAdapter()
+    {
+        var core = FluidBarSettings.CreateDefault();
+        var app = AppSettings.Default with { Material = AppMaterial.LiquidGlass };
+
+        var mapped = CoreSettingsStoreAdapter.ApplyToCore(core, app);
+        Assert.Equal(FluidBar.Core.Settings.IslandMaterial.LiquidGlass, mapped.Appearance.Material);
+
+        var back = CoreSettingsStoreAdapter.ToAppSettings(mapped);
+        Assert.Equal(AppMaterial.LiquidGlass, back.Material);
+    }
+
+    [Fact]
     public void ToAppSettings_RoundTripsTheUiModel()
     {
         var app = new AppSettings
