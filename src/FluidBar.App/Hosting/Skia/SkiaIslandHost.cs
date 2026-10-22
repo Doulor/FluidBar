@@ -1147,7 +1147,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private void PollFullscreen()
     {
-        var suppressed = FluidBar.Platform.Windows.Display.FullscreenDetector.IsForegroundFullscreen();
+        // Smoke runs must be deterministic on a developer desktop that may have a fullscreen
+        // foreground window; real runs keep suppression enabled.
+        var suppressed = Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE") != "1"
+            && FluidBar.Platform.Windows.Display.FullscreenDetector.IsForegroundFullscreen();
         _dispatcher.Post(() =>
         {
             if (_disposed || suppressed == _fullscreenSuppressed)
