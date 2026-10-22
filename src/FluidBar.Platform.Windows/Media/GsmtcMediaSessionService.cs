@@ -5,8 +5,6 @@ using FluidBar.Platform.Windows.Threading;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
 
-using FluidBar.Core.Media;
-
 namespace FluidBar.Platform.Windows.Media;
 
 /// <summary>Event args for a freshly decoded (header-parsed) artwork blob.</summary>
@@ -140,16 +138,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
-
-    /// <summary>The one clock that decides what the island shows.</summary>
-    private readonly PlaybackClock _clock = new();
-
-    private DateTimeOffset _clockOrigin = DateTimeOffset.MinValue;
-    private string? _clockTitle;
-    private bool _clockPendingAnchor;
-
-    /// <summary>Forces the next cross-check to adopt the player's reading (set when playback resumes).</summary>
-    private bool _forceReanchor;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -264,7 +252,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // A track change must show up within a poll, not within the accessibility refresh: the caption of the
         // player window changes immediately, so watch it on its own 250 ms timer.
         _captionPoller = new BackgroundPoller("media-caption", FallbackPollInterval, PollPlayerCaption, _logger);
-        // disabled: see note in CrossCheckTimeline (stale captions hid the real track).
+        _captionPoller.Start();
         _fallbackPoller.Start();
     }
 
@@ -377,8 +365,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     // Keep the paused track on screen. Hiding it after 5 s made the island disappear
                     // whenever the level probe mis-read a playing player as silent (user report
                     // 2026-10-22: "音乐灵动岛不显示了").
-                    _forceReanchor = true;
-            Publish(retained with { IsPlaying = false });
+                    Publish(retained with { IsPlaying = false });
 
                     _fallbackPoller?.SetInterval(FallbackPollInterval);
                     return;
@@ -581,6 +568,28 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // The window caption changes the moment the song does, unlike the accessibility text (30 s cadence).
         // Adopting it here makes the island switch within one poll (250 ms) instead of several seconds.
         Volatile.Write(ref _lastPlayerPid, candidate.ProcessId);
+        var watched = Volatile.Read(ref _captionTitle);
+        if (!string.IsNullOrEmpty(watched) && !string.Equals(watched, candidate.Title, StringComparison.Ordinal))
+        {
+            candidate = candidate with
+            {
+                Title = watched,
+                Artist = Volatile.Read(ref _captionArtist) is { Length: > 0 } artist ? artist : candidate.Artist,
+            };
+        }
+
+        if (KugouWindowTitle.TryRead(candidate.ProcessId) is { Title.Length: > 0 } caption
+            && !string.Equals(caption.Title, candidate.Title, StringComparison.Ordinal))
+        {
+            MediaDiagnostics.LogAlways(
+                $"track.fast title='{candidate.Title}' -> '{caption.Title}' artist='{caption.Artist}'");
+            candidate = candidate with
+            {
+                Title = caption.Title,
+                Artist = string.IsNullOrEmpty(caption.Artist) ? candidate.Artist : caption.Artist,
+            };
+        }
+
         if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
         {
             return candidate;
@@ -588,79 +597,72 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         var statePosition = state.Position;
 
-        // Primary clock: the frames KuGou actually renders. Exact, pause-aware and unable to drift.
+        // Primary clock: count the audio frames KuGou actually renders. The count is exact (ratio
+        // 0.987-0.992 measured), so the only thing needed is an anchor: the track start, or a fresh reading
+        // after a seek. This bypasses the 30-second granularity of the state file entirely.
         if (_loopback.TryStart(candidate.ProcessId))
         {
-            if (_clockOrigin == DateTimeOffset.MinValue)
-            {
-                _clockOrigin = _timeProviderNow();
-            }
-
             var audio = _loopback.Consumed;
-            var wall = _timeProviderNow() - _clockOrigin;
-            if (!string.Equals(_clockTitle, candidate.Title, StringComparison.Ordinal))
+            if (!string.Equals(_frameTrackTitle, candidate.Title, StringComparison.Ordinal))
             {
-                var firstSighting = _clockTitle is null;
-                _clockTitle = candidate.Title;
-                if (firstSighting)
+                _frameTrackTitle = candidate.Title;
+                var sinceWrite = _timeProviderNow() - state.SampledAtUtc;
+                if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(10))
                 {
-                    // Joining mid-song (app start): seed from the best absolute reading we have instead of
-                    // pretending the song just began - otherwise the island restarted every song at 0:00.
-                    var seedAge = TimeSpan.Zero;
-                    var seed = candidate.Position;
-                    if (seed <= TimeSpan.Zero)
-                    {
-                        seed = statePosition;
-                        seedAge = _timeProviderNow() - state.SampledAtUtc;
-                        if (seedAge < TimeSpan.Zero || seedAge > TimeSpan.FromSeconds(30))
-                        {
-                            seedAge = TimeSpan.Zero;
-                        }
-                    }
+                    sinceWrite = TimeSpan.Zero;
+                }
 
-                    _clock.Anchor(seed, audio - seedAge, wall - seedAge);
-                    _clockPendingAnchor = false;
+                // A new title means a new song, which starts at zero - the state file still describes the
+                // PREVIOUS track for a few seconds, so anchoring to it made the new song start at the old
+                // position (measured 223 s, 2026-10-22). Only the very first sighting (app start, mid-song)
+                // uses the state file, because there the song really is somewhere in the middle.
+                // Anchor as precisely as possible: a fresh state-file write describes the new song, so
+                // "what it says + how long ago it was written" is the true position now. Detection itself
+                // costs ~1.5 s (caption poll + repaint), and anchoring to zero at detection time made the
+                // new song permanently ~1.5 s behind (measured 2026-10-22).
+                var firstSighting = _frameAnchorInitialised == false;
+                var stateIsFresh = sinceWrite > TimeSpan.Zero && sinceWrite < TimeSpan.FromSeconds(10);
+                if (firstSighting || (stateIsFresh && statePosition < TimeSpan.FromSeconds(30)))
+                {
+                    _frameAnchorInitialised = true;
+                    _frameAnchorPosition = statePosition;
+                    _frameAnchorAudio = audio - sinceWrite;
                 }
                 else
                 {
-                    _clock.AnchorToTrackStart(audio, wall);
-                    _clockPendingAnchor = true;
+                    _frameAnchorPosition = TimeSpan.Zero;
+                    _frameAnchorAudio = audio;
                 }
             }
 
-            var position = _clock.Advance(audio, wall, _loopback.IsAvailable);
-
-            // A track change leaves the anchor at "start of song"; the player writes the new position a
-            // moment later, and adopting that write is the silent version of the user's pause/resume trick.
-            if (_clockPendingAnchor)
+            var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
+            if (position < TimeSpan.Zero)
             {
-                var writeAge = _timeProviderNow() - state.SampledAtUtc;
-                if (writeAge >= TimeSpan.Zero && writeAge < TimeSpan.FromSeconds(5) && statePosition < TimeSpan.FromSeconds(30))
-                {
-                    _clock.Anchor(statePosition, audio - writeAge, wall - writeAge);
-                    position = _clock.Position;
-                    _clockPendingAnchor = false;
-                }
+                position = TimeSpan.Zero;
             }
 
-            // Every fresh reading from the player is authoritative for that instant; resuming playback
-            // forces one so a pause/resume always leaves the two exactly aligned.
-            var forced = _forceReanchor;
-            _forceReanchor = false;
-            if (candidate.Position > TimeSpan.Zero
-                && (forced || msaaIsFresh)
-                && _clock.TryReanchor(candidate.Position, audio, wall, TimeSpan.FromSeconds(0.4), TimeSpan.FromSeconds(30)))
+            // A freshly repainted clock that disagrees strongly means a seek (or a wrong initial anchor):
+            // adopt it and keep counting frames from there.
+            // Re-anchor on every fresh reading, not only on big jumps: the text is authoritative at the
+            // instant it repaints, so following it keeps the residual error at the text's own 1 s rounding
+            // instead of letting the anchor's error persist for the whole 30 s window.
+            if (msaaIsFresh
+                && candidate.Position > TimeSpan.Zero
+                && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(0.4)
+                && (candidate.Position - position).Duration() < TimeSpan.FromSeconds(30))
             {
-                position = _clock.Position;
+                _frameAnchorAudio = audio;
+                _frameAnchorPosition = candidate.Position;
+                position = candidate.Position;
             }
 
             if (Environment.TickCount64 - _lastFrameLogTick > 2000)
             {
                 _lastFrameLogTick = Environment.TickCount64;
                 MediaDiagnostics.LogAlways(
-                    $"sync.clock pos={position.TotalSeconds:0.0}s text={candidate.Position.TotalSeconds:0.0}s "
-                    + $"ini={statePosition.TotalSeconds:0.0}s audio={audio.TotalSeconds:0.0}s "
-                    + $"frames={_loopback.IsAvailable} title='{candidate.Title}'");
+                    $"sync.frame pos={position.TotalSeconds:0.0}s text={candidate.Position.TotalSeconds:0.0}s "
+                    + $"ini={statePosition.TotalSeconds:0.0}s ageS={( _timeProviderNow() - state.SampledAtUtc).TotalSeconds:0.0} "
+                    + $"anchor={_frameAnchorPosition.TotalSeconds:0.0}s title='{candidate.Title}'");
             }
 
             return candidate with
