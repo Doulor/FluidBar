@@ -6,170 +6,211 @@ namespace FluidBar.Platform.Windows.Media;
 /// Counts the audio frames a single process renders, producing an exact playback clock.
 /// </summary>
 /// <remarks>
-/// <para>Uses the Windows 10 2004+ per-process loopback device (<c>VAD\Process_Loopback</c>) through
-/// <c>ActivateAudioInterfaceAsync</c>. Frames are counted, not decoded: the elapsed audio time is
-/// <c>frames / sampleRate</c>, which advances only while the player is actually rendering.</para>
-/// <para>Verified on 2026-10-22 against KuGou: 4 s wall produced 3.95 s of audio (ratio 0.987), while the
-/// device-wide loopback gave 0.992. Neither an exclusive-mode player nor a DirectUI window can hide from
-/// this, which is why it replaces the 30-second <c>KuGou.ini</c> guesswork.</para>
+/// <para>Uses the Windows 10 2004+ per-process loopback device (<c>VAD\\Process_Loopback</c>) through
+/// <c>ActivateAudioInterfaceAsync</c>. Frames are counted, never decoded: elapsed audio time is
+/// <c>frames / sampleRate</c> and it advances only while the player is actually rendering.</para>
+/// <para>Measured on 2026-10-22 against KuGou: 4 s of wall time produced 3.95 s of audio (ratio 0.987);
+/// the device-wide loopback produced 0.992 for comparison. This removes the 30-second granularity of
+/// <c>KuGou.ini</c>, which was the accuracy ceiling of the previous design.</para>
+/// <para>The capture must run on an MTA thread: the host application's UI thread is STA and the capture
+/// client silently yields no frames there (measured 2026-10-22: estimate froze, island drifted 27 s).</para>
 /// </remarks>
 internal sealed class ProcessLoopbackCapture : IDisposable
 {
-    private const string VirtualDeviceProcessLoopback = "VAD\\Process_Loopback";
-    private const int AudclntShareModeShared = 0;
-    private const int AudclntStreamFlagsLoopback = 0x00020000;
-    private const int AudclntStreamFlagsEventCallback = 0x00040000;
-    private const int AudclntStreamFlagsAutoConvertPcm = unchecked((int)0x80000000);
-    private const int AudclntStreamFlagsSrcDefaultQuality = 0x08000000;
-
-    private readonly object _gate = new();
-    private IAudioClient? _client;
-    private IAudioCaptureClient? _capture;
-    private CompletionHandler? _handler;
+    private readonly Thread _thread;
     private long _frames;
+    private long _lastFrameTick;
     private int _sampleRate = 48000;
-    private int _processId;
+    private int _targetPid;
+    private volatile bool _disposed;
 
-    /// <summary>Elapsed audio time the process has rendered since the capture started.</summary>
-    public TimeSpan Consumed
+    public ProcessLoopbackCapture()
     {
-        get
+        _thread = new Thread(CaptureLoop)
         {
-            lock (_gate)
-            {
-                return TimeSpan.FromSeconds(_frames / (double)_sampleRate);
-            }
-        }
+            IsBackground = true,
+            Name = "fluidbar-process-loopback",
+        };
+        _thread.SetApartmentState(ApartmentState.MTA);
+        _thread.Start();
     }
 
-    /// <summary>True when frames could be read recently (the player is rendering audio).</summary>
-    public bool IsAvailable { get; private set; }
+    /// <summary>Elapsed audio time the process has rendered since it became the capture target.</summary>
+    public TimeSpan Consumed => TimeSpan.FromSeconds(Interlocked.Read(ref _frames) / (double)_sampleRate);
 
-    /// <summary>Starts capturing a process; safe to call repeatedly with the same id.</summary>
+    /// <summary>True when frames arrived within the last 1.5 s (the player is rendering audio).</summary>
+    public bool IsAvailable => Environment.TickCount64 - Interlocked.Read(ref _lastFrameTick) < 1500;
+
+    /// <summary>Points the capture at a process. Safe to call at any rate; only changes restart counting.</summary>
     public bool TryStart(int processId)
     {
-        lock (_gate)
+        if (processId <= 0)
         {
-            if (_client is not null && _processId == processId)
-            {
-                DrainLocked();
-                return true;
-            }
-
-            DisposeLocked();
-            _processId = processId;
-            try
-            {
-                var parameters = BuildActivationParams(processId);
-                var handler = new CompletionHandler();
-                _handler = handler;
-                Activate(VirtualDeviceProcessLoopback, typeof(IAudioClient).GUID, parameters, handler, out _);
-                if (!handler.Wait(3000) || handler.Client is null)
-                {
-                    IsAvailable = false;
-                    return false;
-                }
-
-                _client = handler.Client;
-                var format = CreatePcmFormat(48000, 2, 16);
-                var flags = AudclntStreamFlagsLoopback | AudclntStreamFlagsEventCallback
-                    | AudclntStreamFlagsAutoConvertPcm | AudclntStreamFlagsSrcDefaultQuality;
-                if (_client.Initialize(AudclntShareModeShared, flags, 2_000_000, 0, format, IntPtr.Zero) != 0)
-                {
-                    DisposeLocked();
-                    return false;
-                }
-
-                var captureIid = typeof(IAudioCaptureClient).GUID;
-                if (_client.GetService(ref captureIid, out var capturePtr) != 0 || capturePtr == IntPtr.Zero)
-                {
-                    DisposeLocked();
-                    return false;
-                }
-
-                _capture = (IAudioCaptureClient)Marshal.GetObjectForIUnknown(capturePtr);
-                var eventHandle = CreateEventW(IntPtr.Zero, false, false, IntPtr.Zero);
-                _client.SetEventHandle(eventHandle);
-                if (_client.Start() != 0)
-                {
-                    DisposeLocked();
-                    return false;
-                }
-
-                _frames = 0;
-                IsAvailable = true;
-                return true;
-            }
-            catch (Exception)
-            {
-                DisposeLocked();
-                IsAvailable = false;
-                return false;
-            }
-        }
-    }
-
-    /// <summary>Reads everything the process rendered since the previous call.</summary>
-    public long DrainFrames()
-    {
-        lock (_gate)
-        {
-            return DrainLocked();
-        }
-    }
-
-    private long DrainLocked()
-    {
-        if (_capture is null)
-        {
-            return 0;
+            return false;
         }
 
-        long total = 0;
-        try
+        // KuGou exposes several processes and the reported id changes between polls; switching targets
+        // constantly restarts counting, so keep whichever target is currently producing frames.
+        if (IsAvailable)
         {
-            while (true)
-            {
-                if (_capture.GetNextPacketSize(out var pending) != 0 || pending == 0)
-                {
-                    break;
-                }
-
-                if (_capture.GetBuffer(out _, out var frames, out _, out _, out _) != 0 || frames == 0)
-                {
-                    break;
-                }
-
-                total += frames;
-                _capture.ReleaseBuffer(frames);
-            }
-        }
-        catch (Exception)
-        {
-            IsAvailable = false;
+            return true;
         }
 
-        _frames += total;
-        return total;
+        if (Interlocked.CompareExchange(ref _targetPid, processId, processId) != processId)
+        {
+            Volatile.Write(ref _targetPid, processId);
+            Interlocked.Exchange(ref _frames, 0);
+        }
+
+        return IsAvailable;
     }
 
     public void Dispose()
     {
-        lock (_gate)
+        _disposed = true;
+        _thread.Join(1000);
+    }
+
+    private void CaptureLoop()
+    {
+        CaptureSession? session = null;
+        var activePid = 0;
+        try
         {
-            DisposeLocked();
+            while (!_disposed)
+            {
+                var pid = Volatile.Read(ref _targetPid);
+                if (pid != activePid)
+                {
+                    session?.Dispose();
+                    session = null;
+                    activePid = pid;
+                    if (pid > 0)
+                    {
+                        session = CaptureSession.TryCreate(pid);
+                    }
+                }
+
+                if (session is null)
+                {
+                    Thread.Sleep(300);
+                    continue;
+                }
+
+                var frames = session.Drain();
+                if (frames > 0)
+                {
+                    Interlocked.Add(ref _frames, frames);
+                    Interlocked.Exchange(ref _lastFrameTick, Environment.TickCount64);
+                }
+
+                Thread.Sleep(10);
+            }
+        }
+        finally
+        {
+            session?.Dispose();
         }
     }
 
-    private void DisposeLocked()
+    private sealed class CaptureSession : IDisposable
     {
-        try { _client?.Stop(); } catch { }
-        if (_capture is not null) Marshal.ReleaseComObject(_capture);
-        if (_client is not null) Marshal.ReleaseComObject(_client);
-        _capture = null;
-        _client = null;
-        _handler = null;
-        IsAvailable = false;
+        private const string VirtualDeviceProcessLoopback = "VAD\\Process_Loopback";
+        private const int AudclntShareModeShared = 0;
+        private const int AudclntStreamFlagsLoopback = 0x00020000;
+        private const int AudclntStreamFlagsAutoConvertPcm = unchecked((int)0x80000000);
+        private const int AudclntStreamFlagsSrcDefaultQuality = 0x08000000;
+
+        private IAudioClient? _client;
+        private IAudioCaptureClient? _capture;
+
+        public static CaptureSession? TryCreate(int processId)
+        {
+            try
+            {
+                var parameters = BuildActivationParams(processId);
+                var handler = new CompletionHandler();
+                Activate(VirtualDeviceProcessLoopback, typeof(IAudioClient).GUID, parameters, handler, out _);
+                if (!handler.Wait(2000) || handler.Client is null)
+                {
+                    return null;
+                }
+
+                var format = CreatePcmFormat(48000, 2, 16);
+                var flags = AudclntStreamFlagsLoopback | AudclntStreamFlagsAutoConvertPcm
+                    | AudclntStreamFlagsSrcDefaultQuality;
+                if (handler.Client.Initialize(AudclntShareModeShared, flags, 2_000_000, 0, format, IntPtr.Zero) != 0)
+                {
+                    return null;
+                }
+
+                var captureIid = typeof(IAudioCaptureClient).GUID;
+                if (handler.Client.GetService(ref captureIid, out var capturePtr) != 0 || capturePtr == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var session = new CaptureSession
+                {
+                    _client = handler.Client,
+                    _capture = (IAudioCaptureClient)Marshal.GetObjectForIUnknown(capturePtr),
+                };
+                if (session._client.Start() != 0)
+                {
+                    session.Dispose();
+                    return null;
+                }
+
+                return session;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        public long Drain()
+        {
+            if (_capture is null)
+            {
+                return 0;
+            }
+
+            long total = 0;
+            try
+            {
+                while (true)
+                {
+                    if (_capture.GetNextPacketSize(out var pending) != 0 || pending == 0)
+                    {
+                        break;
+                    }
+
+                    if (_capture.GetBuffer(out _, out var frames, out _, out _, out _) != 0 || frames == 0)
+                    {
+                        break;
+                    }
+
+                    total += frames;
+                    _capture.ReleaseBuffer(frames);
+                }
+            }
+            catch (Exception)
+            {
+                return total;
+            }
+
+            return total;
+        }
+
+        public void Dispose()
+        {
+            try { _client?.Stop(); } catch { }
+            if (_capture is not null) Marshal.ReleaseComObject(_capture);
+            if (_client is not null) Marshal.ReleaseComObject(_client);
+            _capture = null;
+            _client = null;
+        }
     }
 
     private static IntPtr BuildActivationParams(int processId)
@@ -230,9 +271,6 @@ internal sealed class ProcessLoopbackCapture : IDisposable
     private static void Activate(string path, Guid riid, IntPtr parameters,
         IAudioInterfaceCompletionHandler handler, out IAudioInterfaceAsyncOperation operation)
         => ActivateAudioInterfaceAsync(path, riid, parameters, handler, out operation);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateEventW(IntPtr attributes, bool manualReset, bool initialState, IntPtr name);
 
     [ComImport, Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioClient

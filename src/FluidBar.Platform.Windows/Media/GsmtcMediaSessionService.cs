@@ -121,6 +121,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
     private double _stateFilePlayingMs;
 
+    /// <summary>Exact playback clock: counts the audio frames KuGou actually renders.</summary>
+    private readonly ProcessLoopbackCapture _loopback = new();
+
+    /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
+    private TimeSpan _audioAtWrite;
+
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
@@ -538,6 +544,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // track start, 2026-10-22).
             _lastStateTitle = candidate.Title;
             _stateFilePlayingMs = 0;
+            _audioAtWrite = _loopback.Consumed;
             _stateFileWrittenAt = null;
             _stateFileValidFromUtc = _timeProviderNow();
         }
@@ -574,6 +581,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         {
             _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
             _stateFilePlayingMs = 0;
+            _audioAtWrite = _loopback.Consumed;
+        }
+        else if (_loopback.TryStart(candidate.ProcessId))
+        {
+            // The frame counter is exact: it only advances while audio is really rendered, so it needs no
+            // peak gate and cannot run faster or slower than the song (measured ratio 0.987-0.992).
+            var consumed = _loopback.Consumed - _audioAtWrite;
+            if (consumed > TimeSpan.Zero && consumed < TimeSpan.FromMinutes(5))
+            {
+                _stateFilePlayingMs = consumed.TotalMilliseconds;
+            }
         }
         else if (_lastPollAt is { } previous)
         {
