@@ -1240,6 +1240,18 @@ internal sealed class AppBootstrap
         _skiaHost?.Dispose();
         _skiaHost = null;
 
+        // Auxiliary windows are not owned by the island host; close them before the services they
+        // bind to are disposed so their Closed handlers cannot touch half-disposed state.
+        try
+        {
+            _clipboardSearchWindow?.Close();
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        _clipboardSearchWindow = null;
+
         // Update coordinator: stop the schedule and dispose the shared HttpClient.
         if (_updates is not null)
         {
