@@ -481,6 +481,15 @@ internal sealed class AppBootstrap
             SimulateEscape();
             await Task.Delay(1200).ConfigureAwait(true);
             await CaptureAsync("fluidbar-09-collapsed.png", log).ConfigureAwait(true);
+
+            if (Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE_SAFE_MODE") == "1")
+            {
+                _settings?.Update(s => s with { Advanced = s.Advanced with { SafeMode = true } });
+                await Task.Delay(1500).ConfigureAwait(true);
+                _settings?.Update(s => s with { Advanced = s.Advanced with { SafeMode = false } });
+                await Task.Delay(1500).ConfigureAwait(true);
+                log.AppendLine("smoke-safe-mode-toggle-done");
+            }
         }
         catch (Exception ex)
         {
