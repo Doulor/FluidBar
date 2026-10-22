@@ -52,12 +52,16 @@ internal static class KugouWindowTitle
             parts = parts[..^1];
         }
 
-        return parts.Length switch
+        // The caption briefly degrades to just the product name while the next song loads; that is not a
+        // track, and treating it as one made the island switch to a fake entry (2026-10-22).
+        if (parts.Length == 0 || (parts.Length == 1 && (parts[0].Contains(PlayerSuffix, StringComparison.Ordinal) || parts[0].Length < 2)))
         {
-            >= 2 => (string.Join(" - ", parts[..^1]), parts[^1]),
-            1 => (string.Empty, parts[0]),
-            _ => null,
-        };
+            return null;
+        }
+
+        return parts.Length == 1
+            ? (string.Empty, parts[0])
+            : (string.Join(" - ", parts[..^1]), parts[^1]);
     }
 
     private static IntPtr FindMainWindow(int processId)
