@@ -234,6 +234,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
+
+    /// <summary>
+    /// Frame-count clock state for the Qishui candidate — same design as the KuGou frame clock, but
+    /// Soda has no settings file, so the only re-anchor source is its UIA clock text.
+    /// </summary>
+    private string? _qishuiFrameTrackTitle;
+    private TimeSpan _qishuiFrameAnchorAudio;
+    private TimeSpan _qishuiFrameAnchorPosition;
+    private bool _qishuiFrameAnchorReady;
+    private long _qishuiFrameLogTick;
+
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string _captionPendingTitle = string.Empty;
@@ -1243,35 +1254,106 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Overlays the timeline sampled from Soda Music's UIA clock text (dedicated reader thread).
     /// </summary>
     /// <remarks>
-    /// The identity (title/artist/duration) came from the queue cache in <c>FindCandidate</c>; this only
-    /// adds the position. Until the clock element is located the candidate publishes without a timeline
-    /// (duration kept, so the seek row stays hidden instead of drawing a track at zero).
+    /// <para>The identity (title/artist/duration) came from the queue cache in <c>FindCandidate</c>; this
+    /// adds the position. The UIA clock text is the ONLY absolute source, but it is also fragile: the
+    /// Chromium renderer stops updating its accessibility tree when the window loses focus, which froze
+    /// the published position mid-song (user report 2026-10-22: lyrics stopped matching, the island sat
+    /// at one position for minutes). So the UIA text is demoted to a re-anchor source and the position
+    /// itself is counted from the audio frames the player renders — the same primary clock KuGou uses.
+    /// Frames advance while the player renders (focus-independent) and stop on pause.</para>
+    /// <para>Until the clock element is located AND the frame capture is live the candidate publishes
+    /// without a timeline (duration kept, so the seek row stays hidden instead of drawing a track at
+    /// zero).</para>
     /// </remarks>
     private WindowMediaCandidate EnrichWithQishuiClock(WindowMediaCandidate candidate)
     {
         var reader = _qishuiClockReader;
-        if (reader is null)
+        reader?.SetTarget(candidate.ProcessId, candidate.Title);
+        KugouClockSample sample = default;
+        var hasText = reader is not null
+                      && reader.TryRead(out sample)
+                      && string.Equals(sample.Title, candidate.Title, StringComparison.Ordinal);
+        var text = hasText ? sample : default(KugouClockSample);
+        var textAge = hasText ? sample.AgeMs : long.MaxValue;
+
+        // Primary clock: count the audio frames Soda actually renders (ratio ~0.99 measured for KuGou).
+        // No settings file exists for Soda, so a track change anchors at zero and a fresh UIA flip
+        // re-anchors — that is the whole state machine.
+        if (_loopback.TryStart(candidate.ProcessId))
         {
-            return candidate;
+            var audio = _loopback.Consumed;
+            if (!string.Equals(_qishuiFrameTrackTitle, candidate.Title, StringComparison.Ordinal))
+            {
+                _qishuiFrameTrackTitle = candidate.Title;
+                // A fresh text reading describes THIS track: anchor there (app start mid-song, or the
+                // text flipped right after the queue cache noticed the switch). Otherwise start at zero.
+                var textIsFresh = hasText && textAge < 3000;
+                _qishuiFrameAnchorPosition = textIsFresh ? text.Position : TimeSpan.Zero;
+                _qishuiFrameAnchorAudio = audio;
+                _qishuiFrameAnchorReady = true;
+            }
+
+            if (_qishuiFrameAnchorReady)
+            {
+                var position = _qishuiFrameAnchorPosition + (audio - _qishuiFrameAnchorAudio);
+                if (position < TimeSpan.Zero)
+                {
+                    position = TimeSpan.Zero;
+                }
+
+                // A fresh text reading that disagrees means a seek (or a stale zero anchor): adopt it.
+                // Same window as the KuGou clock: too-small differences are the text's own 1 s rounding.
+                if (hasText
+                    && textAge < 2500
+                    && text.Position > TimeSpan.Zero
+                    && (text.Position - position).Duration() > TimeSpan.FromSeconds(0.4)
+                    && (text.Position - position).Duration() < TimeSpan.FromSeconds(30))
+                {
+                    _qishuiFrameAnchorAudio = audio;
+                    _qishuiFrameAnchorPosition = text.Position;
+                    position = text.Position;
+                }
+
+                if (Environment.TickCount64 - _qishuiFrameLogTick > 2000)
+                {
+                    _qishuiFrameLogTick = Environment.TickCount64;
+                    MediaDiagnostics.LogAlways(
+                        $"sync.qishui-frame pos={position.TotalSeconds:0.0}s text={(hasText ? text.Position.TotalSeconds : -1):0.0}s "
+                        + $"textAgeMs={textAge} anchor={_qishuiFrameAnchorPosition.TotalSeconds:0.0}s title='{candidate.Title}'");
+                }
+
+                return candidate with
+                {
+                    Position = position,
+                    PositionSampledAtUtc = _timeProviderNow(),
+                    HasTimeline = true,
+                    TimelineSource = PlayerTimelineSource.AudioFrames,
+                };
+            }
         }
 
-        reader.SetTarget(candidate.ProcessId, candidate.Title);
-        if (!reader.TryRead(out var sample)
-            || !string.Equals(sample.Title, candidate.Title, StringComparison.Ordinal))
+        if (Environment.TickCount64 - _qishuiFrameLogTick > 5000)
         {
-            // No reading for THIS track yet: keep the queue-cache duration but publish no timeline.
+            _qishuiFrameLogTick = Environment.TickCount64;
+            MediaDiagnostics.LogAlways(
+                $"sync.qishui-noframe pid={candidate.ProcessId} text={(hasText ? text.Position.TotalSeconds : -1):0.0}s textAgeMs={textAge} title='{candidate.Title}'");
+        }
+
+        if (!hasText)
+        {
+            // No frame capture and no text: keep the queue-cache duration but publish no timeline.
             return candidate;
         }
 
         return candidate with
         {
-            Position = sample.Position,
-            Duration = sample.Duration > TimeSpan.Zero ? sample.Duration : candidate.Duration,
-            PositionSampledAtUtc = _timeProviderNow() - TimeSpan.FromMilliseconds(sample.AgeMs),
+            Position = text.Position,
+            Duration = text.Duration > TimeSpan.Zero ? text.Duration : candidate.Duration,
+            PositionSampledAtUtc = _timeProviderNow() - TimeSpan.FromMilliseconds(text.AgeMs),
             HasTimeline = true,
             TimelineSource = PlayerTimelineSource.Accessibility,
-            TextFlipped = sample.Flipped,
-            TextShown = sample.Shown,
+            TextFlipped = text.Flipped,
+            TextShown = text.Shown,
         };
     }
 
@@ -1298,10 +1380,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private bool DetermineFallbackPlaying(WindowMediaCandidate candidate)
     {
         // A frozen position only means "paused" after the source has refreshed without moving; the
-        // accessibility timeline refreshes every second, the settings file every ~30 s.
-        var staleAfter = candidate.TimelineSource == PlayerTimelineSource.Accessibility
-            ? FallbackPlaybackTracker.AccessibilityStaleAfter
-            : FallbackPlaybackTracker.StateFileStaleAfter;
+        // frame-count and accessibility timelines refresh every 250 ms / second, the settings file
+        // only every ~30 s.
+        var staleAfter = candidate.TimelineSource switch
+        {
+            PlayerTimelineSource.Accessibility => FallbackPlaybackTracker.AccessibilityStaleAfter,
+            PlayerTimelineSource.AudioFrames => FallbackPlaybackTracker.AccessibilityStaleAfter,
+            _ => FallbackPlaybackTracker.StateFileStaleAfter,
+        };
         return _fallbackPlayback.Observe(candidate.TrackKey, candidate.HasTimeline, candidate.Position,
             candidate.PositionSampledAtUtc, staleAfter);
     }

@@ -793,7 +793,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         {
             _lastSyncTextLogMs = Environment.TickCount64;
             FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
-                $"sync.island {position.TotalSeconds,7:0.0}s text='{(int)(position.TotalSeconds / 60)}:{(int)(position.TotalSeconds % 60):00}' title='{media.Title}'");
+                $"sync.island {position.TotalSeconds,7:0.0}s text='{(int)(position.TotalSeconds / 60)}:{(int)(position.TotalSeconds % 60):00}' title='{media.Title}' key='{media.TrackKey}' playing={isPlaying}");
         }
 
         _logger.Information(LogCategories.Platform, "position.anchor",

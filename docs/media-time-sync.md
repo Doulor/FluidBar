@@ -169,3 +169,20 @@
 
 这是整晚唯一一次把误差压进"文本自身 1 秒量化"以内：帧计数负责两次刷新之间的推进，
 文本负责纠正锚点，两者互补。ini 不再是必需品（仅用于启动时的首次锚定）。
+
+## 2026-10-22 晚：汽水音乐已注册 SMTC（重要认知更新）
+
+新版汽水注册了 SMTC，FluidBar 走 GSMTC 路径消费其位置/元数据
+（TrackKey 形如 `汽水音乐|标题|艺术家|`）。旧结论「Soda never registers
+with SMTC」（3.2.1 实测）已过时，SMTC Timeline 健康时进度正常。
+
+后备链路（SMTC 不可用时）：`EnrichWithQishuiClock` 升级为帧计数主时钟
+（`ProcessLoopbackCapture`，`TimelineSource.AudioFrames`）+ UIA 文本重锚。
+UIA 单元素在窗口失焦后会冻结（Chromium 停更无障碍树），不能作为唯一
+位置源——2026-10-22 晚的 `105.8s` 分钟级冻结即此因。
+
+`ProcessLoopbackCapture.TryStart` 收紧：目标被其他进程占用并出帧时返回
+false，防止双播放器轮询互抢目标、每次切换清零帧计数。
+
+诊断：`sync.island` 行新增 `key=` 字段区分候选来源（`win:`=窗口回退，
+其余=GSMTC）；帧时钟路径每 2 s 打 `sync.qishui-frame`。

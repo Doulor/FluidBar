@@ -114,6 +114,12 @@ internal enum PlayerTimelineSource
 
     /// <summary>Position read from the player's accessibility tree (updated every second).</summary>
     Accessibility,
+
+    /// <summary>
+    /// Position counted from the player's rendered audio frames (250 ms poll; advances while the
+    /// player renders, stops on pause and keeps running when the UI tree goes stale).
+    /// </summary>
+    AudioFrames,
 }
 
 /// <summary>Media snapshot derived from a player window title (players without SMTC/GSMTC support).</summary>

@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-22（晚）— 汽水音乐进度链路：SMTC 认知更新 + 帧计数 fallback
+
+- **新认知**：新版汽水音乐已注册 SMTC（此前文档结论「Soda never registers with SMTC」基于 3.2.1，已过时）。 FluidBar 现在经 GSMTC 路径消费汽水的位置/元数据（TrackKey 形如 `汽水音乐|标题|艺术家|`），SMTC Timeline 健康时进度正常推进。`sync.island` 诊断行补 `key=` 字段用于区分候选来源（`win:`=窗口回退，其余=GSMTC）。
+- **帧计数 fallback**：`EnrichWithQishuiClock` 升级为「帧计数主时钟 + UIA 文本重锚」（与酷狗同构，`TimelineSource.AudioFrames`）——SMTC 路径不可用时兜底；UIA 文本节点在窗口失焦后会冻结（Chromium 停更无障碍树），不再作为唯一位置源。换曲归零、新鲜文本重锚（0.4–30 s 窗口）。
+- **`ProcessLoopbackCapture.TryStart` 收紧**：采集目标正被其他进程占用并出帧时返回 false 而不再抢夺——此前两个播放器轮询会互相偷目标、每次切换清零帧计数。
+- **真机记录**（22:00 前后）：切歌窗口内出现 `26s → 88s` 位置跳变与 `105.8s` 冻结（旧实例、SMTC Timeline 停更窗口 + 岛时钟冻结共同作用），新实例经恢复分支修复后切歌即恢复推进（用户确认新歌歌词/进度匹配正常）。
+
 ## 2026-10-22 — 修复暂停→恢复→暂停时歌词定位偏移 + 歌词行尾二进制垃圾
 
 ### 暂停→恢复→暂停，歌词冻结数秒后猛跳
