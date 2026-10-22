@@ -138,6 +138,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
+
+    /// <summary>Set when playback resumes: the next cross-check re-anchors on the clock text.</summary>
+    private bool _forceReanchor;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -365,7 +368,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     // Keep the paused track on screen. Hiding it after 5 s made the island disappear
                     // whenever the level probe mis-read a playing player as silent (user report
                     // 2026-10-22: "音乐灵动岛不显示了").
-                    Publish(retained with { IsPlaying = false });
+                    // Pausing freezes the clock in the app; force the next cross-check to adopt the player's reading
+            // so the frozen value is exact and the resume continues from it (2026-10-22).
+            _forceReanchor = true;
+            Publish(retained with { IsPlaying = false });
 
                     _fallbackPoller?.SetInterval(FallbackPollInterval);
                     return;
@@ -646,8 +652,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // Re-anchor on every fresh reading, not only on big jumps: the text is authoritative at the
             // instant it repaints, so following it keeps the residual error at the text's own 1 s rounding
             // instead of letting the anchor's error persist for the whole 30 s window.
-            if (msaaIsFresh
-                && candidate.Position > TimeSpan.Zero
+            // Playback resuming is a perfect synchronisation point: the player restarts exactly where it
+            // stopped, so adopting its reading then (even before the text repaints) clears the accumulated
+            // offset. This automates the pause/resume trick the user discovered on 2026-10-22.
+            var forced = _forceReanchor;
+            _forceReanchor = false;
+            if (candidate.Position > TimeSpan.Zero
+                && (forced || msaaIsFresh)
                 && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(0.4)
                 && (candidate.Position - position).Duration() < TimeSpan.FromSeconds(30))
             {
