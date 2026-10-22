@@ -138,6 +138,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
+
+    /// <summary>State-file write the anchor was last snapped to (polling alignment).</summary>
+    private DateTimeOffset _lastAnchorWriteUtc = DateTimeOffset.MinValue;
+
+    /// <summary>When the current frame anchor's track started changing (guards the first state write).</summary>
+    private DateTimeOffset _frameTrackChangedAtUtc = DateTimeOffset.MinValue;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -635,9 +641,31 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (_loopback.TryStart(candidate.ProcessId))
         {
             var audio = _loopback.Consumed;
+
+            // Polling alignment: every time the player rewrites its state file it states the exact position,
+            // so snap the anchor to it instead of letting the residual error accumulate. This is the
+            // automatic version of "pause, wait, play" - the only moment the user found to be perfectly
+            // aligned (2026-10-22). Skipped for a moment after a track change, where the previous song's
+            // value is still in the file.
+            var wroteNow = state.SampledAtUtc != _lastAnchorWriteUtc;
+            _lastAnchorWriteUtc = state.SampledAtUtc;
+            var sinceTrackChange = _timeProviderNow() - _frameTrackChangedAtUtc;
+            if (wroteNow
+                && _frameAnchorInitialised
+                && sinceTrackChange > TimeSpan.FromSeconds(3)
+                && statePosition > TimeSpan.Zero)
+            {
+                var writeAge = _timeProviderNow() - state.SampledAtUtc;
+                if (writeAge >= TimeSpan.Zero && writeAge < TimeSpan.FromSeconds(10))
+                {
+                    _frameAnchorPosition = statePosition;
+                    _frameAnchorAudio = audio - writeAge;
+                }
+            }
             if (!string.Equals(_frameTrackTitle, candidate.Title, StringComparison.Ordinal))
             {
                 _frameTrackTitle = candidate.Title;
+                _frameTrackChangedAtUtc = _timeProviderNow();
                 var sinceWrite = _timeProviderNow() - state.SampledAtUtc;
                 if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(10))
                 {
