@@ -65,7 +65,7 @@ public sealed class CalendarEventService : IAsyncDisposable
             var start = new DateTimeOffset(DateTime.Today);
             var appointments = await store.FindAppointmentsAsync(start, TimeSpan.FromDays(62));
             var next = CountByDay(appointments.Select(appointment => appointment.StartTime));
-            if (!next.SequenceEqual(_counts))
+            if (!CountsEqual(next, _counts))
             {
                 Volatile.Write(ref _counts, next);
                 Changed?.Invoke(this, EventArgs.Empty);
@@ -76,6 +76,26 @@ public sealed class CalendarEventService : IAsyncDisposable
             // AppointmentStore.GetDefaultAsync is commonly denied for unpackaged processes.
             _logger.LogDebug(PlatformLogCategory.Monitor, "widgets.calendar", "Calendar events unavailable.");
         }
+    }
+
+    internal static bool CountsEqual(
+        IReadOnlyDictionary<DateOnly, int> left,
+        IReadOnlyDictionary<DateOnly, int> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var pair in left)
+        {
+            if (!right.TryGetValue(pair.Key, out var value) || value != pair.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Pure date bucketing used by the refresh loop and unit tests.</summary>
