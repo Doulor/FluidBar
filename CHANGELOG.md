@@ -13,6 +13,22 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **发布资产**：release workflow 现在把 `build/publish/win-x64/FluidBar.exe` 作为独立资产上传；更新检查默认的 `FluidBar.*\.exe# Changelog
+
+所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
+
+## 2026-10-22 — 预览版 v1 第一轮硬化：输入状态机 / 全屏 / 单实例 / 空态回退
+
+- **鼠标钩子按下态**：`IslandMouseHook` 抽出可测试的 `GestureTracker`；岛内按下、岛外松开现在一定产生 `Released + Left`，不再把 `_pressed` 留到下一次普通移动（旧行为：幽灵拖拽、页面自己乱翻、下一次点击丢失 release）。
+- **看门狗误判**：健康判断从「10 秒前采样位置」改为「与钩子最后上报的位置比较」。本机日志 43 分钟出现 55 次 `island.mouse-hook-reinstalled`（约 47 秒一次）；修复后只有钩子真的没有回调才重装。重装同时复位手势与光标基准。
+- **命中区跟随放置**：`OnPlacementRequested` 现在 `UpdateHitRegions(force:true)`。切锚点/模式后旧位置的「隐形吃点击区」消失。
+- **拖拽出壳**：pager 拖拽记住起始窗口并按屏幕坐标继续映射，拖过面板边缘不再提前结算；松开/离开时清理 `_hookDragActive` / `_hookDragWindow`。
+- **滚轮亚档**：钩子保留 `mouseData / 120.0` 的小数，`OnHookWheel` 接受 `double`，触摸板 40/80 单位滚动不再被整数除法吞掉。
+- **全屏抑制**：新增 `FullscreenDetector`（前台窗口矩形覆盖显示器 + 无 `WS_CAPTION`/有 `WS_POPUP`）；`SkiaIslandHost` 每秒轮询并通过 `SuppressionChanged` 隐藏/恢复岛。普通最大化窗口不会误判。
+- **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
+- **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
+- **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+ 资产模式终于能匹配到安装包，不再只上传 zip 导致“检查到新版本但找不到安装器”。
 - **剪贴板文件行**：`ClipboardItemData`/`ClipboardContentKind` 新增文件类型，文件行使用文档图标与“文件/File”类型标签（此前一律按文本渲染）。同时修正 Pin 图标判断仍按 preview 文本匹配的问题，持久化摘要现在真正映射到行状态。
 - **通知清空/托盘**：新增 `NotificationClearAll` 动作与 `NotificationService.ClearRecent()`（只清岛内列表，不动 Action Center；水位保持，已存在 toast 不会被下次轮询重放）；托盘菜单新增“清空通知”。同时修复托盘“隐藏”菜单项只显示不生效（switch 缺 `hide` 分支）。
 - **主题显示**：外观页的“桌面主题”分段控件补回“跟随系统”选项；`AppTheme.System` 不再显示成“深色已选中”，选 System 会真正写回 `AppTheme.System`。

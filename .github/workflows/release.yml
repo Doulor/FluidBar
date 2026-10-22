@@ -75,6 +75,7 @@ jobs:
           name: FluidBar-${{ steps.version.outputs.version }}-win-x64
           path: |
             build/artifacts/*.zip
+            build/publish/win-x64/FluidBar.exe
             build/reports/publish-${{ steps.version.outputs.version }}.json
           if-no-files-found: error
           retention-days: 14
@@ -87,12 +88,13 @@ jobs:
         run: |
           $version = '${{ steps.version.outputs.version }}'
           $zip = Get-ChildItem build/artifacts/*.zip | Select-Object -First 1
+          $exe = Get-ChildItem build/publish/win-x64/FluidBar.exe | Select-Object -First 1
           $manifest = Get-ChildItem "build/reports/publish-$version.json" | Select-Object -First 1
-          if (-not $zip -or -not $manifest) {
-            throw 'release artifact or publish manifest is missing'
+          if (-not $zip -or -not $exe -or -not $manifest) {
+            throw 'release artifact, installer exe or publish manifest is missing'
           }
-          Write-Host "Uploading $($zip.Name); SHA-256 manifest=$($manifest.Name); signing: unsigned"
-          gh release create "v$version" $zip.FullName $manifest.FullName `
+          Write-Host "Uploading $($zip.Name), $($exe.Name); SHA-256 manifest=$($manifest.Name); signing: unsigned"
+          gh release create "v$version" $zip.FullName $exe.FullName $manifest.FullName `
             --title "FluidBar $version" `
             --notes "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker." `
             --verify-tag
