@@ -459,7 +459,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Weather or task data changed (widgets page repaint).</summary>
     private void OnCalendarEventsChanged(object? sender, EventArgs e)
-        => Changed?.Invoke(this, EventArgs.Empty);
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnWidgetDataChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
     {
@@ -2051,6 +2058,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         _settings.Changed -= OnSettingsChanged;
+        _calendarEvents.Changed -= OnCalendarEventsChanged;
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("usb-devices", () => _usbDevices.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-devices", () => _bluetoothDevices.DisposeAsync().AsTask()).ConfigureAwait(false);
