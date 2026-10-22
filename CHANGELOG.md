@@ -17,6 +17,7 @@
 - **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
 - **preview.14 发布 + smoke 通过**：包含 smoke fullscreen bypass 的 release `publish.ps1 -Version 2.0.0-preview.14 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `C58080C1...2EE38A0`。隔离 settings 的 release smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
+- **preview.16 发布 + smoke**：包含 surrogate 修复、SafeMode 下次启动策略；release zip 19.63 MB、无 PDB，exe SHA-256 `DAA071F7...F8BA64`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **无效 UTF-16 surrogate 防崩**：`TextEngine` 在 shaping 前把孤立 high/low surrogate 替换为 U+FFFD；修复 preview.15 release smoke 在通知页 `char.ConvertToUtf32` 抛异常，新增 3 个回归用例。
 - **SafeMode 改为下次启动生效**：运行中创建第二个 `PluginRuntime` 不可靠（第二次 `CreateAsync` 会阻塞），因此 SafeMode 变更现在只持久化并记录 `plugin.runtime.restart-required`，下次启动应用；Advanced 页提示同步改为“下次启动生效”。
 - **Runtime 替换顺序修正**：SafeMode rebuild 先组合新 `PluginRuntime`，成功后再把旧 runtime 放后台 retire；旧 runtime 的 plugin/host dispose 加 500ms 上限。首次 `SafeMode=true` smoke 已出现 `compose-returned` + `plugin.runtime.started`；`SafeMode=false` 的第二次重建仍需继续验证。

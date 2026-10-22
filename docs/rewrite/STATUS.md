@@ -22,6 +22,7 @@
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
 - **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
+- **preview.16**：surrogate 修复发布，release smoke 六页 Expanded 通过。
 - **surrogate 防崩**：TextEngine 替换孤立 surrogate，通知页 smoke 不再崩。
 - **SafeMode**：改为下次启动生效，避免第二次 composition 阻塞。
 - **替换顺序**：新 runtime 先组合，旧 runtime 后台 retire；首次 SafeMode true 成功，false 待验。
