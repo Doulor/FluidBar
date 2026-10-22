@@ -22,6 +22,7 @@
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
 - **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
+- **重建阶段**：日志显示 old disposed 后 compose 未返回；待修。
 - **SafeMode 诊断**：change/rebuild-start 日志；smoke 两次 True/False 均触发。
 - **SafeMode runtime smoke**：`FLUIDBAR_SMOKE_SAFE_MODE=1` 触发卸载/重建日志。
 - **Settings 订阅**：提前到 shell 之前，SafeMode 不依赖 tray。

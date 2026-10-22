@@ -17,6 +17,7 @@
 - **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
 - **preview.14 发布 + smoke 通过**：包含 smoke fullscreen bypass 的 release `publish.ps1 -Version 2.0.0-preview.14 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `C58080C1...2EE38A0`。隔离 settings 的 release smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
+- **SafeMode 重建阶段日志**：新增 `plugin.runtime.rebuild-old-disposed`、`rebuild-compose`、`compose-enter`、`compose-task-started`，定位到第二次 `PluginRuntime.CreateAsync` 在重建时未返回；尚未修复。
 - **SafeMode rebuild 诊断日志**：`plugin.runtime.safe-mode-change` 和 `plugin.runtime.rebuild-start` 记录调度/开始；`FLUIDBAR_SMOKE_SAFE_MODE=1` smoke 实际出现 True/False 两次 change + 两次 rebuild-start，确认 Settings 订阅路径生效。
 - **SafeMode runtime smoke**：`FLUIDBAR_SMOKE_SAFE_MODE=1` 时 smoke 在截图后切换 SafeMode true/false；日志出现 plugin host unload/rebuild 序列，验证 AppBootstrap 的 Settings 订阅路径。
 - **Settings 订阅提前**：`AppBootstrap` 在 `_settings` 创建后立即订阅 `Changed`，不再依赖 `StartShellIntegrationAsync` 成功；即使 tray/hotkey 初始化失败（或 `FLUIDBAR_NO_TRAY=1`），SafeMode 变更仍会触发 runtime rebuild。

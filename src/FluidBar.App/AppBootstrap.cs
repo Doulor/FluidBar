@@ -897,9 +897,15 @@ internal sealed class AppBootstrap
             if (old is not null)
             {
                 await old.DisposeAsync().ConfigureAwait(true);
+                _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-old-disposed",
+                    "The old plugin runtime was disposed.");
             }
 
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose",
+                "Composing the replacement plugin runtime.");
             await StartPluginRuntimeAsync().ConfigureAwait(true);
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose-complete",
+                "The replacement plugin runtime composition returned.");
 
             // The settings window captured the old marketplace/plugin services in its context. Closing
             // it forces the next open to bind the rebuilt runtime instead of calling disposed objects.
@@ -1057,7 +1063,14 @@ internal sealed class AppBootstrap
                 BuiltinPackageDirectory = AppContext.BaseDirectory,
             };
 
-            _pluginRuntime = await Task.Run(() => PluginRuntime.CreateAsync(options)).ConfigureAwait(true);
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.compose-enter",
+                "Starting plugin runtime composition.");
+            var composeTask = Task.Run(() => PluginRuntime.CreateAsync(options));
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.compose-task-started",
+                "Plugin runtime composition task started.");
+            _pluginRuntime = await composeTask.ConfigureAwait(true);
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.compose-returned",
+                "Plugin runtime composition returned.");
             var report = _pluginRuntime.Report;
             if (SafeModeActive)
             {
