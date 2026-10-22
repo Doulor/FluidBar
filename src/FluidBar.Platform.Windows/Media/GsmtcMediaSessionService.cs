@@ -60,6 +60,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private GlobalSystemMediaTransportControlsSession? _session;
     private BackgroundPoller? _fallbackPoller;
 
+    /// <summary>Watches the player window caption so a track change is seen within a poll.</summary>
+    private BackgroundPoller? _captionPoller;
+
     /// <summary>Window-title fallback poll period (the accessibility read is cheap; 250 ms tracks taps).</summary>
     public static readonly TimeSpan FallbackPollInterval = TimeSpan.FromMilliseconds(250);
     private readonly IMediaKeySender? _mediaKeySender;
@@ -135,6 +138,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
+    private int _lastPlayerPid;
+    private string? _captionTitle;
+    private string? _captionArtist;
 
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
@@ -243,6 +249,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // 250 ms: the MSAA read is a few microseconds and the play/pause glyph is the only fast signal a
         // fallback player (KuGou) gives us — at 1 s the island's icon lagged visibly behind the tap.
         _fallbackPoller = new BackgroundPoller("media-fallback", FallbackPollInterval, PollWindowFallback, _logger);
+        // A track change must show up within a poll, not within the accessibility refresh: the caption of the
+        // player window changes immediately, so watch it on its own 250 ms timer.
+        _captionPoller = new BackgroundPoller("media-caption", FallbackPollInterval, PollPlayerCaption, _logger);
+        _captionPoller.Start();
         _fallbackPoller.Start();
     }
 
@@ -270,6 +280,27 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Fallback tick: when GSMTC has no active session, find the process that is actually producing
     /// sound and publish its window-title metadata. No artwork/timeline exists on this path.
     /// </summary>
+    private void PollPlayerCaption()
+    {
+        var pid = Volatile.Read(ref _lastPlayerPid);
+        if (pid <= 0 || KugouWindowTitle.TryRead(pid) is not { Title.Length: > 0 } caption)
+        {
+            return;
+        }
+
+        if (string.Equals(caption.Title, Volatile.Read(ref _captionTitle), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Volatile.Write(ref _captionTitle, caption.Title);
+        Volatile.Write(ref _captionArtist, caption.Artist);
+        // Force the next cross-check to treat this as a brand-new track.
+        _frameTrackTitle = null;
+        _lastSyncCheckMs = 0;
+        MediaDiagnostics.LogAlways($"track.caption title='{caption.Title}' artist='{caption.Artist}'");
+    }
+
     private void PollWindowFallback()
     {
         if (State != PlatformMonitorState.Running || _manager is null)
@@ -536,6 +567,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         // The window caption changes the moment the song does, unlike the accessibility text (30 s cadence).
         // Adopting it here makes the island switch within one poll (250 ms) instead of several seconds.
+        Volatile.Write(ref _lastPlayerPid, candidate.ProcessId);
+        var watched = Volatile.Read(ref _captionTitle);
+        if (!string.IsNullOrEmpty(watched) && !string.Equals(watched, candidate.Title, StringComparison.Ordinal))
+        {
+            candidate = candidate with
+            {
+                Title = watched,
+                Artist = Volatile.Read(ref _captionArtist) is { Length: > 0 } artist ? artist : candidate.Artist,
+            };
+        }
+
         if (KugouWindowTitle.TryRead(candidate.ProcessId) is { Title.Length: > 0 } caption
             && !string.Equals(caption.Title, candidate.Title, StringComparison.Ordinal))
         {
