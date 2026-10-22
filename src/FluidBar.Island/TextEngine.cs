@@ -290,7 +290,8 @@ public sealed class TextEngine : IDisposable
         SKRect area,
         SKColor color,
         TextAlign align = TextAlign.Left,
-        float opacity = 1f)
+        float opacity = 1f,
+        SKMaskFilter? maskFilter = null)
     {
         if (string.IsNullOrEmpty(text) || area.Width <= 1 || area.Height <= 1 || opacity <= 0.01f)
         {
@@ -298,7 +299,7 @@ public sealed class TextEngine : IDisposable
         }
 
         var layout = GetLayout(text, style, area.Width);
-        DrawLayout(canvas, layout, area, color, align, opacity);
+        DrawLayout(canvas, layout, area, color, align, opacity, maskFilter);
     }
 
     /// <summary>Draws a previously measured layout inside <paramref name="area"/>.</summary>
@@ -308,7 +309,8 @@ public sealed class TextEngine : IDisposable
         SKRect area,
         SKColor color,
         TextAlign align,
-        float opacity = 1f)
+        float opacity = 1f,
+        SKMaskFilter? maskFilter = null)
     {
         if (opacity <= 0.01f)
         {
@@ -326,10 +328,14 @@ public sealed class TextEngine : IDisposable
             ? color
             : color.WithAlpha((byte)Math.Clamp(color.Alpha * opacity, 0, 255));
 
+        _paint.MaskFilter = maskFilter;
         for (var i = 0; i < layout.Blobs.Length; i++)
         {
             canvas.DrawText(layout.Blobs[i], x + layout.Offsets[i], baseline, _paint);
         }
+
+        // The paint is shared: a blur left on it would smear every later draw of this frame.
+        _paint.MaskFilter = null;
     }
 
     /// <summary>Drops every cached layout (locale/theme/DPI change) while keeping fonts and typefaces.</summary>

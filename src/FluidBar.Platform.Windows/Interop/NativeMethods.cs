@@ -38,6 +38,7 @@ internal static partial class NativeMethods
     internal const uint WM_LBUTTONUP = 0x0202;
     internal const uint WM_LBUTTONDBLCLK = 0x0203;
     internal const uint WM_RBUTTONUP = 0x0205;
+    internal const uint WM_RBUTTONDBLCLK = 0x0206;
     internal const uint WM_KEYDOWN = 0x0100;
     internal const uint WM_KEYUP = 0x0101;
     internal const uint WM_SYSKEYDOWN = 0x0104;
@@ -667,6 +668,12 @@ internal static partial class NativeMethods
 
         [DllImport(Lib)]
         internal static extern bool IsWindowVisible(IntPtr hWnd);
+
+    internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [DllImport(Lib, CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern int GetClassNameW(IntPtr hWnd, [Out] char[] lpClassName, int nMaxCount);

@@ -4,8 +4,9 @@ using FluidBar.Platform.Windows.Media.Lyrics;
 namespace FluidBar.Platform.Tests;
 
 /// <summary>
-/// The current lyric line switches on the next line's <c>StartMs</c>, not on the previous line's end
-/// (a gap between the two must never hold the old line on screen).
+/// A lyric line must be on screen BEFORE its first word is sung: the island's clock comes from the
+/// player's whole-second text and runs a fraction behind the audio, so the selection carries a small
+/// lead. A finished line also hands over immediately, however far away the next timestamp is.
 /// </summary>
 public sealed class LyricLineSelectionTests
 {
@@ -16,31 +17,51 @@ public sealed class LyricLineSelectionTests
             new LyricsLine(TimeSpan.FromMilliseconds(2000), "Line B"),
             new LyricsLine(TimeSpan.FromMilliseconds(3000), "Line C")));
 
+    private static LyricsDocument WordTimed(params LyricsLine[] lines)
+        => new("t", "a", "test", ImmutableArray.Create(lines));
+
+    private static string? At(LyricsDocument document, int ms)
+        => LyricsTimelineSelector.SelectDetailed(document, TimeSpan.FromMilliseconds(ms), null, null).Current;
+
     [Fact]
-    public void Line_switches_exactly_on_the_next_start()
+    public void Line_appears_before_its_first_word()
     {
         var document = Document();
 
-        Assert.Equal("Line A", LyricsTimelineSelector.SelectDetailed(document,
-            TimeSpan.FromMilliseconds(1999), null, null).Current);
-        Assert.Equal("Line B", LyricsTimelineSelector.SelectDetailed(document,
-            TimeSpan.FromMilliseconds(2000), null, null).Current);
-        Assert.Equal("Line B", LyricsTimelineSelector.SelectDetailed(document,
-            TimeSpan.FromMilliseconds(2999), null, null).Current);
-        Assert.Equal("Line C", LyricsTimelineSelector.SelectDetailed(document,
-            TimeSpan.FromMilliseconds(3000), null, null).Current);
+        // The lead (250 ms) makes Line B current before its 2000 ms timestamp.
+        Assert.Equal("Line A", At(document, 1700));
+        Assert.Equal("Line B", At(document, 1780));
+        Assert.Equal("Line B", At(document, 2000));
+        Assert.Equal("Line C", At(document, 2800));
     }
 
     [Fact]
-    public void Gap_between_lines_does_not_delay_the_switch()
+    public void Finished_line_hands_over_immediately_across_a_long_gap()
     {
-        // Line A "ends" long before 2000 (no end times exist), yet the switch still happens at 2000 sharp.
-        var document = Document();
-        for (var ms = 1990; ms <= 2010; ms += 2)
-        {
-            var selection = LyricsTimelineSelector.SelectDetailed(document,
-                TimeSpan.FromMilliseconds(ms), null, null);
-            Assert.Equal(ms >= 2000 ? "Line B" : "Line A", selection.Current);
-        }
+        // Line A's words end ~1600 ms; Line B starts at 6000 ms. A used to stay on screen for the whole
+        // gap and B only appeared once the singing had already started.
+        var document = WordTimed(
+            new LyricsLine(TimeSpan.FromMilliseconds(1000), "Line A", null,
+                ImmutableArray.Create(new LyricWord(0, 2, "Li"), new LyricWord(200, 4, "ne A"))),
+            new LyricsLine(TimeSpan.FromMilliseconds(6000), "Line B"));
+
+        Assert.Equal("Line A", At(document, 1200));
+        Assert.Equal("Line B", At(document, 1500));
+    }
+
+    [Fact]
+    public void Sweep_starts_at_zero_when_the_line_is_shown_early()
+    {
+        var document = WordTimed(
+            new LyricsLine(TimeSpan.FromMilliseconds(1000), "Line A", null,
+                ImmutableArray.Create(new LyricWord(0, 2, "Li"), new LyricWord(200, 4, "ne A"))),
+            new LyricsLine(TimeSpan.FromMilliseconds(6000), "Line B", null,
+                ImmutableArray.Create(new LyricWord(0, 2, "Li"), new LyricWord(200, 4, "ne B"))));
+
+        // Line B is already displayed at 5700 ms (lead) but nothing of it is highlighted yet.
+        var selection = LyricsTimelineSelector.SelectDetailed(document,
+            TimeSpan.FromMilliseconds(5700), null, null);
+        Assert.Equal("Line B", selection.Current);
+        Assert.Equal(0, selection.Highlight);
     }
 }

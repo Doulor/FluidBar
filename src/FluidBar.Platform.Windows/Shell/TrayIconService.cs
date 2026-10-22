@@ -195,15 +195,20 @@ public sealed class TrayIconService : IAsyncDisposable
             return IntPtr.Zero;
         }
 
+        // Two callback layouts have to be understood: version 4 (NIN_SELECT / WM_CONTEXTMENU, icon id in
+        // the high word) and the legacy one (the raw mouse message, icon id in wParam). Only the version-4
+        // codes were handled, so on a shell that refused NIM_SETVERSION — or answered with the legacy
+        // layout — right click produced nothing at all ("托盘的右键菜单没有了", user report 2026-10-22).
         switch (notification)
         {
             case NativeMethods.NIN_SELECT:
+            case NativeMethods.WM_LBUTTONUP:
                 Raise(LeftClicked, nameof(LeftClicked));
                 break;
             case NativeMethods.NIN_KEYSELECT:
-                ShowContextMenu(hwnd);
-                break;
             case NativeMethods.WM_CONTEXTMENU:
+            case NativeMethods.WM_RBUTTONUP:
+            case NativeMethods.WM_RBUTTONDBLCLK:
                 ShowContextMenu(hwnd);
                 break;
             case NativeMethods.WM_LBUTTONDBLCLK:
@@ -220,6 +225,66 @@ public sealed class TrayIconService : IAsyncDisposable
         return IntPtr.Zero;
     }
 
+    /// <summary>Set FLUIDBAR_TRAY_DIAG=1 to trace tray menu handling to %TEMP%\fluidbar-tray.log.</summary>
+    private static readonly bool TrayDiag =
+        Environment.GetEnvironmentVariable("FLUIDBAR_TRAY_DIAG") == "1";
+
+    private static void Diag(string message)
+    {
+        if (!TrayDiag)
+        {
+            return;
+        }
+
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-tray.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}{Environment.NewLine}");
+        }
+        catch (System.IO.IOException)
+        {
+            // Diagnostics must never break the tray.
+        }
+    }
+
+    /// <summary>
+    /// Picks the window the menu should belong to: the tray owner is a 1x1 off-screen window, and a menu
+    /// owned by it is created but never painted (measured 2026-10-22: TrackPopupMenuEx kept its modal loop
+    /// running for seconds while nothing appeared on screen). A real visible window of this process renders
+    /// the menu normally.
+    /// </summary>
+    private IntPtr FindMenuOwner(IntPtr trayWindow)
+    {
+        var owner = IntPtr.Zero;
+        var bestArea = 0;
+        NativeMethods.User32.EnumWindows((handle, _) =>
+        {
+            NativeMethods.User32.GetWindowThreadProcessId(handle, out var ownerPid);
+            if (ownerPid != (uint)Environment.ProcessId || handle == trayWindow
+                || !NativeMethods.User32.IsWindowVisible(handle))
+            {
+                return true;
+            }
+
+            if (!NativeMethods.User32.GetWindowRect(handle, out var rect))
+            {
+                return true;
+            }
+
+            var area = (rect.Right - rect.Left) * (rect.Bottom - rect.Top);
+            if (area > bestArea)
+            {
+                bestArea = area;
+                owner = handle;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return owner != IntPtr.Zero ? owner : trayWindow;
+    }
+
     private void ShowContextMenu(IntPtr hwnd)
     {
         TrayMenuItem[] items;
@@ -228,6 +293,7 @@ public sealed class TrayIconService : IAsyncDisposable
             items = _menuItems.ToArray();
         }
 
+        Diag($"show items={items.Length} hwnd=0x{hwnd:X} fg=0x{NativeMethods.User32.GetForegroundWindow():X}");
         if (items.Length == 0)
         {
             return;
@@ -281,11 +347,37 @@ public sealed class TrayIconService : IAsyncDisposable
             cursor = default;
         }
 
-        // Required for the menu to dismiss correctly: the owner window must be foreground.
-        NativeMethods.User32.SetForegroundWindow(hwnd);
+        // Required for the menu to appear AND to dismiss correctly: the owner window must be foreground.
+        // The window is a 1x1 off-screen top-level, so activation is attempted twice (SetForegroundWindow
+        // can be refused while another app owns the foreground).
+        // A background process is not allowed to take the foreground; SetForegroundWindow simply returns
+        // false and the menu is then owned by a non-foreground window — it opens BEHIND the active window
+        // (invisible) and does not dismiss on an outside click. Measured 2026-10-22: setfg=False, and the
+        // menu only closed when WM_CANCELMODE was posted, i.e. it really was open, just not on top.
+        // Attach to the foreground thread for the duration of the call, then pin the owner topmost.
+        var menuOwner = hwnd;
+        var foregroundWindow = NativeMethods.User32.GetForegroundWindow();
+        var foregroundThread = foregroundWindow == IntPtr.Zero
+            ? 0
+            : NativeMethods.User32.GetWindowThreadProcessId(foregroundWindow, out _);
+        var currentThread = NativeMethods.Kernel32.GetCurrentThreadId();
+        var attached = foregroundThread != 0 && foregroundThread != currentThread
+            && NativeMethods.User32.AttachThreadInput(currentThread, foregroundThread, true);
+        var foreground = NativeMethods.User32.SetForegroundWindow(menuOwner);
+        if (attached)
+        {
+            NativeMethods.User32.AttachThreadInput(currentThread, foregroundThread, false);
+        }
+
+        NativeMethods.User32.SetWindowPos(menuOwner, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        Diag($"menu at {cursor.X},{cursor.Y} owner=0x{menuOwner:X} setfg={foreground} fg=0x{foregroundWindow:X} attached={attached}");
         var selected = (uint)NativeMethods.User32.TrackPopupMenuEx(menu.DangerousGetHandle(),
             NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_NONOTIFY | NativeMethods.TPM_RIGHTBUTTON,
-            cursor.X, cursor.Y, hwnd, IntPtr.Zero);
+            cursor.X, cursor.Y, menuOwner, IntPtr.Zero);
+        NativeMethods.User32.SetWindowPos(menuOwner, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        Diag($"menu done selected={selected} err={Win32Error.LastError}");
         NativeMethods.User32.PostMessageW(hwnd, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero);
 
         if (selected != 0 && commandMap.TryGetValue(selected, out var id))

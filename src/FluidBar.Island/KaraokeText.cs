@@ -8,6 +8,47 @@ namespace FluidBar.Island;
 /// </summary>
 public static class KaraokeText
 {
+    /// <summary>Radius of the tight halo, as a fraction of the font size (the visible core of the glow).</summary>
+    private const float GlowSigmaNearRatio = 0.14f;
+
+    /// <summary>Radius of the wide halo, as a fraction of the font size (the soft bloom around it).</summary>
+    private const float GlowSigmaFarRatio = 0.30f;
+
+    /// <summary>Opacity of the tight halo relative to the sung colour.</summary>
+    private const float GlowNearOpacity = 0.72f;
+
+    /// <summary>Opacity of the wide halo relative to the sung colour.</summary>
+    private const float GlowFarOpacity = 0.32f;
+
+    private static readonly object GlowGate = new();
+    private static readonly Dictionary<int, SKMaskFilter> GlowFilters = new();
+
+    /// <summary>Blur filter reused across frames (one native object per radius, keyed in 0.1 units).</summary>
+    private static SKMaskFilter SharedGlowFilter(float sigma)
+    {
+        var key = (int)MathF.Round(sigma * 10f);
+        lock (GlowGate)
+        {
+            if (!GlowFilters.TryGetValue(key, out var filter))
+            {
+                if (GlowFilters.Count > 16)
+                {
+                    foreach (var stale in GlowFilters.Values)
+                    {
+                        stale.Dispose();
+                    }
+
+                    GlowFilters.Clear();
+                }
+
+                filter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, key / 10f);
+                GlowFilters[key] = filter;
+            }
+
+            return filter;
+        }
+    }
+
     /// <summary>
     /// Unsung lyric colour: the foreground at ~47 % opacity. Deliberately much dimmer than the sung
     /// colour so the karaoke boundary reads even on a dark glass card (user request: ΔL &gt; 30).
@@ -98,7 +139,20 @@ public static class KaraokeText
         };
 
         canvas.Save();
-        canvas.ClipRect(new SKRect(clipLeft - 1, area.Top - 1, clipLeft + sweep, area.Bottom + 1));
+        canvas.ClipRect(new SKRect(clipLeft - 1, area.Top - 4, clipLeft + sweep, area.Bottom + 4));
+
+        // A neon halo under the sung prefix: the artwork accent already lifts the "read" part, and the glow
+        // makes the sweep boundary read at a glance without raising the unread contrast. Two blurred passes
+        // (wide bloom + tight ring) under a crisp pass, all clipped to the sweep so the glow never spills
+        // onto the unsung half. The first version was a single faint pass and read as "no glow at all"
+        // (user report 2026-10-22: "发光效果不明显").
+        var fontSize = text.Metrics.Style(style).Size;
+        var far = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowFarOpacity, 0, 255));
+        var near = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowNearOpacity, 0, 255));
+        text.Draw(canvas, line, style, area, far, align, opacity,
+            SharedGlowFilter(MathF.Max(2.4f, fontSize * GlowSigmaFarRatio)));
+        text.Draw(canvas, line, style, area, near, align, opacity,
+            SharedGlowFilter(MathF.Max(1.2f, fontSize * GlowSigmaNearRatio)));
         text.Draw(canvas, line, style, area, highlightColor, align, opacity);
         canvas.Restore();
     }

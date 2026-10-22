@@ -53,7 +53,7 @@ return 0;
 internal sealed class ProcessLoopbackCapture : IDisposable
 {
     private AudioInterop.IAudioClient? _client;
-    private IntPtr _capturePtr;
+    private AudioInterop.IAudioCaptureClient? _capture;
     private IntPtr _eventHandle;
     private AudioInterop.IAudioInterfaceCompletionHandler? _handler;
 
@@ -90,12 +90,10 @@ internal sealed class ProcessLoopbackCapture : IDisposable
             }
 
             Console.WriteLine("client activated, initializing...");
-            var mixHr = _client.GetMixFormat(out var mixFormat);
-            var format = mixHr == 0 && mixFormat != IntPtr.Zero
-                ? mixFormat
-                : AudioInterop.CreatePcmFormat(48000, 2, 16);
-            var wfx = Marshal.PtrToStructure<AudioInterop.WaveFormatEx>(format);
-            Console.WriteLine($"mixHr=0x{mixHr:X8} fmt tag={wfx.FormatTag} ch={wfx.Channels} rate={wfx.SamplesPerSecond} bits={wfx.BitsPerSample}");
+            // GetMixFormat is not implemented on the process-loopback virtual device: use our own PCM format
+            // (AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM converts it).
+            var format = AudioInterop.CreatePcmFormat(48000, 2, 16);
+            Console.WriteLine("format 48000/2ch/16bit (autoconvert)");
             var flags = AudioInterop.AudclntStreamFlagsLoopback
                 | AudioInterop.AudclntStreamFlagsAutoConvertPcm
                 | AudioInterop.AudclntStreamFlagsSrcDefaultQuality
@@ -116,7 +114,8 @@ internal sealed class ProcessLoopbackCapture : IDisposable
                 return false;
             }
 
-            _capturePtr = capturePtr;
+            _capture = (AudioInterop.IAudioCaptureClient)Marshal.GetObjectForIUnknown(capturePtr);
+            Console.WriteLine($"capture RCW ok: {_capture.GetType().Name}");
             var setHandleHr = _client.SetEventHandle(_eventHandle);
             Console.WriteLine($"SetEventHandle hr=0x{setHandleHr:X8}");
             var startHr = _client.Start();
@@ -134,21 +133,31 @@ internal sealed class ProcessLoopbackCapture : IDisposable
 
     public long DrainFrames()
     {
-        if (_capturePtr == IntPtr.Zero) return 0;
+        if (_capture is null) return 0;
         long total = 0;
-        var vtable = Marshal.ReadIntPtr(_capturePtr);
-        var getBuffer = Marshal.GetDelegateForFunctionPointer<GetBufferDelegate>(Marshal.ReadIntPtr(vtable, 0));
-        var releaseBuffer = Marshal.GetDelegateForFunctionPointer<ReleaseBufferDelegate>(Marshal.ReadIntPtr(vtable, IntPtr.Size));
-        while (true)
+        try
         {
-            var hr = getBuffer(_capturePtr, out _, out var frames, out _, out _, out _);
-            if (hr != 0 || frames == 0)
+            while (true)
             {
-                break;
-            }
+                var next = _capture.GetNextPacketSize(out var pending);
+                if (next != 0 || pending == 0)
+                {
+                    break;
+                }
 
-            total += frames;
-            releaseBuffer(_capturePtr, frames);
+                var hr = _capture.GetBuffer(out _, out var frames, out _, out _, out _);
+                if (hr != 0 || frames == 0)
+                {
+                    break;
+                }
+
+                total += frames;
+                _capture.ReleaseBuffer(frames);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"drain error: {ex.GetType().Name}: {ex.Message}");
         }
 
         return total;
@@ -163,7 +172,7 @@ internal sealed class ProcessLoopbackCapture : IDisposable
     public void Dispose()
     {
         try { _client?.Stop(); } catch { }
-        if (_capturePtr != IntPtr.Zero) Marshal.Release(_capturePtr);
+        if (_capture is not null) Marshal.ReleaseComObject(_capture);
         if (_client is not null) Marshal.ReleaseComObject(_client);
         // _handler is a managed object implementing the interface; releasing it is not valid.
     }

@@ -89,7 +89,9 @@ public sealed class LyricsKaraokeTests
                     ImmutableArray.Create(new LyricWord(0, 2, "He"), new LyricWord(1000, 3, "llo"))),
                 new LyricsLine(TimeSpan.FromSeconds(3), "World")));
 
-        var selection = LyricsTimelineSelector.SelectDetailed(document, TimeSpan.FromMilliseconds(1200), null, null);
+        // 1000 ms still sits inside the line's word timeline (it ends ~1400 ms); past that the line hands
+        // over to the next one immediately (see LyricLineSelectionTests).
+        var selection = LyricsTimelineSelector.SelectDetailed(document, TimeSpan.FromMilliseconds(1000), null, null);
 
         Assert.Equal("Hello", selection.Current);
         Assert.Equal("World", selection.Next);
