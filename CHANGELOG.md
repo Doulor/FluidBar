@@ -13,6 +13,8 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板置顶排序**：固定行现在排到列表最前面（此前点 Pin 只换图标、位置不动）。仍不跨进程持久化，下一步再接 pin 存储。
+- **插件发现测试**：新增 `PluginDiscoveryLayoutTests`，锁住「数据目录 / local 容器不应被当成损坏包」的行为。
 - **插件目录误报**：`PluginDiscoverer` 现在把 `<id>/data` + `<id>/settings.json` 这类插件数据目录、以及包含实际包的 `local` 容器目录识别为合法布局并静默跳过，不再每次启动打 5 条 `Plugin package rejected during discovery`，也不再在插件页生成 5 个幽灵 invalid 条目。
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。

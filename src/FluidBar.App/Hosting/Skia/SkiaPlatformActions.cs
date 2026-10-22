@@ -350,7 +350,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IsMuted = volume?.IsMuted ?? false,
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
-            Clipboard = clipboard.Take(8).Select(MapClipboard).ToImmutableArray(),
+            // Pinned rows stay at the top of the page; the underlying history remains newest-first.
+            Clipboard = clipboard
+                .OrderByDescending(entry => _pinnedClipboard.Contains(ClipboardPreview(entry)))
+                .ThenByDescending(entry => entry.CapturedAtUtc)
+                .Take(8)
+                .Select(MapClipboard)
+                .ToImmutableArray(),
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
