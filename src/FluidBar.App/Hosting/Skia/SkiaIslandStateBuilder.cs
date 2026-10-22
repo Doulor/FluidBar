@@ -244,7 +244,7 @@ public static class SkiaIslandStateBuilder
                 ? null
                 : string.IsNullOrWhiteSpace(content.ClipboardSearchQuery)
                     ? localizer.Get(LocKeys.Clipboard.Search)
-                    : content.ClipboardSearchQuery,
+                    : ShortenSearchQuery(content.ClipboardSearchQuery!),
             EmptyTitle = localizer.Get(LocKeys.Clipboard.Empty),
             EmptyHint = localizer.Get(LocKeys.Clipboard.EmptyHint),
         };
@@ -695,6 +695,9 @@ public static class SkiaIslandStateBuilder
         AppTone.Danger => CompactStatus.Danger,
         _ => CompactStatus.Neutral,
     };
+
+    private static string ShortenSearchQuery(string query)
+        => query.Length <= 12 ? query : string.Concat(query.AsSpan(0, 11), "…");
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 }
