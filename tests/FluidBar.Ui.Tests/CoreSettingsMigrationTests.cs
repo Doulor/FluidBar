@@ -38,4 +38,36 @@ public sealed class CoreSettingsMigrationTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task Existing_core_settings_win_over_a_late_legacy_file()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "FluidBarTests", "migration", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using (var first = CoreSettingsStoreAdapter.CreateDefault(NullAppLogger.Instance, root))
+            {
+                var initial = await first.LoadAsync();
+                first.QueueSave(initial with { Language = "en-US" });
+                await first.FlushAsync();
+            }
+
+            var legacy = Path.Combine(root, LegacySettingsImporter.LegacyFileName);
+            await File.WriteAllTextAsync(legacy, (AppSettings.Default with { Language = "zh-Hans" }).ToJson());
+
+            using (var second = CoreSettingsStoreAdapter.CreateDefault(NullAppLogger.Instance, root))
+            {
+                var loaded = await second.LoadAsync();
+                Assert.Equal("en-US", loaded.Language);
+                Assert.Equal(LegacyImportOutcome.Skipped, second.LegacyImportResult?.Outcome);
+            }
+
+            Assert.True(File.Exists(legacy));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

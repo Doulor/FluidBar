@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **Core 迁移优先级**：已有 Core 文件时 legacy 跳过测试。
 - **搜索窗口测试**：a11y + SelectAll headless。
 - **preview.10**：page save/rebuild gate 后 publish 成功（19.63 MB、无 PDB）。
 - **自更新 helper**：真实 PowerShell copy/自删除测试。
@@ -114,7 +115,7 @@
 - **通知页**：已读 toast id 持久于服务进程内；打开页面/点击行标记已读，未读点不再永久常亮；通知行映射真实 app 图标（`appLogoOverride` / 应用图标）而不是统一铃铛。
 - **首页真实状态**：Wi-Fi/蓝牙开关改用 Radio 服务的真实 `IsEnabled`（不再用 `IsOnline`/硬编码 false）；首页天气 chip 复用小组件页的真实天气；禁用的 Focus 磁贴不再产生点击动作。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*` 并新增独立隐藏项；`Ctrl+Alt+H` 走 `HandleHideHotkey`；`MOD_NOREPEAT` 修复长按重复。
-- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2609 passed / 0 failed**。0 failed：通知 rank 已按 spec 2.3 修正为 9，架构门禁豁免专用后台线程，Integration 两条 rank 断言同步通过。Core 647 · Platform 708 · Ui 512 · Island 448 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 31/31 · Architecture 18/18。
+- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2610 passed / 0 failed**。0 failed：通知 rank 已按 spec 2.3 修正为 9，架构门禁豁免专用后台线程，Integration 两条 rank 断言同步通过。Core 647 · Platform 708 · Ui 512 · Island 448 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 31/31 · Architecture 18/18。
 - **构建**：`dotnet build FluidBar.sln` 0 errors。
 
 ## 里程碑
