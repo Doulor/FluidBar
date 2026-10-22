@@ -426,6 +426,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private void OnSnapshotChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
     {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
         EnsureLyricsForCurrentSession();
         EnsureMediaTick();
         Changed?.Invoke(this, EventArgs.Empty);
@@ -470,6 +475,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private void OnWidgetDataChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
     {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
         try
         {
             Changed?.Invoke(this, EventArgs.Empty);
