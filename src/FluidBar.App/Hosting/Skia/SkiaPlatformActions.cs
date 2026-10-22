@@ -13,6 +13,7 @@ using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Clipboard;
 using FluidBar.Platform.Windows.CoreIntegration;
+using FluidBar.Platform.Windows.Devices;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Focus;
 using FluidBar.Platform.Windows.Media;
@@ -59,6 +60,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly NetworkMonitor _network;
     private readonly GsmtcMediaSessionService _media;
     private readonly ClipboardService _clipboard;
+    private readonly UsbDeviceMonitor _usbDevices;
+    private readonly BluetoothDeviceMonitor _bluetoothDevices;
     private readonly AgentInboxWatcher _agentInbox;
     private readonly AgentProviderRegistry _agentNative;
     private readonly AgentEventSourceAggregator _agentSources;
@@ -142,6 +145,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time,
             powerModeProvider: () => _settings.Current.PowerMode);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
+        _usbDevices = new UsbDeviceMonitor(_messageHost, _platformLogger, _counters, time);
+        _bluetoothDevices = new BluetoothDeviceMonitor(_platformLogger, _counters, time);
 
         // Agent inbox: hook scripts drop one JSON file per Claude Code / Codex event here. Read-only
         // watcher (no polling); the hook installer only writes when the user runs the consent command.
@@ -235,6 +240,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <summary>Clipboard source exposed to first-party plugins.</summary>
     public IClipboardSource ClipboardSource => _clipboard;
+
+    /// <summary>USB device change source exposed to the first-party devices plugin.</summary>
+    public IDeviceEventSource UsbDeviceSource => _usbDevices;
+
+    /// <summary>Bluetooth device change source exposed to the first-party devices plugin.</summary>
+    public IDeviceEventSource BluetoothDeviceSource => _bluetoothDevices;
 
     /// <summary>Agent event inbox exposed to first-party plugins (Claude Code / Codex hooks).</summary>
     public IAgentInboxSource AgentInboxSource => _agentSources;
@@ -1236,6 +1247,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("focus-assist", () => _focus.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("media", () => _media.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("clipboard", () => _clipboard.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("usb-devices", () => _usbDevices.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("bluetooth-devices", () => _bluetoothDevices.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-inbox", () => _agentInbox.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("agent-native", () => _agentNative.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("notifications", () => _notifications.StartAsync(cancellationToken)).ConfigureAwait(false);
@@ -1887,6 +1900,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         _settings.Changed -= OnSettingsChanged;
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("usb-devices", () => _usbDevices.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("bluetooth-devices", () => _bluetoothDevices.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("agent-inbox", () => _agentInbox.StopAsync()).ConfigureAwait(false);
         await StopOneAsync("agent-native", () => _agentNative.StopAsync()).ConfigureAwait(false);
         _agentSources.Dispose();

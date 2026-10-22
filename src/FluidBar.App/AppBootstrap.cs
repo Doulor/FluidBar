@@ -1072,6 +1072,8 @@ internal sealed class AppBootstrap
             AgentInbox = _platformActions.AgentInboxSource,
             AgentHookInstaller = _platformActions.AgentHookInstaller,
             Notifications = notifications,
+            UsbDevices = _platformActions.UsbDeviceSource,
+            BluetoothDevices = _platformActions.BluetoothDeviceSource,
         };
     }
 
