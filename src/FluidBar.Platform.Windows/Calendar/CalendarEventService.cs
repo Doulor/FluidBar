@@ -76,7 +76,15 @@ public sealed class CalendarEventService : IAsyncDisposable
         }
         catch (Exception)
         {
-            // AppointmentStore.GetDefaultAsync is commonly denied for unpackaged processes.
+            // AppointmentStore.GetDefaultAsync is commonly denied for unpackaged processes. Clear
+            // previously published dots so a revoked/unavailable permission cannot leave stale
+            // calendar counts on the month grid.
+            if (_counts.Count > 0)
+            {
+                Volatile.Write(ref _counts, ImmutableDictionary<DateOnly, int>.Empty);
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+
             _logger.LogDebug(PlatformLogCategory.Monitor, "widgets.calendar", "Calendar events unavailable.");
         }
     }

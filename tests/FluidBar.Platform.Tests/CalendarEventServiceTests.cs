@@ -61,6 +61,35 @@ public sealed class CalendarEventServiceTests
     }
 
     [Fact]
+    public async Task RefreshForTest_clears_stale_counts_when_the_store_becomes_unavailable()
+    {
+        var calls = 0;
+        var first = new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.FromHours(8));
+        await using var service = new CalendarEventService(
+            NullPlatformLogger.Instance,
+            readStarts: _ =>
+            {
+                calls++;
+                if (calls == 1)
+                {
+                    return Task.FromResult<IReadOnlyList<DateTimeOffset>>([first]);
+                }
+
+                throw new UnauthorizedAccessException("calendar access revoked");
+            });
+        var changes = 0;
+        service.Changed += (_, _) => changes++;
+
+        await service.RefreshForTestAsync();
+        Assert.Single(service.Counts);
+        Assert.Equal(1, changes);
+
+        await service.RefreshForTestAsync();
+        Assert.Empty(service.Counts);
+        Assert.Equal(2, changes);
+    }
+
+    [Fact]
     public void CountByDay_is_empty_for_no_events()
     {
         Assert.Empty(CalendarEventService.CountByDay([]));
