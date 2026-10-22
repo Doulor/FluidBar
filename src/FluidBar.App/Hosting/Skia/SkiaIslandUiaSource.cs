@@ -830,7 +830,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 UiaElementRole.ListItem,
                 JoinNotEmpty(" — ", JoinNotEmpty(" · ", item.Tool, item.Project), item.Task),
                 ToRect(row),
-                UiaPatternKind.None,
+                UiaPatternKind.Invoke,
                 new UiaElementState
                 {
                     IsFocusable = true,

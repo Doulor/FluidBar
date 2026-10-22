@@ -1349,8 +1349,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
             IslandPlatformActionKind.ClipboardRemove => RemoveClipboard(action.Index),
-            IslandPlatformActionKind.AgentActivate => Defer(
-                action, "agent session activation is App-owned (no platform session-activate service)"),
+            IslandPlatformActionKind.AgentActivate => ActivateAgent(action.Index),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
             _ => Unsupported($"unknown island action {action.Kind}"),
@@ -1620,6 +1619,21 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         _notifications.MarkAllRead();
         return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult ActivateAgent(int index)
+    {
+        var agents = MapAgents(_agentSources.Current);
+        if (index < 0 || index >= agents.Length)
+        {
+            return Unsupported("the agent row no longer exists");
+        }
+
+        var agent = agents[index];
+        return AgentWindowFocus.TryActivate(agent.SessionTitle, agent.Project)
+            ? IslandActionResult.Handled
+            : Defer(new IslandPlatformAction(IslandPlatformActionKind.AgentActivate, index),
+                "no unique agent terminal window matched the session title or project");
     }
 
     private IslandActionResult ClearNotifications()

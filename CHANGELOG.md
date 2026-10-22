@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **Agent 行焦点**：Agent 行重新可点击；`AgentWindowFocus` 按 session title 优先、project leaf 兜底，在可见顶层窗口里找唯一匹配并 `ShowWindow(SW_RESTORE)+SetForegroundWindow`。匹配不唯一则不发焦点，避免误激活别的窗口；`AgentWindowFocus.Matches` 有单测。
 - **Devices 插件接通**：`SkiaPlatformActions` 现在创建并启动 `UsbDeviceMonitor` / `BluetoothDeviceMonitor`，通过 `BuiltinPlatformServices.UsbDevices/BluetoothDevices` 注入内置 `DevicesPlugin`；此前两者始终为 null，插件目录里有 devices 但实际从未组合。随平台 seam 一起 stop/dispose。
 - **便携版自更新**：preview 发布的是 `FluidBar.exe` 而不是 setup；更新安装现在在检测到同名 exe 时生成一个临时 PowerShell helper，等待旧 PID 退出后覆盖当前 exe 并重启，避免新进程被单实例 mutex 挡掉。真正的 setup 仍走 ShellExecute。
 - **退出清理幂等**：`Lifecycle.Exit` 和显式 `Shutdown()` 都会调用 `DisposeServices()`，导致 settings/store/logger 在一次退出里被 dispose 两次；现在用 `_servicesDisposed` 原子 guard 保证只跑一次。
@@ -53,7 +54,7 @@
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
-- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2583 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2584 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
 
 
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）

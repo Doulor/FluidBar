@@ -166,6 +166,9 @@ public sealed record AgentItemData
     /// <summary>Project/workspace leaf name shown next to the brand in the expanded row.</summary>
     public string? Project { get; init; }
 
+    /// <summary>Session title emitted by the provider (used to find the agent's window on activation).</summary>
+    public string? SessionTitle { get; init; }
+
     /// <summary>
     /// Primary row/capsule text: the concrete current action, else the session/task name, else the
     /// localized status. Never the brand name — that is <see cref="Name"/>.

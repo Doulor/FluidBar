@@ -56,6 +56,7 @@ public static class AgentContentMapper
                 // Brand = the expanded row's tool line; the compact capsule never shows it.
                 Name = AgentDisplayName(entry.Agent),
                 Project = ProjectOf(entry),
+                SessionTitle = entry.SessionTitle,
                 // Priority (user requirement + prototype): current action (tool + target) → session/task
                 // name → status description. Brand names are deliberately not part of this chain.
                 PrimaryText = FirstNonEmpty(entry.Action, entry.SessionTitle, statusText),
