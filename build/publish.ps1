@@ -148,6 +148,10 @@ if (-not (Test-Path $exePath)) {
     throw "Publish did not produce $exePath (single-file bundle missing)."
 }
 
+# Native package PDBs (libSkiaSharp/libHarfBuzzSharp) are copied by the SDK even with
+# DebugType=None; they are ~105 MB of debug symbols and must not ship in the user zip.
+Get-ChildItem -Path $publishRoot -Filter *.pdb -File -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
+
 # --- 4. Artifact zip + hash manifest (feeds the UpdateCheckClient workflow) -------------------------
 $zipPath = Join-Path $artifactsRoot "FluidBar-$version-$Runtime.zip"
 if (Test-Path $zipPath) {

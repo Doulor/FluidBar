@@ -79,6 +79,9 @@ $manifest = [ordered]@{
 }
 $manifest | ConvertTo-Json | Set-Content (Join-Path $out 'publish.json') -Encoding utf8NoBOM
 
+# Drop native package PDBs before zipping; they are not needed by users and bloat the download.
+Get-ChildItem -Path $out -Filter *.pdb -File -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
+
 if (-not $SkipZip) {
     $zip = Join-Path $repo "build/release/FluidBar-$Runtime.zip"
     if (Test-Path $zip) { Remove-Item -Force $zip }

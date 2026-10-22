@@ -19,7 +19,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -31,7 +31,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
     steps:
       # Actions are pinned to major versions; pin to full commit SHAs before public release (Lead review).
       - name: Checkout
