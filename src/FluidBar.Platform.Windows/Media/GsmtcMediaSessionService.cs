@@ -639,11 +639,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     _frameAnchorInitialised = true;
                     _frameAnchorPosition = statePosition;
                     _frameAnchorAudio = audio - sinceWrite;
+                    _frameAnchorWall = _timeProviderNow() - sinceWrite;
                 }
                 else
                 {
                     _frameAnchorPosition = TimeSpan.Zero;
                     _frameAnchorAudio = audio;
+                    _frameAnchorWall = _timeProviderNow();
                 }
 
                 _pendingTrackAnchor = true;
@@ -655,9 +657,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // Frames are the exact source, but the capture can die (player restarts its stream, device
             // change). Falling back to wall time keeps the clock moving instead of freezing, and the next
             // re-anchor corrects it.
+            var anchorWall = _frameAnchorWall == DateTimeOffset.MinValue ? _timeProviderNow() : _frameAnchorWall;
             var position = _loopback.IsAvailable
                 ? _frameAnchorPosition + (audio - _frameAnchorAudio)
-                : _frameAnchorPosition + (_timeProviderNow() - _frameAnchorWall);
+                : _frameAnchorPosition + (_timeProviderNow() - anchorWall);
             if (position < TimeSpan.Zero)
             {
                 position = TimeSpan.Zero;
@@ -678,6 +681,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 {
                     _frameAnchorAudio = audio - writeAge;
                     _frameAnchorPosition = statePosition;
+                    _frameAnchorWall = _timeProviderNow() - writeAge;
                     position = statePosition + writeAge;
                     _pendingTrackAnchor = false;
                 }
@@ -695,6 +699,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             {
                 _frameAnchorAudio = audio;
                 _frameAnchorPosition = candidate.Position;
+                _frameAnchorWall = _timeProviderNow();
                 position = candidate.Position;
             }
 
