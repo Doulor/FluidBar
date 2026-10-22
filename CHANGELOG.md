@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **preview.8 发布**：Core settings 接入 + legacy migration 测试后本地 `publish.ps1 -Version 2.0.0-preview.8 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `D0A0688B...467844`。
 - **Core 设置迁移端到端测试**：`CoreSettingsMigrationTests` 在临时 appData 目录写 `settings.ui.json`，用生产 `CoreSettingsStoreAdapter.CreateDefault` 加载，断言语言/AutoCollapse 迁移成功、`settings.json` 生成、legacy 文件重命名为 `.imported`。
 - **AppBootstrap 接入 Core settings**：按 `docs/rewrite/contracts/ui.md` 的 paused-file one-liner，把 `new JsonUiSettingsStore(...)` 替换为 `CoreSettingsStoreAdapter.CreateDefault(_logger)`；UI 仍用 `IUiSettingsStore`，但生产设置落到 Core `settings.json`，并触发一次性的 `settings.ui.json` 迁移。
 - **Core 设置保存 flush 竞态**：`CoreSettingsStoreAdapter.FlushAsync` 与 `JsonUiSettingsStore` 同类问题，只等一次 `_writeTask`；现在同样循环等待 `_pendingSequence == _writtenSequence`，避免迁移到 Core 设置后退出前丢最后一次保存。
