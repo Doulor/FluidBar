@@ -848,6 +848,8 @@ internal sealed class AppBootstrap
         {
             // Safe mode is part of plugin-runtime composition, not just a visual toggle. Rebuild the
             // runtime so turning it on/off takes effect without a full app restart.
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.safe-mode-change",
+                $"Safe mode changed to {current.Advanced.SafeMode}; scheduling a runtime rebuild.");
             Dispatcher.UIThread.Post(() => _ = RebuildPluginRuntimeAsync());
         }
 
@@ -880,6 +882,8 @@ internal sealed class AppBootstrap
 
     private async Task RebuildPluginRuntimeAsync()
     {
+        _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-start",
+            "Rebuilding the plugin runtime.");
         await _pluginRuntimeRebuildGate.WaitAsync().ConfigureAwait(true);
         try
         {
