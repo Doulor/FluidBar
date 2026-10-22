@@ -127,6 +127,45 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Exact playback clock: counts the audio frames KuGou actually renders.</summary>
     private readonly ProcessLoopbackCapture _loopback = new();
 
+    private readonly System.Collections.Generic.Dictionary<string, TimeSpan> _durationCache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Track length for the progress bar. KuGou exposes none through windows or SMTC, so the lyric file is the
+    /// only local evidence: its last timed line is the end of the song. Cached per title.
+    /// </summary>
+    private TimeSpan ResolveDuration(WindowMediaCandidate candidate)
+    {
+        if (candidate.Duration > TimeSpan.Zero)
+        {
+            return candidate.Duration;
+        }
+
+        var key = candidate.Title ?? string.Empty;
+        if (_durationCache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var resolved = TimeSpan.Zero;
+        try
+        {
+            if (Media.Lyrics.KugouLyricCache.TryFind(candidate.Title, candidate.Artist)?.Duration is { } fromLyrics
+                && fromLyrics > TimeSpan.Zero)
+            {
+                resolved = fromLyrics;
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        _durationCache[key] = resolved;
+        return resolved;
+    }
+
     /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
     private TimeSpan _audioAtWrite;
 
@@ -487,7 +526,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // (kept at MinValue so the App never interpolates a position that does not exist).
             candidate.HasTimeline ? candidate.Position : TimeSpan.Zero,
             candidate.HasTimeline ? candidate.PositionSampledAtUtc : DateTimeOffset.MinValue,
-            candidate.HasTimeline ? candidate.Duration : TimeSpan.Zero,
+            candidate.HasTimeline ? ResolveDuration(candidate) : TimeSpan.Zero,
             CanSeek: false,
             // Media keys still reach a player that registered no SMTC session, so next/previous are
             // real capabilities of this path (SMTC simply does not advertise them).
