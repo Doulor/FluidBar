@@ -484,7 +484,7 @@
     "Settings.Advanced.FrameStats": "显示帧统计",
     "Settings.Advanced.DeveloperMode": "开发者模式",
     "Settings.Advanced.SafeMode": "安全模式",
-    "Settings.Advanced.SafeModeHint": "开启后社区插件立即停用，关闭后重新加载；当前运行的插件会被重新组合。",
+    "Settings.Advanced.SafeModeHint": "开启后社区插件停用；该设置在下一次启动 FluidBar 时生效。",
     "Settings.Advanced.ThemeFollowSystem": "主题跟随系统",
     "Settings.Advanced.ThemeFollowSystemHint": "关闭后使用「外观」中选择的桌面主题。",
     "Settings.Advanced.LanguageFollowSystem": "语言跟随系统",

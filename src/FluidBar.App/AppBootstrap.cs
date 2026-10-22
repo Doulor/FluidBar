@@ -846,11 +846,11 @@ internal sealed class AppBootstrap
     {
         if (previous.Advanced.SafeMode != current.Advanced.SafeMode && !_shutdownStarted)
         {
-            // Safe mode is part of plugin-runtime composition, not just a visual toggle. Rebuild the
-            // runtime so turning it on/off takes effect without a full app restart.
-            _logger.Information(LogCategories.Plugin, "plugin.runtime.safe-mode-change",
-                $"Safe mode changed to {current.Advanced.SafeMode}; scheduling a runtime rebuild.");
-            Dispatcher.UIThread.Post(() => _ = RebuildPluginRuntimeAsync());
+            // Plugin-runtime composition is process-global: creating a second runtime after the
+            // first one has started is not reliable (the second composition can block indefinitely).
+            // Safe mode is therefore persisted immediately and applied by the next launch.
+            _logger.Warning(LogCategories.Plugin, "plugin.runtime.restart-required",
+                $"Safe mode changed to {current.Advanced.SafeMode}; restart FluidBar to apply it.");
         }
 
         if (_shell is null)
@@ -878,77 +878,6 @@ internal sealed class AppBootstrap
             Settings = current.HotkeySettings,
         };
         Dispatcher.UIThread.Post(() => _ = ApplyHotkeysAsync(bindings));
-    }
-
-    private async Task RebuildPluginRuntimeAsync()
-    {
-        _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-start",
-            "Rebuilding the plugin runtime.");
-        await _pluginRuntimeRebuildGate.WaitAsync().ConfigureAwait(true);
-        try
-        {
-            if (_shutdownStarted)
-            {
-                return;
-            }
-
-            try
-            {
-                await _pluginRuntimeRetirement.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true);
-            }
-            catch (TimeoutException)
-            {
-                _logger.Warning(LogCategories.Plugin, "plugin.runtime.retire-timeout",
-                    "The previous plugin runtime did not retire within ten seconds; continuing.");
-            }
-
-            var old = _pluginRuntime;
-            _pluginRuntime = null;
-            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose",
-                "Composing the replacement plugin runtime.");
-            await StartPluginRuntimeAsync().ConfigureAwait(true);
-            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-compose-complete",
-                "The replacement plugin runtime composition returned.");
-
-            if (_pluginRuntime is null)
-            {
-                // Keep the previous runtime usable when composition fails; do not leave the app
-                // without plugin pages because a safe-mode toggle could not be applied live.
-                _pluginRuntime = old;
-                _logger.Warning(LogCategories.Plugin, "plugin.runtime.rebuild-restored",
-                    "The replacement plugin runtime failed; keeping the previous runtime.");
-                return;
-            }
-
-            if (old is not null)
-            {
-                // Compose the replacement before retiring the old runtime. Disposing first can
-                // leave the plugin host in a state where the next composition never returns.
-                _pluginRuntimeRetirement = old.DisposeInBackgroundAsync();
-                _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuild-old-retiring",
-                    "The old plugin runtime is retiring in the background.");
-            }
-
-            // The settings window captured the old marketplace/plugin services in its context. Closing
-            // it forces the next open to bind the rebuilt runtime instead of calling disposed objects.
-            if (_settingsWindow is { } staleSettings)
-            {
-                staleSettings.Close();
-                _settingsWindow = null;
-            }
-
-            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuilt",
-                "Plugin runtime rebuilt after a safe-mode change.");
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(LogCategories.Plugin, "plugin.runtime.rebuild-failed",
-                "The plugin runtime could not be rebuilt after a safe-mode change.", ex);
-        }
-        finally
-        {
-            _pluginRuntimeRebuildGate.Release();
-        }
     }
 
     private async Task ApplyTrayVisibilityAsync(bool visible)
@@ -1306,8 +1235,6 @@ internal sealed class AppBootstrap
         }
     }
     private bool _clipboardSearchWasPinned;
-    private readonly SemaphoreSlim _pluginRuntimeRebuildGate = new(1, 1);
-    private Task _pluginRuntimeRetirement = Task.CompletedTask;
     private bool _shutdownStarted;
     private int _servicesDisposed;
 
