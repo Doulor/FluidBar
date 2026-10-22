@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using FluidBar.Platform.Windows.Clipboard;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Monitors;
@@ -81,6 +82,25 @@ public sealed class ClipboardHistoryTests
         var snapshot = history.Snapshot();
         Assert.Equal(2, snapshot.History.Count(entry => entry.Kind == ClipboardContentKind.Image));
         Assert.DoesNotContain(snapshot.History, entry => entry.Sequence == 1);
+    }
+
+    [Fact]
+    public void ImageDib_ConvertsToPngThumbnail()
+    {
+        var dib = new byte[56];
+        BitConverter.GetBytes(40u).CopyTo(dib, 0);
+        BitConverter.GetBytes(2).CopyTo(dib, 4);
+        BitConverter.GetBytes(2).CopyTo(dib, 8);
+        BitConverter.GetBytes((ushort)1).CopyTo(dib, 12);
+        BitConverter.GetBytes((ushort)24).CopyTo(dib, 14);
+        BitConverter.GetBytes(16u).CopyTo(dib, 20);
+
+        var method = typeof(ClipboardService).GetMethod("TryCreatePng",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        var png = (byte[]?)method!.Invoke(null, [dib]);
+
+        Assert.NotNull(png);
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, png![..4]);
     }
 
     [Fact]
