@@ -20,6 +20,7 @@
 - **剪贴板清空**：托盘入口清空岛内历史（系统剪贴板不动），同时清空 pin 摘要，避免固定行复活。
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
+- **图像缓存测试**：8 张剪贴板图片全留缓存。
 - **图像缓存**：默认容量 4→16，覆盖剪贴板 8 图 + 媒体封面，避免整表清空后逐帧重解码。
 - **自更新脚本**：UTF-8 BOM 写入，中文路径不乱码；脚本构建单测。
 - **日历退出竞态**：缓存 cancellation token，避免 dispose 后 timer 回调抛异常。
@@ -62,7 +63,7 @@
 - **通知页**：已读 toast id 持久于服务进程内；打开页面/点击行标记已读，未读点不再永久常亮；通知行映射真实 app 图标（`appLogoOverride` / 应用图标）而不是统一铃铛。
 - **首页真实状态**：Wi-Fi/蓝牙开关改用 Radio 服务的真实 `IsEnabled`（不再用 `IsOnline`/硬编码 false）；首页天气 chip 复用小组件页的真实天气；禁用的 Focus 磁贴不再产生点击动作。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*` 并新增独立隐藏项；`Ctrl+Alt+H` 走 `HandleHideHotkey`；`MOD_NOREPEAT` 修复长按重复。
-- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2591 passed / 3 failed**。3 个失败均为既有：Architecture 的 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（STATUS 已记录）与 Integration 的 notification rank 顺序断言（预览版通知 rank 0 导致，非本轮改动）。Core 647 · Platform 707 · Ui 512 · Island 447 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 29/31 · Architecture 17/18。
+- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2592 passed / 3 failed**。3 个失败均为既有：Architecture 的 `KugouMemoryPosition.cs:103 Thread.Sleep(1000)`（STATUS 已记录）与 Integration 的 notification rank 顺序断言（预览版通知 rank 0 导致，非本轮改动）。Core 647 · Platform 707 · Ui 512 · Island 448 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 29/31 · Architecture 17/18。
 - **构建**：`dotnet build FluidBar.sln` 0 errors。
 
 ## 里程碑
