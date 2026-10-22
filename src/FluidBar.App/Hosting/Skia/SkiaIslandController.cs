@@ -955,6 +955,9 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Applies the hide hotkey.</summary>
     public void HandleHideHotkey() => ApplyInput(IslandInput.HideHotkey());
 
+    /// <summary>A left-button press outside the island (desktop/other window); closes an expanded island.</summary>
+    public void HandleOutsideClick() => ApplyInput(IslandInput.OutsideClick());
+
     /// <summary>Suppresses the island while a fullscreen foreground window owns the screen.</summary>
     public void HandleSuppressionChanged(bool suppressed) => ApplyInput(IslandInput.SuppressionChanged(suppressed));
 

@@ -673,6 +673,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHook.PointerDragged += OnHookPointerDragged;
         _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
+        _mouseHook.OutsidePressed += OnHookOutsidePressed;
         // Started at the end of StartAsync, after the controller has a render state and the first
         // frame is on screen: a hook that consumes clicks before that would swallow them into a
         // controller that cannot hit-test yet (the classic "first click after launch does nothing").
@@ -1785,6 +1786,21 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var scale = entry.Host.Scale <= 0 ? 1 : entry.Host.Scale;
         xDip = (float)((screenX - placement.X) / scale);
         yDip = (float)((screenY - placement.Y) / scale);
+    }
+
+    private void OnHookOutsidePressed()
+    {
+        _dispatcher.Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _controller.HandleOutsideClick();
+            EnsureDeadlineTicker();
+            EnsureFrameLoop();
+        });
     }
 
     private void OnHookWheel(double notches)

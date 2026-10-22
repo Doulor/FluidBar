@@ -86,6 +86,7 @@ public sealed class MouseHookRegionTests
         var gestures = new IslandMouseHook.GestureTracker();
         var down = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonDown);
         Assert.False(down.Pressed);
+        Assert.True(down.OutsidePressed);
         Assert.False(gestures.IsPressed);
 
         var up = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonUp);

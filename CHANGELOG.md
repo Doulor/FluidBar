@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **点击外部关闭**：`WH_MOUSE_LL` 现在把“从桌面/其他窗口开始的左键按下”路由成 `OutsidePressed`，宿主派发 `IslandInput.OutsideClick()`；展开态点击外部会按状态机策略收起，固定态仍由 `BlocksOutsideClickClose` 拦截。
 - **发布脚本可执行性**：`build/publish.ps1` 的 `-warnaserror` 把平台项目的 CA 分析器建议全部升级为错误（52 个），导致 release 流程在 publish 前直接失败；现在只保留编译器警告门（`RunAnalyzers=false`）。本地实跑 `-Version 2.0.0-preview.1 -SkipTests` 成功：zip 19.62 MB、`FluidBar.exe` 60.3 MB、zip 内无 PDB。
 - **SafeMode 热切换**：`AppSettings.Advanced.SafeMode` 变化时重建插件运行时（停止旧 runtime → 按新 SafeMode 组合），不再需要重启 FluidBar；设置文案同步改为立即生效。
 - **剪贴板单条删除**：剪贴板行新增删除按钮（Pin 左侧），`ClipboardRemove` 按 sequence 从历史移除并同步清掉该行 pin；UIA 也暴露 Delete 按钮。

@@ -74,6 +74,9 @@ public sealed class IslandMouseHook : IDisposable
     /// </summary>
     public event Action<double>? Wheel;
 
+    /// <summary>A left-button press that started outside every island rectangle (desktop/window click).</summary>
+    public event Action? OutsidePressed;
+
     /// <summary>True when the hook is installed.</summary>
     public bool IsInstalled => _hook != IntPtr.Zero;
 
@@ -279,6 +282,11 @@ public sealed class IslandMouseHook : IDisposable
             Wheel?.Invoke(notches);
         }
 
+        if (route.OutsidePressed)
+        {
+            OutsidePressed?.Invoke();
+        }
+
         if (route.Left)
         {
             PointerLeft?.Invoke();
@@ -365,7 +373,7 @@ public sealed class IslandMouseHook : IDisposable
                     // A press that starts on the desktop is never the island's; clear any stale state
                     // left by an interrupted gesture before this one.
                     _pressed = false;
-                    return new GestureRoute(Left: left);
+                    return new GestureRoute(Left: left, OutsidePressed: true);
                 }
 
                 if (message == WmLButtonUp && _pressed)
@@ -430,7 +438,8 @@ public sealed class IslandMouseHook : IDisposable
         bool Moved = false,
         bool Dragged = false,
         bool Left = false,
-        double? WheelNotches = null);
+        double? WheelNotches = null,
+        bool OutsidePressed = false);
 
     /// <summary>How one screen point is routed by the hook.</summary>
     internal enum HookRegionKind
