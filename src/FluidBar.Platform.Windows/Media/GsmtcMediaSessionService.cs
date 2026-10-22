@@ -130,6 +130,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Slowly learned correction for the state file's own rounding, in milliseconds.</summary>
     private double _anchorOffsetMs;
 
+    private string? _frameTrackTitle;
+    private TimeSpan _frameAnchorAudio;
+    private TimeSpan _frameAnchorPosition;
+
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
@@ -532,6 +536,50 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var statePosition = state.Position;
+
+        // Primary clock: count the audio frames KuGou actually renders. The count is exact (ratio
+        // 0.987-0.992 measured), so the only thing needed is an anchor: the track start, or a fresh reading
+        // after a seek. This bypasses the 30-second granularity of the state file entirely.
+        if (_loopback.TryStart(candidate.ProcessId))
+        {
+            var audio = _loopback.Consumed;
+            if (!string.Equals(_frameTrackTitle, candidate.Title, StringComparison.Ordinal))
+            {
+                _frameTrackTitle = candidate.Title;
+                _frameAnchorPosition = statePosition;
+                var sinceWrite = _timeProviderNow() - state.SampledAtUtc;
+                if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(45))
+                {
+                    sinceWrite = TimeSpan.Zero;
+                }
+
+                _frameAnchorAudio = audio - sinceWrite;
+            }
+
+            var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
+            if (position < TimeSpan.Zero)
+            {
+                position = TimeSpan.Zero;
+            }
+
+            // A freshly repainted clock that disagrees strongly means a seek (or a wrong initial anchor):
+            // adopt it and keep counting frames from there.
+            if (msaaIsFresh
+                && candidate.Position > TimeSpan.Zero
+                && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(3))
+            {
+                _frameAnchorAudio = audio;
+                _frameAnchorPosition = candidate.Position;
+                position = candidate.Position;
+            }
+
+            return candidate with
+            {
+                Position = position,
+                PositionSampledAtUtc = _timeProviderNow(),
+                HasTimeline = true,
+            };
+        }
 
         if (candidate.Position <= TimeSpan.Zero)
         {
