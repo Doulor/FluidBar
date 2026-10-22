@@ -62,19 +62,7 @@ public sealed class CalendarEventService : IAsyncDisposable
 
             var start = new DateTimeOffset(DateTime.Today);
             var appointments = await store.FindAppointmentsAsync(start, TimeSpan.FromDays(62));
-            var counts = new Dictionary<DateOnly, int>();
-            foreach (var appointment in appointments)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                var day = DateOnly.FromDateTime(appointment.StartTime.LocalDateTime);
-                counts[day] = counts.TryGetValue(day, out var existing) ? existing + 1 : 1;
-            }
-
-            var next = counts.ToImmutableDictionary();
+            var next = CountByDay(appointments.Select(appointment => appointment.StartTime));
             if (!next.SequenceEqual(_counts))
             {
                 Volatile.Write(ref _counts, next);
@@ -86,6 +74,20 @@ public sealed class CalendarEventService : IAsyncDisposable
             // AppointmentStore.GetDefaultAsync is commonly denied for unpackaged processes.
             _logger.LogDebug(PlatformLogCategory.Monitor, "widgets.calendar", "Calendar events unavailable.");
         }
+    }
+
+    /// <summary>Pure date bucketing used by the refresh loop and unit tests.</summary>
+    public static ImmutableDictionary<DateOnly, int> CountByDay(IEnumerable<DateTimeOffset> starts)
+    {
+        ArgumentNullException.ThrowIfNull(starts);
+        var counts = new Dictionary<DateOnly, int>();
+        foreach (var start in starts)
+        {
+            var day = DateOnly.FromDateTime(start.LocalDateTime);
+            counts[day] = counts.TryGetValue(day, out var existing) ? existing + 1 : 1;
+        }
+
+        return counts.ToImmutableDictionary();
     }
 
     /// <summary>Stops the refresh timer and cancels an in-flight read.</summary>
