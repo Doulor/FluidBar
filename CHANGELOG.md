@@ -19,6 +19,7 @@
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
 - **preview.16 发布 + smoke**：包含 surrogate 修复、SafeMode 下次启动策略；release zip 19.63 MB、无 PDB，exe SHA-256 `DAA071F7...F8BA64`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **Lyric 帧测试稳定化**：`MediaLyricTransitionFrameTests` 的渲染性能断言从 max/p99 8ms 改为 mean 8ms + p95 16.7ms，避免单个 JIT/调度尖峰造成全量 flaky；功能性的帧请求/transition 断言保持不变。
+- **搜索窗口 smoke 截图**：`FLUIDBAR_SMOKE_SEARCH=1` 时 smoke 打开真实 `ClipboardSearchWindow`，通过 `RenderTargetBitmap` 写出 `fluidbar-10-search.png` 并关闭；本轮 debug smoke exit 0，截图 6 KB。
 - **日历权限失效清理**：当 AppointmentStore 读取失败且之前已有 counts 时，清空旧事件点并触发 `Changed`，避免权限撤销后月历保留陈旧 dots；新增对应测试。
 - **自更新等待运行进程测试**：新增真实 `cmd.exe` 运行中 PID 的 self-replace 脚本测试，验证 helper 会先等待进程退出再覆盖 exe；Platform 4 个 self-replace 用例通过。
 - **通知页 surrogate 回归**：新增 `Expanded_notifications_survive_unpaired_utf16_surrogates`，用真实 `IslandRenderer` 渲染含孤立 surrogate 的通知标题/正文，覆盖 preview.15 崩溃路径。

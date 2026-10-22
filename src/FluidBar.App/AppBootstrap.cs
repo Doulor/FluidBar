@@ -482,6 +482,17 @@ internal sealed class AppBootstrap
             await Task.Delay(1200).ConfigureAwait(true);
             await CaptureAsync("fluidbar-09-collapsed.png", log).ConfigureAwait(true);
 
+            if (Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE_SEARCH") == "1")
+            {
+                ShowClipboardSearch();
+                await Task.Delay(500).ConfigureAwait(true);
+                if (_clipboardSearchWindow is { } searchWindow)
+                {
+                    await CaptureWindowAsync(searchWindow, "fluidbar-10-search.png", log).ConfigureAwait(true);
+                    searchWindow.Close();
+                }
+            }
+
             if (Environment.GetEnvironmentVariable("FLUIDBAR_SMOKE_SAFE_MODE") == "1")
             {
                 _settings?.Update(s => s with { Advanced = s.Advanced with { SafeMode = true } });
@@ -795,6 +806,29 @@ internal sealed class AppBootstrap
         {
             var scale = window.RenderScaling;
             var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(
+                new PixelSize((int)Math.Ceiling(window.ClientSize.Width * scale), (int)Math.Ceiling(window.ClientSize.Height * scale)),
+                new Vector(96 * scale, 96 * scale));
+            bitmap.Render(window);
+            bitmap.Save(destination);
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine("capture-failed: " + ex);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task CaptureWindowAsync(Avalonia.Controls.Window window, string fileName, System.Text.StringBuilder log)
+    {
+        log.AppendLine("=== " + fileName + " ===");
+        var folder = Path.Combine(Path.GetTempPath(), "fluidbar-evidence");
+        Directory.CreateDirectory(folder);
+        var destination = Path.Combine(folder, fileName);
+        try
+        {
+            var scale = window.RenderScaling;
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(
                 new PixelSize((int)Math.Ceiling(window.ClientSize.Width * scale), (int)Math.Ceiling(window.ClientSize.Height * scale)),
                 new Vector(96 * scale, 96 * scale));
             bitmap.Render(window);
