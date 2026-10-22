@@ -20,6 +20,7 @@
 - **剪贴板清空**：托盘入口清空岛内历史（系统剪贴板不动），同时清空 pin 摘要，避免固定行复活。
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **Agent 行**：移除死命中目标与 UIA Invoke，等真实会话聚焦服务再接。
+- **便携版自更新**：同名 `FluidBar.exe` 下载后由 PowerShell helper 等旧 PID 退出、覆盖并重启；setup 仍走 ShellExecute。
 - **退出清理**：DisposeServices 加 idempotent guard，避免 Exit + Shutdown 双跑。
 - **外部点击**：钩子新增 OutsidePressed，展开岛点击桌面/其他窗口会按策略收起（固定态不收起）。
 - **发布脚本**：警告门只保留编译器警告；本地 publish 成功，zip 19.62 MB、exe 60.3 MB、无 PDB。
