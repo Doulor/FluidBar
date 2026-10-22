@@ -24,7 +24,8 @@ public sealed record ClipboardEntry(
     ClipboardContentKind Kind,
     string? Text,
     int OriginalTextLength,
-    ImmutableArray<string> FilePaths)
+    ImmutableArray<string> FilePaths,
+    byte[]? ImageDib = null)
 {
     /// <summary>True when the captured text was truncated for storage.</summary>
     public bool IsTextTruncated => Text is not null && Text.Length < OriginalTextLength;
@@ -52,6 +53,9 @@ public sealed class ClipboardServiceOptions
     /// <summary>Maximum number of file paths kept per entry.</summary>
     public int MaxFilePaths { get; init; } = 16;
 
+    /// <summary>Maximum retained image entries; raw DIBs are much larger than text rows.</summary>
+    public int MaxImageEntries { get; init; } = 5;
+
     /// <summary>Maximum attempts to open the clipboard when another process holds it.</summary>
     public int OpenClipboardAttempts { get; init; } = 10;
 
@@ -66,11 +70,14 @@ public sealed class ClipboardHistory
 {
     private readonly LinkedList<ClipboardEntry> _entries = new();
     private readonly object _gate = new();
+    private readonly int _maxImageEntries;
 
-    public ClipboardHistory(int maxEntries = 50)
+    public ClipboardHistory(int maxEntries = 50, int maxImageEntries = 5)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEntries);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxImageEntries);
         MaxEntries = maxEntries;
+        _maxImageEntries = maxImageEntries;
     }
 
     public int MaxEntries { get; }
@@ -111,6 +118,8 @@ public sealed class ClipboardHistory
                 Evictions++;
             }
 
+            TrimImagesLocked();
+
             snapshot = BuildSnapshotLocked();
             return true;
         }
@@ -146,6 +155,25 @@ public sealed class ClipboardHistory
         lock (_gate)
         {
             _entries.Clear();
+        }
+    }
+
+    /// <summary>Drops the oldest image entries once the image count exceeds the cap.</summary>
+    private void TrimImagesLocked()
+    {
+        var images = _entries.Count(entry => entry.Kind == ClipboardContentKind.Image);
+        var node = _entries.Last;
+        while (node is not null && images > _maxImageEntries)
+        {
+            var previous = node.Previous;
+            if (node.Value.Kind == ClipboardContentKind.Image)
+            {
+                _entries.Remove(node);
+                images--;
+                Evictions++;
+            }
+
+            node = previous;
         }
     }
 

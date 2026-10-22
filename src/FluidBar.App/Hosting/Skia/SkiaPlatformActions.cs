@@ -350,13 +350,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IsMuted = volume?.IsMuted ?? false,
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
-            // Pinned rows stay at the top of the page; the underlying history remains newest-first.
-            Clipboard = clipboard
-                .OrderByDescending(entry => _pinnedClipboard.Contains(ClipboardPreview(entry)))
-                .ThenByDescending(entry => entry.CapturedAtUtc)
-                .Take(8)
-                .Select(MapClipboard)
-                .ToImmutableArray(),
+            Clipboard = DisplayedClipboard().Select(MapClipboard).ToImmutableArray(),
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
@@ -1624,23 +1618,66 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private IslandActionResult CopyClipboard(in IslandPlatformAction action)
     {
-        var text = action.Text;
-        if (action.Index >= 0)
+        if (action.Index < 0)
         {
-            var history = _clipboard.GetHistory();
-            if (action.Index < history.Count && !string.IsNullOrWhiteSpace(history[action.Index].Text))
+            if (string.IsNullOrWhiteSpace(action.Text))
             {
-                text = history[action.Index].Text;
+                return Unsupported("the clipboard row has no text to copy");
             }
-        }
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return Unsupported("the clipboard row has no text to copy (image/file rows are not supported)");
+
+            var fallbackText = action.Text;
+            _ = RunAsync(() => _clipboard.SetTextAsync(fallbackText), "island.actions.clipboard-copy");
+            return IslandActionResult.Handled;
         }
 
-        _ = RunAsync(() => _clipboard.SetTextAsync(text), "island.actions.clipboard-copy");
-        return IslandActionResult.Handled;
+        var history = DisplayedClipboard();
+        if (action.Index >= history.Count)
+        {
+            return Unsupported("the clipboard row no longer exists");
+        }
+
+        var entry = history[action.Index];
+        switch (entry.Kind)
+        {
+            case ClipboardContentKind.Text:
+                if (string.IsNullOrWhiteSpace(entry.Text))
+                {
+                    return Unsupported("the clipboard row has no text to copy");
+                }
+
+                _ = RunAsync(() => _clipboard.SetTextAsync(entry.Text), "island.actions.clipboard-copy");
+                return IslandActionResult.Handled;
+
+            case ClipboardContentKind.Files:
+                if (entry.FilePaths.Length == 0)
+                {
+                    return Unsupported("the clipboard file row has no paths");
+                }
+
+                _ = RunAsync(() => _clipboard.SetFilesAsync(entry.FilePaths), "island.actions.clipboard-copy-files");
+                return IslandActionResult.Handled;
+
+            case ClipboardContentKind.Image:
+                if (entry.ImageDib is not { Length: > 0 })
+                {
+                    return Unsupported("the clipboard image has no DIB payload");
+                }
+
+                _ = RunAsync(() => _clipboard.SetImageAsync(entry.ImageDib), "island.actions.clipboard-copy-image");
+                return IslandActionResult.Handled;
+
+            default:
+                return Unsupported("the clipboard row has no copyable payload");
+        }
     }
+
+    /// <summary>Rows exactly as painted: pinned first, then newest; capped at the page limit.</summary>
+    private IReadOnlyList<ClipboardEntry> DisplayedClipboard()
+        => _clipboard.GetHistory()
+            .OrderByDescending(entry => _pinnedClipboard.Contains(ClipboardPreview(entry)))
+            .ThenByDescending(entry => entry.CapturedAtUtc)
+            .Take(8)
+            .ToArray();
 
     private IslandActionResult Defer(in IslandPlatformAction action, string reason)
     {

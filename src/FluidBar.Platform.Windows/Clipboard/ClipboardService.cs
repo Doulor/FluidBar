@@ -48,7 +48,7 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
 
     protected override async ValueTask OnStartAsync(CancellationToken cancellationToken)
     {
-        _history = new ClipboardHistory(_options.MaxHistoryEntries);
+        _history = new ClipboardHistory(_options.MaxHistoryEntries, _options.MaxImageEntries);
         _lastSequence = 0;
         _window = await _host.CreateWindowAsync("clipboard", PlatformWindowKind.MessageOnly,
             OnWindowMessage, cancellationToken).ConfigureAwait(false);
@@ -225,11 +225,48 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
             || NativeMethods.User32.IsClipboardFormatAvailable(NativeMethods.CF_DIB))
         {
             return new ClipboardEntry(sequence, timestamp, ClipboardContentKind.Image, null, 0,
-                ImmutableArray<string>.Empty);
+                ImmutableArray<string>.Empty, ReadDib());
         }
 
         return new ClipboardEntry(sequence, timestamp, ClipboardContentKind.Unknown, null, 0,
             ImmutableArray<string>.Empty);
+    }
+
+    /// <summary>
+    /// Copies the raw CF_DIB payload so an image row can be pasted back later. We deliberately keep
+    /// the device-independent bitmap instead of decoding/encoding PNG: no WIC/GDI+ dependency and the
+    /// bytes are exactly what the source application published.
+    /// </summary>
+    private static byte[]? ReadDib()
+    {
+        var handle = NativeMethods.User32.GetClipboardData(NativeMethods.CF_DIB);
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        var size = (ulong)NativeMethods.Kernel32.GlobalSize(handle).ToInt64();
+        if (size == 0 || size > 64L * 1024 * 1024)
+        {
+            return null;
+        }
+
+        var pointer = NativeMethods.Kernel32.GlobalLock(handle);
+        if (pointer == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bytes = new byte[(int)size];
+            Marshal.Copy(pointer, bytes, 0, bytes.Length);
+            return bytes;
+        }
+        finally
+        {
+            NativeMethods.Kernel32.GlobalUnlock(pointer);
+        }
     }
 
     private static string? ReadUnicodeText()
@@ -318,6 +355,160 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
         _logger.LogWarning(PlatformLogCategory.Clipboard, "clipboard.write-open-failed",
             "Could not open the clipboard for writing.");
         return false;
+    }
+
+    /// <summary>Writes a raw CF_DIB image back to the system clipboard.</summary>
+    public Task<bool> SetImageAsync(byte[] dib, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dib);
+        return WriteWithRetryAsync(() => TryWriteImageOnce(dib), cancellationToken);
+    }
+
+    /// <summary>Writes file paths back as CF_HDROP (paste into Explorer/email as real files).</summary>
+    public Task<bool> SetFilesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        return WriteWithRetryAsync(() => TryWriteFilesOnce(paths), cancellationToken);
+    }
+
+    private async Task<bool> WriteWithRetryAsync(Func<(bool Opened, bool Written)> write,
+        CancellationToken cancellationToken)
+    {
+        var attempts = Math.Clamp(_options.OpenClipboardAttempts, 1, 100);
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            var (opened, written) = await Task.Run(write, cancellationToken).ConfigureAwait(false);
+            if (opened)
+            {
+                return written;
+            }
+
+            if (attempt < attempts - 1)
+            {
+                await Task.Delay(_options.OpenClipboardRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        _counters.IncrementClipboardReadFailures();
+        _logger.LogWarning(PlatformLogCategory.Clipboard, "clipboard.write-open-failed",
+            "Could not open the clipboard for writing.");
+        return false;
+    }
+
+    private static (bool Opened, bool Written) TryWriteImageOnce(byte[] dib)
+    {
+        if (!NativeMethods.User32.OpenClipboard(IntPtr.Zero))
+        {
+            return (false, false);
+        }
+
+        try
+        {
+            if (!NativeMethods.User32.EmptyClipboard() || dib.Length == 0)
+            {
+                return (true, false);
+            }
+
+            var memory = NativeMethods.Kernel32.GlobalAlloc(NativeMethods.GMEM_MOVEABLE, (UIntPtr)dib.Length);
+            if (memory == IntPtr.Zero)
+            {
+                return (true, false);
+            }
+
+            var pointer = NativeMethods.Kernel32.GlobalLock(memory);
+            if (pointer == IntPtr.Zero)
+            {
+                NativeMethods.Kernel32.GlobalFree(memory);
+                return (true, false);
+            }
+
+            try
+            {
+                Marshal.Copy(dib, 0, pointer, dib.Length);
+            }
+            finally
+            {
+                NativeMethods.Kernel32.GlobalUnlock(memory);
+            }
+
+            if (NativeMethods.User32.SetClipboardData(NativeMethods.CF_DIB, memory) == IntPtr.Zero)
+            {
+                NativeMethods.Kernel32.GlobalFree(memory);
+                return (true, false);
+            }
+
+            return (true, true);
+        }
+        finally
+        {
+            NativeMethods.User32.CloseClipboard();
+        }
+    }
+
+    private static (bool Opened, bool Written) TryWriteFilesOnce(IReadOnlyList<string> paths)
+    {
+        if (!NativeMethods.User32.OpenClipboard(IntPtr.Zero))
+        {
+            return (false, false);
+        }
+
+        try
+        {
+            if (!NativeMethods.User32.EmptyClipboard() || paths.Count == 0)
+            {
+                return (true, false);
+            }
+
+            // CF_HDROP payload: DROPFILES header followed by a double-null-terminated wide path list.
+            var list = System.Text.Encoding.Unicode.GetBytes(string.Join('\0', paths) + "\0\0");
+            var headerSize = Marshal.SizeOf<DropFiles>();
+            var total = headerSize + list.Length;
+            var memory = NativeMethods.Kernel32.GlobalAlloc(NativeMethods.GMEM_MOVEABLE, (UIntPtr)total);
+            if (memory == IntPtr.Zero)
+            {
+                return (true, false);
+            }
+
+            var pointer = NativeMethods.Kernel32.GlobalLock(memory);
+            if (pointer == IntPtr.Zero)
+            {
+                NativeMethods.Kernel32.GlobalFree(memory);
+                return (true, false);
+            }
+
+            try
+            {
+                var header = new DropFiles { pFiles = (uint)headerSize, fWide = 1 };
+                Marshal.StructureToPtr(header, pointer, fDeleteOld: false);
+                Marshal.Copy(list, 0, IntPtr.Add(pointer, headerSize), list.Length);
+            }
+            finally
+            {
+                NativeMethods.Kernel32.GlobalUnlock(memory);
+            }
+
+            if (NativeMethods.User32.SetClipboardData(NativeMethods.CF_HDROP, memory) == IntPtr.Zero)
+            {
+                NativeMethods.Kernel32.GlobalFree(memory);
+                return (true, false);
+            }
+
+            return (true, true);
+        }
+        finally
+        {
+            NativeMethods.User32.CloseClipboard();
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DropFiles
+    {
+        public uint pFiles;
+        public int x;
+        public int y;
+        public int fNC;
+        public int fWide;
     }
 
     private static (bool Opened, bool Written) TryWriteOnce(string text)

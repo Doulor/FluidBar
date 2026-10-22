@@ -68,6 +68,22 @@ public sealed class ClipboardHistoryTests
     }
 
     [Fact]
+    public void TryAdd_KeepsOnlyTheNewestImageEntries()
+    {
+        var history = new ClipboardHistory(maxEntries: 20, maxImageEntries: 2);
+        for (uint sequence = 1; sequence <= 3; sequence++)
+        {
+            history.TryAdd(new ClipboardEntry(sequence, DateTimeOffset.UnixEpoch.AddSeconds(sequence),
+                ClipboardContentKind.Image, null, 0, ImmutableArray<string>.Empty,
+                [checked((byte)sequence)]), out _);
+        }
+
+        var snapshot = history.Snapshot();
+        Assert.Equal(2, snapshot.History.Count(entry => entry.Kind == ClipboardContentKind.Image));
+        Assert.DoesNotContain(snapshot.History, entry => entry.Sequence == 1);
+    }
+
+    [Fact]
     public void Snapshot_IsEmptyForFreshHistory()
     {
         var history = new ClipboardHistory();
