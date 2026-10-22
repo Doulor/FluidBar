@@ -68,6 +68,7 @@
     "Island.Accessibility.PageDot": "第 {0} 页：{1}",
     "Island.Accessibility.PreviousMonth": "上个月",
     "Island.Accessibility.NextMonth": "下个月",
+    "Island.Accessibility.OpenSoundSettings": "打开 Windows 声音设置",
     "Island.Accessibility.UnsupportedOutput": "此版本没有可用的音频输出服务。",
     "Island.Accessibility.UnsupportedQueue": "此版本没有可用的播放队列服务。",
     "Island.Accessibility.Unpin": "取消固定",

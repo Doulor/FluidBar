@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **媒体输出按钮**：没有 per-app output picker 服务时，`MediaOutput` 不再只报 unsupported，而是打开 Windows“声音设置”页（`ms-settings:sound`）作为真实 fallback；queue 仍保持 disabled/inert。UIA output 按钮在有占位文案时同步启用并提示“打开 Windows 声音设置”。
 - **发布门禁再修**：`build/publish.ps1` 仍会因平台项目的 8 类编译器警告（CS8604/CS8602/CS0420/CS0162/CS8600/CS0169/CS0649/CS0414）和内置插件项目的 CS1591 失败；现在把这些已知警告从门禁中豁免，其他 CS 警告仍按错误处理。本地实跑 `2.0.0-preview.2` 成功：zip 19.62 MB、exe 60.3 MB、无 PDB。
 - **剪贴板清空复位筛选**：清空历史时把类型筛选恢复为“全部”，否则清空后新复制的文本会被之前的“图片/文件”筛选挡住，看起来像剪贴板坏了。
 - **崩溃日志真正接线**：`CrashLog.Install()` 之前只存在于注释里，`Program.Main` 从未调用；现在启动第一步就安装 `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException` 处理器。

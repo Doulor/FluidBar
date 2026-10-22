@@ -1341,8 +1341,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.VolumeMute => ToggleVolumeMute(),
             IslandPlatformActionKind.BrightnessSet => SetBrightness(action.Value),
             IslandPlatformActionKind.QuickToggle => Toggle(action.Toggle),
-            IslandPlatformActionKind.MediaOutput => Unsupported(
-                "no audio-output picker service exists (needs an IAudioOutputService over IMMDeviceEnumerator)"),
+            IslandPlatformActionKind.MediaOutput => OpenSoundSettings(),
             IslandPlatformActionKind.MediaQueue => Unsupported(
                 "no media queue service exists (the GSMTC snapshot exposes no queue)"),
             IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
@@ -1640,6 +1639,21 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             ? IslandActionResult.Handled
             : Defer(new IslandPlatformAction(IslandPlatformActionKind.AgentActivate, index),
                 "no unique agent terminal window matched the session title or project");
+    }
+
+    private IslandActionResult OpenSoundSettings()
+    {
+        try
+        {
+            // Windows has no public per-app output picker API here. The system Sound settings page is
+            // the honest fallback: it is where the user can actually change the default endpoint.
+            Process.Start(new ProcessStartInfo("ms-settings:sound") { UseShellExecute = true });
+            return IslandActionResult.Handled;
+        }
+        catch
+        {
+            return Unsupported("could not open the Windows sound settings page");
+        }
     }
 
     private IslandActionResult ClearNotifications()

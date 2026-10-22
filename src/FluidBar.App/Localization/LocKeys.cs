@@ -158,6 +158,8 @@ public static partial class LocKeys
             public const string PreviousMonth = "Island.Accessibility.PreviousMonth";
             /// <summary><c>Island.Accessibility.NextMonth</c></summary>
             public const string NextMonth = "Island.Accessibility.NextMonth";
+            /// <summary><c>Island.Accessibility.OpenSoundSettings</c></summary>
+            public const string OpenSoundSettings = "Island.Accessibility.OpenSoundSettings";
             /// <summary><c>Island.Accessibility.UnsupportedOutput</c></summary>
             public const string UnsupportedOutput = "Island.Accessibility.UnsupportedOutput";
             /// <summary><c>Island.Accessibility.UnsupportedQueue</c></summary>

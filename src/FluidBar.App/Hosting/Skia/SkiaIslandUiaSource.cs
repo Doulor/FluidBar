@@ -638,23 +638,25 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             help: media.HasVolume
                 ? L("Island.Accessibility.ToggleHelp", "Press Enter to toggle.")
                 : L("Island.Accessibility.UnsupportedVolume", "No audio endpoint is available.")));
+        var canOpenOutput = state.Pages.Media.OutputAvailable
+            || !string.IsNullOrWhiteSpace(state.Pages.Media.OutputPlaceholder);
         children.Add(Node(
             "island.page.1.output",
             UiaElementRole.Button,
             L("Page.Media.Output", "Audio output"),
             ToRect(PageLayout.MediaOutput(page)),
-            // Disabled control: no Invoke pattern — an "invokable but disabled" button is exactly the
-            // dead-but-clickable shape the user complained about. The reason travels in ItemStatus/help.
-            UiaPatternKind.None,
+            canOpenOutput ? UiaPatternKind.Invoke : UiaPatternKind.None,
             new UiaElementState
             {
-                IsEnabled = false,
-                IsFocusable = false,
-                ItemStatus = L("Island.Accessibility.UnsupportedOutput",
-                    "No audio-output service is available in this build."),
+                IsEnabled = canOpenOutput,
+                IsFocusable = canOpenOutput,
+                ItemStatus = canOpenOutput
+                    ? L("Island.Accessibility.OpenSoundSettings", "Open Windows sound settings.")
+                    : L("Island.Accessibility.UnsupportedOutput", "No audio-output service is available in this build."),
             },
-            help: L("Island.Accessibility.UnsupportedOutput",
-                "No audio-output service is available in this build.")));
+            help: canOpenOutput
+                ? L("Island.Accessibility.OpenSoundSettings", "Open Windows sound settings.")
+                : L("Island.Accessibility.UnsupportedOutput", "No audio-output service is available in this build.")));
         children.Add(Node(
             "island.page.1.queue",
             UiaElementRole.Button,
@@ -1287,7 +1289,6 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
                 return;
             case "queue":
-                return;
                 return;
             case "card":
                 if (parts.Length > 4 && parts[4] == "play")

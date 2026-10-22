@@ -68,6 +68,7 @@
     "Island.Accessibility.PageDot": "Page {0}: {1}",
     "Island.Accessibility.PreviousMonth": "Previous month",
     "Island.Accessibility.NextMonth": "Next month",
+    "Island.Accessibility.OpenSoundSettings": "Open Windows sound settings.",
     "Island.Accessibility.UnsupportedOutput": "No audio-output service is available in this build.",
     "Island.Accessibility.UnsupportedQueue": "No media queue service is available in this build.",
     "Island.Accessibility.Unpin": "Unpin",

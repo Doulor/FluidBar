@@ -202,8 +202,8 @@ public sealed class SkiaIslandUiaTests
         Assert.Equal(UiaElementRole.Slider, seek!.Role);
         Assert.InRange(seek.State.RangeValue ?? -1, 0, 100);
         Assert.NotNull(output);
-        Assert.False(output!.State.IsEnabled);
-        Assert.False(output.State.IsFocusable);
+        Assert.True(output!.State.IsEnabled);
+        Assert.True(output.State.IsFocusable);
         Assert.False(string.IsNullOrWhiteSpace(output.State.ItemStatus));
         Assert.NotNull(queue);
         Assert.False(queue!.State.IsEnabled);

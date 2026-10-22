@@ -239,7 +239,8 @@ public static class SkiaIslandHitTest
         // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable
         // and then do nothing. The renderer greys them and prints the localized reason instead.
         if (kind == PageSlotKind.Media
-            && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable)
+            && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable
+                    && string.IsNullOrWhiteSpace(pages.Media.OutputPlaceholder))
                 || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)
                 || (control == IslandPageControl.VolumeMute && !pages.Media.HasVolume)))
         {
