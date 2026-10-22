@@ -72,7 +72,11 @@ internal sealed class ClipboardSearchWindow : Window
             },
         };
 
-        Opened += (_, _) => _query.Focus();
+        Opened += (_, _) =>
+        {
+            _query.Focus();
+            _query.SelectAll();
+        };
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)

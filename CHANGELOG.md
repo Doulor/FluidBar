@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **搜索框重新打开时全选**：Opened 时 `Focus()` 后 `SelectAll()`，预填 query 时直接输入会替换旧关键字，而不是插到开头。
 - **SafeMode 插件运行时回归**：新增 `SafeModePluginRuntimeTests`，在 local 插件目录放一个 `manifest.json`，用 `LoadCommunity=false` 组合 `PluginRuntime`，断言 `DiscoveredPackages`/`CommunityResults` 均为空，锁住安全模式跳过社区发现/加载的契约。
 - **MediaQueue 无会话回归**：新增 `SkiaPlatformActionsTests.MediaQueue_WithoutASession_ReportsThePlayerUnavailable`，断言返回 “no active media session to open”，锁住 switch 真正调用 `OpenMediaPlayer` 而不是旧的 “no queue service” 分支。
 - **搜索窗口可访问性**：为 Window 和查询 TextBox 设置 `AutomationProperties.Name`/`HelpText`，屏幕阅读器能读出“搜索 / Search”和提示文本。
