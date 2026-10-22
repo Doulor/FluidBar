@@ -423,13 +423,24 @@ public static class SettingsSectionBuilder
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Desc),
                     [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.System), "system"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Dark), "dark"),
                         (ctx.Localizer.Get(LocKeys.Settings.Appearance.Theme.Light), "light"),
                     ],
-                    settings.Theme == AppTheme.Light ? "light" : "dark",
+                    settings.Theme switch
+                    {
+                        AppTheme.Light => "light",
+                        AppTheme.Dark => "dark",
+                        _ => "system",
+                    },
                     value => ctx.Settings.Update(s => s with
                     {
-                        Theme = value == "light" ? AppTheme.Light : AppTheme.Dark,
+                        Theme = value switch
+                        {
+                            "light" => AppTheme.Light,
+                            "dark" => AppTheme.Dark,
+                            _ => AppTheme.System,
+                        },
                     })),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.Material.Desc),
