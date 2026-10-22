@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **退出顺序**：搜索窗口先于 host dispose。
 - **恢复页启动**：`_archipelago` 先于 `ApplyRestoredPage` 初始化；smoke page3 启动通过。
 - **设置目录覆盖**：`FLUIDBAR_SETTINGS_DIR`；隔离 smoke 已生成 Settings/六页展开。
 - **Core flush 回归**：debounce=0 连续保存后 flush。

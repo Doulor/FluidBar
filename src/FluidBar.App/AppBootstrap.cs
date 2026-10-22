@@ -1258,11 +1258,8 @@ internal sealed class AppBootstrap
         _pluginRuntime = null;
         // The single notification listener is owned (and disposed exactly once) by _platformActions.
 
-        _skiaHost?.Dispose();
-        _skiaHost = null;
-
-        // Auxiliary windows are not owned by the island host; close them before the services they
-        // bind to are disposed so their Closed handlers cannot touch half-disposed state.
+        // Auxiliary windows are not owned by the island host; close them before the host and the
+        // services they bind to are disposed so their Closed handlers can restore the pin safely.
         try
         {
             _clipboardSearchWindow?.Close();
@@ -1272,6 +1269,8 @@ internal sealed class AppBootstrap
         }
 
         _clipboardSearchWindow = null;
+        _skiaHost?.Dispose();
+        _skiaHost = null;
 
         // Update coordinator: stop the schedule and dispose the shared HttpClient.
         if (_updates is not null)
