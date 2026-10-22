@@ -62,7 +62,9 @@ internal sealed class ProcessLoopbackCapture : IDisposable
             Interlocked.Exchange(ref _frames, 0);
         }
 
-        return IsAvailable;
+        // Ready even before the first frame: the caller falls back to wall time meanwhile. Returning false
+        // here made every poll take the legacy path, which then froze the position (measured 2026-10-22).
+        return true;
     }
 
     public void Dispose()
