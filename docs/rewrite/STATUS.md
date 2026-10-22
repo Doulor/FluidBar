@@ -233,7 +233,8 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 **最终用户指令**：直接照抄 `https://github.com/GEORGEWWWU/NetSpeed-Dynamic` 里的通知样式。
 
 - 按参考截图 `screenshot4.png` 实测：**基础 360×64 DIP**，圆角 **21 DIP**（比 35 DIP 胶囊方，贴近参考）。
-- **长度上限 540 → 810 DIP（再 +50%）**：短消息未被截断时仍保持 360；只有文本测量超出时才逐渐变宽，最长 810；Float/Flush 宿主同步扩到 858 DIP 以容纳。
+- **长度上限 810 → 1215 DIP（再 +50%）**：短消息未被截断时仍保持 360；只有文本测量超出时才逐渐变宽，最长 1215；Float/Flush 宿主同步扩到 1263 DIP 以容纳。
+- 通知卡右侧频谱已纳入 `IsWaveActive`/`WaveDamage`，媒体播放时按 30 fps 更新相位并持续请求动画帧。
 - **35 DIP 圆形头像**（30 DIP 图片，`object-fit: cover`）；优先读取 toast XML 的 `appLogoOverride` 图片（QQ 发送者/群头像），其次 `AppInfo.DisplayInfo.GetLogo(64×64)`，再次运行中 app 的可执行文件图标；全部失败才画通用铃铛。
 - Windows `UserNotificationListener` 不暴露 image 元素，因此新增只读 `wpndatabase.db` 的 payload reader；QQ 的 `src` 为空时仍回退 app 图标。
 - 通知卡/通知行点击读取 toast 的 `launch` 协议（QQ 为 `ntqq-notification://...`）并打开对应聊天；没有 launch 时回退打开 app 可执行文件。
@@ -243,6 +244,6 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
 - FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
 - 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛，通知为主时隐藏 split 预览球。golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `1067856BE989319044C575741140A54A5BD3F842C7F28986B20E7628CF55977F`。
-- 证据：`build/evidence/toast-293088.jpg`（360×64 短消息保持基础宽度；长文本测试覆盖到 810）。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `04F68B5CEED4AADA862CC0B09A83F944BD2EC35D14A893095AEA68851A0C17EF`。
+- 证据：`build/evidence/toast-293088.jpg`（360×64 短消息保持基础宽度；长文本测试覆盖到 1215）。
 
