@@ -19,4 +19,25 @@ public sealed class UpdateSelfReplaceTests
         Assert.Contains("Start-Process -FilePath 'C:\\Program Files\\FluidBar\\FluidBar.exe'", script);
         Assert.Contains("Remove-Item -LiteralPath $PSCommandPath -Force", script);
     }
+
+    [Fact]
+    public void Script_is_written_as_utf8_with_bom()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"fluidbar-update-test-{Guid.NewGuid():N}.ps1");
+        try
+        {
+            ProcessUpdateInstallerLauncher.WriteSelfReplaceScript(path, "# 中文路径\n");
+
+            var bytes = File.ReadAllBytes(path);
+            Assert.True(bytes.Length >= 3);
+            Assert.Equal(0xEF, bytes[0]);
+            Assert.Equal(0xBB, bytes[1]);
+            Assert.Equal(0xBF, bytes[2]);
+            Assert.Contains("中文路径", File.ReadAllText(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
