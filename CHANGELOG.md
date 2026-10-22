@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **preview.9 发布**：启动恢复页 NRE / 退出搜索窗口顺序修复后本地 `publish.ps1 -Version 2.0.0-preview.9 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `2BFB4374...E53C07`。
 - **SafeMode 启动 smoke**：临时 Core settings 将 `safeMode=true`，`FLUIDBAR_SETTINGS_DIR` 隔离启动 smoke，进程 exit 0；日志出现 `plugin.runtime.safe-mode`「community plugins are not loaded」，确认安全模式在 AppBootstrap 真实启动路径生效。
 - **v1 设置迁移 smoke**：把真实 v1 `settings.json` 复制到 `FLUIDBAR_SETTINGS_DIR` 临时目录后启动 smoke，App exit 0，Core 自动生成 v2 `settings.json` 和 `settings.v1.backup.json`，六个 expanded 页面全部渲染；未触碰真实用户设置。
 - **退出时搜索窗口顺序**：`DisposeServices` 之前先 `_skiaHost.Dispose()` 再关搜索窗口，`Closed` handler 会在已释放 host 上 `SetActivityPinned`；改为先关闭搜索窗口、恢复 pin，再释放 host。

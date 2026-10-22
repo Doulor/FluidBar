@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **preview.9**：恢复页/退出顺序修复后 publish 成功（19.63 MB、无 PDB）。
 - **SafeMode 启动**：隔离 settings safeMode=true，日志确认 community skipped。
 - **v1 设置迁移 smoke**：临时 settings.json 启动成功，生成 v2 + v1 backup。
 - **退出顺序**：搜索窗口先于 host dispose。
