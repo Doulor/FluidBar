@@ -611,10 +611,23 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private (string? Current, string? Next, double Highlight, FluidBar.Island.KaraokeTrack? Karaoke) ResolveLyrics(
         MediaSnapshot media, TimeSpan position)
     {
+        // Instrumentals have nothing to sing: show the title and artist instead of whatever the catalogue
+        // matched for that title (user report 2026-10-22: "纯音乐随机取了别的歌的歌词").
+        if (FluidBar.Platform.Windows.Media.Lyrics.InstrumentalDetector.LooksInstrumental(media.Title))
+        {
+            return (null, null, -1, null);
+        }
+
         // The player's own KRC file comes FIRST: it is exactly what KuGou is showing (word-level timing)
         // and cannot be another song. It used to be consulted after the "no online document" early
         // return, so a track without an online lyric never reached it (user report 2026-10-21).
         var localDocument = FluidBar.Platform.Windows.Media.Lyrics.KugouLyricCache.TryFind(media.Title, media.Artist);
+        if (FluidBar.Platform.Windows.Media.Lyrics.InstrumentalDetector.IsPlaceholder(localDocument))
+        {
+            // The player's own lyric for this file is the "纯音乐，请欣赏" placeholder: treat it as no lyric.
+            return (null, null, -1, null);
+        }
+
         if (localDocument is { IsEmpty: false })
         {
             var localSelection = LyricsTimelineSelector.SelectDetailed(localDocument, position, media.Title, media.Artist);
@@ -792,6 +805,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var artwork = _artworkCache.TryGet(media.TrackKey, out var artworkEntry) && artworkEntry is not null
             ? artworkEntry.Data
             : null;
+        if (artwork is not null)
+        {
+            _lastArtworkTitle = CoreTitle(media.Title);
+            _lastArtworkEntry = artworkEntry;
+        }
+        else if (_lastArtworkEntry is not null
+                 && _lastArtworkTitle.Length > 0
+                 && string.Equals(_lastArtworkTitle, CoreTitle(media.Title), StringComparison.OrdinalIgnoreCase))
+        {
+            // The identity key can change for a cosmetic reason (caption refinement, artist field filled in
+            // a beat later). Reusing the cover we already decoded keeps it on screen instead of flashing
+            // placeholder -> cover -> placeholder ("封面获取到了又丢失了", user report 2026-10-22).
+            artwork = _lastArtworkEntry.Data;
+        }
 
         var (lyricLine, nextLyricLine, lyricHighlight, karaoke) = ResolveLyrics(media, position);
 
@@ -825,6 +852,28 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             TrackIndex = 0,
             TrackCount = 0,
         };
+    }
+
+    /// <summary>Last artwork shown, reused while the track (by title core) is unchanged.</summary>
+    private string _lastArtworkTitle = string.Empty;
+    private ArtworkEntry? _lastArtworkEntry;
+
+    /// <summary>Title without decorations ("Song (Live)" -> "song"), used to recognise the same track.</summary>
+    private static string CoreTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return string.Empty;
+        }
+
+        var text = title.Trim();
+        var cut = text.IndexOfAny(['(', '（', '[', '【']);
+        if (cut > 0)
+        {
+            text = text[..cut];
+        }
+
+        return text.Trim().ToLowerInvariant();
     }
 
     /// <summary>Monotonic playback position shared by every media mapping (progress, lyrics, karaoke).</summary>

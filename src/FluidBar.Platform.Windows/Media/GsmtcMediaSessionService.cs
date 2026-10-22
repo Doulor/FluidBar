@@ -479,15 +479,35 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         var processName = previous.SourceDisplayName ?? "kugou";
+        // A caption refinement ("Song" -> "Song (Live)") must not change the identity: the artwork and the
+        // lyric document are cached under the key, and re-keying threw both away for a cosmetic change.
+        var keepKey = IsTitleRefinement(previous.Title, title);
         Publish(previous with
         {
             Title = title,
             Artist = artist,
-            TrackKey = "win|" + processName.ToLowerInvariant() + "|" + title + "|" + artist,
+            TrackKey = keepKey
+                ? previous.TrackKey
+                : "win|" + processName.ToLowerInvariant() + "|" + title + "|" + artist,
             // The length belongs to the out-going track and must not be shown next to the new title; the
             // position is left alone so a one-poll caption blip cannot rewind the bar.
             Duration = TimeSpan.Zero,
         });
+    }
+
+    /// <summary>True when the new caption only extends/trims the old title (same recording).</summary>
+    private static bool IsTitleRefinement(string? oldTitle, string newTitle)
+    {
+        if (string.IsNullOrWhiteSpace(oldTitle) || string.IsNullOrWhiteSpace(newTitle))
+        {
+            return false;
+        }
+
+        var left = oldTitle.Trim();
+        var right = newTitle.Trim();
+        return !string.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+               && (right.StartsWith(left, StringComparison.OrdinalIgnoreCase)
+                   || left.StartsWith(right, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Splits KuGou's "artist - title" state-file string.</summary>
@@ -732,11 +752,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         // Attach the cover *before* publishing: the App builds its page models from this snapshot, and
         // the models are only rebuilt when their content signature changes — a cover that arrived one
-        // event later would keep the placeholder until the next track.
-        if (changed)
-        {
-            TryAttachFallbackArtwork(candidate);
-        }
+        // event later would keep the placeholder until the next track. Called on every publish, not only
+        // on a signature change: the identity is published a poll earlier by PollPlayerCaption, which
+        // consumed that edge and left the new track without a cover lookup (user report 2026-10-22:
+        // "封面获取到了又丢失了").
+        TryAttachFallbackArtwork(candidate);
 
         if (changed || positionMoved || durationChanged)
         {
