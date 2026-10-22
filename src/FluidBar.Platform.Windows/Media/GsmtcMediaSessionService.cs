@@ -127,6 +127,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
     private TimeSpan _audioAtWrite;
 
+    /// <summary>Slowly learned correction for the state file's own rounding, in milliseconds.</summary>
+    private double _anchorOffsetMs;
+
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
@@ -624,7 +627,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // Extrapolate by the time the track was actually PLAYING since the file was written, not by wall
         // time: the file is only rewritten every ~30 s, so a pause inside that window made the estimate
         // up to twenty seconds too large (user report 2026-10-22: "jumped 10 s, still 10 s off").
-        var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
+        var expected = statePosition
+            + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000))
+            + TimeSpan.FromMilliseconds(_anchorOffsetMs);
+
+        // The frame counter removed the drift, so what is left is the state file's own rounding. Whenever
+        // the player repaints its clock the reading is authoritative for that instant, so learn the offset
+        // slowly (EMA, clamped) instead of jumping on a single sample.
+        if (msaaIsFresh && candidate.Position > TimeSpan.Zero)
+        {
+            var sample = (candidate.Position - expected).TotalMilliseconds;
+            if (Math.Abs(sample) < 5000 && _loopback.IsAvailable)
+            {
+                _anchorOffsetMs = Math.Clamp((_anchorOffsetMs * 0.9) + (sample * 0.1), -3000, 3000);
+            }
+        }
         // Guard against the state file still describing the previous track: right after a switch its value
         // can be far AHEAD of the new track's small reading (measured 51 s vs 20 s, 2026-10-22).
         if (candidate.Position > TimeSpan.Zero
