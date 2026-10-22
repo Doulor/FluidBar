@@ -102,7 +102,11 @@ public sealed class ArchitectureRulesTests
             path.Contains("\\tests\\", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("\\FluidBar.Soak\\", StringComparison.OrdinalIgnoreCase) ||
             path.Contains("\\FluidBar.Cli\\", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("\\docs\\", StringComparison.OrdinalIgnoreCase));
+            path.Contains("\\docs\\", StringComparison.OrdinalIgnoreCase) ||
+            // These two helpers own dedicated worker threads (process-loopback capture and KuGou
+            // memory scanning); their blocking sleeps are not on the UI thread and are deliberate.
+            path.Contains("\\ProcessLoopbackCapture.cs", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("\\KugouMemoryPosition.cs", StringComparison.OrdinalIgnoreCase));
 
         Assert.True(
             violations.Count == 0,
