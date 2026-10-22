@@ -121,6 +121,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         _pollingFallback = false;
         Volatile.Write(ref _primed, 0);
         Volatile.Write(ref _seededIds, ImmutableHashSet<uint>.Empty);
+        Volatile.Write(ref _readIds, ImmutableHashSet<uint>.Empty);
 
         UserNotificationListener listener;
         try
@@ -357,6 +358,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         lock (_stateGate)
         {
             _recent = seeded;
+            PruneReadIds();
         }
 
         if (!seeded.IsDefaultOrEmpty)
@@ -440,6 +442,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                 }
 
                 _recent = merged;
+                PruneReadIds();
             }
 
             Publish(new NotificationsSnapshot(NotificationAccessState.Allowed, _recent));
@@ -601,11 +604,27 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             }
 
             _recent = ImmutableArray<NotificationEntry>.Empty;
+            _readIds = ImmutableHashSet<uint>.Empty;
         }
 
         Publish(new NotificationsSnapshot(_access, _recent));
         _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.cleared",
             "Notification page cleared locally.");
+    }
+
+    /// <summary>Drops read ids for toasts that are no longer in the bounded recent list.</summary>
+    private void PruneReadIds()
+    {
+        if (_readIds.IsEmpty)
+        {
+            return;
+        }
+
+        var next = _readIds.Intersect(_recent.Select(entry => entry.Id));
+        if (next.Count != _readIds.Count)
+        {
+            _readIds = next;
+        }
     }
 
     /// <summary>Marks one toast as read; the next snapshot clears its unread dot.</summary>
@@ -665,6 +684,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             if (next.Length != _recent.Length)
             {
                 _recent = next;
+                PruneReadIds();
                 removed = true;
             }
         }
