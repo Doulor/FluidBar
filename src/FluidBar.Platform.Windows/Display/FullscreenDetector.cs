@@ -24,6 +24,14 @@ public static class FullscreenDetector
             return false;
         }
 
+        // The island's own borderless windows can be foreground on top of another app; never let
+        // our own process suppress the island.
+        NativeMethods.User32.GetWindowThreadProcessId(hwnd, out var processId);
+        if (ShouldIgnoreProcess(processId, (uint)Environment.ProcessId))
+        {
+            return false;
+        }
+
         // The desktop/shell itself is never a fullscreen app.
         var className = new char[128];
         var length = NativeMethods.User32.GetClassNameW(hwnd, className, className.Length);
@@ -71,6 +79,10 @@ public static class FullscreenDetector
     /// True for borderless/popup windows. A normal maximized window keeps WS_CAPTION and no WS_POPUP,
     /// so maximizing a browser or Explorer must not hide the island.
     /// </summary>
+    /// <summary>True when the foreground window belongs to this process (island/search/settings).</summary>
+    internal static bool ShouldIgnoreProcess(uint foregroundProcessId, uint currentProcessId)
+        => foregroundProcessId != 0 && foregroundProcessId == currentProcessId;
+
     internal static bool IsFullscreenStyle(long style)
         => (style & WsPopup) != 0 || (style & WsCaption) == 0;
 
