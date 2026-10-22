@@ -12,8 +12,17 @@ namespace FluidBar.App.Hosting.Skia;
 internal static class PageSelectionStore
 {
     private static readonly object Gate = new();
-    private static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar", "ui-page.json");
+    private static string FilePath
+    {
+        get
+        {
+            var settingsRoot = Environment.GetEnvironmentVariable("FLUIDBAR_SETTINGS_DIR");
+            var root = string.IsNullOrWhiteSpace(settingsRoot)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar")
+                : settingsRoot;
+            return Path.Combine(root, "ui-page.json");
+        }
+    }
 
     /// <summary>Last selected page index, or 0 when nothing was stored (or the file is unreadable).</summary>
     public static int Load()
