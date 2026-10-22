@@ -23,6 +23,7 @@
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
 - **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
 - **preview.16**：surrogate 修复发布，release smoke 六页 Expanded 通过。
+- **Lyric 测试**：mean/p95 阈值，全量稳定 2617/0。
 - **通知页 surrogate 回归**：真实 IslandRenderer 渲染含孤立 surrogate 的通知。
 - **surrogate 防崩**：TextEngine 替换孤立 surrogate，通知页 smoke 不再崩。
 - **SafeMode**：改为下次启动生效，避免第二次 composition 阻塞。
