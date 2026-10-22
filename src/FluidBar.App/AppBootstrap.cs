@@ -872,6 +872,15 @@ internal sealed class AppBootstrap
             }
 
             await StartPluginRuntimeAsync().ConfigureAwait(true);
+
+            // The settings window captured the old marketplace/plugin services in its context. Closing
+            // it forces the next open to bind the rebuilt runtime instead of calling disposed objects.
+            if (_settingsWindow is { } staleSettings)
+            {
+                staleSettings.Close();
+                _settingsWindow = null;
+            }
+
             _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuilt",
                 "Plugin runtime rebuilt after a safe-mode change.");
         }
