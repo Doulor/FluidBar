@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -12,6 +13,14 @@ namespace FluidBar.Platform.Windows.Agent;
 public static class AgentWindowFocus
 {
     private const int SwRestore = 9;
+
+    private static readonly HashSet<string> EligibleProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "WindowsTerminal", "wt", "OpenConsole", "conhost", "powershell", "pwsh", "cmd",
+        "Code", "devenv", "idea64", "pycharm64", "Cursor", "Windsurf", "Alacritty",
+        "wezterm-gui", "Tabby", "Hyper", "mintty", "MobaXterm", "zcode", "Qoder",
+        "WorkBuddy", "claude", "codex",
+    };
 
     /// <summary>Attempts to focus a single visible top-level window matching the row.</summary>
     /// <param name="sessionTitle">Provider session title (may contain the project/AI task name).</param>
@@ -39,7 +48,7 @@ public static class AgentWindowFocus
             }
 
             GetWindowThreadProcessId(hwnd, out var pid);
-            if (pid == currentPid)
+            if (pid == currentPid || !IsEligibleProcess(pid))
             {
                 return true;
             }
@@ -69,6 +78,27 @@ public static class AgentWindowFocus
 
         ShowWindow(matches[0], SwRestore);
         return SetForegroundWindow(matches[0]);
+    }
+
+    /// <summary>True when the process is a terminal/editor that can own an agent session.</summary>
+    public static bool IsEligibleProcessName(string? processName)
+        => !string.IsNullOrWhiteSpace(processName) && EligibleProcesses.Contains(processName);
+
+    private static bool IsEligibleProcess(uint pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById((int)pid);
+            return IsEligibleProcessName(process.ProcessName);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Pure title matcher exposed for tests.</summary>
