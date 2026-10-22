@@ -559,7 +559,11 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             && snapshot.Position <= _lastPublishedPosition)
         {
             var stalled = now - _lastPublishedAt;
-            if (stalled > TimeSpan.FromMilliseconds(1200) && stalled < TimeSpan.FromSeconds(5))
+            // The upper bound used to be 5 s, which threw away real stalls: a frozen accessibility text plus no
+            // state-file write for 8 s produced no correction at all, so the position fell 8 s behind and then
+            // jumped when the next write arrived ("slow 5 s, then slow 10 s, then back", user report
+            // 2026-10-22). 30 s covers the longest observed gap and is still bounded.
+            if (stalled > TimeSpan.FromMilliseconds(1200) && stalled < TimeSpan.FromSeconds(30))
             {
                 snapshot = snapshot with { Position = _lastPublishedPosition + stalled };
             }
