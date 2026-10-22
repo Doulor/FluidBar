@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
 
@@ -105,14 +106,10 @@ public sealed class ProcessUpdateInstallerLauncher : IUpdateInstallerLauncher
         try
         {
             var scriptPath = Path.Combine(Path.GetTempPath(), $"fluidbar-update-{Guid.NewGuid():N}.ps1");
-            var script = string.Join(Environment.NewLine,
-                "$ErrorActionPreference = 'Stop'",
-                $"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue",
-                "Start-Sleep -Milliseconds 800",
-                $"Copy-Item -LiteralPath '{EscapePowerShellLiteral(installerPath)}' -Destination '{EscapePowerShellLiteral(current)}' -Force",
-                $"Start-Process -FilePath '{EscapePowerShellLiteral(current)}'",
-                "Remove-Item -LiteralPath $PSCommandPath -Force");
-            File.WriteAllText(scriptPath, script);
+            var script = BuildSelfReplaceScript(installerPath, current, Environment.ProcessId);
+            // Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI; a Chinese/Unicode install path
+            // would then be mojibake and Copy-Item would target the wrong file.
+            File.WriteAllText(scriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             var info = new ProcessStartInfo("powershell.exe")
             {
                 UseShellExecute = false,
@@ -126,6 +123,16 @@ public sealed class ProcessUpdateInstallerLauncher : IUpdateInstallerLauncher
             return false;
         }
     }
+
+    /// <summary>Builds the self-replace helper script; pure so escaping is unit-testable.</summary>
+    internal static string BuildSelfReplaceScript(string installerPath, string currentPath, int pid)
+        => string.Join(Environment.NewLine,
+            "$ErrorActionPreference = 'Stop'",
+            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue",
+            "Start-Sleep -Milliseconds 800",
+            $"Copy-Item -LiteralPath '{EscapePowerShellLiteral(installerPath)}' -Destination '{EscapePowerShellLiteral(currentPath)}' -Force",
+            $"Start-Process -FilePath '{EscapePowerShellLiteral(currentPath)}'",
+            "Remove-Item -LiteralPath $PSCommandPath -Force");
 
     private static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
 }
