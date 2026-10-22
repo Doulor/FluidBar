@@ -25,7 +25,8 @@ public class ActivitySchedulerTests
     [Fact]
     public void HigherPriorityActivity_PreemptsTransientPrimary()
     {
-        var state = TestData.BuildState(_scheduler, TestData.Notification("notif", "notification"));
+        var state = TestData.BuildState(_scheduler, IslandEvent.New(
+            TestData.Key(ActivityKind.Agent), TestData.Payload("Agent"), 1));
         var volume = IslandEvent.New(Key(ActivityKind.Volume), TestData.Payload("vol"), 1);
 
         var update = _scheduler.Update(state, volume, TestData.Now);

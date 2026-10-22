@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "notification-burst",
-  "description": "Notification burst: same-rank replacement, clipboard preemption of a transient notification, media joining as a ghost, retracts back to idle.",
+  "description": "Notification burst: same-kind replacement, notification stays primary over clipboard/media, and retracts back to idle.",
   "seed": 1102,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -11,7 +11,10 @@
       "activityKind": "Notification",
       "source": "notif:toast-a",
       "sequence": 1,
-      "payload": { "title": "Build finished", "body": "CI is green" }
+      "payload": {
+        "title": "Build finished",
+        "body": "CI is green"
+      }
     },
     {
       "offsetMs": 500,
@@ -19,7 +22,10 @@
       "activityKind": "Notification",
       "source": "notif:toast-b",
       "sequence": 1,
-      "payload": { "title": "New message", "body": "2 unread" }
+      "payload": {
+        "title": "New message",
+        "body": "2 unread"
+      }
     },
     {
       "offsetMs": 1000,
@@ -27,7 +33,10 @@
       "activityKind": "Clipboard",
       "source": "clipboard:host",
       "sequence": 1,
-      "payload": { "title": "Copied", "body": "npm run build" }
+      "payload": {
+        "title": "Copied",
+        "body": "npm run build"
+      }
     },
     {
       "offsetMs": 1500,
@@ -84,33 +93,33 @@
     {
       "atEventIndex": 2,
       "stateKind": "Compact",
-      "page": "Clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Copied",
-      "ghostCount": 0,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "Clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Copied",
-      "ghostCount": 1,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "Media",
-      "primaryKind": "Media",
-      "title": "Lo-fi beats",
-      "ghostCount": 0,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
-      "progressPercent": 0,
-      "showsWave": true
+      "progressPercent": null,
+      "showsWave": false
     },
     {
       "atEventIndex": 5,

@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "clipboard-agent-mix",
-  "description": "Clipboard/agent/lock-key mix with TTL expiry: ghost stacking, preemption of expired primaries, HUD surface, retract back to idle.",
+  "description": "Clipboard/agent/lock-key mix with TTL expiry; notification rank 0 owns the primary slot until its TTL expires.",
   "seed": 1103,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -118,31 +118,30 @@
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "Clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Hello world",
-      "ghostCount": 2,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "Home",
-      "primaryKind": "Volume",
-      "title": "Volume",
-      "ghostCount": 1,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
-      "showsWave": false,
-      "hudLabelKey": "Hud.Volume"
+      "showsWave": false
     },
     {
       "atEventIndex": 5,
       "stateKind": "Compact",
-      "page": "Agent",
-      "primaryKind": "Agent",
-      "title": "Agent finished",
-      "ghostCount": 1,
+      "page": "Notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
       "progressPercent": null,
       "showsWave": false

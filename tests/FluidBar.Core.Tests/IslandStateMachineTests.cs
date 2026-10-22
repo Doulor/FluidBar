@@ -606,9 +606,9 @@ public class IslandStateMachineTests
     {
         var order = new[]
         {
-            ActivityKind.Lookup, ActivityKind.Clipboard, ActivityKind.LockKeys, ActivityKind.Device,
-            ActivityKind.Bluetooth, ActivityKind.Focus, ActivityKind.Volume, ActivityKind.Brightness,
-            ActivityKind.Notification, ActivityKind.Agent, ActivityKind.BatteryLow, ActivityKind.Progress,
+            ActivityKind.Notification, ActivityKind.Lookup, ActivityKind.Clipboard, ActivityKind.LockKeys,
+            ActivityKind.Device, ActivityKind.Bluetooth, ActivityKind.Focus, ActivityKind.Volume,
+            ActivityKind.Brightness, ActivityKind.Agent, ActivityKind.BatteryLow, ActivityKind.Progress,
             ActivityKind.Timer, ActivityKind.Media, ActivityKind.Idle,
         };
 
