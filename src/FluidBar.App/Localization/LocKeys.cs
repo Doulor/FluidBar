@@ -303,6 +303,8 @@ public static partial class LocKeys
         public const string Text = "Clipboard.Text";
         /// <summary><c>Clipboard.Image</c></summary>
         public const string Image = "Clipboard.Image";
+        /// <summary><c>Clipboard.File</c></summary>
+        public const string File = "Clipboard.File";
         /// <summary><c>Clipboard.Pinned</c></summary>
         public const string Pinned = "Clipboard.Pinned";
     }

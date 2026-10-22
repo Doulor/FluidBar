@@ -1024,10 +1024,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         {
             Preview = preview,
             Meta = RelativeTime(entry.CapturedAtUtc),
-            // Pin state is App-owned (ClipboardService keeps only history), so the island remembers
-            // pinned rows by preview text for this process lifetime.
-            Pinned = _pinnedClipboard.Contains(preview),
+            // Pin identity is a content hash, never the preview text: previews collide and must not
+            // persist clipboard contents on disk.
+            Pinned = _pinnedClipboard.Contains(PinKey(entry)),
             IsImage = entry.Kind == ClipboardContentKind.Image,
+            IsFiles = entry.Kind == ClipboardContentKind.Files,
         };
     }
 

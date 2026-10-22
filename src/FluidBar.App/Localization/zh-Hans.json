@@ -127,6 +127,7 @@
     "Clipboard.Empty": "剪贴板为空",
     "Clipboard.EmptyHint": "复制的文本和图片会显示在这里。",
     "Clipboard.Text": "文本",
+    "Clipboard.File": "文件",
     "Clipboard.Image": "图片",
     "Clipboard.Pinned": "已固定",
     "Agent.Title": "Agent",

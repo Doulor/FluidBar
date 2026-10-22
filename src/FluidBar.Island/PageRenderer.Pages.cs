@@ -501,6 +501,7 @@ internal sealed partial class PageRenderer
         ClipboardContentKind.Code => _theme.Accent,
         ClipboardContentKind.Link => _theme.Info,
         ClipboardContentKind.Image => _theme.Warning,
+        ClipboardContentKind.Files => _theme.Info,
         _ => _theme.Success,
     };
 
@@ -509,6 +510,7 @@ internal sealed partial class PageRenderer
         ClipboardContentKind.Code => IconKind.Code,
         ClipboardContentKind.Link => IconKind.Link,
         ClipboardContentKind.Image => IconKind.Image,
+        ClipboardContentKind.Files => IconKind.Document,
         _ => IconKind.Document,
     };
 

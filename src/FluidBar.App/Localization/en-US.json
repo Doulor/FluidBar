@@ -127,6 +127,7 @@
     "Clipboard.Empty": "Clipboard is empty",
     "Clipboard.EmptyHint": "Copied text and images show up here.",
     "Clipboard.Text": "Text",
+    "Clipboard.File": "File",
     "Clipboard.Image": "Image",
     "Clipboard.Pinned": "Pinned",
     "Agent.Title": "Agents",

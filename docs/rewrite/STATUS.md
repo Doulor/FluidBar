@@ -15,6 +15,7 @@
 - **全屏抑制**：新增 `FullscreenDetector`（矩形覆盖 + `WS_POPUP`/无 `WS_CAPTION` 判定，普通最大化不误判）；每秒轮询，进入/退出全屏通过 `SuppressionChanged` 隐藏/恢复岛。
 - **单实例 / 空态**：`SingleInstanceGuard` 阻止第二个岛并向后一个进程发送 `ActivateMessage` 打开设置；平台 seam 失败/ Avalonia fallback 改用 `EmptyIslandDataSource`，不再显示虚假的 Spotify/Teams/剪贴板。
 - **电源/GC**：所有帧循环停止路径走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution 与默认 GC latency；修复前首次动画后系统 timer 停在 1 ms（实测 `NtQueryTimerResolution`）。
+- **剪贴板文件行**：文件类型标签/文档图标；Pin 图标改用内容摘要匹配。
 - **通知**：托盘“清空通知”清空岛内列表（Action Center 不动）；托盘“隐藏”恢复生效。
 - **主题**：外观页补回“跟随系统”，System 不再被错误显示为 Dark。
 - **剪贴板图片/文件**：捕获 `CF_DIB`/`CF_HDROP`，支持写回图片和文件列表；图片历史上限 5 条（避免 50 张大图占内存）。

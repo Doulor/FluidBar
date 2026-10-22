@@ -128,6 +128,9 @@ public sealed record ClipboardItemData
 
     /// <summary>Whether the item is an image.</summary>
     public bool IsImage { get; init; }
+
+    /// <summary>Whether the item is a file list (CF_HDROP).</summary>
+    public bool IsFiles { get; init; }
 }
 
 /// <summary>One agent session row.</summary>

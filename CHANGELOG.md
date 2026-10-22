@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板文件行**：`ClipboardItemData`/`ClipboardContentKind` 新增文件类型，文件行使用文档图标与“文件/File”类型标签（此前一律按文本渲染）。同时修正 Pin 图标判断仍按 preview 文本匹配的问题，持久化摘要现在真正映射到行状态。
 - **通知清空/托盘**：新增 `NotificationClearAll` 动作与 `NotificationService.ClearRecent()`（只清岛内列表，不动 Action Center；水位保持，已存在 toast 不会被下次轮询重放）；托盘菜单新增“清空通知”。同时修复托盘“隐藏”菜单项只显示不生效（switch 缺 `hide` 分支）。
 - **主题显示**：外观页的“桌面主题”分段控件补回“跟随系统”选项；`AppTheme.System` 不再显示成“深色已选中”，选 System 会真正写回 `AppTheme.System`。
 - **剪贴板图片/文件复制**：图片条目捕获原始 `CF_DIB`（上限 64 MB、历史最多保留 5 张图）；文件条目保留 `CF_HDROP` 路径。点击图片/文件行的复制按钮现在分别写回 `CF_DIB` / `CF_HDROP`，不再把文件路径当文本、也不再对图片直接报 unsupported。

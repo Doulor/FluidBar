@@ -1029,8 +1029,11 @@ public enum ClipboardContentKind
     /// <summary>URL.</summary>
     Link,
 
-    /// <summary>Image/file preview.</summary>
+    /// <summary>Image preview.</summary>
     Image,
+
+    /// <summary>File list (CF_HDROP).</summary>
+    Files,
 }
 
 /// <summary>

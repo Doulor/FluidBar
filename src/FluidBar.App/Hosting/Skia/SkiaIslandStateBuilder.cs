@@ -318,7 +318,9 @@ public static class SkiaIslandStateBuilder
         for (var i = 0; i < models.Length; i++)
         {
             var item = items[i];
-            var kind = item.IsImage ? ClipboardContentKind.Image : ClipboardContentKind.Text;
+            var kind = item.IsImage
+                ? ClipboardContentKind.Image
+                : item.IsFiles ? ClipboardContentKind.Files : ClipboardContentKind.Text;
             models[i] = new ClipboardItemModel
             {
                 Preview = item.Preview,
@@ -327,9 +329,12 @@ public static class SkiaIslandStateBuilder
                 Kind = kind,
                 // The renderer used to fall back to hard-coded English "Text"/"Image" labels, which
                 // mixed languages on the zh UI; supply the localized label from the catalog instead.
-                TypeLabel = localizer.Get(kind == ClipboardContentKind.Image
-                    ? LocKeys.Clipboard.Image
-                    : LocKeys.Clipboard.Text),
+                TypeLabel = localizer.Get(kind switch
+                {
+                    ClipboardContentKind.Image => LocKeys.Clipboard.Image,
+                    ClipboardContentKind.Files => LocKeys.Clipboard.File,
+                    _ => LocKeys.Clipboard.Text,
+                }),
             };
         }
 
