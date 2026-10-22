@@ -130,7 +130,7 @@
     "Clipboard.History": "历史记录",
     "Clipboard.Empty": "剪贴板为空",
     "Clipboard.EmptyHint": "复制的文本和图片会显示在这里。",
-    "Clipboard.SearchHint": "Esc 关闭并清除筛选",
+    "Clipboard.SearchHint": "Enter 关闭；Esc 关闭并清除筛选",
     "Clipboard.Search": "搜索",
     "Clipboard.All": "全部",
     "Clipboard.Text": "文本",

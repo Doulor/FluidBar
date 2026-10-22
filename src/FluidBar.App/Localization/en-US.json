@@ -130,7 +130,7 @@
     "Clipboard.History": "History",
     "Clipboard.Empty": "Clipboard is empty",
     "Clipboard.EmptyHint": "Copied text and images show up here.",
-    "Clipboard.SearchHint": "Esc closes and clears the filter",
+    "Clipboard.SearchHint": "Enter closes; Esc closes and clears the filter",
     "Clipboard.Search": "Search",
     "Clipboard.All": "All",
     "Clipboard.Text": "Text",
