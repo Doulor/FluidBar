@@ -14,6 +14,7 @@ public sealed class CalendarEventService : IAsyncDisposable
     private readonly IPlatformLogger _logger;
     private readonly TimeProvider _time;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly CancellationToken _lifetimeToken;
     private ITimer? _timer;
     private int _started;
     private int _disposed;
@@ -24,6 +25,7 @@ public sealed class CalendarEventService : IAsyncDisposable
     {
         _logger = logger ?? NullPlatformLogger.Instance;
         _time = timeProvider ?? TimeProvider.System;
+        _lifetimeToken = _lifetime.Token;
     }
 
     /// <summary>Event counts by local calendar day; empty when the store is unavailable.</summary>
@@ -48,7 +50,7 @@ public sealed class CalendarEventService : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    private void RefreshInBackground() => _ = RefreshAsync(_lifetime.Token);
+    private void RefreshInBackground() => _ = RefreshAsync(_lifetimeToken);
 
     private async Task RefreshAsync(CancellationToken cancellationToken)
     {
