@@ -1720,9 +1720,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private bool MatchesClipboardSearch(ClipboardEntry entry)
+    /// <summary>Pure clipboard query matcher (text content or file names, case-insensitive).</summary>
+    public static bool MatchesClipboardSearch(ClipboardEntry entry, string? query)
     {
-        if (string.IsNullOrEmpty(_clipboardSearchQuery))
+        if (string.IsNullOrWhiteSpace(query))
         {
             return true;
         }
@@ -1734,7 +1735,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             _ => null,
         };
         return text is not null
-            && text.Contains(_clipboardSearchQuery, StringComparison.OrdinalIgnoreCase);
+            && text.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private IslandActionResult RequestClipboardSearch()
@@ -1933,7 +1934,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Rows exactly as painted: pinned first, then newest; capped at the page limit.</summary>
     private IReadOnlyList<ClipboardEntry> DisplayedClipboard()
         => _clipboard.GetHistory()
-            .Where(MatchesClipboardSearch)
+            .Where(entry => MatchesClipboardSearch(entry, _clipboardSearchQuery))
             .Where(entry => _clipboardFilter switch
             {
                 ClipboardFilter.Text => entry.Kind == ClipboardContentKind.Text,
