@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Headless;
 using FluidBar.App.Views;
 
@@ -33,6 +34,13 @@ public sealed class ClipboardSearchWindowTests
                 window.FocusQuery();
                 Assert.Equal(0, textBox.SelectionStart);
                 Assert.Equal(textBox.Text!.Length, textBox.SelectionEnd);
+
+                window.RaiseEvent(new KeyEventArgs
+                {
+                    RoutedEvent = InputElement.KeyDownEvent,
+                    Key = Key.Escape,
+                });
+                Assert.False(window.IsVisible);
             }
             finally
             {
