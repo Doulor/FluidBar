@@ -246,6 +246,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.State;
 
+    /// <summary>Raised after the island state (compact/expanded/peek/hidden) changes.</summary>
+    public event EventHandler? StateChanged;
+
     /// <summary>Temporarily pins the activity layer so the expanded panel cannot auto-collapse.</summary>
     public void SetActivityPinned(bool pinned) => _controller.ApplyInput(IslandInput.PinnedChanged(pinned));
 
@@ -1893,6 +1896,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         EnsureDeadlineTicker();
         EnsureFrameLoop();
         RenderNow(forceFull: true);
+        StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

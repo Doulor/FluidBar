@@ -1144,8 +1144,10 @@ internal sealed class AppBootstrap
             return;
         }
 
-        _clipboardSearchWasPinned = _skiaHost?.State.IsPinned ?? false;
-        _skiaHost?.SetActivityPinned(true);
+        var searchHost = _skiaHost;
+        _clipboardSearchWasPinned = searchHost?.State.IsPinned ?? false;
+        searchHost?.SetActivityPinned(true);
+        searchHost?.StateChanged += OnClipboardSearchHostStateChanged;
 
         var label = _localizer?.Get(LocKeys.Clipboard.Search) ?? "Search";
         var window = new ClipboardSearchWindow(
@@ -1157,7 +1159,8 @@ internal sealed class AppBootstrap
         window.Closed += (_, _) =>
         {
             _clipboardSearchWindow = null;
-            _skiaHost?.SetActivityPinned(_clipboardSearchWasPinned);
+            searchHost?.StateChanged -= OnClipboardSearchHostStateChanged;
+            searchHost?.SetActivityPinned(_clipboardSearchWasPinned);
             _platformActions?.SetClipboardSearchQuery(null);
         };
         _clipboardSearchWindow = window;
@@ -1226,6 +1229,15 @@ internal sealed class AppBootstrap
 
     private SettingsWindow? _settingsWindow;
     private ClipboardSearchWindow? _clipboardSearchWindow;
+
+    private void OnClipboardSearchHostStateChanged(object? sender, EventArgs e)
+    {
+        if (_clipboardSearchWindow is { } window
+            && _skiaHost?.State.Kind != FluidBar.Core.Activities.IslandStateKind.Expanded)
+        {
+            window.Close();
+        }
+    }
     private bool _clipboardSearchWasPinned;
     private bool _shutdownStarted;
     private int _servicesDisposed;
