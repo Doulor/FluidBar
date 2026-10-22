@@ -10,9 +10,9 @@ namespace FluidBar.Platform.Windows.Media.Lyrics;
 /// Finds the lyric file KuGou itself uses for a track, in the player's own <c>Lyric</c> folder.
 /// </summary>
 /// <remarks>
-/// <para>The folder holds <c>&lt;artist&gt; - &lt;title&gt;-&lt;32 hex&gt;-&lt;songId&gt;-00000000.krc</c> files, i.e. exactly the
+/// <para>The folder holds <c>&lt;artist&gt; - &lt;title&gt;-&lt;32 hex&gt;-&lt;songId&gt;-00000000.krc</c> (or newer <c>.lrc</c>) files, i.e. exactly the
 /// lyric the player shows for that song. Matching by file name avoids the fuzzy catalogue search that
-/// returned other songs' lyrics, and the KRC carries per-word timings, so the island's sweep is the
+/// returned other songs' lyrics, and KRC carries per-word timings while LRC is line-timed, so the island's sweep is the
 /// player's own timeline instead of an interpolation.</para>
 /// <para>Read-only. A missing folder, an unreadable file or an undecodable blob simply returns null and
 /// the caller falls back to the online providers.</para>
@@ -55,8 +55,13 @@ public static partial class KugouLyricCache
                 }
             }
 
-            var decoded = KrcDecoder.TryDecode(File.ReadAllBytes(path));
-            var document = decoded?.Document is { Lines.Length: > 0 } value ? value : null;
+            var document = Path.GetExtension(path).Equals(".lrc", StringComparison.OrdinalIgnoreCase)
+                ? ParseLrc(path)
+                : KrcDecoder.TryDecode(File.ReadAllBytes(path))?.Document;
+            if (document is not { Lines.Length: > 0 })
+            {
+                document = null;
+            }
             lock (Gate)
             {
                 if (DocumentCache.Count > 64)
@@ -145,6 +150,13 @@ public static partial class KugouLyricCache
         return path;
     }
 
+    private static LyricsDocument? ParseLrc(string path)
+    {
+        using var reader = new StreamReader(path, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var document = LrcParser.Parse(reader.ReadToEnd(), "kugou-lrc");
+        return document.IsEmpty ? null : document;
+    }
+
     private static void Refresh()
     {
         var root = _root ??= ResolveRoot();
@@ -173,12 +185,17 @@ public static partial class KugouLyricCache
         var index = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            foreach (var file in Directory.EnumerateFiles(root, "*.krc"))
+            // Newer KuGou versions download some tracks as plain .lrc; older/KRC tracks keep word timing.
+            // Prefer .krc when both exist, but never ignore a valid .lrc cache entry.
+            foreach (var extension in new[] { "*.krc", "*.lrc" })
             {
-                var key = Normalize(FileNameRegex().Replace(Path.GetFileNameWithoutExtension(file), string.Empty));
-                if (key.Length > 0)
+                foreach (var file in Directory.EnumerateFiles(root, extension))
                 {
-                    index[key] = file;
+                    var key = Normalize(FileNameRegex().Replace(Path.GetFileNameWithoutExtension(file), string.Empty));
+                    if (key.Length > 0 && !index.ContainsKey(key))
+                    {
+                        index[key] = file;
+                    }
                 }
             }
         }

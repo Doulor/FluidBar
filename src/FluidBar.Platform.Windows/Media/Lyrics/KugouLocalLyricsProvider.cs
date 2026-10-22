@@ -10,7 +10,7 @@ namespace FluidBar.Platform.Windows.Media.Lyrics;
 /// <remarks>
 /// <para>KuGou never registers with SMTC and its mobile search CDN is not always reachable from a
 /// desktop network, so third-party lyric lookups for it are hit and miss. The player keeps a
-/// <c>.krc</c> file per played song named <c>{artist} - {title}-{hash}-{songid}-00000000.krc</c>;
+/// <c>.krc</c> (or newer <c>.lrc</c>) file per played song named <c>{artist} - {title}-{hash}-{songid}-00000000.krc/.lrc</c>;
 /// reading that file is both offline and exact — it is the same lyric the player shows.</para>
 /// <para>The directory comes from the player's own settings (<c>LyricPath</c>) and is cached: lookups
 /// run on the thread pool and never block the UI.</para>
@@ -89,8 +89,18 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
             return null;
         }
 
-        var decoded = KrcDecoder.TryDecode(bytes);
-        if (decoded is null)
+        LyricsDocument? document;
+        if (Path.GetExtension(path).Equals(".lrc", StringComparison.OrdinalIgnoreCase))
+        {
+            using var reader = new StreamReader(path, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            document = LrcParser.Parse(reader.ReadToEnd(), "kugou-lrc");
+        }
+        else
+        {
+            document = KrcDecoder.TryDecode(bytes)?.Document;
+        }
+
+        if (document is not { Lines.Length: > 0 })
         {
             _logger.LogDebug(PlatformLogCategory.Media, "lyrics.kugou-local-decode-failed",
                 "A KuGou lyric file could not be decoded.", new Dictionary<string, object?>
@@ -104,10 +114,10 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
             "Lyrics served from the player's own cache.", new Dictionary<string, object?>
             {
                 ["file"] = Path.GetFileName(path),
-                ["lines"] = decoded.Document.Lines.Length,
+                ["lines"] = document.Lines.Length,
                 ["titleOnlyMatch"] = matchedFromTitleOnly,
             });
-        return decoded.Document;
+        return document;
     }
 
     /// <summary>Finds the cached lyric file for a track (exposed for tests through <see cref="FindLyricFile"/>).</summary>
@@ -202,37 +212,40 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
         Dictionary<string, List<string>> byTitle = new(StringComparer.OrdinalIgnoreCase);
         try
         {
-            foreach (var path in Directory.EnumerateFiles(directory, "*.krc", SearchOption.TopDirectoryOnly))
+            foreach (var extension in new[] { "*.krc", "*.lrc" })
             {
-                var stem = Path.GetFileNameWithoutExtension(path);
-                var match = FileNamePattern.Match(stem);
-                if (!match.Success)
+                foreach (var path in Directory.EnumerateFiles(directory, extension, SearchOption.TopDirectoryOnly))
                 {
-                    continue;
-                }
+                    var stem = Path.GetFileNameWithoutExtension(path);
+                    var match = FileNamePattern.Match(stem);
+                    if (!match.Success)
+                    {
+                        continue;
+                    }
 
-                var stemText = match.Groups["stem"].Value;
-                var separator = stemText.LastIndexOf(" - ", StringComparison.Ordinal);
-                if (separator <= 0)
-                {
-                    continue;
-                }
+                    var stemText = match.Groups["stem"].Value;
+                    var separator = stemText.LastIndexOf(" - ", StringComparison.Ordinal);
+                    if (separator <= 0)
+                    {
+                        continue;
+                    }
 
-                var artist = stemText[..separator].Trim();
-                var title = stemText[(separator + 3)..].Trim();
-                if (title.Length == 0)
-                {
-                    continue;
-                }
+                    var artist = stemText[..separator].Trim();
+                    var title = stemText[(separator + 3)..].Trim();
+                    if (title.Length == 0)
+                    {
+                        continue;
+                    }
 
-                byFull[BuildLookupKey(artist, title)] = path;
-                var titleKey = Normalize(title);
-                if (!byTitle.TryGetValue(titleKey, out var list))
-                {
-                    byTitle[titleKey] = list = [];
-                }
+                    byFull[BuildLookupKey(artist, title)] = path;
+                    var titleKey = Normalize(title);
+                    if (!byTitle.TryGetValue(titleKey, out var list))
+                    {
+                        byTitle[titleKey] = list = [];
+                    }
 
-                list.Add(path);
+                    list.Add(path);
+                }
             }
         }
         catch (DirectoryNotFoundException)

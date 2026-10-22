@@ -331,6 +331,21 @@ public sealed class KugouLocalLyricsProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task FetchAsync_ReturnsACachedLrcFile()
+    {
+        WriteLrc("变奏的梦想 - 花未期", "[00:17.07]【吉他】\n[00:20.31]05.05.05.05.");
+        var provider = new KugouLocalLyricsProvider(_directory);
+
+        var document = await provider.FetchAsync(
+            new LyricsQuery("花未期", "变奏的梦想", TimeSpan.Zero, "track"), CancellationToken.None);
+
+        Assert.NotNull(document);
+        Assert.Equal("kugou-lrc", document!.Source);
+        Assert.Equal(2, document.Lines.Length);
+        Assert.Equal("【吉他】", document.Lines[0].Text);
+    }
+
+    [Fact]
     public async Task FetchAsync_FallsBackToTitleOnlyMatch()
     {
         WriteKrc("Some Other Artist - Horizon", "[ti:Horizon]\n[12657,1966]<0,287,0>la la");
@@ -361,6 +376,12 @@ public sealed class KugouLocalLyricsProviderTests : IDisposable
         Assert.Equal(
             KugouLocalLyricsProvider.BuildLookupKey("ADAM", "Zhurek"),
             KugouLocalLyricsProvider.BuildLookupKey("  adam ", "  ZHUREK  "));
+    }
+
+    private void WriteLrc(string stem, string text)
+    {
+        var path = Path.Combine(_directory, stem + "-" + new string('b', 32) + "-123456-00000000.lrc");
+        File.WriteAllText(path, text, Encoding.UTF8);
     }
 
     private void WriteKrc(string stem, string text)
