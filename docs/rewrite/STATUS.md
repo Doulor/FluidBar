@@ -25,6 +25,7 @@
 - **preview.16**：surrogate 修复发布，release smoke 六页 Expanded 通过。
 - **Lyric 测试**：mean/p95 阈值，全量稳定 2617/0。
 - **preview.17**：release smoke 10 张图，含搜索窗口。
+- **preview.18**：release smoke 10 图通过。
 - **搜索 Enter**：Enter 关闭，UI 测试。
 - **搜索 smoke**：`FLUIDBAR_SMOKE_SEARCH=1` 输出 fluidbar-10-search.png。
 - **日历权限失效**：清空 stale counts。
