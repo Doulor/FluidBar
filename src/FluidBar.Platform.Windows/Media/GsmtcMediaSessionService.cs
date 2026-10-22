@@ -144,6 +144,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     /// <summary>True right after a track change until the player writes the new song's position.</summary>
     private bool _pendingTrackAnchor;
+
+    /// <summary>Wall-clock instant matching the frame anchor, used when the capture is not producing frames.</summary>
+    private DateTimeOffset _frameAnchorWall = DateTimeOffset.MinValue;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -649,7 +652,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 _loopback.Reset();
             }
 
-            var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
+            // Frames are the exact source, but the capture can die (player restarts its stream, device
+            // change). Falling back to wall time keeps the clock moving instead of freezing, and the next
+            // re-anchor corrects it.
+            var position = _loopback.IsAvailable
+                ? _frameAnchorPosition + (audio - _frameAnchorAudio)
+                : _frameAnchorPosition + (_timeProviderNow() - _frameAnchorWall);
             if (position < TimeSpan.Zero)
             {
                 position = TimeSpan.Zero;
