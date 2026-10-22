@@ -1356,8 +1356,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.BrightnessSet => SetBrightness(action.Value),
             IslandPlatformActionKind.QuickToggle => Toggle(action.Toggle),
             IslandPlatformActionKind.MediaOutput => OpenSoundSettings(),
-            IslandPlatformActionKind.MediaQueue => Unsupported(
-                "no media queue service exists (the GSMTC snapshot exposes no queue)"),
+            IslandPlatformActionKind.MediaQueue => OpenMediaPlayer(),
             IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
