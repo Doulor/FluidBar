@@ -2,6 +2,24 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-22 — 暂停→恢复→暂停歌词定位偏移 + 汽水音乐歌词/进度链路
+
+### 暂停→恢复→暂停，歌词冻结数秒后猛跳
+
+- **根因**（两处，都在播放状态的切换路径上）：
+  1. `SkiaIslandController.SyncKaraoke` 只在暂停时调 `_karaokeClock.SetPlaying(false)`，**恢复时没有任何路径把时钟拨回播放**——`Nudge` 保持 playing 标志不动。时钟保持冻结、真实播放继续推进，偏差累积到 2.5 s（`SeekThresholdMs`）才当作 seek 硬跳。表现：每次暂停→恢复，歌词/时间文本先冻结 ~10 s 然后猛跳。
+  2. `MediaPositionClock.Reconcile` 的 drift 分支直接改 `_playing` 却不折叠锚点：暂停瞬间 `PositionAt` 立即切到暂停分支、返回**旧锚点**（回跳整个外推量），恢复后又把暂停时长算进推进（进度条/时间文本的数据源路径）。
+- **修法**：`SyncKaraoke` 暂停分支补对称恢复分支（`IsAdvancing == false` 时 `SetPlaying(true)`，把冻结位置折叠进锚点）；`Reconcile` 在播放状态变化时先 `_anchorPositionMs = PositionAt(now)`、`_anchorAtMs = now` 再翻转标志。
+- **回归测试**：`KaraokeSweepTests.Karaoke_sweep_resumes_on_the_frame_the_pause_ends`、`MediaPositionClockTests.Reconcile_play_state_change_folds_the_extrapolated_position_into_the_anchor`。
+
+### 汽水音乐（Soda Music）歌词与进度
+
+- **歌词行尾垃圾**（用户截图 `…还能不能相见£krcij◆7566176614707430459◆Gentlem…`）：`%APPDATA%\SodaMusic\LunaCacheV2\entries.db` 是 LMDB 紧凑存储，一条歌词的最后一行与该条目的 MessagePack 尾部（类型标记 `krci`、字段 `not_luna_user`、曲目 ID、相邻条目歌名）之间**没有换行**；`EnumerateLines` 按 `
+` 分行时垃圾与歌词同行，`KrcDecoder.ParseWords` 把标签后的整段 run 当词文本，垃圾全部并入最后一行并渲染上岛。修法：`CutBinaryFraming`——每行在第一个「歌词字母表之外」的字符（非 ASCII/中日韩/中文标点/全角形）处截断，发生在块构建之前。
+- **进度源**：UIA 时钟文本节点是唯一绝对源，但 Chromium 在窗口失焦后会停止更新无障碍树（实测位置冻结 5 分钟）；升级为「帧计数主时钟（`ProcessLoopbackCapture`，`TimelineSource.AudioFrames`）+ UIA 文本重锚」，换曲归零、新鲜文本重锚（0.4–30 s 窗口）。
+- **TryStart 收紧**：采集目标正被其他进程占用并出帧时返回 false 而不抢夺——两个播放器轮询此前会互相偷目标、每次切换清零帧计数。
+- **认知更新**：新版汽水已注册 SMTC（旧文档结论基于 3.2.1），主路径经 GSMTC 消费；`sync.island` 诊断行补 `key=` 字段区分候选来源（`win:`=窗口回退，其余=GSMTC）。
+
 ## 2026-10-22 — 预览版 v1 第一轮硬化：输入状态机 / 全屏 / 单实例 / 空态回退
 
 - **鼠标钩子按下态**：`IslandMouseHook` 抽出可测试的 `GestureTracker`；岛内按下、岛外松开现在一定产生 `Released + Left`，不再把 `_pressed` 留到下一次普通移动（旧行为：幽灵拖拽、页面自己乱翻、下一次点击丢失 release）。

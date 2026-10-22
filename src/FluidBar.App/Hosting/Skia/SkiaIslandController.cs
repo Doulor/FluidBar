@@ -3273,6 +3273,15 @@ private void HandlePageControl(in IslandHitTarget hit)
             _karaokeClock.SetPlaying(false, now);
             _karaokeHighlight = track.Progress(_karaokeClock.PositionAt(now));
         }
+        else if (_karaokeClock.HasAnchor && !_karaokeClock.IsAdvancing)
+        {
+            // Resume: nothing in the Nudge/Anchor paths above un-pauses the clock (Nudge keeps the
+            // playing flag), so the sweep stayed frozen while the track played on, and the accumulating
+            // gap only cleared when it crossed the 2.5 s seek threshold and snapped — pause → resume →
+            // pause made the lyric visibly jump every time (user report 2026-10-22). SetPlaying(true)
+            // folds the frozen position into the anchor so playback continues from where it stopped.
+            _karaokeClock.SetPlaying(true, now);
+        }
     }
 
     /// <summary>
