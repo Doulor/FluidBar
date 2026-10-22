@@ -371,7 +371,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = DisplayedClipboard().Select(MapClipboard).ToImmutableArray(),
-            ClipboardFilterLabel = ClipboardFilterLabel(),
+            ClipboardFilterLabel = _clipboard.GetHistory().Count > 0 ? ClipboardFilterLabel() : null,
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(

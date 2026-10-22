@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
+using FluidBar.App.Diagnostics;
 using FluidBar.App.Hosting;
 
 namespace FluidBar.App;
@@ -15,6 +16,10 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Last-resort crash logging must be armed before any composition work. The logger seam is
+        // optional here; the file entry is the important part when the process is already dying.
+        CrashLog.Install();
+
         // One island per session: a second launch would create a second layered window, a second
         // WH_MOUSE_LL hook and a second tray icon, and both processes would overwrite settings.
         if (!SingleInstanceGuard.TryAcquire())

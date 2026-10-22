@@ -13,6 +13,8 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **崩溃日志真正接线**：`CrashLog.Install()` 之前只存在于注释里，`Program.Main` 从未调用；现在启动第一步就安装 `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException` 处理器。
+- **剪贴板筛选空态**：总历史为空时不再绘制筛选 chip，避免空列表上出现一个没有意义的“全部”按钮。
 - **未读数只算未读**：`UnreadCount` 之前直接取 `Recent.Length`，打开通知页标记已读后角标仍不减；现在按 `ReadIds` 过滤，只统计未读 toast。
 - **崩溃日志轮转**：`crash.log` 超过 1 MB 时复制到 `crash.log.old` 并重新开始，避免长期运行/反复崩溃把日志无界增长；轮转失败仍继续追加，不丢崩溃条目。
 - **自动收起 0 语义**：`AutoCollapseMs=0` 在设置滑块上显示“关闭/Off”而不是“0.0 s”，提示文案明确 0 表示不自动收起；状态机本来就把 0 当无 deadline，现在 UI 不再误导为立即收起。
