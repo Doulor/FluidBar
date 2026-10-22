@@ -589,7 +589,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // it as silence made the estimate stall and the island drift ahead by ~2 s per window.
             var audible = justWrote
                 || !MediaWindowFallback.HasSession(candidate.ProcessId)
-                || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
+                || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.00001;
             if (audible)
             {
                 _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
