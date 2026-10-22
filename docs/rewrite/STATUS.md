@@ -244,6 +244,6 @@ Release：`build/release/win-x64/FluidBar.exe` SHA256 `4BA0425DF0DE84CC4F0D8876C
 - 临时滑杆、拖拽校准、`NotificationCardScale` 等调大小代码全部移除，尺寸固定为 token。
 - FontScale 0.8/1.0/1.6 与 Dock 52 DIP 变体适配；`notifications.seeded` / `received` 日志保留 `icons` 计数，实测本机 12 条真实 toast 全部读到 logo。
 - 通知卡现在直接占用正常主岛位置；不再生成主岛下方的副岛，通知为主时隐藏 split 预览球。golden `04/30/31/32/33` 重录。
-- Release：`build/release/win-x64/FluidBar.exe` SHA256 `04F68B5CEED4AADA862CC0B09A83F944BD2EC35D14A893095AEA68851A0C17EF`。
+- Release：`build/release/win-x64/FluidBar.exe` SHA256 `47F6BEA3CACD9BD8375F03F30C3EFC49650B58E91ECBF37E01077BDE1F3F3E5B`（运行副本：`build/notifications-final/win-x64`）。
 - 证据：`build/evidence/toast-293088.jpg`（360×64 短消息保持基础宽度；长文本测试覆盖到 1215）。
 
