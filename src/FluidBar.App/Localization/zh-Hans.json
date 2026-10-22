@@ -175,6 +175,7 @@
     "Page.Media.Output": "音频输出",
     "Page.Media.Queue": "播放队列",
     "Page.Media.QueueLabel": "队列",
+    "Page.Media.OutputSettings": "声音设置",
     "Page.Media.OutputNone": "无输出",
     "Page.Media.QueueNone": "无队列",
     "Page.Media.NoLyrics": "暂无歌词",

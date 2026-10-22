@@ -175,6 +175,7 @@
     "Page.Media.Output": "Audio output",
     "Page.Media.Queue": "Play queue",
     "Page.Media.QueueLabel": "Queue",
+    "Page.Media.OutputSettings": "Sound settings",
     "Page.Media.OutputNone": "No output",
     "Page.Media.QueueNone": "No queue",
     "Page.Media.NoLyrics": "No lyrics",

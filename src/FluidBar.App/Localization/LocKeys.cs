@@ -418,6 +418,8 @@ public static partial class LocKeys
             public const string Queue = "Page.Media.Queue";
             /// <summary><c>Page.Media.QueueLabel</c></summary>
             public const string QueueLabel = "Page.Media.QueueLabel";
+            /// <summary><c>Page.Media.OutputSettings</c></summary>
+            public const string OutputSettings = "Page.Media.OutputSettings";
             /// <summary><c>Page.Media.OutputNone</c></summary>
             public const string OutputNone = "Page.Media.OutputNone";
             /// <summary><c>Page.Media.QueueNone</c></summary>

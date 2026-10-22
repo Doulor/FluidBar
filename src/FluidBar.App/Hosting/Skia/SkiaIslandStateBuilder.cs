@@ -211,7 +211,7 @@ public static class SkiaIslandStateBuilder
             // instead of staying blank (a blank transport slot read as a broken render).
             QueueCount = media?.TrackCount ?? 0,
             QueueLabel = localizer.Get(LocKeys.Page.Media.QueueLabel),
-            OutputPlaceholder = localizer.Get(LocKeys.Page.Media.OutputNone),
+            OutputPlaceholder = localizer.Get(LocKeys.Page.Media.OutputSettings),
             QueuePlaceholder = localizer.Get(LocKeys.Page.Media.QueueNone),
             // Capability bits: Windows has no per-app output-device API and neither GSMTC nor KuGou's
             // accessibility tree exposes a queue, so both slots are inert and say so (greyed by the
