@@ -134,6 +134,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorAudio;
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
+    private bool _frameAnchorInitialised;
 
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
@@ -531,6 +532,20 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return candidate;
         }
 
+        // The window caption changes the moment the song does, unlike the accessibility text (30 s cadence).
+        // Adopting it here makes the island switch within one poll (250 ms) instead of several seconds.
+        if (KugouWindowTitle.TryRead(candidate.ProcessId) is { Title.Length: > 0 } caption
+            && !string.Equals(caption.Title, candidate.Title, StringComparison.Ordinal))
+        {
+            MediaDiagnostics.LogAlways(
+                $"track.fast title='{candidate.Title}' -> '{caption.Title}' artist='{caption.Artist}'");
+            candidate = candidate with
+            {
+                Title = caption.Title,
+                Artist = string.IsNullOrEmpty(caption.Artist) ? candidate.Artist : caption.Artist,
+            };
+        }
+
         if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
         {
             return candidate;
@@ -553,19 +568,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     sinceWrite = TimeSpan.Zero;
                 }
 
-                // A new title means a new song, which starts at zero. The state file may still hold the
-                // PREVIOUS track's position for a few seconds, so only trust it when the reading agrees that
-                // we are not at the very beginning (a 223 s jump was measured on this path, 2026-10-22).
-                var justStarted = candidate.Position >= TimeSpan.Zero && candidate.Position < TimeSpan.FromSeconds(20);
-                if (justStarted && statePosition > TimeSpan.FromSeconds(25))
+                // A new title means a new song, which starts at zero - the state file still describes the
+                // PREVIOUS track for a few seconds, so anchoring to it made the new song start at the old
+                // position (measured 223 s, 2026-10-22). Only the very first sighting (app start, mid-song)
+                // uses the state file, because there the song really is somewhere in the middle.
+                var firstSighting = _frameAnchorInitialised == false;
+                if (firstSighting)
                 {
-                    _frameAnchorPosition = TimeSpan.Zero;
-                    _frameAnchorAudio = audio;
+                    _frameAnchorInitialised = true;
+                    _frameAnchorPosition = statePosition;
+                    _frameAnchorAudio = audio - sinceWrite;
                 }
                 else
                 {
-                    _frameAnchorPosition = statePosition;
-                    _frameAnchorAudio = audio - sinceWrite;
+                    _frameAnchorPosition = TimeSpan.Zero;
+                    _frameAnchorAudio = audio;
                 }
             }
 
