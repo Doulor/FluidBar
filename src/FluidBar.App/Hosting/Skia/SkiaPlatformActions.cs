@@ -81,6 +81,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
     private readonly Dictionary<uint, string> _pinKeyCache = new();
     private ClipboardFilter _clipboardFilter = ClipboardFilter.All;
+    private string? _clipboardSearchQuery;
     private readonly string _clipboardPinsPath;
     private bool _weatherCityLockedByEnvironment;
     private INotificationSource? _pluginNotificationSource;
@@ -331,6 +332,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     /// <inheritdoc />
     public event EventHandler? Changed;
+
+    /// <summary>Raised when the user asks for the clipboard search window.</summary>
+    public event EventHandler? ClipboardSearchRequested;
 
     /// <inheritdoc />
     public IslandContent Snapshot()
@@ -1354,6 +1358,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
             IslandPlatformActionKind.ClipboardRemove => RemoveClipboard(action.Index),
             IslandPlatformActionKind.ClipboardCycleFilter => CycleClipboardFilter(),
+            IslandPlatformActionKind.ClipboardSearch => RequestClipboardSearch(),
             IslandPlatformActionKind.AgentActivate => ActivateAgent(action.Index),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
@@ -1683,6 +1688,42 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _ => LocKeys.Clipboard.All,
     }) ?? _clipboardFilter.ToString();
 
+    /// <summary>Updates the text query used by the clipboard page; null/empty clears it.</summary>
+    public void SetClipboardSearchQuery(string? query)
+    {
+        var next = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
+        if (string.Equals(_clipboardSearchQuery, next, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _clipboardSearchQuery = next;
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool MatchesClipboardSearch(ClipboardEntry entry)
+    {
+        if (string.IsNullOrEmpty(_clipboardSearchQuery))
+        {
+            return true;
+        }
+
+        var text = entry.Kind switch
+        {
+            ClipboardContentKind.Text => entry.Text,
+            ClipboardContentKind.Files => string.Join(' ', entry.FilePaths),
+            _ => null,
+        };
+        return text is not null
+            && text.Contains(_clipboardSearchQuery, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private IslandActionResult RequestClipboardSearch()
+    {
+        ClipboardSearchRequested?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
     private IslandActionResult RemoveClipboard(int index)
     {
         var history = DisplayedClipboard();
@@ -1873,6 +1914,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Rows exactly as painted: pinned first, then newest; capped at the page limit.</summary>
     private IReadOnlyList<ClipboardEntry> DisplayedClipboard()
         => _clipboard.GetHistory()
+            .Where(MatchesClipboardSearch)
             .Where(entry => _clipboardFilter switch
             {
                 ClipboardFilter.Text => entry.Kind == ClipboardContentKind.Text,

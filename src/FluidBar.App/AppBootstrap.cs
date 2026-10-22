@@ -366,6 +366,7 @@ internal sealed class AppBootstrap
         {
             var actions = new SkiaPlatformActions(_settings, _logger, timeProvider: null,
                 quickToggles: null, localizer: _localizer, weatherCity: _settings.Current.WeatherCity);
+            actions.ClipboardSearchRequested += (_, _) => Dispatcher.UIThread.Post(ShowClipboardSearch);
             actions.StartInBackground();
             return actions;
         }
@@ -1135,6 +1136,30 @@ internal sealed class AppBootstrap
         });
     }
 
+    private void ShowClipboardSearch()
+    {
+        if (_clipboardSearchWindow is { } existing)
+        {
+            BringToFront(existing);
+            return;
+        }
+
+        var label = _localizer?.Get(LocKeys.Clipboard.Search) ?? "Search";
+        var window = new ClipboardSearchWindow(
+            query => _platformActions?.SetClipboardSearchQuery(query),
+            $"{label} — FluidBar",
+            label,
+            _localizer?.Get(LocKeys.Clipboard.SearchHint) ?? "Esc closes and clears the filter");
+        window.Closed += (_, _) =>
+        {
+            _clipboardSearchWindow = null;
+            _platformActions?.SetClipboardSearchQuery(null);
+        };
+        _clipboardSearchWindow = window;
+        window.Show();
+        BringToFront(window);
+    }
+
     private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
     private void OpenMarket() => ShowSettingsWindow(SettingsWindowSection.Marketplace);
 
@@ -1195,6 +1220,7 @@ internal sealed class AppBootstrap
     }
 
     private SettingsWindow? _settingsWindow;
+    private ClipboardSearchWindow? _clipboardSearchWindow;
     private bool _shutdownStarted;
     private int _servicesDisposed;
 

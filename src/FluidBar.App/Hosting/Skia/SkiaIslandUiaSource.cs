@@ -803,7 +803,18 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 children: children));
         }
 
-        var controls = new List<UiaElementSnapshot>(2);
+        var controls = new List<UiaElementSnapshot>(3);
+        if (!string.IsNullOrWhiteSpace(model.SearchLabel))
+        {
+            controls.Add(Node(
+                "island.page.3.search",
+                UiaElementRole.Button,
+                model.SearchLabel,
+                ToRect(PageLayout.ClipboardSearchRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state)))),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true }));
+        }
+
         if (!string.IsNullOrWhiteSpace(model.FilterLabel))
         {
             controls.Add(Node(
@@ -1306,6 +1317,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 return;
             case "filter":
                 _controller.ActivateAccessibleControl(IslandPageControl.ClipboardFilter, page);
+                return;
+            case "search":
+                _controller.ActivateAccessibleControl(IslandPageControl.ClipboardSearch, page);
                 return;
             case "row":
                 ExecuteRow(page, index, parts.Length > 5 ? parts[5] : null);

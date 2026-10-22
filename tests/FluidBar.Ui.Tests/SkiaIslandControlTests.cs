@@ -186,6 +186,20 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
+    public void ClipboardSearch_MapsToSearchAction()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+
+        var action = SkiaIslandControlRouter.Map(
+            new IslandHitTarget(IslandHitKind.PageControl, 0, IslandPageControl.ClipboardSearch),
+            fixture.Controller.RenderState, 0);
+
+        Assert.NotNull(action);
+        Assert.Equal(IslandPlatformActionKind.ClipboardSearch, action.Value.Kind);
+    }
+
+    [Fact]
     public void ClipboardFilter_MapsToCycleFilterAction()
     {
         using var fixture = ControllerFixture.Create();

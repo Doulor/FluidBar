@@ -67,6 +67,9 @@ public enum IslandPlatformActionKind
     /// <summary>Cycle the clipboard type filter (all → text → image → files).</summary>
     ClipboardCycleFilter,
 
+    /// <summary>Open the clipboard text-search window.</summary>
+    ClipboardSearch,
+
     /// <summary>Activate an agent session row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     AgentActivate,
 

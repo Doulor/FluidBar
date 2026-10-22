@@ -219,6 +219,14 @@ public static class SkiaIslandHitTest
         };
         var contentRect = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
         if (kind == PageSlotKind.Clipboard
+            && !string.IsNullOrWhiteSpace(pages.Clipboard.SearchLabel)
+            && PageLayout.ClipboardSearchRect(contentRect).Contains(x, y))
+        {
+            index = -1;
+            return IslandPageControl.ClipboardSearch;
+        }
+
+        if (kind == PageSlotKind.Clipboard
             && !string.IsNullOrWhiteSpace(pages.Clipboard.FilterLabel)
             && PageLayout.ClipboardFilterRect(contentRect).Contains(x, y))
         {

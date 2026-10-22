@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板文本搜索**：剪贴板标题栏新增“搜索/Search”chip，打开一个键盘可聚焦的搜索窗口（岛本体是 non-activating layered window，不能直接内嵌文本框）；输入实时按文本/文件名大小写不敏感过滤剪贴板行，Esc 关闭并清空查询，UIA `island.page.3.search` 同步可用。
 - **自动隐藏 0 语义**：与自动收起一致，`AutoHideMs=0` 在设置页显示“关闭/Off”，不再显示成 `0 s`；提示文案本来就写明 0 保持可见。
 - **封面临时路径有界**：`ArtworkTempStore.Sweep()` 删除文件后没有清理 `_pathsByKey`，长播放会话会为每张被淘汰的封面保留一个失效路径；现在 sweep 同时移除文件已不存在的 key。
 - **媒体时长缓存有界**：`GsmtcMediaSessionService._durationCache` 与 `KugouDurationCatalog._cache` 之前会按曲目无限增长；现在超过 512 条清空重建，长播放会话不再永久保留每个 track key。
@@ -68,7 +69,7 @@
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
-- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2585 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2586 passed / 3 个既有失败（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
 
 
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）

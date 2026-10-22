@@ -108,6 +108,18 @@ internal sealed partial class PageRenderer : IDisposable
             _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
 
         if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Clipboard
+            && state.Pages.Clipboard.SearchLabel is { Length: > 0 } searchLabel)
+        {
+            var search = PageLayout.ClipboardSearchRect(content);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            canvas.DrawRoundRect(search, 6, 6, _fill);
+            _text.Draw(canvas, searchLabel, IslandType.RowMeta, search,
+                _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
+        }
+
+        if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Clipboard
             && state.Pages.Clipboard.FilterLabel is { Length: > 0 } filterLabel)
         {
             var filter = PageLayout.ClipboardFilterRect(content);

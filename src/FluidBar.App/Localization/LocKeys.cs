@@ -303,6 +303,10 @@ public static partial class LocKeys
         public const string Empty = "Clipboard.Empty";
         /// <summary><c>Clipboard.EmptyHint</c></summary>
         public const string EmptyHint = "Clipboard.EmptyHint";
+        /// <summary><c>Clipboard.Search</c></summary>
+        public const string Search = "Clipboard.Search";
+        /// <summary><c>Clipboard.SearchHint</c></summary>
+        public const string SearchHint = "Clipboard.SearchHint";
         /// <summary><c>Clipboard.All</c></summary>
         public const string All = "Clipboard.All";
         /// <summary><c>Clipboard.Text</c></summary>

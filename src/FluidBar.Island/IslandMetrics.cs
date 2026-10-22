@@ -623,6 +623,10 @@ public static class PageLayout
     /// </summary>
     public static SKRect SettingsRect(SKRect content) => new(content.Right - 50, content.Top - 4, content.Right - 26, content.Top + 20);
 
+    /// <summary>Clipboard search chip in the header, left of the type filter.</summary>
+    public static SKRect ClipboardSearchRect(SKRect content)
+        => new(content.Right - 176, content.Top - 2, content.Right - 124, content.Top + 18);
+
     /// <summary>Clipboard type-filter chip in the header, left of the settings gear.</summary>
     public static SKRect ClipboardFilterRect(SKRect content)
         => new(content.Right - 118, content.Top - 2, content.Right - 58, content.Top + 18);

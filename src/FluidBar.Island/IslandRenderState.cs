@@ -1070,6 +1070,9 @@ public sealed record ClipboardPageModel
 
     /// <summary>Localized label for the active type filter (null hides the header chip).</summary>
     public string? FilterLabel { get; init; }
+
+    /// <summary>Localized label for the search button (null hides the header chip).</summary>
+    public string? SearchLabel { get; init; }
 }
 
 /// <summary>One clipboard history row.</summary>

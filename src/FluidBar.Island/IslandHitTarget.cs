@@ -100,6 +100,9 @@ public enum IslandPageControl
     /// <summary>Cycle the clipboard type filter (header chip).</summary>
     ClipboardFilter,
 
+    /// <summary>Open the clipboard search window (header chip).</summary>
+    ClipboardSearch,
+
     /// <summary>Pin/unpin a clipboard row.</summary>
     Pin,
 
