@@ -123,14 +123,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Last state-file write we observed (a new write proves the player is running).</summary>
     private DateTimeOffset _lastSeenWriteUtc;
 
+    /// <summary>Playing time accumulated since that write (wall time would over-count pauses).</summary>
+    private double _stateFilePlayingMs;
+
     /// <summary>Exact playback clock: counts the audio frames KuGou actually renders.</summary>
     private readonly ProcessLoopbackCapture _loopback = new();
 
     /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
     private TimeSpan _audioAtWrite;
-
-    /// <summary>Playing time accumulated since that write; only the legacy fallback advances it now.</summary>
-    private double _stateFilePlayingMs;
 
     /// <summary>Slowly learned correction for the state file's own rounding, in milliseconds.</summary>
     private double _anchorOffsetMs;
@@ -706,6 +706,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // so the estimate is unusable until the player writes the new one (measured 3 s error at every
             // track start, 2026-10-22).
             _lastStateTitle = candidate.Title;
+            _stateFilePlayingMs = 0;
             _audioAtWrite = _loopback.Consumed;
             _stateFileWrittenAt = null;
             _stateFileValidFromUtc = _timeProviderNow();
@@ -755,6 +756,27 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 _stateFilePlayingMs = consumed.TotalMilliseconds;
             }
         }
+        else if (_lastPollAt is { } previous)
+        {
+            // Play time must follow the audio meter, not the glyph: a stale "playing" glyph during a pause
+            // would inflate the estimate and push the island ahead of the song (measured 2026-10-22).
+            // Playing time must advance at wall-clock rate while the player is genuinely playing: gating
+            // it purely on the audio peak made the estimate lag ~3 %/s, which the island then chased into a
+            // 2 s sawtooth between state-file writes (measured 2026-10-22). A fresh state-file write is
+            // proof enough that the player is running, so either signal counts.
+            var justWrote = state.SampledAtUtc != _lastSeenWriteUtc;
+            _lastSeenWriteUtc = state.SampledAtUtc;
+            // No session at all (minimised player, or enumeration hiccup) is NOT evidence of a pause: counting
+            // it as silence made the estimate stall and the island drift ahead by ~2 s per window.
+            var audible = justWrote
+                || !MediaWindowFallback.HasSession(candidate.ProcessId)
+                || MediaWindowFallback.GetProcessPeak(candidate.ProcessId) > 0.0005;
+            if (audible)
+            {
+                _stateFilePlayingMs += (nowForAccumulation - previous).TotalMilliseconds;
+            }
+        }
+
         _lastPollAt = nowForAccumulation;
         if (age < TimeSpan.Zero || age > TimeSpan.FromSeconds(45))
         {
