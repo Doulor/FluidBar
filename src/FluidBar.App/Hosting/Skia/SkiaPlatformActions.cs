@@ -1616,6 +1616,11 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private IslandActionResult ClearClipboard()
     {
+        // Clearing history also clears its pins; otherwise a pinned row would come back the next
+        // time the same content is copied, which makes "clear" feel ineffective.
+        _pinnedClipboard.Clear();
+        _pinKeyCache.Clear();
+        SaveClipboardPins();
         _clipboard.ClearHistory();
         return IslandActionResult.Handled;
     }
