@@ -10,7 +10,7 @@ namespace FluidBar.Island;
 /// </summary>
 internal sealed partial class PageRenderer
 {
-    private static readonly string[] ClipboardTypeLabels = ["Text", "Code", "Link", "Image"];
+    private static readonly string[] ClipboardTypeLabels = ["Text", "Code", "Link", "Image", "File"];
 
     // ------------------------------------------------------------ plugin list (M0)
 
@@ -465,7 +465,7 @@ internal sealed partial class PageRenderer
             x += 8;
         }
 
-        var typeLabel = item.TypeLabel ?? ClipboardTypeLabels[Math.Clamp((int)item.Kind, 0, 3)];
+        var typeLabel = item.TypeLabel ?? ClipboardTypeLabels[Math.Clamp((int)item.Kind, 0, 4)];
         var typeWidth = Math.Min(40, _text.Measure(typeLabel, IslandType.RowMeta));
         _text.Draw(
             canvas,
