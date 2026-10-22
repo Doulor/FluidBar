@@ -11,6 +11,7 @@ using FluidBar.Core.Configuration;
 using FluidBar.Core.Diagnostics;
 using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Agent;
+using FluidBar.Platform.Windows.Calendar;
 using FluidBar.Platform.Windows.Clipboard;
 using FluidBar.Platform.Windows.CoreIntegration;
 using FluidBar.Platform.Windows.Devices;
@@ -78,6 +79,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly NotificationService _notifications;
     private readonly WeatherService _weather;
     private readonly TaskListService _tasks;
+    private readonly CalendarEventService _calendarEvents;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
     private readonly Dictionary<uint, string> _pinKeyCache = new();
     private ClipboardFilter _clipboardFilter = ClipboardFilter.All;
@@ -220,6 +222,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _tasks = new TaskListService(_platformLogger, _counters,
             taskOptions ?? TaskListOptions.FromEnvironment(), time);
         _tasks.SnapshotChanged += OnWidgetDataChanged;
+        _calendarEvents = new CalendarEventService(_platformLogger, time);
+        _calendarEvents.Changed += OnCalendarEventsChanged;
 
         var today = time.GetLocalNow();
         _calendarMonth = new DateOnly(today.Year, today.Month, 1);
@@ -394,7 +398,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             // the previous empty card was a missing mapping rather than missing data.
             CalendarMonthTitle = FormatMonthTitle(_calendarMonth, culture),
             WeekdayHeaders = BuildWeekdayHeaders(culture),
-            CalendarDays = BuildCalendarDays(_calendarMonth, today),
+            CalendarDays = BuildCalendarDays(_calendarMonth, today, _calendarEvents.Counts),
             Stats = _systemStats.Build(batteryPercent, Localized(LocKeys.Battery.Title, "Battery")),
             UnreadCount = Math.Clamp(
                 _notifications.Current?.Recent.Count(entry => !_notifications.ReadIds.Contains(entry.Id)) ?? 0,
@@ -452,6 +456,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     }
 
     /// <summary>Weather or task data changed (widgets page repaint).</summary>
+    private void OnCalendarEventsChanged(object? sender, EventArgs e)
+        => Changed?.Invoke(this, EventArgs.Empty);
+
     private void OnWidgetDataChanged<T>(object? sender, SnapshotEventArgs<T> args) where T : class, IEquatable<T>
     {
         try
@@ -1209,7 +1216,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     }
 
     /// <summary>42 Monday-first calendar cells for a month (current day highlighted, no event source yet).</summary>
-    private static ImmutableArray<CalendarDayData> BuildCalendarDays(DateOnly month, DateOnly today)
+    private static ImmutableArray<CalendarDayData> BuildCalendarDays(
+        DateOnly month, DateOnly today, IReadOnlyDictionary<DateOnly, int>? eventCounts = null)
     {
         var first = month.ToDateTime(TimeOnly.MinValue);
         var offset = ((int)first.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
@@ -1224,7 +1232,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 Day = day.Day,
                 InMonth = day.Month == month.Month && day.Year == month.Year,
                 IsToday = day.Date == todayDate,
-                HasEvents = false,
+                HasEvents = eventCounts?.ContainsKey(DateOnly.FromDateTime(day)) == true,
             });
         }
 
@@ -1263,6 +1271,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StartOneAsync("notifications", () => _notifications.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("weather", () => _weather.StartAsync(cancellationToken)).ConfigureAwait(false);
         await StartOneAsync("tasks", () => _tasks.StartAsync(cancellationToken)).ConfigureAwait(false);
+        await StartOneAsync("calendar-events", () => _calendarEvents.StartAsync(cancellationToken)).ConfigureAwait(false);
         _systemStats.Prime();
         ScheduleClockTick();
     }
@@ -2033,6 +2042,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         await StopOneAsync("notifications", () => _notifications.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("weather", () => _weather.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("tasks", () => _tasks.DisposeAsync().AsTask()).ConfigureAwait(false);
+        await StopOneAsync("calendar-events", () => _calendarEvents.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("media", () => _media.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("focus-assist", () => _focus.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("bluetooth-radio", () => _bluetooth.DisposeAsync().AsTask()).ConfigureAwait(false);

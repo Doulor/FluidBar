@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **日历事件点**：新增 `CalendarEventService`，用 `AppointmentManager.RequestStoreAsync(AllCalendarsReadOnly)` 只读拉取未来 62 天事件，按本地日期映射到 Widgets 月格 `HasEvents`；15 分钟刷新，无权限/不可用时静默返回空，不伪造事件。
 - **剪贴板搜索单测**：抽出 `SkiaPlatformActions.MatchesClipboardSearch(entry, query)`，覆盖文本/文件名大小写不敏感匹配、空查询匹配全部、图片行不参与文本匹配。
 - **媒体队列按钮**：Queue 槽位显示“打开播放器 / Open player”，点击用当前 `MediaSnapshot.SourceAppUserModelId` 执行 `shell:AppsFolder\<AUMID>` 拉起播放器；UIA queue 按钮同步启用。找不到活跃媒体会话或 AUMID 启动失败时仍返回 unsupported。
 - **媒体输出标签**：Output 槽位现在显示“声音设置 / Sound settings”而不是“无输出”，与它实际打开 `ms-settings:sound` 的行为一致，避免用户以为按钮还是死的。
