@@ -1,4 +1,7 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
 using Windows.Foundation;
@@ -456,36 +459,91 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     }
 
     /// <summary>
-    /// Reads the source app's logo from its <c>AppDisplayInfo</c>. Win32 toasts often expose no logo or
-    /// return a protected ms-resource URI; every failure degrades to null so the island draws one
-    /// generic notification glyph instead of pretending a wrong icon is the app's.
+    /// Reads the source app's logo from its <c>AppDisplayInfo</c>. Win32 toasts (QQ included) often
+    /// expose no logo or an empty appLogoOverride; fall back to the running executable's real icon.
+    /// Windows toast payloads do not expose the sender's personal avatar, so the app icon is the
+    /// closest real identity available.
     /// </summary>
     private static async Task<byte[]?> TryLoadAppIconAsync(UserNotification notification)
     {
+        // QQ/Win32 toasts put the real sender/group avatar in the toast XML image element; the
+        // WinRT UserNotification projection does not expose images, so read it from the toast payload.
+        var toastImage = NotificationToastImageReader.TryRead(notification.Id);
+        if (toastImage is { Length: > 0 })
+        {
+            return toastImage;
+        }
+
+        var appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? notification.AppInfo?.Id;
         try
         {
             var display = notification.AppInfo?.DisplayInfo;
-            if (display is null)
+            if (display is not null)
             {
-                return null;
+                var logo = display.GetLogo(new global::Windows.Foundation.Size(64, 64));
+                using var stream = await logo.OpenReadAsync().AsTask().ConfigureAwait(false);
+                if (stream.Size is > 0 and <= 1024 * 1024)
+                {
+                    using var managed = stream.AsStreamForRead();
+                    using var buffer = new MemoryStream((int)stream.Size);
+                    await managed.CopyToAsync(buffer).ConfigureAwait(false);
+                    return buffer.ToArray();
+                }
             }
-
-            var logo = display.GetLogo(new Size(64, 64));
-            using var stream = await logo.OpenReadAsync().AsTask().ConfigureAwait(false);
-            if (stream.Size is 0 or > 1024 * 1024)
-            {
-                return null;
-            }
-
-            using var managed = stream.AsStreamForRead();
-            using var buffer = new MemoryStream((int)stream.Size);
-            await managed.CopyToAsync(buffer).ConfigureAwait(false);
-            return buffer.ToArray();
         }
         catch (Exception)
         {
+            // Fall through to the executable icon below.
+        }
+
+        return TryLoadProcessIcon(appName);
+    }
+
+    /// <summary>Finds the running app's own executable and reads its icon as PNG bytes.</summary>
+    private static byte[]? TryLoadProcessIcon(string? appName)
+    {
+        if (string.IsNullOrWhiteSpace(appName))
+        {
             return null;
         }
+
+        var wanted = appName.Trim();
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                var processName = process.ProcessName;
+                if (!processName.Equals(wanted, StringComparison.OrdinalIgnoreCase)
+                    && !wanted.Contains(processName, StringComparison.OrdinalIgnoreCase)
+                    && !processName.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var path = process.MainModule?.FileName;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    continue;
+                }
+
+                using var icon = Icon.ExtractAssociatedIcon(path);
+                if (icon is null)
+                {
+                    continue;
+                }
+
+                using var bitmap = icon.ToBitmap();
+                using var png = new MemoryStream();
+                bitmap.Save(png, ImageFormat.Png);
+                return png.ToArray();
+            }
+            catch
+            {
+                // Access denied or process exited between enumeration and inspection; try the next.
+            }
+        }
+
+        return null;
     }
 
     private NotificationCandidate? CreateCandidate(UserNotification notification)
