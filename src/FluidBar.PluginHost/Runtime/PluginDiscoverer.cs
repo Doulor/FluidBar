@@ -56,6 +56,15 @@ internal sealed class PluginDiscoverer
             var candidate = SelectCandidateDirectory(pluginDirectory, out var versionDirectory, out var selectionError);
             if (candidate is null)
             {
+                // Plugin ownership data lives next to packages (<id>/data, <id>/settings.json) and the
+                // unsigned-local root contains packages rather than a manifest. Both are legitimate
+                // layout, not broken plugins: reporting them every launch produced five Error lines
+                // and five ghost "invalid plugin" rows in the settings UI.
+                if (IsDataDirectory(pluginDirectory) || IsPluginContainer(pluginDirectory))
+                {
+                    continue;
+                }
+
                 results.Add(new PluginDiscoveryInfo(
                     directoryName!,
                     pluginDirectory,
@@ -244,6 +253,32 @@ internal sealed class PluginDiscoverer
             _options.Logger.Warn(Path.GetFileName(pluginDirectory), $"active.json could not be read: {exception.Message}");
             return null;
         }
+    }
+
+    /// <summary>True for a plugin's data/settings directory (no package manifest by design).</summary>
+    private static bool IsDataDirectory(string directory)
+        => Directory.Exists(Path.Combine(directory, "data"))
+           || File.Exists(Path.Combine(directory, "settings.json"));
+
+    /// <summary>True for a root that contains packages (for example the unsigned local plugin root).</summary>
+    private static bool IsPluginContainer(string directory)
+    {
+        foreach (var child in Directory.EnumerateDirectories(directory))
+        {
+            // A versioned package root's children are semver directories; those are handled by
+            // SelectCandidateDirectory and must not turn the root into a container here.
+            if (SemanticVersion.TryParse(Path.GetFileName(child), out _))
+            {
+                continue;
+            }
+
+            if (File.Exists(Path.Combine(child, "manifest.json")))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private string ReadManifest(string manifestPath)
