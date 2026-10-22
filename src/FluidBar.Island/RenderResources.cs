@@ -60,8 +60,11 @@ internal sealed class ArtworkImageCache : IDisposable
     private readonly int _maxDimension;
     private long _pixelBytes;
 
-    public ArtworkImageCache(int capacity = 4, int maxDimension = DefaultMaxDimension)
+    public ArtworkImageCache(int capacity = 16, int maxDimension = DefaultMaxDimension)
     {
+        // The clipboard page paints up to eight image rows and the media page adds cover + thumbnails.
+        // A four-entry cache cleared every time it filled, so every later frame re-decoded rows 1..4.
+        // 16 entries stay under ~4 MB at the 256 px cap and cover the whole visible page.
         _capacity = capacity;
         _maxDimension = maxDimension > 0 ? maxDimension : DefaultMaxDimension;
     }
