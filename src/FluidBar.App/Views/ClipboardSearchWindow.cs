@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace FluidBar.App.Views;
 
@@ -26,7 +27,10 @@ internal sealed class ClipboardSearchWindow : Window
         ShowInTaskbar = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = new SolidColorBrush(Color.Parse("#101014"));
+        var dark = Application.Current?.ActualThemeVariant != ThemeVariant.Light;
+        var foreground = dark ? "#D8D8E0" : "#24242C";
+        var muted = dark ? "#8A8A98" : "#626270";
+        Background = new SolidColorBrush(Color.Parse(dark ? "#101014" : "#F7F7FA"));
 
         _query = new TextBox
         {
@@ -49,14 +53,14 @@ internal sealed class ClipboardSearchWindow : Window
                     new TextBlock
                     {
                         Text = watermark,
-                        Foreground = new SolidColorBrush(Color.Parse("#D8D8E0")),
+                        Foreground = new SolidColorBrush(Color.Parse(foreground)),
                         FontSize = 13,
                     },
                     _query,
                     new TextBlock
                     {
                         Text = hint,
-                        Foreground = new SolidColorBrush(Color.Parse("#8A8A98")),
+                        Foreground = new SolidColorBrush(Color.Parse(muted)),
                         FontSize = 11,
                         Margin = new Thickness(0, 4, 0, 0),
                     },
