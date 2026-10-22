@@ -1185,9 +1185,17 @@ internal sealed class AppBootstrap
 
     private SettingsWindow? _settingsWindow;
     private bool _shutdownStarted;
+    private int _servicesDisposed;
 
     private void DisposeServices()
     {
+        // Lifecycle.Exit also calls this method; an explicit Shutdown() would otherwise run the
+        // whole disposal path twice (settings/logger/store double-dispose).
+        if (Interlocked.Exchange(ref _servicesDisposed, 1) != 0)
+        {
+            return;
+        }
+
         _pluginRuntime?.DisposeInBackground();
         _pluginRuntime = null;
         // The single notification listener is owned (and disposed exactly once) by _platformActions.
