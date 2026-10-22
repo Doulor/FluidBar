@@ -1798,7 +1798,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Display/DPI change: snap springs and repaint everything.</summary>
     public void NotifyDisplayChanged()
     {
-        _motion.SetTarget(BuildTarget(ActivityPresenter.PresentIsland(_schedulerState, State)));
+        _motion.SetTarget(BuildTarget(PreferNotificationPrimary(ActivityPresenter.PresentIsland(_schedulerState, State))));
         _motion.SnapToTarget();
         _pager.JumpToPage(IndexOfPage(State.Page));
         BuildRenderState();
@@ -1991,7 +1991,7 @@ public sealed class SkiaIslandController : IDisposable
         var viewModel = ActivityPresenter.PresentIsland(_schedulerState, State);
         // Notification uses the normal island position; it is no longer demoted to a second pill.
 
-        var presentation = viewModel;
+        var presentation = PreferNotificationPrimary(viewModel);
         PinDiagnostics.Log(
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
             $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
@@ -2330,37 +2330,44 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>
-    /// Demotes a notification from the primary slot when another activity is alive, so the notification
-    /// can be painted as a second pill below the current island instead of replacing it.
+    /// Promotes a notification from the ghost layers to the primary slot. Split and stacked layouts
+    /// still use the same primary pill, so a notification must never be painted as a small floating
+    /// preview when another activity is alive.
     /// </summary>
-    private static IslandViewModel PreferNotificationSecondary(IslandViewModel viewModel)
+    private static IslandViewModel PreferNotificationPrimary(IslandViewModel viewModel)
     {
-        if (viewModel.Primary?.Kind != ActivityKind.Notification || viewModel.Ghosts.Length == 0)
+        if (viewModel.Primary?.Kind == ActivityKind.Notification)
+
         {
             return viewModel;
         }
 
-        var partner = -1;
+        var notificationIndex = -1;
         for (var i = 0; i < viewModel.Ghosts.Length; i++)
         {
-            if (viewModel.Ghosts[i].Kind != ActivityKind.Notification)
+            if (viewModel.Ghosts[i].Kind == ActivityKind.Notification)
             {
-                partner = i;
+                notificationIndex = i;
                 break;
             }
         }
 
-        if (partner < 0)
+        if (notificationIndex < 0)
         {
             return viewModel;
         }
 
-        var notification = viewModel.Primary with { IsGhost = true, StackIndex = 1 };
-        var promoted = viewModel.Ghosts[partner] with { IsGhost = false, StackIndex = 0 };
+        var notification = viewModel.Ghosts[notificationIndex] with { IsGhost = false, StackIndex = 0 };
+        var ghosts = viewModel.Ghosts.RemoveAt(notificationIndex);
+        if (viewModel.Primary is { } previousPrimary)
+        {
+            ghosts = ghosts.Insert(0, previousPrimary with { IsGhost = true, StackIndex = 1 });
+        }
+
         return viewModel with
         {
-            Primary = promoted,
-            Ghosts = viewModel.Ghosts.RemoveAt(partner).Insert(0, notification),
+            Primary = notification,
+            Ghosts = ghosts,
         };
     }
 
@@ -2391,7 +2398,8 @@ public sealed class SkiaIslandController : IDisposable
     private void UpdateSplitPreviews(IslandViewModel viewModel, AppSettings settings)
     {
         // The reference notification card owns the island; hide split previews while it is primary.
-        if (viewModel.Primary?.Kind == ActivityKind.Notification)
+        if (viewModel.Primary?.Kind == ActivityKind.Notification
+            || viewModel.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Notification))
         {
             _splitPreviews = [];
             return;

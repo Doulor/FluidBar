@@ -438,6 +438,34 @@ public sealed class SkiaIslandControlTests
         Assert.True(fixture.Controller.RenderState.MotionPhase > before);
     }
 
+    [Theory]
+    [InlineData(StackingStrategySetting.Split)]
+    [InlineData(StackingStrategySetting.Stacked)]
+    public void Notification_stays_primary_when_a_higher_rank_activity_is_present(StackingStrategySetting stacking)
+    {
+        using var fixture = ControllerFixture.Create(
+            settings: AppSettings.Default with { Stacking = stacking, AutoCollapseMs = 0, AutoHideMs = 0 });
+
+        fixture.Controller.PublishActivity(ActivityKind.Clipboard, new ActivityPayload
+        {
+            Title = "Copied",
+            Body = "npm run build",
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "QQ",
+            Body = "New message",
+            SourceName = "QQ",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(ActivityKind.Notification, state.Compact?.Kind);
+        Assert.Empty(state.SplitIslets);
+    }
+
     private static SKRect Page(int page, ControllerFixture fixture)
         => IslandMetrics.PageRect(fixture.Controller.RenderState, page);
 
