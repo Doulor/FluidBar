@@ -57,6 +57,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     private readonly object _stateGate = new();
     private UserNotificationListener? _listener;
     private ImmutableArray<NotificationEntry> _recent = ImmutableArray<NotificationEntry>.Empty;
+    private ImmutableHashSet<uint> _readIds = ImmutableHashSet<uint>.Empty;
     private NotificationAccessState _access = NotificationAccessState.Unavailable;
     private static int s_activeInstances;
     private ITimer? _pollTimer;
@@ -89,6 +90,12 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     /// <summary>Ids of the toasts seeded as backlog (<see cref="NotificationServiceOptions.SeedRecentFromExisting"/>).</summary>
     public IReadOnlySet<uint> SeededIds => Volatile.Read(ref _seededIds);
+
+    /// <summary>
+    /// Toast ids the user has already seen (opened or clicked). Immutable so the snapshot mapper can
+    /// read it without taking the service lock.
+    /// </summary>
+    public IReadOnlySet<uint> ReadIds => Volatile.Read(ref _readIds);
 
     /// <summary>Current permission state.</summary>
     public NotificationAccessState AccessState
@@ -578,6 +585,47 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         }
 
         return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    /// <summary>Marks one toast as read; the next snapshot clears its unread dot.</summary>
+    public void MarkRead(uint id)
+    {
+        NotificationsSnapshot? publish = null;
+        lock (_stateGate)
+        {
+            if (_readIds.Contains(id) || !_recent.Any(entry => entry.Id == id))
+            {
+                return;
+            }
+
+            _readIds = _readIds.Add(id);
+            publish = new NotificationsSnapshot(_access, _recent);
+        }
+
+        Publish(publish);
+        _logger.LogDebug(PlatformLogCategory.Notifications, "notifications.read",
+            "Notification marked as read.", new Dictionary<string, object?> { ["id"] = id });
+    }
+
+    /// <summary>Marks every currently listed toast as read (the notification page was opened).</summary>
+    public void MarkAllRead()
+    {
+        NotificationsSnapshot? publish = null;
+        lock (_stateGate)
+        {
+            var next = _readIds.Union(_recent.Select(entry => entry.Id));
+            if (next.Count == _readIds.Count)
+            {
+                return;
+            }
+
+            _readIds = next;
+            publish = new NotificationsSnapshot(_access, _recent);
+        }
+
+        Publish(publish);
+        _logger.LogDebug(PlatformLogCategory.Notifications, "notifications.read-all",
+            "All listed notifications marked as read.");
     }
 
     /// <summary>

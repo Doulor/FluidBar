@@ -984,6 +984,13 @@ public sealed class SkiaIslandController : IDisposable
             }
         }
 
+        if (page == CoreIslandPage.Notifications)
+        {
+            // Opening the page is the user's "I saw these" signal; rows lose their unread dot even
+            // when the user only glances at the list and leaves without clicking a row.
+            _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationMarkAllRead));
+        }
+
         var index = IndexOfPage(page);
         if (index < 0 || index == _pager.SelectedIndex)
         {

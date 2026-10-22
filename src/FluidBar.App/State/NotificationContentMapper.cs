@@ -25,11 +25,13 @@ public static class NotificationContentMapper
     /// <param name="maxItems">Maximum rows to emit.</param>
     /// <param name="now">Reference time for the relative "time ago" label; defaults to the system clock.</param>
     /// <param name="localizer">Localizer for the relative label; English fallbacks are used when null.</param>
+    /// <param name="readIds">Toast ids already seen; their rows lose the unread dot.</param>
     public static ImmutableArray<NotificationItemData> Map(
         NotificationsSnapshot? snapshot,
         int maxItems = DefaultMaxItems,
         DateTimeOffset? now = null,
-        ILocalizer? localizer = null)
+        ILocalizer? localizer = null,
+        IReadOnlySet<uint>? readIds = null)
     {
         if (snapshot is null || snapshot.Recent.IsDefaultOrEmpty || maxItems <= 0)
         {
@@ -45,14 +47,15 @@ public static class NotificationContentMapper
                 break;
             }
 
-            items.Add(MapEntry(entry, reference, localizer));
+            items.Add(MapEntry(entry, reference, localizer, readIds is null || !readIds.Contains(entry.Id)));
         }
 
         return items.MoveToImmutable();
     }
 
     /// <summary>Maps one toast entry (exposed for focused tests).</summary>
-    public static NotificationItemData MapEntry(NotificationEntry entry, DateTimeOffset now, ILocalizer? localizer = null)
+    public static NotificationItemData MapEntry(NotificationEntry entry, DateTimeOffset now, ILocalizer? localizer = null,
+        bool isUnread = true)
     {
         ArgumentNullException.ThrowIfNull(entry);
         var source = string.IsNullOrWhiteSpace(entry.AppName) ? FallbackAppName : entry.AppName.Trim();
@@ -68,6 +71,7 @@ public static class NotificationContentMapper
             AppIconKey = entry.AppIconPng is { Length: > 0 }
                 ? $"notif:{entry.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
                 : null,
+            IsUnread = isUnread,
         };
     }
 

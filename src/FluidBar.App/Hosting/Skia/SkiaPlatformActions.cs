@@ -354,7 +354,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
-                _notifications.Current, PageNotificationLimit, now, _localizer),
+                _notifications.Current, PageNotificationLimit, now, _localizer, _notifications.ReadIds),
             Agents = MapAgents(_agentSources.Current),
             Tasks = tasks.Tasks,
             TasksEmptyHint = tasks.EmptyHint,
@@ -1237,6 +1237,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
+            IslandPlatformActionKind.NotificationMarkAllRead => MarkAllNotificationsRead(),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -1506,6 +1507,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// Copies a notification's detected verification code to the clipboard. The code travels in
     /// <see cref="IslandPlatformAction.Text"/> so the platform seam never needs the toast snapshot.
     /// </summary>
+    private IslandActionResult MarkAllNotificationsRead()
+    {
+        _notifications.MarkAllRead();
+        return IslandActionResult.Handled;
+    }
+
     private IslandActionResult CopyNotificationCode(in IslandPlatformAction action)
     {
         if (string.IsNullOrWhiteSpace(action.Text))
@@ -1532,6 +1539,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         var entry = recent[index];
+        _notifications.MarkRead(entry.Id);
         var launch = NotificationToastImageReader.TryReadLaunch(entry.Id);
         if (!string.IsNullOrWhiteSpace(launch))
         {

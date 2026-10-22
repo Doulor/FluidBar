@@ -1009,6 +1009,12 @@ public sealed record NotificationItemModel
 
     /// <summary>Whether the row is unread (informational).</summary>
     public bool IsUnread { get; init; } = true;
+
+    /// <summary>Real app logo bytes for the leading glyph; null falls back to the bell/icon.</summary>
+    public byte[]? AppIconPng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="AppIconPng"/>.</summary>
+    public string? AppIconKey { get; init; }
 }
 
 /// <summary>Clipboard content type (drives the badge icon/tone and the default type label).</summary>

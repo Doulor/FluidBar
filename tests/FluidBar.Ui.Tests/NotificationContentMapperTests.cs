@@ -87,6 +87,18 @@ public sealed class NotificationContentMapperTests
     }
 
     [Fact]
+    public void Map_UsesReadIdsForTheUnreadDot()
+    {
+        var snapshot = Snapshot(Entry(id: 1, title: "read"), Entry(id: 2, title: "unread"));
+        var readIds = new HashSet<uint> { 1 };
+
+        var items = NotificationContentMapper.Map(snapshot, now: Now, readIds: readIds);
+
+        Assert.False(items[0].IsUnread);
+        Assert.True(items[1].IsUnread);
+    }
+
+    [Fact]
     public void Map_EmptyOrMissingSnapshotYieldsNoRows()
     {
         Assert.Empty(NotificationContentMapper.Map(null, now: Now));

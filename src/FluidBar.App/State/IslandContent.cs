@@ -109,6 +109,9 @@ public sealed record NotificationItemData
 
     /// <summary>Stable cache key for <see cref="AppIconPng"/>.</summary>
     public string? AppIconKey { get; init; }
+
+    /// <summary>Whether the row still shows the unread dot.</summary>
+    public bool IsUnread { get; init; } = true;
 }
 
 /// <summary>One clipboard history row.</summary>

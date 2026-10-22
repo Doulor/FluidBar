@@ -46,6 +46,9 @@ public enum IslandPlatformActionKind
     /// <summary>Copy a notification's verification code; <see cref="IslandPlatformAction.Text"/> is the code.</summary>
     NotificationCopyCode,
 
+    /// <summary>Mark every currently listed notification as read (opening the notification page).</summary>
+    NotificationMarkAllRead,
+
     /// <summary>Copy a clipboard row; <see cref="IslandPlatformAction.Text"/> is the row text.</summary>
     ClipboardCopy,
 

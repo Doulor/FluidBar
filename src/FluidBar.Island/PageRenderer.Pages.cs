@@ -143,10 +143,7 @@ internal sealed partial class PageRenderer
 
         var accent = _accents.Get(item.AccentHex, _theme.Info);
         var icon = PageMetricsLayout.NotificationIcon(row);
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(accent, 0.16f * _opacity);
-        canvas.DrawRoundRect(icon, 10, 10, _fill);
-        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, icon.Deflate(8), Alpha(accent, _opacity), _icon);
+        DrawNotificationGlyph(canvas, icon, accent, item);
 
         // Unread cue: a coloured dot on the app glyph (phone-card read), never a separate hit target.
         if (item.IsUnread)
@@ -314,6 +311,34 @@ internal sealed partial class PageRenderer
         }
 
         return (value[..cut].TrimEnd(), value[cut..].TrimStart());
+    }
+
+    /// <summary>
+    /// Leading notification glyph: the real toast app icon when Windows exposed one, otherwise the
+    /// existing tinted bell. The image is clipped to the same rounded square as the fallback.
+    /// </summary>
+    private void DrawNotificationGlyph(SKCanvas canvas, SKRect rect, SKColor accent, NotificationItemModel item)
+    {
+        var image = item.AppIconPng is { Length: > 0 }
+            ? _artwork.Get(item.AppIconKey, item.AppIconPng)
+            : null;
+        if (image is not null && image.Width > 0 && image.Height > 0)
+        {
+            canvas.Save();
+            canvas.ClipRoundRect(new SKRoundRect(rect, 10, 10), SKClipOperation.Intersect, antialias: true);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(image, rect, _fill);
+            canvas.Restore();
+            return;
+        }
+
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.Color = Alpha(accent, 0.16f * _opacity);
+        canvas.DrawRoundRect(rect, 10, 10, _fill);
+        IconSet.Draw(canvas, item.Icon ?? IconKind.Bell, rect.Deflate(8), Alpha(accent, _opacity), _icon);
     }
 
     // ---------------------------------------------------------------- clipboard

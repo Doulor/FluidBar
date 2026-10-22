@@ -303,6 +303,9 @@ public static class SkiaIslandStateBuilder
                 CodeChipLabel = code is null
                     ? null
                     : localizer.Format(LocKeys.Notifications.VerificationCode, ("code", code)),
+                IsUnread = item.IsUnread,
+                AppIconPng = item.AppIconPng,
+                AppIconKey = item.AppIconKey,
             };
         }
 
