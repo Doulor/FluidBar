@@ -109,6 +109,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>State-file samples older than this belong to the previous track.</summary>
     private DateTimeOffset _stateFileValidFromUtc = DateTimeOffset.MinValue;
 
+    /// <summary>When the current track started (used to distrust the state file right after a switch).</summary>
+    private DateTimeOffset _trackChangedAtUtc = DateTimeOffset.MinValue;
+
     /// <summary>Last accessibility position and when it last changed (freshness of the player's clock).</summary>
     private TimeSpan _lastMsaaPosition = TimeSpan.MinValue;
     private long _lastMsaaChangeMs;
@@ -540,6 +543,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFilePlayingMs = 0;
             _stateFileWrittenAt = null;
             _stateFileValidFromUtc = _timeProviderNow();
+            _trackChangedAtUtc = _timeProviderNow();
         }
 
         if (state.SampledAtUtc < _stateFileValidFromUtc)
@@ -609,11 +613,19 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var expected = statePosition + TimeSpan.FromMilliseconds(Math.Clamp(_stateFilePlayingMs, 0, 60_000));
         // Guard against the state file still describing the previous track: right after a switch its value
         // can be far AHEAD of the new track's small reading (measured 51 s vs 20 s, 2026-10-22).
-        if (candidate.Position > TimeSpan.Zero
-            && candidate.Position < TimeSpan.FromSeconds(90)
-            && expected > candidate.Position + TimeSpan.FromSeconds(15))
+        if (candidate.Position > TimeSpan.Zero && candidate.Position < TimeSpan.FromSeconds(90))
         {
-            return candidate;
+            var sinceChange = _timeProviderNow() - _trackChangedAtUtc;
+            // Right after a switch the state file can describe the previous track in either direction
+            // (ahead when it kept counting, behind when it was written earlier). While the small reading is
+            // the only evidence about the NEW track, a >15 s disagreement means the file is not about it.
+            var distrust = expected > candidate.Position + TimeSpan.FromSeconds(15)
+                || (sinceChange >= TimeSpan.Zero && sinceChange < TimeSpan.FromSeconds(30)
+                    && (candidate.Position - expected).Duration() > TimeSpan.FromSeconds(15));
+            if (distrust)
+            {
+                return candidate;
+            }
         }
 
         var difference = (candidate.Position - expected).Duration();
