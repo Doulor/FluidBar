@@ -25,6 +25,7 @@
 - **preview.16**：surrogate 修复发布，release smoke 六页 Expanded 通过。
 - **Lyric 测试**：mean/p95 阈值，全量稳定 2617/0。
 - **preview.17**：release smoke 10 张图，含搜索窗口。
+- **preview.19**：release smoke 10 图通过。
 - **搜索提示**：Enter/Esc 文案更新。
 - **preview.18**：release smoke 10 图通过。
 - **搜索 Enter**：Enter 关闭，UI 测试。

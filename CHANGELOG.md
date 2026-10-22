@@ -20,6 +20,7 @@
 - **preview.16 发布 + smoke**：包含 surrogate 修复、SafeMode 下次启动策略；release zip 19.63 MB、无 PDB，exe SHA-256 `DAA071F7...F8BA64`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **Lyric 帧测试稳定化**：`MediaLyricTransitionFrameTests` 的渲染性能断言从 max/p99 8ms 改为 mean 8ms + p95 16.7ms，避免单个 JIT/调度尖峰造成全量 flaky；功能性的帧请求/transition 断言保持不变。
 - **preview.17 发布 + smoke**：包含日历 stale 修复、搜索窗口 smoke；release zip 19.63 MB、无 PDB，exe SHA-256 `DB814E0A...41A065A`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact，`fluidbar-10-search.png` 6201 字节。
+- **preview.19 发布 + smoke**：包含搜索提示文案；release zip 19.63 MB、无 PDB，exe SHA-256 `32EFD10D...C7F1EF`；隔离 settings smoke exit 0，10 张图通过。
 - **搜索快捷键提示**：`Clipboard.SearchHint` 同步 Enter/Esc 行为（Enter 关闭、Esc 关闭并清除筛选）。
 - **preview.18 发布 + smoke**：包含搜索 Enter 关闭；release zip 19.63 MB、无 PDB，exe SHA-256 `5FCA806C...D2B905F`；隔离 settings smoke exit 0，10 张图，`fluidbar-10-search.png` 6261 字节。
 - **搜索 Enter 关闭**：搜索框支持 Enter 关闭并保留当前过滤结果，新增 UI 测试覆盖输入回调 + Enter 收起；Escape 行为不变。
