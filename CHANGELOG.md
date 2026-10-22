@@ -15,6 +15,7 @@
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
 - **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
+- **preview.14 发布 + smoke 通过**：包含 smoke fullscreen bypass 的 release `publish.ps1 -Version 2.0.0-preview.14 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `C58080C1...2EE38A0`。隔离 settings 的 release smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
 - **smoke 稳健性**：`SmokeAsync` 在点击前调用 `SimulatePointerLeft` + `PumpTimers`，清掉真实鼠标可能造成的 Peek/hover 初始态；debug smoke 重新稳定得到 6 个 Expanded 页面。
 - **preview.11 smoke**：隔离 settings 启动 exit 0，生成 settings.json/settings.json.bak/ui-page.json；本次 release smoke 的页面状态出现 Peek/Compact 时序差异，未作为六页展开证据；debug smoke 仍六页展开。

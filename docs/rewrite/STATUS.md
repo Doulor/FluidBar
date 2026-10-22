@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
 - **release smoke**：仅 smoke 时绕过 fullscreen suppression，六页 Expanded。
 - **smoke 稳健性**：点击前清 hover/peek，六页展开稳定。
 - **preview.11 smoke**：exit 0；release 页面时序有 Peek/Compact 差异，未作六页证据。
