@@ -75,9 +75,10 @@ internal sealed class ClipboardSearchWindow : Window
         Opened += (_, _) => FocusQuery();
         KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape)
+            if (e.Key is Key.Escape or Key.Enter)
             {
                 Close();
+                e.Handled = true;
             }
         };
     }

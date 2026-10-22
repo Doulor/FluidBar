@@ -20,6 +20,7 @@
 - **preview.16 发布 + smoke**：包含 surrogate 修复、SafeMode 下次启动策略；release zip 19.63 MB、无 PDB，exe SHA-256 `DAA071F7...F8BA64`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **Lyric 帧测试稳定化**：`MediaLyricTransitionFrameTests` 的渲染性能断言从 max/p99 8ms 改为 mean 8ms + p95 16.7ms，避免单个 JIT/调度尖峰造成全量 flaky；功能性的帧请求/transition 断言保持不变。
 - **preview.17 发布 + smoke**：包含日历 stale 修复、搜索窗口 smoke；release zip 19.63 MB、无 PDB，exe SHA-256 `DB814E0A...41A065A`；隔离 settings smoke exit 0，01 Compact、02-08 Expanded、09 Compact，`fluidbar-10-search.png` 6201 字节。
+- **搜索 Enter 关闭**：搜索框支持 Enter 关闭并保留当前过滤结果，新增 UI 测试覆盖输入回调 + Enter 收起；Escape 行为不变。
 - **搜索窗口 smoke 截图**：`FLUIDBAR_SMOKE_SEARCH=1` 时 smoke 打开真实 `ClipboardSearchWindow`，通过 `RenderTargetBitmap` 写出 `fluidbar-10-search.png` 并关闭；本轮 debug smoke exit 0，截图 6 KB。
 - **日历权限失效清理**：当 AppointmentStore 读取失败且之前已有 counts 时，清空旧事件点并触发 `Changed`，避免权限撤销后月历保留陈旧 dots；新增对应测试。
 - **自更新等待运行进程测试**：新增真实 `cmd.exe` 运行中 PID 的 self-replace 脚本测试，验证 helper 会先等待进程退出再覆盖 exe；Platform 4 个 self-replace 用例通过。
@@ -156,7 +157,7 @@
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
-- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2619 passed / 0 failed（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2620 passed / 0 failed（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
 
 
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）
