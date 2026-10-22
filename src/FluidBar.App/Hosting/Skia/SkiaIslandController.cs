@@ -862,7 +862,10 @@ public sealed class SkiaIslandController : IDisposable
         }
         else if (pagerWasRunning)
         {
-            InvalidateDirty(ContentDamage());
+            // The preview rail's dot clusters belong to the page, so a page change must damage the rail
+            // band too: repainting only the shell content left the previous page's dots on screen as
+            // unclickable ghosts (user report 2026-10-22 — "第一页左边还有 3 个点不了的点点").
+            InvalidateDirty(ContentDamage().Union(StripDamage()));
         }
         else if (archWasRunning || railWasRunning)
         {
@@ -1508,7 +1511,8 @@ public sealed class SkiaIslandController : IDisposable
                 HandlePageRequest(PageAt(pending));
             }
 
-            if (hadPress)
+            // Dots have no press highlight, so the strip must be repainted for them as well.
+            if (hadPress || pending >= 0)
             {
                 InvalidateDirty(StripDamage());
             }

@@ -51,6 +51,26 @@ public readonly record struct VisualRect(double X, double Y, double Width, doubl
         return right <= left || bottom <= top ? Empty : new VisualRect(left, top, right - left, bottom - top);
     }
 
+    /// <summary>Smallest rectangle containing both inputs (either side may be <see cref="Empty"/>).</summary>
+    public VisualRect Union(in VisualRect other)
+    {
+        if (IsEmpty)
+        {
+            return other;
+        }
+
+        if (other.IsEmpty)
+        {
+            return this;
+        }
+
+        var left = Math.Min(X, other.X);
+        var top = Math.Min(Y, other.Y);
+        var right = Math.Max(Right, other.Right);
+        var bottom = Math.Max(Bottom, other.Bottom);
+        return new VisualRect(left, top, right - left, bottom - top);
+    }
+
     /// <summary>Whether two rectangles overlap.</summary>
     public bool IntersectsWith(VisualRect other) => !Intersect(other).IsEmpty;
 

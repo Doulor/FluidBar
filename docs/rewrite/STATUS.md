@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **Rail 残影**：页面切换/点 far dot 重绘 strip；新增 VisualRect.Union。
 - **自更新 BOM**：WriteSelfReplaceScript 单测。
 - **Agent 进程探测**：Code Insiders + Win32Exception 容错。
 - **搜索 chip**：query >12 字符截断加省略号。
