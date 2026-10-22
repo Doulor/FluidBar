@@ -39,6 +39,7 @@ internal sealed class KugouClockReader : IDisposable
 
     private volatile int _processId;
     private volatile string _title = string.Empty;
+    private volatile bool _titleChanged;
     private int _disposed;
 
     private KugouClockSample _sample;
@@ -58,8 +59,17 @@ internal sealed class KugouClockReader : IDisposable
     /// <summary>Points the reader at the player process showing <paramref name="title"/>.</summary>
     public void SetTarget(int processId, string? title)
     {
+        var next = title ?? string.Empty;
+        if (!string.Equals(_title, next, StringComparison.Ordinal))
+        {
+            // A new track rebuilds the player's transport row: drop the cached accessibility session so the
+            // reader opens a fresh one instead of reading a dead element for seconds (measured 2026-10-23:
+            // a fresh session reads in 0-7 ms while the long-lived one can go blind after a track change).
+            _titleChanged = true;
+        }
+
         _processId = processId;
-        _title = title ?? string.Empty;
+        _title = next;
     }
 
     /// <summary>
@@ -101,6 +111,7 @@ internal sealed class KugouClockReader : IDisposable
         PlayerAccessibilitySession? session = null;
         var sessionPid = 0;
         var tick = 0;
+        var failures = 0;
         try
         {
             while (!_stop.Wait(TickMs))
@@ -130,12 +141,40 @@ internal sealed class KugouClockReader : IDisposable
                     continue;
                 }
 
-                var ok = session.TryReadTimeline(out var timeline, null, allowFullWalk: false);
-                if (!ok && tick % RebuildEveryTicks == 0)
+                if (_titleChanged)
                 {
-                    // The element cache is useless (track change / tree rebuild): pay for one walk here,
-                    // never on the media poll thread.
-                    ok = session.TryReadTimeline(out timeline, null, allowFullWalk: true);
+                    _titleChanged = false;
+                    session.Dispose();
+                    session = null;
+                    sessionPid = 0;
+                    failures = 0;
+                    continue;
+                }
+
+                var ok = session.TryReadTimeline(out var timeline, null, allowFullWalk: false);
+                if (!ok)
+                {
+                    failures++;
+                    if (failures % RebuildEveryTicks == 0)
+                    {
+                        // The element cache is useless (tree rebuild): pay for one walk here, never on the
+                        // media poll thread.
+                        ok = session.TryReadTimeline(out timeline, null, allowFullWalk: true);
+                    }
+
+                    if (failures >= 24)
+                    {
+                        // ~6 s without a reading: recycle the session. A fresh one is what actually recovers
+                        // after a track change or a player UI rebuild.
+                        session.Dispose();
+                        session = null;
+                        sessionPid = 0;
+                        failures = 0;
+                    }
+                }
+                else
+                {
+                    failures = 0;
                 }
 
                 tick++;

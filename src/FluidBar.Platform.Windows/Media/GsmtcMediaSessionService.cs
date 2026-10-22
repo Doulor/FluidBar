@@ -62,6 +62,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     /// <summary>Watches the player window caption so a track change is seen within a poll.</summary>
     private BackgroundPoller? _captionPoller;
+    private BackgroundPoller? _sessionPoller;
 
     /// <summary>Window-title fallback poll period (the accessibility read is cheap; 250 ms tracks taps).</summary>
     public static readonly TimeSpan FallbackPollInterval = TimeSpan.FromMilliseconds(250);
@@ -228,6 +229,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private KugouDurationCatalog? _durationCatalog;
     private KugouClockReader? _kugouClockReader;
+    private int _kugouPid;
+    private long _kugouPidAtMs;
 
     /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
     private TimeSpan _audioAtWrite;
@@ -389,6 +392,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // player window changes immediately, so watch it on its own 250 ms timer.
         _captionPoller = new BackgroundPoller("media-caption", FallbackPollInterval, PollPlayerCaption, _logger);
         _captionPoller.Start();
+        // KuGou 20.x never raises timeline events (its SMTC timeline is a constant 0/0), so the snapshot has
+        // to be refreshed on a timer to carry the clock read from the player's own "mm:ss" label.
+        _sessionPoller = new BackgroundPoller("media-session", FallbackPollInterval, TickActiveSession, _logger);
+        _sessionPoller.Start();
         _fallbackPoller.Start();
         _kugouClockReader = new KugouClockReader();
     }
@@ -1392,6 +1399,24 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
             var duration = timeline.EndTime > timeline.StartTime ? timeline.EndTime - timeline.StartTime : TimeSpan.Zero;
             var position = timeline.Position;
+            var positionAt = timeline.LastUpdatedTime;
+
+            // KuGou 20.x publishes a real media session (title/artist/status/artwork) but its timeline is a
+            // permanent 0/0. The player's own "mm:ss / mm:ss" label is still readable through MSAA, so the
+            // island follows that clock instead of the empty SMTC one. Without this the island sat on the
+            // settings-file value (written every 30 s) and drifted seconds away from the player
+            // (user requirement 2026-10-23: within 1 s of the player at all times).
+            if (IsKugouAumid(aumid) && TryReadKugouClock(properties.Title, out var clockPosition, out var clockDuration,
+                    out var clockSampledAt))
+            {
+                position = clockPosition;
+                positionAt = clockSampledAt;
+                if (clockDuration > TimeSpan.Zero)
+                {
+                    duration = clockDuration;
+                }
+            }
+
             if (duration > TimeSpan.Zero && position > duration)
             {
                 position = duration;
@@ -1407,7 +1432,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 MapPlaybackState(playbackInfo.PlaybackStatus),
                 playbackInfo.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
                 position < TimeSpan.Zero ? TimeSpan.Zero : position,
-                timeline.LastUpdatedTime,
+                positionAt,
                 duration,
                 controls.IsPlaybackPositionEnabled,
                 controls.IsNextEnabled,
@@ -1440,6 +1465,77 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _logger.LogWarning(PlatformLogCategory.Media, "media.snapshot-failed",
                 "Could not read the active media session snapshot.", ex);
         }
+    }
+
+    /// <summary>True when the session belongs to KuGou (its AUMID is the bare "kugou").</summary>
+    private static bool IsKugouAumid(string? aumid)
+        => aumid is not null && aumid.Contains("kugou", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Reads the player's own clock for the SMTC path. The reader is the same one the fallback path uses:
+    /// a dedicated thread that walks the KuGou accessibility tree once and then reads the cached
+    /// "mm:ss / mm:ss" text every 250 ms (measured 2026-10-23: 0-4 ms per read on KuGou 20.1).
+    /// </summary>
+    private bool TryReadKugouClock(string? title, out TimeSpan position, out TimeSpan duration,
+        out DateTimeOffset sampledAt)
+    {
+        position = TimeSpan.Zero;
+        duration = TimeSpan.Zero;
+        sampledAt = _timeProviderNow();
+
+        var reader = _kugouClockReader;
+        if (reader is null || string.IsNullOrEmpty(title))
+        {
+            return false;
+        }
+
+        var pid = ResolveKugouProcessId();
+        if (pid <= 0)
+        {
+            return false;
+        }
+
+        reader.SetTarget(pid, title);
+        if (!reader.TryRead(out var sample) || !string.Equals(sample.Title, title, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        position = sample.Position;
+        duration = sample.Duration;
+        sampledAt = _timeProviderNow() - TimeSpan.FromMilliseconds(sample.AgeMs);
+        return true;
+    }
+
+    /// <summary>KuGou's main process id (cached for a few seconds; the player restarts rarely).</summary>
+    private int ResolveKugouProcessId()
+    {
+        var now = Environment.TickCount64;
+        if (_kugouPid > 0 && now - _kugouPidAtMs < 10_000)
+        {
+            return _kugouPid;
+        }
+
+        var found = 0;
+        try
+        {
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("KuGou"))
+            {
+                if (process.MainWindowHandle != IntPtr.Zero)
+                {
+                    found = process.Id;
+                    break;
+                }
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Player exited between enumeration and inspection.
+        }
+
+        _kugouPid = found;
+        _kugouPidAtMs = now;
+        return found;
     }
 
     private void DetachSession()
@@ -1711,6 +1807,18 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var loaded = await reader.LoadAsync((uint)size).AsTask(cancellationToken).ConfigureAwait(false);
         reader.ReadBytes(buffer);
         return loaded == size ? buffer : null;
+    }
+
+    /// <summary>
+    /// Timer tick for the active SMTC session: KuGou publishes no timeline events, so without this the
+    /// island would only refresh on track changes and its clock would freeze at the session's 0/0.
+    /// </summary>
+    private void TickActiveSession()
+    {
+        if (_session is { } session && IsKugouAumid(session.SourceAppUserModelId))
+        {
+            QueueRefresh("kugou-clock-tick");
+        }
     }
 
     private void OnSessionsChanged(GlobalSystemMediaTransportControlsSessionManager sender,

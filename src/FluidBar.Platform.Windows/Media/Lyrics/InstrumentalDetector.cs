@@ -24,14 +24,16 @@ public static class InstrumentalDetector
     [
         "纯音乐", "純音樂", "纯音", "伴奏", "无人声", "無人聲", "演奏版", "音乐盒", "音樂盒",
         "instrumental", "off vocal", "offvocal", "backing track", "karaoke", "カラオケ", "inst.", "inst版",
+        "纯享", "轻音乐", "輕音樂", "钢琴曲", "鋼琴曲", "八音盒", "白噪音", "助眠", "bgm", "lofi", "lo-fi",
     ];
 
     /// <summary>Credit lines ("作词：…", "Lyrics by …"): metadata, not something anybody sings.</summary>
     private static readonly string[] CreditMarkers =
     [
         "作词", "作曲", "编曲", "制作人", "监制", "出品", "录音", "混音", "母带", "发行", "和声", "演奏", "吉他",
-        "贝斯", "鼓手", "弦乐", "钢琴", "词：", "曲：", "lyrics by", "composed by", "arranged by", "produced by",
-        "written by", "music by", "composer", "lyricist", "remix", "mixing", "mastering", "vocal", "instrumental",
+        "贝斯", "鼓手", "弦乐", "钢琴", "词：", "曲：", "词:", "曲:", "lyrics by", "composed by", "arranged by",
+        "produced by", "written by", "music by", "composer", "compose", "lyricist", "remix", "mixing", "mastering",
+        "arrange", "master", "producer", "studio", "vocal", "instrumental", "制作", "后期", "出品", "发行", "编曲",
     ];
 
     /// <summary>Fragments of the placeholder line KuGou writes for tracks without words.</summary>

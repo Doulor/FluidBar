@@ -662,6 +662,26 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         return titleOk && artistOk;
     }
 
+    /// <summary>
+    /// True when the lyric document can plausibly belong to the track: their lengths agree within
+    /// <paramref name="tolerance"/> (10 s or 8 %, whichever is larger). The player now reports its exact
+    /// duration, so a document describing a different recording is caught even when the title matches —
+    /// this is what stopped instrumentals from scrolling some other song's words.
+    /// </summary>
+    private static bool LyricFitsTrackDuration(FluidBar.Platform.Windows.Media.Lyrics.LyricsDocument document,
+        MediaSnapshot media)
+    {
+        if (document.Duration <= TimeSpan.Zero || media.Duration <= TimeSpan.Zero)
+        {
+            return true;
+        }
+
+        // Generous: a lyric file can legitimately end well before the track (long outros). The point is to
+        // catch a document describing a different recording, not to police the outro length.
+        var tolerance = TimeSpan.FromSeconds(Math.Max(20, media.Duration.TotalSeconds * 0.10));
+        return (document.Duration - media.Duration).Duration() <= tolerance;
+    }
+
     private static bool Mentions(string haystack, string needle)
         => needle.Length > 0 && haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
@@ -685,6 +705,15 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return (null, null, -1, null);
         }
 
+        if (localDocument is { IsEmpty: false } && !LyricFitsTrackDuration(localDocument, media))
+        {
+            // Another song's lyric file: an instrumental with a short/absent artist name used to pick the
+            // nearest file by name and scroll a stranger's words (user report 2026-10-23).
+            _logger.Information(LogCategories.Platform, "lyrics.duration-mismatch",
+                $"Rejected local lyric '{localDocument.Title}' ({localDocument.Duration.TotalSeconds:0}s) for '{media.Title}' ({media.Duration.TotalSeconds:0}s).");
+            return (null, null, -1, null);
+        }
+
         if (localDocument is { IsEmpty: false })
         {
             var localSelection = LyricsTimelineSelector.SelectDetailed(localDocument, position, media.Title, media.Artist);
@@ -705,6 +734,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         // The catalogue search is fuzzy: a cover, a same-titled single or a mistyped window title
         // returns another song's lyrics, which then scroll against the wrong track. Reject a document
         // whose metadata does not describe this track (user report 2026-10-21).
+        if (!LyricFitsTrackDuration(document, media))
+        {
+            _logger.Information(LogCategories.Platform, "lyrics.duration-mismatch",
+                $"Rejected lyric '{document.Title}' ({document.Duration.TotalSeconds:0}s) for '{media.Title}' ({media.Duration.TotalSeconds:0}s).");
+            return (null, null, -1, null);
+        }
+
         if (!LyricsBelongToTrack(document, media))
         {
             _logger.Information(LogCategories.Platform, "lyrics.rejected",
@@ -713,6 +749,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
 
         var selection = LyricsTimelineSelector.SelectDetailed(document, position, media.Title, media.Artist);
+        _logger.Information(LogCategories.Platform, "lyrics.online",
+            $"Online lyric used: '{document.Title}' by '{document.Artist}' ({document.Source}, {document.Duration.TotalSeconds:0}s) lines={document.Lines.Length} track='{media.Title}'.");
         return (selection.Current, selection.Next, selection.Highlight, ToKaraokeTrack(selection.Line, document));
     }
 
