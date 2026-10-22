@@ -71,6 +71,9 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Host surface width for both modes (DIP).</summary>
     public const double Width = 488;
 
+    /// <summary>Float surface width (588 DIP): room for the 540 DIP notification cap.</summary>
+    public const double FloatWidth = 588;
+
     /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 8 gap + 32 strip + 36 bleed.</summary>
     public const double FloatHeight = 384;
 
@@ -111,7 +114,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     public const double DockBottomAllowance = DockHeight - Padding - PanelHeight;
 
     /// <summary>Float surface size (488x384 DIP).</summary>
-    public static LayeredSurfaceSize Float { get; } = new(Width, FloatHeight);
+    public static LayeredSurfaceSize Float { get; } = new(FloatWidth, FloatHeight);
 
     /// <summary>Dock surface size (488x444 DIP).</summary>
     public static LayeredSurfaceSize Dock { get; } = new(Width, DockHeight);
@@ -131,7 +134,8 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// at <see cref="DockStripTop"/> instead (use the <see cref="FluidBar.Core.Layout.ShellForm"/>
     /// overload).
     /// </summary>
-    public static VisualPoint ShellLocalOffset(LayeredHostMode mode) => new(Padding, Padding);
+    public static VisualPoint ShellLocalOffset(LayeredHostMode mode)
+        => new(mode == LayeredHostMode.Dock ? Padding : (FloatWidth - PanelWidth) / 2, Padding);
 
     /// <summary>
     /// Surface-local DIP offset of the anchor shell for a form: the expanded panel for every mode,
@@ -141,7 +145,9 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     public static VisualPoint ShellLocalOffset(LayeredHostMode mode, FluidBar.Core.Layout.ShellForm form)
         => mode == LayeredHostMode.Dock && form != FluidBar.Core.Layout.ShellForm.Expanded
             ? new VisualPoint(Padding, DockStripTop)
-            : new VisualPoint(Padding, Padding);
+            : mode == LayeredHostMode.Dock
+                ? new VisualPoint(Padding, Padding)
+                : new VisualPoint((FloatWidth - PanelWidth) / 2, Padding);
 
     /// <summary>Converts to physical pixels with the ceiling size rule (never clips a DIP).</summary>
     public LayeredPixelSize ToPixels(double scale)

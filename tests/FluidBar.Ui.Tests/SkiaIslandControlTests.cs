@@ -376,6 +376,35 @@ public sealed class SkiaIslandControlTests
         Assert.Equal(PageSlotKind.Notifications, expanded.Pages.PageSlotAt(expanded.PageIndex)?.Kind);
     }
 
+    [Fact]
+    public void Notification_width_grows_only_for_long_text_up_to_the_540_cap()
+    {
+        using var shortFixture = ControllerFixture.Create();
+        shortFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "Hi",
+            Body = "短消息",
+            SourceName = "QQ",
+        }, 1, "test");
+        shortFixture.RunToRest();
+        shortFixture.Settle();
+        Assert.Equal(LayoutTokens.NotificationMinWidth, shortFixture.Controller.RenderState.ShellWidth, 1);
+
+        using var longFixture = ControllerFixture.Create();
+        longFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "Long notification",
+            Body = new string('长', 200),
+            SourceName = "QQ",
+        }, 1, "test");
+        longFixture.RunToRest();
+        longFixture.Settle();
+        var state = longFixture.Controller.RenderState;
+        Assert.True(state.ShellWidth > LayoutTokens.NotificationMinWidth);
+        Assert.True(state.ShellWidth <= LayoutTokens.NotificationMaxWidth);
+        Assert.True(IslandMetrics.ShellRect(state).Right <= HostSurface.Float.Width + 0.5f);
+    }
+
     private static SKRect Page(int page, ControllerFixture fixture)
         => IslandMetrics.PageRect(fixture.Controller.RenderState, page);
 

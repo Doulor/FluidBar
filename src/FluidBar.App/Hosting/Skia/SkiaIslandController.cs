@@ -2188,6 +2188,15 @@ public sealed class SkiaIslandController : IDisposable
         var compactKind = viewModel.Primary?.Kind;
         var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
 
+        // The notification card only grows when its text actually needs the room; short messages keep
+        // the 360 DIP token. The cap is 540 DIP (the requested +50% over the old 360 limit).
+        if (compactKind == ActivityKind.Notification && _compact.Model is { } notificationModel)
+        {
+            var measured = MeasureNotificationWidth(notificationModel, settings.FontScale);
+            var width = Math.Clamp(measured, LayoutTokens.NotificationMinWidth, LayoutTokens.NotificationMaxWidth);
+            compactSize = new VisualSize(width, compactSize.Height);
+        }
+
         // Lyric form: widen the pill so the whole line fits instead of ellipsising it. The motion driver
         // tweens the width (380 ms shell transition), so a line change grows/shrinks the pill smoothly;
         // the clamp keeps the token as the floor and the host surface as the ceiling (over-long lines
@@ -2504,6 +2513,29 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Measures the compact lyric line at the current font scale (cached by the text engine).</summary>
+    private float MeasureNotificationWidth(CompactModel model, double fontScale)
+    {
+        var scale = double.IsFinite(fontScale) && fontScale > 0 ? fontScale : 1.0;
+        var titleStyle = new TextStyle(IslandType.NotificationTitle.Role, (float)(IslandType.NotificationTitle.Size * scale));
+        var bodyStyle = new TextStyle(IslandType.NotificationBody.Role, (float)(IslandType.NotificationBody.Size * scale));
+        var appStyle = new TextStyle(IslandType.CompactSmallSemiBold.Role, (float)(IslandType.CompactSmallSemiBold.Size * scale));
+        var app = model.AppName ?? model.Subtitle ?? string.Empty;
+        var title = model.Title ?? model.Body ?? app;
+        var body = model.Body ?? string.Empty;
+        var titleWidth = _lyricMeasure.Measure(title, titleStyle);
+        var bodyWidth = _lyricMeasure.Measure(body, bodyStyle);
+        var titleRow = titleWidth;
+        if (!string.IsNullOrEmpty(app))
+        {
+            titleRow += (6f * (float)scale) + (12f * (float)scale)
+                + _lyricMeasure.Measure(app, appStyle);
+        }
+
+        // 14 left + 35 avatar + 12 gap + 45 right padding, plus the same 2 DIP shaper slack used by
+        // the media pill so the final glyph never rounds into an ellipsis.
+        return (float)(61 + Math.Max(titleRow, bodyWidth) + 2);
+    }
+
     private float MeasureCompactLyric(string lyric, double fontScale)
     {
         var style = IslandType.CompactMediaLyric;

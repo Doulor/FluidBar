@@ -177,7 +177,7 @@ public sealed class SkiaIslandMotion : IDisposable
                 IslandAnchor.TopLeft or IslandAnchor.BottomLeft when mode != IslandMode.Dock => host.SidePadding,
                 IslandAnchor.TopRight or IslandAnchor.BottomRight when mode != IslandMode.Dock
                     => host.Width - host.SidePadding - width,
-                _ => host.SidePadding + ((LayoutTokens.ExpandedWidth - width) / 2),
+                _ => (host.Width - width) / 2,
             };
 
             if (mode == IslandMode.Dock)
@@ -227,7 +227,8 @@ public sealed class SkiaIslandMotion : IDisposable
         _hasAppeared |= target.Form != ShellForm.Hidden;
         _target = target;
 
-        var compactW = Math.Clamp(target.CompactSize.Width, 60, LayoutTokens.ExpandedWidth);
+        var maxCompactW = target.Mode == IslandMode.Dock ? LayoutTokens.ExpandedWidth : LayoutTokens.NotificationMaxWidth;
+        var compactW = Math.Clamp(target.CompactSize.Width, 60, maxCompactW);
         var compactH = Math.Clamp(target.CompactSize.Height, 24, LayoutTokens.ExpandedHeight);
         var wantsExpanded = target.Form == ShellForm.Expanded;
         var baseWidth = wantsExpanded ? LayoutTokens.ExpandedWidth : compactW;
@@ -288,7 +289,8 @@ public sealed class SkiaIslandMotion : IDisposable
     public void SnapToTarget()
     {
         var wantsExpanded = _target.Form == ShellForm.Expanded;
-        var compactW = Math.Clamp(_target.CompactSize.Width, 60, LayoutTokens.ExpandedWidth);
+        var maxCompactW = _target.Mode == IslandMode.Dock ? LayoutTokens.ExpandedWidth : LayoutTokens.NotificationMaxWidth;
+        var compactW = Math.Clamp(_target.CompactSize.Width, 60, maxCompactW);
         var compactH = Math.Clamp(_target.CompactSize.Height, 24, LayoutTokens.ExpandedHeight);
         SnapGeometry(wantsExpanded ? LayoutTokens.ExpandedWidth : compactW,
             wantsExpanded ? LayoutTokens.ExpandedHeight : compactH, wantsExpanded);

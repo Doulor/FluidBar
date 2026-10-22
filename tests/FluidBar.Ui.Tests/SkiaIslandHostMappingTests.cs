@@ -36,7 +36,7 @@ public sealed class SkiaIslandHostMappingTests
         Assert.False(string.IsNullOrEmpty(state.Compact.Value.Model.ClockText));
         Assert.True(state.IsVisible);
         // Top-center float: the compact pill is centred inside the fixed 488 DIP host surface.
-        Assert.Equal(LayoutTokens.WindowPadding + ((LayoutTokens.ExpandedWidth - state.ShellWidth) / 2), state.ShellOrigin.X, 1);
+        Assert.Equal((HostSurface.Float.Width - state.ShellWidth) / 2, state.ShellOrigin.X, 1);
         Assert.Equal(LayoutTokens.WindowPadding, state.ShellOrigin.Y, 1);
     }
 
@@ -148,7 +148,7 @@ public sealed class SkiaIslandHostMappingTests
         Assert.Equal(ShellForm.Expanded, state.Form);
         Assert.Equal(LayoutTokens.ExpandedWidth, state.ShellWidth, 1);
         Assert.Equal(LayoutTokens.ExpandedHeight, state.ShellHeight, 1);
-        Assert.Equal(new VisualPoint(LayoutTokens.WindowPadding, LayoutTokens.WindowPadding), state.ShellOrigin);
+        Assert.Equal(new VisualPoint((HostSurface.Float.Width - LayoutTokens.ExpandedWidth) / 2, LayoutTokens.WindowPadding), state.ShellOrigin);
         Assert.Equal(1, state.ContentOpacity, 2);
     }
 

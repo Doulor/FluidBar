@@ -50,6 +50,9 @@ public static class LayoutTokens
     /// <summary>Fixed per-monitor host surface width (488 DIP) for every mode.</summary>
     public const double HostSurfaceWidth = ExpandedWidth + (2 * WindowPadding);
 
+    /// <summary>Float/flush host surface width (588 DIP): 440 panel + 24 bleed + 100 extra lane for the 540 DIP notification cap.</summary>
+    public const double HostSurfaceFloatWidth = NotificationMaxWidth + (2 * WindowPadding);
+
     /// <summary>
     /// Fixed float/flush host surface height (488x384 DIP): shell envelope 332 + the detached
     /// Page Archipelago band 52 (gap 8 + strip 32 + bottom padding 12). The host surface is the
@@ -330,6 +333,12 @@ public static class LayoutTokens
     // NetSpeed-Dynamic message card (screenshot4.png measured): 360×64 DIP, ~21 DIP radius,
     // i.e. clearly squarer than the 35 DIP stadium a 70-high card would produce.
     private static readonly VisualSize NotificationSize = new(360, 64);
+
+    /// <summary>Minimum notification-card width (short, unclipped messages stay here).</summary>
+    public const double NotificationMinWidth = 360;
+
+    /// <summary>Maximum notification-card width after the requested +50% cap (360 → 540).</summary>
+    public const double NotificationMaxWidth = 540;
 
     /// <summary>Squarer notification-card radius measured from the reference screenshot (~43 px at 2×).</summary>
     public const double NotificationCornerRadius = 21;

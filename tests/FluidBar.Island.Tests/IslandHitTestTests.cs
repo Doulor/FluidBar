@@ -65,12 +65,14 @@ public sealed class IslandHitTestTests
         var state = IslandTestFixtures.Expanded(0);
         var shell = IslandMetrics.ShellRect(state);
         var content = IslandMetrics.ContentRect(shell);
+        var ox = shell.Left - 24;
+        var oy = shell.Top - 24;
 
-        var clock = Hit(state, 60, 80);
+        var clock = Hit(state, 60 + ox, 80 + oy);
         Assert.Equal(IslandHitKind.Page, clock.Kind);
         Assert.Equal(0, clock.PageIndex);
 
-        var toggle = Hit(state, 60, 120);
+        var toggle = Hit(state, 60 + ox, 120 + oy);
         Assert.Equal(IslandHitKind.PageControl, toggle.Kind);
         Assert.Equal(IslandPageControl.QuickToggle, toggle.Control);
         Assert.Equal(0, toggle.Index);
@@ -80,27 +82,27 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandPageControl.QuickToggle, toggle3.Control);
         Assert.Equal(2, toggle3.Index);
 
-        var mediaPlay = Hit(state, 420, 180);
+        var mediaPlay = Hit(state, 420 + ox, 180 + oy);
         Assert.Equal(IslandHitKind.PageControl, mediaPlay.Kind);
         Assert.Equal(IslandPageControl.PlayPause, mediaPlay.Control);
 
-        var mediaCard = Hit(state, 100, 180);
+        var mediaCard = Hit(state, 100 + ox, 180 + oy);
         Assert.Equal(IslandPageControl.MediaCard, mediaCard.Control);
 
-        var volume = Hit(state, 100, 231);
+        var volume = Hit(state, 100 + ox, 231 + oy);
         Assert.Equal(IslandPageControl.VolumeSlider, volume.Control);
 
-        var brightness = Hit(state, 300, 231);
+        var brightness = Hit(state, 300 + ox, 231 + oy);
         Assert.Equal(IslandPageControl.BrightnessSlider, brightness.Control);
 
-        var collapse = Hit(state, 430, 44);
+        var collapse = Hit(state, 430 + ox, 44 + oy);
         Assert.Equal(IslandHitKind.Collapse, collapse.Kind);
 
-        var title = Hit(state, 100, 40);
+        var title = Hit(state, 100 + ox, 40 + oy);
         Assert.Equal(IslandHitKind.Title, title.Kind);
         Assert.False(title.IsInteractive);
 
-        var background = Hit(state, 250, 300);
+        var background = Hit(state, 250 + ox, 300 + oy);
         Assert.Equal(IslandHitKind.Shell, background.Kind);
 
         Assert.Equal(IslandHitKind.None, Hit(state, 10, 10).Kind);
@@ -283,4 +285,3 @@ public sealed class IslandHitTestTests
         Assert.Empty(last.DotsRight);
     }
 }
-

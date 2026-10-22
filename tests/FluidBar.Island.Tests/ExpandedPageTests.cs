@@ -18,7 +18,7 @@ public sealed class ExpandedPageTests
         var state = IslandTestFixtures.Expanded(pageIndex);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(882, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);

@@ -72,10 +72,10 @@ public sealed record HostSurface
     public bool HasDockStrip => Mode == IslandMode.Dock;
 
     /// <summary>Expanded shell top-left inside the host surface (24, 24).</summary>
-    public VisualPoint ShellLocalOffset => new(SidePadding, TopPadding);
+    public VisualPoint ShellLocalOffset => new((Width - LayoutTokens.ExpandedWidth) / 2, TopPadding);
 
     /// <summary>Expanded shell envelope (440x284) inside the host surface.</summary>
-    public VisualRect ShellEnvelopeLocal => new(SidePadding, TopPadding, LayoutTokens.ExpandedWidth, LayoutTokens.ExpandedHeight);
+    public VisualRect ShellEnvelopeLocal => new((Width - LayoutTokens.ExpandedWidth) / 2, TopPadding, LayoutTokens.ExpandedWidth, LayoutTokens.ExpandedHeight);
 
     /// <summary>Y of the expanded shell bottom inside the host surface (24 + 284 = 308).</summary>
     public double ShellBottomLocal => TopPadding + LayoutTokens.ExpandedHeight;
@@ -85,7 +85,7 @@ public sealed record HostSurface
 
     /// <summary>Dock strip rectangle inside the host surface; empty for float/flush.</summary>
     public VisualRect DockStripLocal => HasDockStrip
-        ? new VisualRect(SidePadding, DockStripTopLocal, LayoutTokens.ExpandedWidth, DockStripHeight)
+        ? new VisualRect((Width - LayoutTokens.ExpandedWidth) / 2, DockStripTopLocal, LayoutTokens.ExpandedWidth, DockStripHeight)
         : VisualRect.Empty;
 
     /// <summary>Archipelago strip top inside the host surface (318 float/flush, 378 dock).</summary>
@@ -182,7 +182,11 @@ public sealed record HostSurface
             shell.Width,
             shell.Height);
         var windowVisual = new VisualRect(windowX, windowY, Width, Height);
-        var archipelago = ArchipelagoStripLocal.Offset(windowX, windowY);
+        var archipelago = new VisualRect(
+            adjustedShell.X + ((adjustedShell.Width - LayoutTokens.ArchipelagoTrackWidth) / 2),
+            ArchipelagoStripLocal.Y + windowY,
+            LayoutTokens.ArchipelagoTrackWidth,
+            ArchipelagoStripHeight);
         var dockStrip = HasDockStrip ? DockStripLocal.Offset(windowX, windowY) : VisualRect.Empty;
         var bottomBand = BottomBandLocal.Offset(windowX, windowY);
         return new HostPlacement(
@@ -267,7 +271,7 @@ public sealed record HostSurface
     private static HostSurface Create(IslandMode mode) => new()
     {
         Mode = mode,
-        Width = LayoutTokens.HostSurfaceWidth,
+        Width = mode == IslandMode.Dock ? LayoutTokens.HostSurfaceWidth : LayoutTokens.HostSurfaceFloatWidth,
         Height = mode == IslandMode.Dock ? LayoutTokens.HostSurfaceDockHeight : LayoutTokens.HostSurfaceFloatHeight,
         SidePadding = LayoutTokens.HostTopPadding,
         TopPadding = LayoutTokens.HostTopPadding,
