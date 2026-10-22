@@ -138,12 +138,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
-
-    /// <summary>State-file write the anchor was last snapped to (polling alignment).</summary>
-    private DateTimeOffset _lastAnchorWriteUtc = DateTimeOffset.MinValue;
-
-    /// <summary>When the current frame anchor's track started changing (guards the first state write).</summary>
-    private DateTimeOffset _frameTrackChangedAtUtc = DateTimeOffset.MinValue;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -559,11 +553,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             && snapshot.Position <= _lastPublishedPosition)
         {
             var stalled = now - _lastPublishedAt;
-            // The upper bound used to be 5 s, which threw away real stalls: a frozen accessibility text plus no
-            // state-file write for 8 s produced no correction at all, so the position fell 8 s behind and then
-            // jumped when the next write arrived ("slow 5 s, then slow 10 s, then back", user report
-            // 2026-10-22). 30 s covers the longest observed gap and is still bounded.
-            if (stalled > TimeSpan.FromMilliseconds(1200) && stalled < TimeSpan.FromSeconds(30))
+            if (stalled > TimeSpan.FromMilliseconds(1200) && stalled < TimeSpan.FromSeconds(5))
             {
                 snapshot = snapshot with { Position = _lastPublishedPosition + stalled };
             }
@@ -645,32 +635,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         if (_loopback.TryStart(candidate.ProcessId))
         {
             var audio = _loopback.Consumed;
-
-            // Polling alignment: every time the player rewrites its state file it states the exact position,
-            // so snap the anchor to it instead of letting the residual error accumulate. This is the
-            // automatic version of "pause, wait, play" - the only moment the user found to be perfectly
-            // aligned (2026-10-22). Skipped for a moment after a track change, where the previous song's
-            // value is still in the file.
-            var wroteNow = state.SampledAtUtc != _lastAnchorWriteUtc;
-            _lastAnchorWriteUtc = state.SampledAtUtc;
-            var sinceTrackChange = _timeProviderNow() - _frameTrackChangedAtUtc;
-            if (wroteNow
-                && _frameAnchorInitialised
-                && sinceTrackChange > TimeSpan.FromSeconds(3)
-                && state.SampledAtUtc > _frameTrackChangedAtUtc
-                && statePosition > TimeSpan.Zero)
-            {
-                var writeAge = _timeProviderNow() - state.SampledAtUtc;
-                if (writeAge >= TimeSpan.Zero && writeAge < TimeSpan.FromSeconds(10))
-                {
-                    _frameAnchorPosition = statePosition;
-                    _frameAnchorAudio = audio - writeAge;
-                }
-            }
             if (!string.Equals(_frameTrackTitle, candidate.Title, StringComparison.Ordinal))
             {
                 _frameTrackTitle = candidate.Title;
-                _frameTrackChangedAtUtc = _timeProviderNow();
                 var sinceWrite = _timeProviderNow() - state.SampledAtUtc;
                 if (sinceWrite < TimeSpan.Zero || sinceWrite > TimeSpan.FromSeconds(10))
                 {
@@ -686,19 +653,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 // costs ~1.5 s (caption poll + repaint), and anchoring to zero at detection time made the
                 // new song permanently ~1.5 s behind (measured 2026-10-22).
                 var firstSighting = _frameAnchorInitialised == false;
-                if (firstSighting)
+                var stateIsFresh = sinceWrite > TimeSpan.Zero && sinceWrite < TimeSpan.FromSeconds(10);
+                if (firstSighting || (stateIsFresh && statePosition < TimeSpan.FromSeconds(30)))
                 {
-                    // Joining mid-song (app start): seed from the player's current reading, because the song
-                    // really is somewhere in the middle.
                     _frameAnchorInitialised = true;
                     _frameAnchorPosition = statePosition;
                     _frameAnchorAudio = audio - sinceWrite;
                 }
                 else
                 {
-                    // A new song ALWAYS starts at zero. The state file still describes the previous track at
-                    // this instant, so using it made the next song begin at the old position (reported
-                    // 2026-10-22: switching at 0:30 made the new song start at 0:30).
                     _frameAnchorPosition = TimeSpan.Zero;
                     _frameAnchorAudio = audio;
                 }
