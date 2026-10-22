@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **页面偏好**：Save 移出 UI 线程。
 - **SafeMode 重建**：串行 gate + shutdown guard。
 - **page 选择**：ui-page.json 跟随 FLUIDBAR_SETTINGS_DIR。
 - **快照事件**：`_disposed` guard，避免晚到 Changed。

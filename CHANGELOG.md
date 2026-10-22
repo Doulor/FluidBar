@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **页面偏好写入移出 UI 线程**：`PageSelectionStore.Save` 之前在 `OnPagerPageChanged` 里同步 `File.WriteAllText`，翻页时可能卡一帧；现在 `Task.Run` 写临时设置根下的 `ui-page.json`，失败仍静默。
 - **插件运行时重建串行化**：SafeMode 快速切换会并发 `RebuildPluginRuntimeAsync`，可能重复 dispose/启动 runtime；新增 `SemaphoreSlim` gate + `_shutdownStarted` 检查，重建串行执行。
 - **page 选择文件也跟随 settings root**：`PageSelectionStore` 的 `ui-page.json` 现在优先使用 `FLUIDBAR_SETTINGS_DIR`，隔离 smoke 不再改写真实 `%APPDATA%\FluidBar\ui-page.json`。
 - **快照事件 dispose guard**：`SkiaPlatformActions.OnSnapshotChanged` / `OnWidgetDataChanged` 可能在服务 dispose 后从后台线程晚到；现在先检查 `_disposed`，避免退出阶段再触发 `Changed`。

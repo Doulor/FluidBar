@@ -45,8 +45,14 @@ internal static class PageSelectionStore
         }
     }
 
-    /// <summary>Stores the selected page index; failures are swallowed on purpose.</summary>
+    /// <summary>Stores the selected page index off the UI thread; failures are swallowed on purpose.</summary>
     public static void Save(int index)
+    {
+        var value = Math.Max(0, index);
+        _ = Task.Run(() => SaveCore(value));
+    }
+
+    private static void SaveCore(int index)
     {
         lock (Gate)
         {
@@ -54,7 +60,7 @@ internal static class PageSelectionStore
             {
                 var directory = Path.GetDirectoryName(FilePath)!;
                 Directory.CreateDirectory(directory);
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(new { index = Math.Max(0, index) }));
+                File.WriteAllText(FilePath, JsonSerializer.Serialize(new { index }));
             }
             catch (Exception)
             {
