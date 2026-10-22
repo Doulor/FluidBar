@@ -17,6 +17,7 @@
 - **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
 - **preview.14 发布 + smoke 通过**：包含 smoke fullscreen bypass 的 release `publish.ps1 -Version 2.0.0-preview.14 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `C58080C1...2EE38A0`。隔离 settings 的 release smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
+- **无效 UTF-16 surrogate 防崩**：`TextEngine` 在 shaping 前把孤立 high/low surrogate 替换为 U+FFFD；修复 preview.15 release smoke 在通知页 `char.ConvertToUtf32` 抛异常，新增 3 个回归用例。
 - **SafeMode 改为下次启动生效**：运行中创建第二个 `PluginRuntime` 不可靠（第二次 `CreateAsync` 会阻塞），因此 SafeMode 变更现在只持久化并记录 `plugin.runtime.restart-required`，下次启动应用；Advanced 页提示同步改为“下次启动生效”。
 - **Runtime 替换顺序修正**：SafeMode rebuild 先组合新 `PluginRuntime`，成功后再把旧 runtime 放后台 retire；旧 runtime 的 plugin/host dispose 加 500ms 上限。首次 `SafeMode=true` smoke 已出现 `compose-returned` + `plugin.runtime.started`；`SafeMode=false` 的第二次重建仍需继续验证。
 - **SafeMode 重建阶段日志**：新增 `plugin.runtime.rebuild-old-disposed`、`rebuild-compose`、`compose-enter`、`compose-task-started`，定位到第二次 `PluginRuntime.CreateAsync` 在重建时未返回；尚未修复。
@@ -148,7 +149,7 @@
 - **通知已读/图标**：`NotificationService` 记录已读 toast id；打开通知页或点击通知行时标记已读，页面不再给所有行画永久未读点；通知行增加真实 `appLogoOverride`/应用图标映射（之前只有通用铃铛）。新增 `NotificationMarkAllRead` 平台动作，保持 headless 可测。
 - **首页状态**：`IslandContent` 新增真实 `IsWifiEnabled`/`IsBluetoothEnabled`（来自 Radio 服务）；Wi-Fi 不再用 `IsOnline` 代替无线电状态，蓝牙不再恒为关。首页天气 chip 改用小组件页同一份真实天气；禁用的 Focus 磁贴不再作为可点击命中目标（之前只写一条 control-unsupported 日志）。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*`（中英随语言），新增独立「隐藏」项；`Ctrl+Alt+H` 走 `HandleHideHotkey` 而不是 toggle；`HotkeyGesture.ToNativeModifiers` 补 `MOD_NOREPEAT`，长按不再重复触发。
-- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2614 passed / 0 failed（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
+- **测试**：新增 `IslandMouseHook.GestureTracker` 6 个用例、`FullscreenDetector` 7 个用例；Platform 115 项定向测试通过；全量 `dotnet test` 2616 passed / 0 failed（Architecture 的 `KugouMemoryPosition.Thread.Sleep`、Integration 的 notification rank 断言，均不由本轮改动引入）。
 
 
 ## 2026-10-21 — 修复灵动岛动画卡顿（帧时钟被 50 ms 截止计时器反复停掉）

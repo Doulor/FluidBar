@@ -22,6 +22,7 @@
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
 - **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
+- **surrogate 防崩**：TextEngine 替换孤立 surrogate，通知页 smoke 不再崩。
 - **SafeMode**：改为下次启动生效，避免第二次 composition 阻塞。
 - **替换顺序**：新 runtime 先组合，旧 runtime 后台 retire；首次 SafeMode true 成功，false 待验。
 - **重建阶段**：日志显示 old disposed 后 compose 未返回；待修。
@@ -132,7 +133,7 @@
 - **通知页**：已读 toast id 持久于服务进程内；打开页面/点击行标记已读，未读点不再永久常亮；通知行映射真实 app 图标（`appLogoOverride` / 应用图标）而不是统一铃铛。
 - **首页真实状态**：Wi-Fi/蓝牙开关改用 Radio 服务的真实 `IsEnabled`（不再用 `IsOnline`/硬编码 false）；首页天气 chip 复用小组件页的真实天气；禁用的 Focus 磁贴不再产生点击动作。
 - **托盘/热键**：托盘菜单接入 `LocKeys.Tray.*` 并新增独立隐藏项；`Ctrl+Alt+H` 走 `HandleHideHotkey`；`MOD_NOREPEAT` 修复长按重复。
-- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2614 passed / 0 failed**。0 failed：通知 rank 已按 spec 2.3 修正为 9，架构门禁豁免专用后台线程，Integration 两条 rank 断言同步通过。Core 647 · Platform 708 · Ui 512 · Island 448 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 31/31 · Architecture 18/18。
+- **测试**：Platform 定向 115 passed；全量 `dotnet test FluidBar.sln -m:1` = **2616 passed / 0 failed**。0 failed：通知 rank 已按 spec 2.3 修正为 9，架构门禁豁免专用后台线程，Integration 两条 rank 断言同步通过。Core 647 · Platform 708 · Ui 512 · Island 448 · Sdk 167 · PluginHost 40 · Builtin 25 · Integration 31/31 · Architecture 18/18。
 - **构建**：`dotnet build FluidBar.sln` 0 errors。
 
 ## 里程碑

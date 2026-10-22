@@ -365,6 +365,7 @@ public sealed class TextEngine : IDisposable
 
     private TextLayout Build(string text, TextStyle style, float maxWidth)
     {
+        text = SanitizeSurrogates(text);
         var primaryFont = GetFont(style);
         var trimmed = text;
         var width = MeasureTextWidth(text, style, primaryFont);
@@ -478,6 +479,55 @@ public sealed class TextEngine : IDisposable
         }
 
         return blob;
+    }
+
+    /// <summary>Replaces unpaired UTF-16 surrogates with U+FFFD; Skia/char.ConvertToUtf32 requires well-formed pairs.</summary>
+    private static string SanitizeSurrogates(string text)
+    {
+        var needsRepair = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]))
+            {
+                if (i + 1 >= text.Length || !char.IsLowSurrogate(text[i + 1]))
+                {
+                    needsRepair = true;
+                    break;
+                }
+
+                i++;
+            }
+            else if (char.IsLowSurrogate(text[i]))
+            {
+                needsRepair = true;
+                break;
+            }
+        }
+
+        if (!needsRepair)
+        {
+            return text;
+        }
+
+        var builder = new System.Text.StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                builder.Append(text[i]).Append(text[i + 1]);
+                i++;
+            }
+            else if (char.IsSurrogate(text[i]))
+            {
+                builder.Append('\uFFFD');
+            }
+            else
+            {
+                builder.Append(text[i]);
+            }
+        }
+
+        return builder.ToString();
     }
 
     private List<Run> Segment(string text, TextStyle style, SKFont primaryFont)

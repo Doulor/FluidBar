@@ -104,6 +104,19 @@ public sealed class TextEngineTests
         Assert.True(layout.Width > 0);
     }
 
+    [Theory]
+    [InlineData("\uD83C")]
+    [InlineData("\uDE00")]
+    [InlineData("before\uD83Cafter")]
+    public void Unpaired_utf16_surrogates_are_replaced_instead_of_throwing(string value)
+    {
+        using var text = new TextEngine();
+        var layout = text.GetLayout(value, new TextStyle(FontRole.Ui, 13f), 200);
+
+        Assert.True(layout.Width > 0);
+        Assert.DoesNotContain('\uD83C', layout.Text);
+    }
+
     [Fact]
     public void Missing_fonts_fall_back_without_throwing()
     {
