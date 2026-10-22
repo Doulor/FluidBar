@@ -1646,6 +1646,25 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 "no unique agent terminal window matched the session title or project");
     }
 
+    private IslandActionResult OpenMediaPlayer()
+    {
+        var aumid = _media.Current?.SourceAppUserModelId;
+        if (string.IsNullOrWhiteSpace(aumid))
+        {
+            return Unsupported("there is no active media session to open");
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo($"shell:AppsFolder\\{aumid}") { UseShellExecute = true });
+            return IslandActionResult.Handled;
+        }
+        catch
+        {
+            return Unsupported("the current media app could not be launched");
+        }
+    }
+
     private IslandActionResult OpenSoundSettings()
     {
         try

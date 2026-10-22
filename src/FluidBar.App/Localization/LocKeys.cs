@@ -158,6 +158,8 @@ public static partial class LocKeys
             public const string PreviousMonth = "Island.Accessibility.PreviousMonth";
             /// <summary><c>Island.Accessibility.NextMonth</c></summary>
             public const string NextMonth = "Island.Accessibility.NextMonth";
+            /// <summary><c>Island.Accessibility.OpenMediaPlayer</c></summary>
+            public const string OpenMediaPlayer = "Island.Accessibility.OpenMediaPlayer";
             /// <summary><c>Island.Accessibility.OpenSoundSettings</c></summary>
             public const string OpenSoundSettings = "Island.Accessibility.OpenSoundSettings";
             /// <summary><c>Island.Accessibility.UnsupportedOutput</c></summary>
@@ -418,6 +420,8 @@ public static partial class LocKeys
             public const string Queue = "Page.Media.Queue";
             /// <summary><c>Page.Media.QueueLabel</c></summary>
             public const string QueueLabel = "Page.Media.QueueLabel";
+            /// <summary><c>Page.Media.OpenPlayer</c></summary>
+            public const string OpenPlayer = "Page.Media.OpenPlayer";
             /// <summary><c>Page.Media.OutputSettings</c></summary>
             public const string OutputSettings = "Page.Media.OutputSettings";
             /// <summary><c>Page.Media.OutputNone</c></summary>

@@ -249,7 +249,8 @@ public static class SkiaIslandHitTest
         if (kind == PageSlotKind.Media
             && ((control == IslandPageControl.Output && !pages.Media.OutputAvailable
                     && string.IsNullOrWhiteSpace(pages.Media.OutputPlaceholder))
-                || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable)
+                || (control == IslandPageControl.Queue && !pages.Media.QueueAvailable
+                    && string.IsNullOrWhiteSpace(pages.Media.QueuePlaceholder))
                 || (control == IslandPageControl.VolumeMute && !pages.Media.HasVolume)))
         {
             index = -1;

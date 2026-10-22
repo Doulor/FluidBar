@@ -20,6 +20,7 @@
 - **剪贴板清空**：托盘入口清空岛内历史（系统剪贴板不动），同时清空 pin 摘要，避免固定行复活。
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
+- **媒体队列**：Queue 按当前 AUMID 打开播放器，UIA 同步启用。
 - **媒体输出标签**：显示“声音设置/Sound settings”，匹配实际 fallback。
 - **搜索窗口退出**：DisposeServices 先关搜索窗口。
 - **剪贴板搜索**：标题栏 Search chip 打开搜索窗口，实时过滤文本/文件名；UIA 同步。
@@ -28,7 +29,7 @@
 - **媒体时长缓存**：GSMTC/Kugou 两处时长缓存 512 条上限。
 - **通知已读 id**：随 recent 裁剪，启动清空，避免无界增长。
 - **SafeMode 重建**：重建后关闭旧设置窗口，避免旧服务引用。
-- **媒体输出**：Output 按钮打开 `ms-settings:sound`；queue 仍 inert。
+- **媒体输出**：Output 打开 `ms-settings:sound`；Queue 显示“打开播放器”，按 AUMID 拉起当前播放器。
 - **发布门禁**：豁免平台 8 类已知 CS 警告与内置插件 CS1591；本地 preview.2 publish 成功（zip 19.62 MB、无 PDB）。
 - **崩溃日志**：`Program.Main` 首步安装 CrashLog handlers。
 - **剪贴板筛选**：总历史为空时隐藏筛选 chip。

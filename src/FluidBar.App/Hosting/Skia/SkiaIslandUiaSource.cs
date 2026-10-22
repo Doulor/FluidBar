@@ -657,21 +657,25 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             help: canOpenOutput
                 ? L("Island.Accessibility.OpenSoundSettings", "Open Windows sound settings.")
                 : L("Island.Accessibility.UnsupportedOutput", "No audio-output service is available in this build.")));
+        var canOpenQueue = state.Pages.Media.QueueAvailable
+            || !string.IsNullOrWhiteSpace(state.Pages.Media.QueuePlaceholder);
         children.Add(Node(
             "island.page.1.queue",
             UiaElementRole.Button,
-            L("Page.Media.Queue", "Play queue"),
+            L("Page.Media.OpenPlayer", "Open player"),
             ToRect(PageLayout.MediaQueue(page)),
-            UiaPatternKind.None,
+            canOpenQueue ? UiaPatternKind.Invoke : UiaPatternKind.None,
             new UiaElementState
             {
-                IsEnabled = false,
-                IsFocusable = false,
-                ItemStatus = L("Island.Accessibility.UnsupportedQueue",
-                    "No media queue service is available in this build."),
+                IsEnabled = canOpenQueue,
+                IsFocusable = canOpenQueue,
+                ItemStatus = canOpenQueue
+                    ? L("Island.Accessibility.OpenMediaPlayer", "Open the current media player.")
+                    : L("Island.Accessibility.UnsupportedQueue", "No media queue service is available in this build."),
             },
-            help: L("Island.Accessibility.UnsupportedQueue",
-                "No media queue service is available in this build.")));
+            help: canOpenQueue
+                ? L("Island.Accessibility.OpenMediaPlayer", "Open the current media player.")
+                : L("Island.Accessibility.UnsupportedQueue", "No media queue service is available in this build.")));
         return children;
     }
 
@@ -1300,6 +1304,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             return;
                 return;
             case "queue":
+                _controller.ActivateAccessibleControl(IslandPageControl.Queue, page);
                 return;
             case "card":
                 if (parts.Length > 4 && parts[4] == "play")

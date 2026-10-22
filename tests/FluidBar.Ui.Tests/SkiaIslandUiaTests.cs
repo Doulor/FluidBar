@@ -206,7 +206,8 @@ public sealed class SkiaIslandUiaTests
         Assert.True(output.State.IsFocusable);
         Assert.False(string.IsNullOrWhiteSpace(output.State.ItemStatus));
         Assert.NotNull(queue);
-        Assert.False(queue!.State.IsEnabled);
+        Assert.True(queue!.State.IsEnabled);
+        Assert.True(queue.State.IsFocusable);
     }
 
     [Fact]

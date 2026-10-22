@@ -212,7 +212,7 @@ public static class SkiaIslandStateBuilder
             QueueCount = media?.TrackCount ?? 0,
             QueueLabel = localizer.Get(LocKeys.Page.Media.QueueLabel),
             OutputPlaceholder = localizer.Get(LocKeys.Page.Media.OutputSettings),
-            QueuePlaceholder = localizer.Get(LocKeys.Page.Media.QueueNone),
+            QueuePlaceholder = localizer.Get(LocKeys.Page.Media.OpenPlayer),
             // Capability bits: Windows has no per-app output-device API and neither GSMTC nor KuGou's
             // accessibility tree exposes a queue, so both slots are inert and say so (greyed by the
             // renderer, refused by the hit test, disabled in the automation tree).
