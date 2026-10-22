@@ -62,6 +62,32 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
+    public void Expanded_notifications_survive_unpaired_utf16_surrogates()
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var baseState = IslandTestFixtures.Expanded();
+        var items = baseState.Pages.Notifications.Items.ToList();
+        items.Add(new NotificationItemModel
+        {
+            AppName = "Broken toast",
+            Title = "before\uD83C",
+            Body = "\uDE00after",
+            TimeText = "now",
+        });
+        var state = baseState with
+        {
+            Pages = baseState.Pages with
+            {
+                Notifications = baseState.Pages.Notifications with { Items = items },
+            },
+        };
+
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.Equal(1895, bitmap.Width);
+        Assert.Equal(576, bitmap.Height);
+    }
+
+    [Fact]
     public void Compact_dock_uses_the_440x52_dock_strip()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
