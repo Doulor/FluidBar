@@ -38,6 +38,14 @@ public sealed class FullscreenDetectorTests
     }
 
     [Fact]
+    public void ShouldIgnoreProcess_only_matches_a_nonzero_current_process()
+    {
+        Assert.True(FullscreenDetector.ShouldIgnoreProcess(42, 42));
+        Assert.False(FullscreenDetector.ShouldIgnoreProcess(42, 43));
+        Assert.False(FullscreenDetector.ShouldIgnoreProcess(0, 0));
+    }
+
+    [Fact]
     public void NormalMaximizedWindowStyle_IsNotFullscreen()
     {
         // WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZE (a regular maximized desktop window).
