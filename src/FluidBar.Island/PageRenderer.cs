@@ -107,6 +107,18 @@ internal sealed partial class PageRenderer : IDisposable
         _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
             _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
 
+        if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Clipboard
+            && state.Pages.Clipboard.FilterLabel is { Length: > 0 } filterLabel)
+        {
+            var filter = PageLayout.ClipboardFilterRect(content);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            canvas.DrawRoundRect(filter, 6, 6, _fill);
+            _text.Draw(canvas, filterLabel, IslandType.RowMeta, filter,
+                _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
+        }
+
         if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Notifications
             && state.Pages.Notifications.ClearLabel is { Length: > 0 } clearLabel)
         {

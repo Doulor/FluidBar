@@ -1067,6 +1067,9 @@ public sealed record ClipboardPageModel
 
     /// <summary>Empty-state hint override.</summary>
     public string? EmptyHint { get; init; }
+
+    /// <summary>Localized label for the active type filter (null hides the header chip).</summary>
+    public string? FilterLabel { get; init; }
 }
 
 /// <summary>One clipboard history row.</summary>

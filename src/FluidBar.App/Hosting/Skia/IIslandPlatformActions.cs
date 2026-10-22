@@ -64,6 +64,9 @@ public enum IslandPlatformActionKind
     /// <summary>Remove one clipboard row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     ClipboardRemove,
 
+    /// <summary>Cycle the clipboard type filter (all → text → image → files).</summary>
+    ClipboardCycleFilter,
+
     /// <summary>Activate an agent session row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     AgentActivate,
 

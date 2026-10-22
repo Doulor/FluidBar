@@ -97,6 +97,9 @@ public enum IslandPageControl
     /// <summary>Clear the local notification list (header chip).</summary>
     NotificationClear,
 
+    /// <summary>Cycle the clipboard type filter (header chip).</summary>
+    ClipboardFilter,
+
     /// <summary>Pin/unpin a clipboard row.</summary>
     Pin,
 

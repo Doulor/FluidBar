@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板类型筛选**：剪贴板页标题栏新增筛选 chip，循环“全部 → 文本 → 图片 → 文件”；`DisplayedClipboard()` 在排序/分页前过滤，Pin/Copy/Delete 的 index 仍与绘制行一致。空列表或无法本地化时 chip 不出现。
 - **Agent 行焦点**：Agent 行重新可点击；`AgentWindowFocus` 按 session title 优先、project leaf 兜底，在可见顶层窗口里找唯一匹配并 `ShowWindow(SW_RESTORE)+SetForegroundWindow`。匹配不唯一则不发焦点，避免误激活别的窗口；`AgentWindowFocus.Matches` 有单测。
 - **Devices 插件接通**：`SkiaPlatformActions` 现在创建并启动 `UsbDeviceMonitor` / `BluetoothDeviceMonitor`，通过 `BuiltinPlatformServices.UsbDevices/BluetoothDevices` 注入内置 `DevicesPlugin`；此前两者始终为 null，插件目录里有 devices 但实际从未组合。随平台 seam 一起 stop/dispose。
 - **便携版自更新**：preview 发布的是 `FluidBar.exe` 而不是 setup；更新安装现在在检测到同名 exe 时生成一个临时 PowerShell helper，等待旧 PID 退出后覆盖当前 exe 并重启，避免新进程被单实例 mutex 挡掉。真正的 setup 仍走 ShellExecute。

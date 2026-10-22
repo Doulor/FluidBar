@@ -80,6 +80,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private readonly TaskListService _tasks;
     private readonly HashSet<string> _pinnedClipboard = new(StringComparer.Ordinal);
     private readonly Dictionary<uint, string> _pinKeyCache = new();
+    private ClipboardFilter _clipboardFilter = ClipboardFilter.All;
     private readonly string _clipboardPinsPath;
     private bool _weatherCityLockedByEnvironment;
     private INotificationSource? _pluginNotificationSource;
@@ -370,6 +371,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             BrightnessPercent = brightness is { IsSupported: true } ? brightness.Percent : null,
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = DisplayedClipboard().Select(MapClipboard).ToImmutableArray(),
+            ClipboardFilterLabel = ClipboardFilterLabel(),
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
@@ -1349,6 +1351,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
             IslandPlatformActionKind.ClipboardRemove => RemoveClipboard(action.Index),
+            IslandPlatformActionKind.ClipboardCycleFilter => CycleClipboardFilter(),
             IslandPlatformActionKind.AgentActivate => ActivateAgent(action.Index),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
@@ -1642,6 +1645,27 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         return IslandActionResult.Handled;
     }
 
+    private IslandActionResult CycleClipboardFilter()
+    {
+        _clipboardFilter = _clipboardFilter switch
+        {
+            ClipboardFilter.All => ClipboardFilter.Text,
+            ClipboardFilter.Text => ClipboardFilter.Image,
+            ClipboardFilter.Image => ClipboardFilter.Files,
+            _ => ClipboardFilter.All,
+        };
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    private string ClipboardFilterLabel() => _localizer?.Get(_clipboardFilter switch
+    {
+        ClipboardFilter.Text => LocKeys.Clipboard.Text,
+        ClipboardFilter.Image => LocKeys.Clipboard.Image,
+        ClipboardFilter.Files => LocKeys.Clipboard.File,
+        _ => LocKeys.Clipboard.All,
+    }) ?? _clipboardFilter.ToString();
+
     private IslandActionResult RemoveClipboard(int index)
     {
         var history = DisplayedClipboard();
@@ -1831,6 +1855,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Rows exactly as painted: pinned first, then newest; capped at the page limit.</summary>
     private IReadOnlyList<ClipboardEntry> DisplayedClipboard()
         => _clipboard.GetHistory()
+            .Where(entry => _clipboardFilter switch
+            {
+                ClipboardFilter.Text => entry.Kind == ClipboardContentKind.Text,
+                ClipboardFilter.Image => entry.Kind == ClipboardContentKind.Image,
+                ClipboardFilter.Files => entry.Kind == ClipboardContentKind.Files,
+                _ => true,
+            })
             .OrderByDescending(entry => _pinnedClipboard.Contains(PinKey(entry)))
             .ThenByDescending(entry => entry.CapturedAtUtc)
             .Take(8)
@@ -1939,6 +1970,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _lyricsHttp.Dispose();
         _artworkCache.Dispose();
         _artworkTempStore.Dispose();
+    }
+
+    private enum ClipboardFilter
+    {
+        All,
+        Text,
+        Image,
+        Files,
     }
 
     private async Task StopOneAsync(string name, Func<Task> stop)

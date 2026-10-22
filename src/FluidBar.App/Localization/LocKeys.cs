@@ -301,6 +301,8 @@ public static partial class LocKeys
         public const string Empty = "Clipboard.Empty";
         /// <summary><c>Clipboard.EmptyHint</c></summary>
         public const string EmptyHint = "Clipboard.EmptyHint";
+        /// <summary><c>Clipboard.All</c></summary>
+        public const string All = "Clipboard.All";
         /// <summary><c>Clipboard.Text</c></summary>
         public const string Text = "Clipboard.Text";
         /// <summary><c>Clipboard.Image</c></summary>

@@ -801,16 +801,26 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 children: children));
         }
 
-        return
-        [
-            Node(
-                "island.page.3.list",
-                UiaElementRole.List,
-                state.Pages.Title(3),
-                ToRect(body),
-                state: new UiaElementState { IsOffscreen = false },
-                children: rows),
-        ];
+        var controls = new List<UiaElementSnapshot>(2);
+        if (!string.IsNullOrWhiteSpace(model.FilterLabel))
+        {
+            controls.Add(Node(
+                "island.page.3.filter",
+                UiaElementRole.Button,
+                model.FilterLabel,
+                ToRect(PageLayout.ClipboardFilterRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state)))),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true }));
+        }
+
+        controls.Add(Node(
+            "island.page.3.list",
+            UiaElementRole.List,
+            state.Pages.Title(3),
+            ToRect(body),
+            state: new UiaElementState { IsOffscreen = false },
+            children: rows));
+        return controls;
     }
 
     private List<UiaElementSnapshot> BuildAgentControls(in IslandRenderState state, SKRect page)
@@ -1292,6 +1302,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 return;
             case "clear":
                 _controller.ClearNotifications();
+                return;
+            case "filter":
+                _controller.ActivateAccessibleControl(IslandPageControl.ClipboardFilter, page);
                 return;
             case "row":
                 ExecuteRow(page, index, parts.Length > 5 ? parts[5] : null);

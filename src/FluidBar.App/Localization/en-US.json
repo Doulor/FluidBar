@@ -128,6 +128,7 @@
     "Clipboard.History": "History",
     "Clipboard.Empty": "Clipboard is empty",
     "Clipboard.EmptyHint": "Copied text and images show up here.",
+    "Clipboard.All": "All",
     "Clipboard.Text": "Text",
     "Clipboard.File": "File",
     "Clipboard.Image": "Image",

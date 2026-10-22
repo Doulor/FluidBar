@@ -281,6 +281,9 @@ public sealed record IslandContent
     /// <summary>Clipboard rows, newest first.</summary>
     public ImmutableArray<ClipboardItemData> Clipboard { get; init; } = [];
 
+    /// <summary>Localized label for the active clipboard type filter (null hides the header chip).</summary>
+    public string? ClipboardFilterLabel { get; init; }
+
     /// <summary>Agent session rows.</summary>
     public ImmutableArray<AgentItemData> Agents { get; init; } = [];
 

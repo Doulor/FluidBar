@@ -128,6 +128,7 @@
     "Clipboard.History": "历史记录",
     "Clipboard.Empty": "剪贴板为空",
     "Clipboard.EmptyHint": "复制的文本和图片会显示在这里。",
+    "Clipboard.All": "全部",
     "Clipboard.Text": "文本",
     "Clipboard.File": "文件",
     "Clipboard.Image": "图片",
