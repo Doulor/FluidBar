@@ -64,6 +64,21 @@ public sealed class SkiaPlatformActionsTests
     }
 
     [Fact]
+    public async Task ClipboardSearchQuery_RoundTripsAndClears()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        actions.SetClipboardSearchQuery("needle");
+        Assert.Equal("needle", actions.ClipboardSearchQuery);
+
+        actions.SetClipboardSearchQuery(null);
+        Assert.Null(actions.ClipboardSearchQuery);
+
+        settings.Dispose();
+    }
+
+    [Fact]
     public async Task ThemeQuickToggle_FlipsTheAppThemeThroughSettings()
     {
         var settings = CreateSettings();
