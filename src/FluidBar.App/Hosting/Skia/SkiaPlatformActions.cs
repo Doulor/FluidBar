@@ -392,7 +392,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             WeekdayHeaders = BuildWeekdayHeaders(culture),
             CalendarDays = BuildCalendarDays(_calendarMonth, today),
             Stats = _systemStats.Build(batteryPercent, Localized(LocKeys.Battery.Title, "Battery")),
-            UnreadCount = Math.Clamp(_notifications.Current?.Recent.Length ?? 0, 0, 99),
+            UnreadCount = Math.Clamp(
+                _notifications.Current?.Recent.Count(entry => !_notifications.ReadIds.Contains(entry.Id)) ?? 0,
+                0,
+                99),
         };
         if (dumpEnabled)
         {
