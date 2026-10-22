@@ -14,6 +14,9 @@ public static class CrashLog
     private static readonly object Gate = new();
     private static int _installed;
 
+    /// <summary>Rotate crash.log once it exceeds this size; keeps one previous file.</summary>
+    public const long MaxBytes = 1024 * 1024;
+
     /// <summary>Installs the process-wide unhandled-exception handlers (idempotent).</summary>
     public static void Install(IAppLogger? logger = null)
     {
@@ -72,6 +75,20 @@ public static class CrashLog
             lock (Gate)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                try
+                {
+                    var info = new FileInfo(path);
+                    if (info.Exists && info.Length > MaxBytes)
+                    {
+                        File.Copy(path, path + ".old", overwrite: true);
+                        File.Delete(path);
+                    }
+                }
+                catch (IOException)
+                {
+                    // If rotation fails, keep appending instead of losing the crash entry.
+                }
+
                 File.AppendAllText(path, entry + Environment.NewLine, Encoding.UTF8);
             }
         }
