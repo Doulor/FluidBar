@@ -62,9 +62,12 @@ public static partial class KugouLyricCache
                     // into an instrumental track (user report 2026-10-22). Require a near-exact key instead.
                     var expectedLength = wantedTitle.Length + wantedArtist.Length;
                     var both = wantedTitle.Length >= 4
+                        // Without an artist the file name still carries one ("zeroerror始まりの詩开始的诗"),
+                        // so a length check rejected every lyric for tracks whose artist the player did not
+                        // report (user report 2026-10-22: "这首显示暂无歌词，也没有进度条末尾"). Ending with the
+                        // title is already a strong match; the >= 4 character guard above prevents fuzzy hits.
                         && (wantedArtist.Length == 0
                             ? pair.Key.EndsWith(wantedTitle, StringComparison.Ordinal)
-                              && Math.Abs(pair.Key.Length - wantedTitle.Length) <= 2
                             : pair.Key.Contains(wantedTitle, StringComparison.Ordinal)
                               && pair.Key.Contains(wantedArtist, StringComparison.Ordinal)
                               && Math.Abs(pair.Key.Length - expectedLength) <= 4);
