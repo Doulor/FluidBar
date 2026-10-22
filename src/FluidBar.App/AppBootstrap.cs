@@ -1144,6 +1144,9 @@ internal sealed class AppBootstrap
             return;
         }
 
+        _clipboardSearchWasPinned = _skiaHost?.State.IsPinned ?? false;
+        _skiaHost?.SetActivityPinned(true);
+
         var label = _localizer?.Get(LocKeys.Clipboard.Search) ?? "Search";
         var window = new ClipboardSearchWindow(
             query => _platformActions?.SetClipboardSearchQuery(query),
@@ -1154,6 +1157,7 @@ internal sealed class AppBootstrap
         window.Closed += (_, _) =>
         {
             _clipboardSearchWindow = null;
+            _skiaHost?.SetActivityPinned(_clipboardSearchWasPinned);
             _platformActions?.SetClipboardSearchQuery(null);
         };
         _clipboardSearchWindow = window;
@@ -1222,6 +1226,7 @@ internal sealed class AppBootstrap
 
     private SettingsWindow? _settingsWindow;
     private ClipboardSearchWindow? _clipboardSearchWindow;
+    private bool _clipboardSearchWasPinned;
     private bool _shutdownStarted;
     private int _servicesDisposed;
 

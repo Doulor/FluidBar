@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **搜索展开**：搜索窗口期间临时 pin，关闭恢复。
 - **Rail 远点**：逐点导航；命中区 7×22。
 - **搜索状态**：chip 显示 query，窗口预填。
 - **通知优先级**：NotificationRank 0→9（spec 2.3），剪贴板可抢占瞬时 toast；fixtures/Core/Integration 同步，全量 2596/0。

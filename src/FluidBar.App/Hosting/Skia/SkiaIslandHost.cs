@@ -246,6 +246,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Current island state snapshot.</summary>
     public IslandState State => _controller.State;
 
+    /// <summary>Temporarily pins the activity layer so the expanded panel cannot auto-collapse.</summary>
+    public void SetActivityPinned(bool pinned) => _controller.ApplyInput(IslandInput.PinnedChanged(pinned));
+
     /// <summary>Current activity scheduler snapshot.</summary>
     public ActivitySchedulerState SchedulerState => _controller.SchedulerState;
 

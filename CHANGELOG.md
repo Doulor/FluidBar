@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **搜索时保持展开**：打开剪贴板搜索窗口时临时 pin 当前活动层（保存原 pin 状态），避免鼠标移到搜索框后岛按 AutoCollapse 收起；关闭窗口恢复原 pin 状态。
 - **远点逐页导航**：Rail 远点不再整簇跳同一页；最近点代表前一页/后一页，三个点分别覆盖 01–03 / 04–06，命中区从 7×15 增到 7×22，手指更容易点到。
 - **剪贴板搜索状态**：搜索 chip 在有关键字时显示当前 query，重新打开搜索窗口会预填上次查询；清空历史/关闭窗口仍会把 query 复位。
 - **通知优先级修正**：`ActivityPriorityPolicy.NotificationRank` 从 0 改为规范表 rank 9。rank 0 让通知无条件压过剪贴板/查找等用户发起反馈，与 spec 2.3（lookup 1、clipboard 2…notification 9）冲突；现在剪贴板能抢占瞬时 toast，通知仍高于 battery/agent/media。同步更新 `notification-burst` / `clipboard-agent-mix` fixture 与 Core/Integration 断言。全量测试 **2596 passed / 0 failed**。
