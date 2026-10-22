@@ -264,7 +264,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // A track change must show up within a poll, not within the accessibility refresh: the caption of the
         // player window changes immediately, so watch it on its own 250 ms timer.
         _captionPoller = new BackgroundPoller("media-caption", FallbackPollInterval, PollPlayerCaption, _logger);
-        _captionPoller.Start();
+        // disabled: see note in CrossCheckTimeline (stale captions hid the real track).
         _fallbackPoller.Start();
     }
 
@@ -581,28 +581,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // The window caption changes the moment the song does, unlike the accessibility text (30 s cadence).
         // Adopting it here makes the island switch within one poll (250 ms) instead of several seconds.
         Volatile.Write(ref _lastPlayerPid, candidate.ProcessId);
-        var watched = Volatile.Read(ref _captionTitle);
-        if (!string.IsNullOrEmpty(watched) && !string.Equals(watched, candidate.Title, StringComparison.Ordinal))
-        {
-            candidate = candidate with
-            {
-                Title = watched,
-                Artist = Volatile.Read(ref _captionArtist) is { Length: > 0 } artist ? artist : candidate.Artist,
-            };
-        }
-
-        if (KugouWindowTitle.TryRead(candidate.ProcessId) is { Title.Length: > 0 } caption
-            && !string.Equals(caption.Title, candidate.Title, StringComparison.Ordinal))
-        {
-            MediaDiagnostics.LogAlways(
-                $"track.fast title='{candidate.Title}' -> '{caption.Title}' artist='{caption.Artist}'");
-            candidate = candidate with
-            {
-                Title = caption.Title,
-                Artist = string.IsNullOrEmpty(caption.Artist) ? candidate.Artist : caption.Artist,
-            };
-        }
-
         if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
         {
             return candidate;
