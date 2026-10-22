@@ -483,6 +483,22 @@ public class IslandStateMachineTests
     }
 
     [Fact]
+    public void SettingsChanged_WithAutoCollapseOff_ClearsExistingDeadline()
+    {
+        var expanded = IslandState.Hidden with
+        {
+            Kind = IslandStateKind.Expanded,
+            ActivityCount = 1,
+            AutoCollapseDeadline = TestData.Now.AddMilliseconds(100),
+        };
+
+        var transition = Reduce(expanded, IslandInput.SettingsChanged(), Defaults with { AutoCollapseMs = 0 });
+
+        Assert.Equal(IslandStateKind.Expanded, transition.State.Kind);
+        Assert.Null(transition.State.AutoCollapseDeadline);
+    }
+
+    [Fact]
     public void PrimaryClick_FromHoveredCompact_DoesNotArmAutoCollapse()
     {
         var compact = IslandState.Hidden with

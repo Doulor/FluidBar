@@ -606,9 +606,33 @@ public static class IslandStateMachine
         }
 
         var next = state;
-        if (reason == IslandTransitionReason.SettingsChanged && state.Kind == IslandStateKind.Peek && !options.HoverPeek)
+        if (reason == IslandTransitionReason.SettingsChanged)
         {
-            next = EnterCompact(state, options, now);
+            if (state.Kind == IslandStateKind.Peek && !options.HoverPeek)
+            {
+                next = EnterCompact(state, options, now);
+            }
+            else if (state.Kind == IslandStateKind.Expanded && !state.IsHovering)
+            {
+                // Auto-collapse can be disabled (0) or shortened while an old deadline is pending.
+                // Replace the deadline with the new policy instead of letting the stale one close the
+                // panel; 0 clears it immediately.
+                next = next with
+                {
+                    AutoCollapseDeadline = options.AutoCollapseMs > 0
+                        ? now.AddMilliseconds(options.AutoCollapseMs)
+                        : null,
+                };
+            }
+            else if (state.Kind == IslandStateKind.Compact && !state.IsHovering)
+            {
+                next = next with
+                {
+                    AutoHideDeadline = options.AutoHideMs > 0
+                        ? now.AddMilliseconds(options.AutoHideMs)
+                        : null,
+                };
+            }
         }
 
         return Transition(state, next, reason,
