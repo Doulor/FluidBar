@@ -81,6 +81,11 @@ internal sealed partial class KugouDurationCatalog
 
         if (resolved > TimeSpan.Zero)
         {
+            if (_cache.Count >= 512 && !_cache.ContainsKey(key))
+            {
+                _cache.Clear();
+            }
+
             _cache[key] = resolved;
         }
 

@@ -205,6 +205,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return;
             }
 
+            if (_durationCache.Count >= 512 && !_durationCache.ContainsKey(key))
+            {
+                // Bound the per-session track duration cache; re-resolving a handful of old tracks is
+                // cheaper than letting a day-long listening session retain every track key.
+                _durationCache.Clear();
+            }
+
             _durationCache[key] = resolved;
             MediaDiagnostics.LogAlways(
                 $"duration.resolved key={key} value={resolved.TotalSeconds:0.000}s");
