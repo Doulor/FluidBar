@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **preview.10**：page save/rebuild gate 后 publish 成功（19.63 MB、无 PDB）。
 - **自更新 helper**：真实 PowerShell copy/自删除测试。
 - **页面偏好**：Save 移出 UI 线程。
 - **SafeMode 重建**：串行 gate + shutdown guard。
