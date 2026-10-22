@@ -118,6 +118,7 @@
     "Notifications.Empty": "No notifications",
     "Notifications.EmptyHint": "New notifications show up here.",
     "Notifications.VerificationCode": "Code {code}",
+    "Notifications.ClearAll": "Clear all",
     "Notifications.CopyCode": "Copy code",
     "Notifications.JustNow": "just now",
     "Notifications.MinutesAgo": "{count, plural, one {# minute ago} other {# minutes ago}}",

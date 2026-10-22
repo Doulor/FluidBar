@@ -217,6 +217,14 @@ public static class SkiaIslandHitTest
             PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
+        if (kind == PageSlotKind.Notifications
+            && !string.IsNullOrWhiteSpace(pages.Notifications.ClearLabel)
+            && PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state))).Contains(x, y))
+        {
+            index = -1;
+            return IslandPageControl.NotificationClear;
+        }
+
         var control = PageMetricsLayout.HitTest(kind, pageRect, x, y, metrics, scroll, count, out index);
 
         // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable

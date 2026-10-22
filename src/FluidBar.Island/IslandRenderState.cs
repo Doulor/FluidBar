@@ -978,6 +978,9 @@ public sealed record NotificationsPageModel
 
     /// <summary>Localized fallback label for the copy-code chip ("Copy code" / "复制验证码").</summary>
     public string? CopyCodeLabel { get; init; }
+
+    /// <summary>Localized clear-all label; null hides the header action.</summary>
+    public string? ClearLabel { get; init; }
 }
 
 /// <summary>One notification row.</summary>

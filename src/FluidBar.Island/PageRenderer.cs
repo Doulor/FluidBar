@@ -107,6 +107,18 @@ internal sealed partial class PageRenderer : IDisposable
         _text.Draw(canvas, state.Pages.Title(page), IslandType.PageTitle, PageLayout.PageTitleRect(content),
             _theme.Foreground.WithAlpha(184), TextAlign.Left, _opacity);
 
+        if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Notifications
+            && state.Pages.Notifications.ClearLabel is { Length: > 0 } clearLabel)
+        {
+            var clear = PageLayout.NotificationClearRect(content);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            canvas.DrawRoundRect(clear, 6, 6, _fill);
+            _text.Draw(canvas, clearLabel, IslandType.RowMeta, clear,
+                _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
+        }
+
         // The island had no in-island route to the settings window (only the global hotkey, which
         // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
         // gear next to the collapse chevron on every page; the same rectangle is the click target and

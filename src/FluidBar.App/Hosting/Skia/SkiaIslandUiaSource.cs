@@ -727,16 +727,26 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 children: children));
         }
 
-        return
-        [
-            Node(
-                "island.page.2.list",
-                UiaElementRole.List,
-                state.Pages.Title(2),
-                ToRect(body),
-                state: new UiaElementState { IsOffscreen = false },
-                children: rows),
-        ];
+        var controls = new List<UiaElementSnapshot>(2);
+        if (!string.IsNullOrWhiteSpace(model.ClearLabel))
+        {
+            controls.Add(Node(
+                "island.page.2.clear",
+                UiaElementRole.Button,
+                model.ClearLabel,
+                ToRect(PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state)))),
+                UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true }));
+        }
+
+        controls.Add(Node(
+            "island.page.2.list",
+            UiaElementRole.List,
+            state.Pages.Title(2),
+            ToRect(body),
+            state: new UiaElementState { IsOffscreen = false },
+            children: rows));
+        return controls;
     }
 
     private List<UiaElementSnapshot> BuildClipboardControls(in IslandRenderState state, SKRect page)
@@ -1272,6 +1282,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                     _controller.HandlePageRequest(PageRef.Media);
                 }
 
+                return;
+            case "clear":
+                _controller.ClearNotifications();
                 return;
             case "row":
                 ExecuteRow(page, index, parts.Length > 5 ? parts[5] : null);

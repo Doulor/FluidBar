@@ -94,6 +94,9 @@ public enum IslandPageControl
     /// <summary>Dismiss a notification row.</summary>
     Dismiss,
 
+    /// <summary>Clear the local notification list (header chip).</summary>
+    NotificationClear,
+
     /// <summary>Pin/unpin a clipboard row.</summary>
     Pin,
 

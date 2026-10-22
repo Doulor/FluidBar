@@ -271,14 +271,14 @@ public static partial class LocKeys
     {
         /// <summary><c>Notifications.Title</c></summary>
         public const string Title = "Notifications.Title";
-        /// <summary><c>Notifications.ClearAll</c></summary>
-        public const string ClearAll = "Notifications.ClearAll";
         /// <summary><c>Notifications.Empty</c></summary>
         public const string Empty = "Notifications.Empty";
         /// <summary><c>Notifications.EmptyHint</c></summary>
         public const string EmptyHint = "Notifications.EmptyHint";
         /// <summary><c>Notifications.VerificationCode</c></summary>
         public const string VerificationCode = "Notifications.VerificationCode";
+        /// <summary><c>Notifications.ClearAll</c></summary>
+        public const string ClearAll = "Notifications.ClearAll";
         /// <summary><c>Notifications.CopyCode</c></summary>
         public const string CopyCode = "Notifications.CopyCode";
         /// <summary><c>Notifications.JustNow</c></summary>

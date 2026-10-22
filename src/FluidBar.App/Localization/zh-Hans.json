@@ -118,6 +118,7 @@
     "Notifications.Empty": "暂无通知",
     "Notifications.EmptyHint": "新通知会显示在这里。",
     "Notifications.VerificationCode": "验证码 {code}",
+    "Notifications.ClearAll": "全部清除",
     "Notifications.CopyCode": "复制验证码",
     "Notifications.JustNow": "刚刚",
     "Notifications.MinutesAgo": "{count, plural, other {# 分钟前}}",

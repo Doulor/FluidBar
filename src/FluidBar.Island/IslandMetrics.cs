@@ -623,6 +623,10 @@ public static class PageLayout
     /// </summary>
     public static SKRect SettingsRect(SKRect content) => new(content.Right - 50, content.Top - 4, content.Right - 26, content.Top + 20);
 
+    /// <summary>Notification clear-all chip in the header, left of the settings gear.</summary>
+    public static SKRect NotificationClearRect(SKRect content)
+        => new(content.Right - 118, content.Top - 2, content.Right - 58, content.Top + 18);
+
     /// <summary>Page number rectangle (prototype2 `.pager-title`: left 20, top 11, 14 DIP tall).</summary>
     public static SKRect PageNumberRect(SKRect content) => new(content.Left, content.Top - 1, content.Left + 16, content.Top + 13);
 

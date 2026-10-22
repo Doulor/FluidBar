@@ -230,6 +230,9 @@ public static class SkiaIslandStateBuilder
             EmptyHint = localizer.Get(LocKeys.Notifications.EmptyHint),
             DismissLabel = localizer.Get(LocKeys.Common.Close),
             CopyCodeLabel = localizer.Get(LocKeys.Notifications.CopyCode),
+            ClearLabel = content.Notifications.Length > 0
+                ? localizer.Get(LocKeys.Notifications.ClearAll)
+                : null,
         };
 
         var clipboardPage = new ClipboardPageModel

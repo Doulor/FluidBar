@@ -67,6 +67,8 @@ public static class SkiaIslandControlRouter
                 return new IslandPlatformAction(IslandPlatformActionKind.MediaOutput);
             case IslandPageControl.Queue:
                 return new IslandPlatformAction(IslandPlatformActionKind.MediaQueue);
+            case IslandPageControl.NotificationClear:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationClearAll);
             case IslandPageControl.Dismiss:
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, hit.Index)
