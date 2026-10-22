@@ -406,10 +406,27 @@ internal sealed partial class PageRenderer
         canvas.Translate(0, dy);
         var tone = ClipboardTone(item.Kind);
         var badge = new SKRect(row.Left + 10, row.Top + 12, row.Left + 34, row.Top + 36);
-        _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(tone, 0.14f * _opacity);
-        canvas.DrawRoundRect(badge, 6, 6, _fill);
-        IconSet.Draw(canvas, ClipboardIcon(item.Kind), badge.Deflate(6), Alpha(tone, _opacity), _icon);
+        var thumbnail = item.ImagePng is { Length: > 0 }
+            ? _artwork.Get(item.ImageKey, item.ImagePng)
+            : null;
+        if (thumbnail is not null && thumbnail.Width > 0 && thumbnail.Height > 0)
+        {
+            canvas.Save();
+            canvas.ClipRoundRect(new SKRoundRect(badge, 6, 6), SKClipOperation.Intersect, antialias: true);
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.DrawImage(thumbnail, badge, _fill);
+            canvas.Restore();
+        }
+        else
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            _fill.Color = Alpha(tone, 0.14f * _opacity);
+            canvas.DrawRoundRect(badge, 6, 6, _fill);
+            IconSet.Draw(canvas, ClipboardIcon(item.Kind), badge.Deflate(6), Alpha(tone, _opacity), _icon);
+        }
 
         _text.Draw(
             canvas,

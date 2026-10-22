@@ -25,7 +25,8 @@ public sealed record ClipboardEntry(
     string? Text,
     int OriginalTextLength,
     ImmutableArray<string> FilePaths,
-    byte[]? ImageDib = null)
+    byte[]? ImageDib = null,
+    byte[]? ImagePng = null)
 {
     /// <summary>True when the captured text was truncated for storage.</summary>
     public bool IsTextTruncated => Text is not null && Text.Length < OriginalTextLength;

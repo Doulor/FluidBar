@@ -1075,8 +1075,14 @@ public sealed record ClipboardItemModel
     /// <summary>Relative time label ("2 min").</summary>
     public string? TimeText { get; init; }
 
-    /// <summary>Optional localized type label override ("Text"/"Code"/"Link"/"Image").</summary>
+    /// <summary>Optional localized type label override ("Text"/"Code"/"Link"/"Image"/"File").</summary>
     public string? TypeLabel { get; init; }
+
+    /// <summary>PNG thumbnail for an image row; null falls back to the type icon.</summary>
+    public byte[]? ImagePng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="ImagePng"/>.</summary>
+    public string? ImageKey { get; init; }
 
     /// <summary>Content type.</summary>
     public ClipboardContentKind Kind { get; init; } = ClipboardContentKind.Text;

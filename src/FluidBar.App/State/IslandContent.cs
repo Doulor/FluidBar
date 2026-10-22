@@ -131,6 +131,12 @@ public sealed record ClipboardItemData
 
     /// <summary>Whether the item is a file list (CF_HDROP).</summary>
     public bool IsFiles { get; init; }
+
+    /// <summary>PNG thumbnail for image rows (null when the DIB could not be decoded).</summary>
+    public byte[]? ImagePng { get; init; }
+
+    /// <summary>Stable cache key for <see cref="ImagePng"/>.</summary>
+    public string? ImageKey { get; init; }
 }
 
 /// <summary>One agent session row.</summary>

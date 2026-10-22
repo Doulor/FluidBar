@@ -335,6 +335,8 @@ public static class SkiaIslandStateBuilder
                     ClipboardContentKind.Files => LocKeys.Clipboard.File,
                     _ => LocKeys.Clipboard.Text,
                 }),
+                ImagePng = item.ImagePng,
+                ImageKey = item.ImageKey,
             };
         }
 

@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Interop;
@@ -224,8 +226,9 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
         if (NativeMethods.User32.IsClipboardFormatAvailable(NativeMethods.CF_BITMAP)
             || NativeMethods.User32.IsClipboardFormatAvailable(NativeMethods.CF_DIB))
         {
+            var dib = ReadDib();
             return new ClipboardEntry(sequence, timestamp, ClipboardContentKind.Image, null, 0,
-                ImmutableArray<string>.Empty, ReadDib());
+                ImmutableArray<string>.Empty, dib, TryCreatePng(dib));
         }
 
         return new ClipboardEntry(sequence, timestamp, ClipboardContentKind.Unknown, null, 0,
@@ -266,6 +269,67 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
         finally
         {
             NativeMethods.Kernel32.GlobalUnlock(pointer);
+        }
+    }
+
+    /// <summary>
+    /// Converts a packed CF_DIB (BI_RGB, 24/32 bpp) into PNG for the island thumbnail. Copying rows
+    /// into a top-down buffer avoids relying on GDI+ accepting negative strides for bottom-up DIBs.
+    /// </summary>
+    private static byte[]? TryCreatePng(byte[]? dib)
+    {
+        if (dib is not { Length: >= 40 })
+        {
+            return null;
+        }
+
+        try
+        {
+            var headerSize = BitConverter.ToUInt32(dib, 0);
+            var width = BitConverter.ToInt32(dib, 4);
+            var height = BitConverter.ToInt32(dib, 8);
+            var bitCount = BitConverter.ToUInt16(dib, 14);
+            var compression = BitConverter.ToUInt32(dib, 16);
+            if (headerSize < 40 || width <= 0 || height == 0 || Math.Abs((long)height) > 16384
+                || compression != 0 || bitCount is not (24 or 32))
+            {
+                return null;
+            }
+
+            var absoluteHeight = (int)Math.Abs((long)height);
+            var stride = ((width * bitCount + 31) / 32) * 4;
+            var expected = headerSize + ((long)stride * absoluteHeight);
+            if (dib.Length < expected)
+            {
+                return null;
+            }
+
+            var pixels = new byte[stride * absoluteHeight];
+            for (var y = 0; y < absoluteHeight; y++)
+            {
+                var sourceRow = height > 0 ? absoluteHeight - 1 - y : y;
+                Buffer.BlockCopy(dib, (int)(headerSize + ((long)sourceRow * stride)), pixels, y * stride, stride);
+            }
+
+            var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+            try
+            {
+                using var bitmap = new Bitmap(width, absoluteHeight, stride,
+                    bitCount == 32 ? PixelFormat.Format32bppRgb : PixelFormat.Format24bppRgb,
+                    handle.AddrOfPinnedObject());
+                using var png = new MemoryStream();
+                bitmap.Save(png, ImageFormat.Png);
+                return png.ToArray();
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+        catch
+        {
+            // Thumbnail is best-effort; the DIB is still retained for copy-back.
+            return null;
         }
     }
 

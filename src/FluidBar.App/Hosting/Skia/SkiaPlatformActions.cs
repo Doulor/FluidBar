@@ -1029,6 +1029,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Pinned = _pinnedClipboard.Contains(PinKey(entry)),
             IsImage = entry.Kind == ClipboardContentKind.Image,
             IsFiles = entry.Kind == ClipboardContentKind.Files,
+            ImagePng = entry.ImagePng,
+            ImageKey = entry.ImagePng is { Length: > 0 } ? $"clip:{entry.Sequence}" : null,
         };
     }
 
