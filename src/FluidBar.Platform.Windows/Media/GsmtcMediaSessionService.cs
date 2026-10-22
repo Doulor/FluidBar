@@ -577,9 +577,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
             // A freshly repainted clock that disagrees strongly means a seek (or a wrong initial anchor):
             // adopt it and keep counting frames from there.
+            // Re-anchor on every fresh reading, not only on big jumps: the text is authoritative at the
+            // instant it repaints, so following it keeps the residual error at the text's own 1 s rounding
+            // instead of letting the anchor's error persist for the whole 30 s window.
             if (msaaIsFresh
                 && candidate.Position > TimeSpan.Zero
-                && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(3))
+                && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(0.4)
+                && (candidate.Position - position).Duration() < TimeSpan.FromSeconds(30))
             {
                 _frameAnchorAudio = audio;
                 _frameAnchorPosition = candidate.Position;
