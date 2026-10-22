@@ -656,7 +656,10 @@ public static class SettingsSectionBuilder
                     })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseMs),
                     ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseMsHint), 0, 8000, 100, settings.AutoCollapseMs,
-                    value => $"{value / 1000:0.0} s", value => ctx.Settings.Update(s => s with { AutoCollapseMs = (int)Math.Round(value) })),
+                    value => value <= 0
+                        ? ctx.Localizer.Get(LocKeys.Settings.Island.AutoCollapseOff)
+                        : $"{value / 1000:0.0} s",
+                    value => ctx.Settings.Update(s => s with { AutoCollapseMs = (int)Math.Round(value) })),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.MotionStrength),
                     ctx.Localizer.Get(LocKeys.Settings.Island.MotionStrengthHint), 0.5, 1.5, 0.05, settings.MotionStrength,
                     value => $"×{value:0.00}", value => ctx.Settings.Update(s => s with { MotionStrength = value })),

@@ -875,7 +875,9 @@ public static partial class LocKeys
             public const string HoverPeek = "Settings.Island.HoverPeek";
             /// <summary><c>Settings.Island.HoverPeekHint</c></summary>
             public const string HoverPeekHint = "Settings.Island.HoverPeekHint";
-            /// <summary><c>Settings.Island.AutoCollapseMs</c></summary>
+            /// <summary><c>Settings.Island.AutoCollapseOff</c></summary>
+        public const string AutoCollapseOff = "Settings.Island.AutoCollapseOff";
+        /// <summary><c>Settings.Island.AutoCollapseMs</c></summary>
             public const string AutoCollapseMs = "Settings.Island.AutoCollapseMs";
             /// <summary><c>Settings.Island.AutoCollapseMsHint</c></summary>
             public const string AutoCollapseMsHint = "Settings.Island.AutoCollapseMsHint";
