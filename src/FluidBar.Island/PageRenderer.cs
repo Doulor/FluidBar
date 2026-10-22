@@ -442,12 +442,16 @@ internal sealed partial class PageRenderer : IDisposable
             var lyricBottom = lyricTop + 17 + m.LineGrow(IslandType.Lyric);
             // Karaoke sweep from the KRC word timeline; a line without word timing paints as a plain line
             // in the primary colour, exactly like before.
-            var baseColor = media.LyricHighlight < 0
-                ? _theme.Foreground
-                : KaraokeText.UnsungColor(_theme.Foreground);
-            var sungColor = media.LyricHighlight < 0
-                ? accent
-                : KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent));
+            // The split style is a property of the TRACK (does it carry word timing), not of the frame:
+            // keying it on the instantaneous highlight painted the whole line in the plain foreground
+            // colour whenever a single frame arrived without a sweep ("整句突然变白一下").
+            var hasSweep = media.HasKaraokeSweep || media.LyricHighlight >= 0;
+            var baseColor = hasSweep
+                ? KaraokeText.UnsungColor(_theme.Foreground)
+                : _theme.Foreground;
+            var sungColor = hasSweep
+                ? KaraokeText.SungColor(KaraokeText.SaturatedAccent(accent, _theme.TrackAccent))
+                : accent;
             KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
                 new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
                 baseColor, sungColor, TextAlign.Left, _opacity);

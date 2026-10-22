@@ -141,7 +141,9 @@ internal sealed record WindowMediaCandidate(
     bool HasTimeline = false,
     bool IsMuted = false,
     PlayerTimelineSource TimelineSource = PlayerTimelineSource.None,
-    bool? IsPlayingHint = null);
+    bool? IsPlayingHint = null,
+    bool TextFlipped = false,
+    TimeSpan TextShown = default);
 
 /// <summary>
 /// Fallback media source for players that never register with Windows SMTC (e.g. KuGou). It finds the
@@ -327,6 +329,12 @@ internal static class MediaWindowFallback
         // A title that is only the player name carries no track information.
         if (rule is not null
             && rule.AppSuffixes.Any(suffix => title.Equals(suffix, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        // "下一首" / "暂停" … are transport verbs KuGou puts in its caption for a moment during a switch.
+        if (rule is not null && IsKugouRule(rule) && KugouWindowTitle.IsPlayerCommand(title))
         {
             return null;
         }

@@ -923,7 +923,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         {
             _positionSample = media.Position;
             _positionSampleAt = media.PositionUpdatedAtUtc;
-            _positionClock.Reconcile(media.Position.TotalMilliseconds, nowMs, isPlaying);
+            // The sample carries the instant it was taken. Anchoring it at "now" adds the transport delay
+            // (platform poll + dispatch) to every frame, which is what kept the island a second or two
+            // ahead of the player. Age the sample forward instead.
+            var sampleAgeMs = media.PositionUpdatedAtUtc > DateTimeOffset.MinValue
+                ? Math.Clamp((DateTimeOffset.UtcNow - media.PositionUpdatedAtUtc).TotalMilliseconds, 0, 5000)
+                : 0;
+            var sampledPositionMs = media.Position.TotalMilliseconds + (isPlaying ? sampleAgeMs : 0);
+            _positionClock.Reconcile(sampledPositionMs, nowMs, isPlaying);
         }
         else
         {

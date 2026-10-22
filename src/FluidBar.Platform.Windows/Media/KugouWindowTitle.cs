@@ -18,15 +18,55 @@ internal static class KugouWindowTitle
 {
     private const string PlayerSuffix = "酷狗音乐";
 
-    /// <summary>Returns the parsed artist and title, or null when no suitable window is found.</summary>
+    /// <summary>
+    /// Captions that are player UI verbs, not track names. KuGou's window text briefly reads "下一首"
+    /// while a switch is in flight; publishing that as the title put the literal words "下一首" in the
+    /// island for several seconds (user report 2026-10-22).
+    /// </summary>
+    private static readonly HashSet<string> BlockedCaptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "下一首", "上一首", "播放", "暂停", "停止", "继续", "快进", "快退", "静音", "取消静音",
+        "音量", "随机播放", "顺序播放", "单曲循环", "列表循环", "酷狗音乐", "酷狗",
+    };
+
+    /// <summary>True when the caption is a player command rather than a track name.</summary>
+    public static bool IsPlayerCommand(string? title)
+        => !string.IsNullOrWhiteSpace(title) && BlockedCaptions.Contains(title.Trim());
+
+    /// <summary>
+    /// Returns the parsed artist and title, or null when no suitable window is found.
+    /// </summary>
+    /// <remarks>
+    /// Every top-level window of the process is inspected, not just the main one: during a switch KuGou's
+    /// main caption reads "下一首" for up to eleven seconds (measured 2026-10-22) while the mini bar already
+    /// carries the new track name, so taking the first window that parses as a real track is what makes the
+    /// island switch instantly without ever showing the command verb.
+    /// </remarks>
     public static (string Artist, string Title)? TryRead(int processId)
     {
-        var handle = FindMainWindow(processId);
-        if (handle == IntPtr.Zero)
+        (string Artist, string Title)? firstTrack = null;
+        foreach (var handle in EnumerateWindows(processId))
         {
-            return null;
+            var parsed = TryReadFrom(handle);
+            if (parsed is not { Title.Length: > 0 } candidate)
+            {
+                continue;
+            }
+
+            if (candidate.Artist.Length > 0)
+            {
+                return candidate;
+            }
+
+            firstTrack ??= candidate;
         }
 
+        return firstTrack;
+    }
+
+    /// <summary>Parses one window's caption, or null when it is not a track.</summary>
+    private static (string Artist, string Title)? TryReadFrom(IntPtr handle)
+    {
         var length = GetWindowTextLength(handle);
         if (length <= 0)
         {
@@ -59,40 +99,45 @@ internal static class KugouWindowTitle
             return null;
         }
 
+        var parsedTitle = parts.Length == 1 ? parts[0] : parts[^1];
+        if (IsPlayerCommand(parsedTitle))
+        {
+            return null;
+        }
+
         return parts.Length == 1
-            ? (string.Empty, parts[0])
-            : (string.Join(" - ", parts[..^1]), parts[^1]);
+            ? (string.Empty, parsedTitle)
+            : (string.Join(" - ", parts[..^1]), parsedTitle);
     }
 
-    private static IntPtr FindMainWindow(int processId)
+    /// <summary>Top-level windows of the process that carry a caption, main window first.</summary>
+    private static List<IntPtr> EnumerateWindows(int processId)
     {
+        var windows = new List<IntPtr>(8);
         try
         {
             using var process = Process.GetProcessById(processId);
             if (process.MainWindowHandle != IntPtr.Zero)
             {
-                return process.MainWindowHandle;
+                windows.Add(process.MainWindowHandle);
             }
         }
         catch (ArgumentException)
         {
-            return IntPtr.Zero;
+            return windows;
         }
 
-        // Fall back to the first visible top-level window owned by the process.
-        var found = IntPtr.Zero;
         EnumWindows((handle, _) =>
         {
             GetWindowThreadProcessId(handle, out var owner);
-            if (owner == processId && IsWindowVisible(handle) && GetWindowTextLength(handle) > 0)
+            if (owner == processId && !windows.Contains(handle) && GetWindowTextLength(handle) > 0)
             {
-                found = handle;
-                return false;
+                windows.Add(handle);
             }
 
             return true;
         }, IntPtr.Zero);
-        return found;
+        return windows;
     }
 
     private delegate bool EnumWindowsProc(IntPtr handle, IntPtr parameter);

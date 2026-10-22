@@ -15,6 +15,18 @@ internal readonly record struct PlayerTimeline(TimeSpan Position, TimeSpan Durat
     /// midpoint of that window removes the systematic "the lyric is always a bit late" bias.
     /// </summary>
     public TimeSpan Age { get; init; }
+
+    /// <summary>
+    /// The whole-second value the player is displaying right now (the parsed "mm:ss"), i.e. the number the
+    /// user compares the island against. <see cref="Position"/> adds the time elapsed since it appeared.
+    /// </summary>
+    public TimeSpan ShownPosition { get; init; }
+
+    /// <summary>
+    /// True when this read saw the text flip to a new second. That instant IS the player's second boundary,
+    /// so it is the one moment the true position is known exactly (whole seconds, ± the repaint latency).
+    /// </summary>
+    public bool Changed { get; init; }
 }
 
 /// <summary>
@@ -63,15 +75,6 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     /// <summary>When the clock text last changed (its last trustworthy moment).</summary>
     private long _lastTimelineChangeMs;
 
-    /// <summary>Measured lateness of the player's clock text, in milliseconds (0..3000).</summary>
-    private double _measuredLeadMs = 500;
-
-    /// <summary>Current self-calibrated display latency of the player's clock text.</summary>
-    public double MeasuredLeadMs => _measuredLeadMs;
-
-    /// <summary>Monotonic time and value of the previous observed flip.</summary>
-    private long _lastFlipMs;
-    private TimeSpan _lastFlipPosition;
     private const string PreviousButtonName = "上一首";
     private const string NextButtonName = "下一首";
     private const string PlayButtonName = "播放";
@@ -85,6 +88,14 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     private readonly int _processId;
     private IAccessible? _root;
     private IAccessible? _timeText;
+
+    /// <summary>
+    /// Child-index path from the window root to the time text. KuGou recreates that element on every
+    /// repaint, so the cached reference goes stale about once a second; re-resolving the path costs a
+    /// handful of calls instead of the ~900-node tree walk (measured 2026-10-22: the walk took ~2.5 s,
+    /// which stretched the 250 ms poll to 2.5 s and made the island clock jump).
+    /// </summary>
+    private readonly List<int> _timeTextPath = [];
     private readonly List<ButtonCandidate> _previousButtons = [];
     private readonly List<ButtonCandidate> _nextButtons = [];
     private readonly List<ButtonCandidate> _playButtons = [];
@@ -222,7 +233,17 @@ internal sealed class PlayerAccessibilitySession : IDisposable
     }
 
     /// <summary>Reads the position/duration the player shows, or false when the tree moved on.</summary>
-    public bool TryReadTimeline(out PlayerTimeline timeline)
+    /// <param name="timeline">The sample.</param>
+    /// <param name="audible">
+    /// Whether the player is producing sound right now. <c>null</c> treats a clock text that changed within
+    /// the last 1.5 s as running. Only used to decide whether time may be added since the last repaint.
+    /// </param>
+    /// <param name="allowFullWalk">
+    /// False for the 250 ms clock tick: it may only use the cached element or its child-index path, never the
+    /// ~900-node tree walk (which costs ~2.5 s and is what starved the clock). The dedicated reader thread
+    /// pays for a walk on its own thread, at most once every couple of seconds.
+    /// </param>
+    public bool TryReadTimeline(out PlayerTimeline timeline, bool? audible = null, bool allowFullWalk = true)
     {
         timeline = default;
         if (Volatile.Read(ref _disposed) != 0 || IsReadBackoffActive)
@@ -244,9 +265,15 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
             for (var attempt = 0; attempt < 2; attempt++)
             {
-                var element = _timeText ?? (attempt == 0 ? null : RebuildLocked());
+                var element = _timeText ?? TryResolveTimeTextByPath();
                 if (element is null)
                 {
+                    if (!allowFullWalk)
+                    {
+                        // No backoff either: the clock tick retries in 250 ms.
+                        return false;
+                    }
+
                     if (attempt == 0)
                     {
                         RebuildLocked();
@@ -267,39 +294,11 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                         && duration > TimeSpan.Zero)
                     {
                         MarkReadSuccess();
-                        var age = TimeSpan.Zero;
-                        var previousRead = _lastTimelineReadMs;
-                        // Self-calibration: each flip of the text ("S" -> "S+1") happens when the real
-                        // position crosses that second, so the excess delay against our own expectation is
-                        // this player's display latency. Feeding it back removes the constant lag without
-                        // any per-machine tuning (user request 2026-10-22).
-                        if (_lastFlipMs > 0 && position != _lastFlipPosition)
-                        {
-                            var expectedFlipMs = _lastFlipMs + (position - _lastFlipPosition).TotalMilliseconds;
-                            var lateness = nowMs - expectedFlipMs;
-                            if (lateness is > -500 and < 5000)
-                            {
-                                _measuredLeadMs = Math.Clamp((_measuredLeadMs * 0.7) + (lateness * 0.3), 0, 3000);
-                            }
-                        }
 
-                        if (position != _lastFlipPosition)
-                        {
-                            _lastFlipMs = nowMs;
-                            _lastFlipPosition = position;
-                        }
-                        if (previousRead > 0 && _lastTimelinePosition != position)
-                        {
-                            // The flip happened somewhere inside this window: its midpoint is the best
-                            // estimate of the real boundary, so the sample is that much old.
-                            age = TimeSpan.FromMilliseconds(
-                                Math.Clamp((nowMs - previousRead) / 2.0, 0, 400));
-                        }
-
-                        // A frozen clock text (the player repaints the time only while its window is
-                        // visible) used to be stamped as "now", which put the island tens of seconds
-                        // away from the real position. Three identical reads mean "not live": refuse the
-                        // sample so the caller keeps the ini timeline, which carries a real write time.
+                        // The text is the player's own clock, truncated to whole seconds: it flips the
+                        // moment the real position crosses the second. So the true position now is
+                        // "shown value + time since that value appeared" — no lead, no self-calibration,
+                        // nothing that can push the island a second ahead of the player.
                         var changed = position != _lastTimelinePosition;
                         _stuckTimelinePolls = changed ? 0 : _stuckTimelinePolls + 1;
                         if (changed || _lastTimelineChangeMs == 0)
@@ -309,24 +308,31 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
                         _lastTimelineReadMs = nowMs;
                         _lastTimelinePosition = position;
-                        if (_stuckTimelinePolls >= 3)
-                        {
-                            // The text stopped updating (KuGou only repaints it while its window is drawn),
-                            // but the duration it carries is still valid and the position was true at the
-                            // moment it last changed. Back-date the sample instead of dropping the whole
-                            // timeline — dropping it also lost the track length (user report 2026-10-21).
-                            age = TimeSpan.FromMilliseconds(Math.Max(0, nowMs - _lastTimelineChangeMs));
-                            timeline = new PlayerTimeline(position + TimeSpan.FromMilliseconds(_measuredLeadMs), duration) { Age = age };
-                            return true;
-                        }
 
-                        timeline = new PlayerTimeline(position + TimeSpan.FromMilliseconds(_measuredLeadMs), duration) { Age = age };
+                        // Only advance while the player is really running. The glyph cannot answer that
+                        // (KuGou reports "paused" while it plays), so the caller's audio meter decides;
+                        // without one, a text that flipped within 1.5 s is proof enough. The cap keeps a
+                        // stalled text from inventing seconds it never played.
+                        var sinceChange = Math.Max(0, nowMs - _lastTimelineChangeMs);
+                        var running = audible ?? sinceChange < 1500;
+                        var elapsed = running ? Math.Min(sinceChange, 1200) : 0;
+                        timeline = new PlayerTimeline(position + TimeSpan.FromMilliseconds(elapsed), duration)
+                        {
+                            Age = TimeSpan.Zero,
+                            ShownPosition = position,
+                            Changed = changed,
+                        };
                         return true;
                     }
                 }
 
                 // Stale element (track change rebuilds the transport row): rebuild once and retry.
                 _timeText = null;
+                if (!allowFullWalk)
+                {
+                    return false;
+                }
+
                 RebuildLocked();
             }
 
@@ -468,6 +474,58 @@ internal sealed class PlayerAccessibilitySession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Re-resolves the time text through its last known child-index path, without walking the whole tree.
+    /// </summary>
+    /// <remarks>
+    /// KuGou's DirectUI rebuilds that element on every repaint, so the cached reference is stale about once
+    /// a second while the layout (and therefore the path) stays the same. Returns null when the path no
+    /// longer resolves to a clock text — the caller then pays for a full walk.
+    /// </remarks>
+    private IAccessible? TryResolveTimeTextByPath()
+    {
+        var root = _root;
+        if (root is null || _timeTextPath.Count == 0)
+        {
+            return null;
+        }
+
+        var current = root;
+        try
+        {
+            foreach (var index in _timeTextPath)
+            {
+                if (current.get_accChild(index, out var childObject) != 0
+                    || childObject is not IAccessible child)
+                {
+                    return null;
+                }
+
+                current = child;
+            }
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+
+        return TryReadName(current, out var name) && TimeTextPattern.IsMatch(name) ? current : null;
+    }
+
+    /// <summary>Rebuilds the element cache (full tree walk). Only the dedicated reader thread calls this.</summary>
+    public bool TryRebuild()
+    {
+        lock (_gate)
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                return false;
+            }
+
+            return RebuildLocked() is not null;
+        }
+    }
+
     private IAccessible? RebuildLocked()
     {
         ResetElementsLocked();
@@ -480,7 +538,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
 
         try
         {
-            Walk(root, 0);
+            Walk(root, 0, []);
         }
         catch (COMException)
         {
@@ -515,7 +573,7 @@ internal sealed class PlayerAccessibilitySession : IDisposable
         target.Add(new ButtonCandidate(element, role));
     }
 
-    private void Walk(IAccessible parent, int depth)
+    private void Walk(IAccessible parent, int depth, List<int> path)
     {
         if (depth > MaxDepth)
         {
@@ -551,9 +609,11 @@ internal sealed class PlayerAccessibilitySession : IDisposable
             }
 
             Interlocked.Increment(ref _lastWalkNodes);
+            path.Add(index);
             if (!TryReadName(child, out var name) || name.Length == 0)
             {
-                Walk(child, depth + 1);
+                Walk(child, depth + 1, path);
+                path.RemoveAt(path.Count - 1);
                 continue;
             }
 
@@ -563,6 +623,8 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                 && TimeTextPattern.IsMatch(name))
             {
                 _timeText = child;
+                _timeTextPath.Clear();
+                _timeTextPath.AddRange(path);
             }
             else if (TryReadRole(child, out var buttonRole) && buttonRole is RolePushButton or RoleGraphic)
             {
@@ -583,7 +645,8 @@ internal sealed class PlayerAccessibilitySession : IDisposable
                 }
             }
 
-            Walk(child, depth + 1);
+            Walk(child, depth + 1, path);
+            path.RemoveAt(path.Count - 1);
         }
     }
 

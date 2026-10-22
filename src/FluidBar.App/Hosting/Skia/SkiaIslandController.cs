@@ -3304,7 +3304,16 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var finished = track.IsFinished(position);
         _karaokeActive = !finished;
-        if (Math.Abs(highlight - _karaokeHighlight) < KaraokeHighlightTolerance && !finished)
+        // A content rebuild (new snapshot, lyric refresh, track metadata) replaces the page model with
+        // the freshly resolved highlight, which is -1 for one frame when the lyric source flaps. Without
+        // this the page stayed on that plain value until the sweep moved by 1/255 — a visible white flash
+        // of the whole line. Push our own value back whenever the page disagrees.
+        var pageOutOfSync = _pages.Media.LyricLine is not null
+                            && Math.Abs(_pages.Media.LyricHighlight - highlight) > KaraokeHighlightTolerance;
+        var compactOutOfSync = _compact.Model is { ShowLyrics: true } compactModel
+                               && Math.Abs(compactModel.LyricHighlight - highlight) > KaraokeHighlightTolerance;
+        if (Math.Abs(highlight - _karaokeHighlight) < KaraokeHighlightTolerance && !finished
+            && !pageOutOfSync && !compactOutOfSync)
         {
             return false;
         }
@@ -3392,6 +3401,10 @@ private void HandlePageControl(in IslandHitTarget hit)
         var position = Math.Clamp(_mediaClock.PositionAt(NowMs()), 0, _mediaDurationMs);
         var percent = position / _mediaDurationMs * 100;
         var positionText = FormatMediaTime(position);
+        // The length arrives later than the track (the player's clock text, then the catalogue), so it has
+        // to be pushed into the page model here — otherwise the island keeps rendering the placeholder
+        // length it was first built with (user report 2026-10-22: "灵动岛 3:53, 酷狗 3:57").
+        var durationText = FormatMediaTime(_mediaDurationMs);
         var changed = false;
 
         if (_compact.Kind == ActivityKind.Media
@@ -3403,11 +3416,17 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         if (_pages.Media.HasSession
             && (Math.Abs(_pages.Media.ProgressPercent - percent) > 0.01
-                || !string.Equals(_pages.Media.PositionText, positionText, StringComparison.Ordinal)))
+                || !string.Equals(_pages.Media.PositionText, positionText, StringComparison.Ordinal)
+                || !string.Equals(_pages.Media.DurationText, durationText, StringComparison.Ordinal)))
         {
             _pages = _pages with
             {
-                Media = _pages.Media with { ProgressPercent = percent, PositionText = positionText },
+                Media = _pages.Media with
+                {
+                    ProgressPercent = percent,
+                    PositionText = positionText,
+                    DurationText = durationText,
+                },
             };
             changed = true;
         }

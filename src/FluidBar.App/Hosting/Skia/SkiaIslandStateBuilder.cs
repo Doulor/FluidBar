@@ -185,6 +185,7 @@ public static class SkiaIslandStateBuilder
             LyricLine = media?.LyricLine,
             NextLyricLine = media?.NextLyricLine,
             LyricHighlight = media?.LyricHighlight ?? -1,
+            HasKaraokeSweep = media?.Karaoke is not null,
             VolumePercent = content.VolumePercent,
             HasVolume = content.VolumePercent is not null,
             IsMuted = content.IsMuted,

@@ -874,6 +874,13 @@ public sealed record MediaPageModel
     /// </summary>
     public double LyricHighlight { get; init; } = -1;
 
+    /// <summary>
+    /// Whether this track carries a karaoke timeline at all. The split style must follow the TRACK, not the
+    /// instantaneous sweep value: a single frame that arrived without one used to repaint the whole line in
+    /// the plain foreground colour ("整句突然变白一下").
+    /// </summary>
+    public bool HasKaraokeSweep { get; init; }
+
     /// <summary>Elapsed time text.</summary>
     public string? PositionText { get; init; }
 

@@ -100,8 +100,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Throttles the verification line.</summary>
     private long _lastSyncCheckMs;
 
-    private double _accessibilityLeadMs() => _accessibility?.MeasuredLeadMs ?? 0;
-
     /// <summary>Write time of the state file we are currently extrapolating.</summary>
     /// <summary>Master switch for the state-file arbitration. Off while the two clocks fight.</summary>
     private const bool CrossCheckEnabled = true;
@@ -127,7 +125,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// <summary>Exact playback clock: counts the audio frames KuGou actually renders.</summary>
     private readonly ProcessLoopbackCapture _loopback = new();
 
-    private readonly System.Collections.Generic.Dictionary<string, TimeSpan> _durationCache = new(StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, TimeSpan> _durationCache = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _durationLookups = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Track length for the progress bar. KuGou exposes none through windows or SMTC, so the lyric file is the
@@ -135,36 +134,93 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </summary>
     private TimeSpan ResolveDuration(WindowMediaCandidate candidate)
     {
+        // The player's own progress row already carries the length whenever its window exposes the time
+        // text: that is exactly the number the user compares against, so it wins.
         if (candidate.Duration > TimeSpan.Zero)
         {
             return candidate.Duration;
         }
 
-        var key = candidate.Title ?? string.Empty;
+        var key = candidate.TrackKey;
         if (_durationCache.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
-        var resolved = TimeSpan.Zero;
-        try
+        QueueDurationLookup(candidate);
+        return TimeSpan.Zero;
+    }
+
+    /// <summary>
+    /// Looks the track length up in KuGou's own catalogue, once per track, without blocking the poll.
+    /// </summary>
+    /// <remarks>
+    /// The lyric file the player cached for the track carries its file hash in the name, and the lyric
+    /// service answers that hash with the song's length in milliseconds. Tracks without a cached lyric fall
+    /// back to the catalogue search. When both fail the poll keeps publishing no length rather than the
+    /// lyric's last line, which is systematically short (see <see cref="KugouDurationCatalog"/>).
+    /// </remarks>
+    private void QueueDurationLookup(WindowMediaCandidate candidate)
+    {
+        var key = candidate.TrackKey;
+        if (string.IsNullOrEmpty(key))
         {
-            if (Media.Lyrics.KugouLyricCache.TryFind(candidate.Title, candidate.Artist)?.Duration is { } fromLyrics
-                && fromLyrics > TimeSpan.Zero)
-            {
-                resolved = fromLyrics;
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            return;
         }
 
-        _durationCache[key] = resolved;
-        return resolved;
+        lock (_durationLookups)
+        {
+            if (!_durationLookups.Add(key))
+            {
+                return;
+            }
+
+            if (_durationLookups.Count > 512)
+            {
+                _durationLookups.Clear();
+                _durationLookups.Add(key);
+            }
+        }
+
+        var title = candidate.Title;
+        var artist = candidate.Artist;
+        _ = Task.Run(async () =>
+        {
+            TimeSpan resolved;
+            try
+            {
+                var lyricPath = Media.Lyrics.KugouLyricCache.TryFindPath(title, artist);
+                resolved = await DurationCatalog.ResolveAsync(key, title, artist, lyricPath, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                resolved = TimeSpan.Zero;
+            }
+
+            if (resolved <= TimeSpan.Zero)
+            {
+                // Keep the key: one failed lookup per track and session is enough. Retrying on every
+                // publish (twice a second) would hammer the catalogue for tracks it simply does not have.
+                return;
+            }
+
+            _durationCache[key] = resolved;
+            MediaDiagnostics.LogAlways(
+                $"duration.resolved key={key} value={resolved.TotalSeconds:0.000}s");
+        });
     }
+
+    /// <summary>Catalogue lookups for the fallback player (created on first use).</summary>
+    private KugouDurationCatalog DurationCatalog => _durationCatalog ??= new KugouDurationCatalog(
+        new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(6),
+            DefaultRequestHeaders = { { "User-Agent", "FluidBar/2.0 (duration)" } },
+        });
+
+    private KugouDurationCatalog? _durationCatalog;
+    private KugouClockReader? _kugouClockReader;
 
     /// <summary>Audio time already consumed when the current state-file sample was written.</summary>
     private TimeSpan _audioAtWrite;
@@ -179,6 +235,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private bool _frameAnchorInitialised;
     private int _lastPlayerPid;
     private string? _captionTitle;
+    private string _captionPendingTitle = string.Empty;
+    private int _captionPendingPolls;
     private string? _captionArtist;
 
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
@@ -222,6 +280,38 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     private readonly ArtworkFetcher? _artworkFetcher;
     private ArtworkFetcher? _defaultArtworkFetcher;
+
+    /// <summary>
+    /// Last whole-second clock reading from the player, kept so a failed accessibility read (KuGou's
+    /// DirectUI tree answers only intermittently while its window is off-screen) does not fall back to the
+    /// 30-second settings file. The player's clock is the audio clock, so projecting it with wall time —
+    /// frozen while the meter says nothing is playing — stays within a fraction of a second.
+    /// </summary>
+    /// <summary>
+    /// The fallback player's own clock: KuGou renders audio at exactly one second per second, so counting
+    /// the frames it renders gives the playback position without trusting any of its UI or settings file.
+    /// Anchored at zero on every track change (the caption poll sees it within 250 ms) and corrected from
+    /// the accessibility text whenever that text is fresh.
+    /// </summary>
+    private string _clockTitle = string.Empty;
+    private PlayerPlaybackState? _lastKnownState;
+    private TimeSpan _clockAnchorPosition;
+    private TimeSpan _clockAnchorAudio;
+    private TimeSpan _clockPosition;
+    private long _clockAtMs = Environment.TickCount64;
+    private long _lastTextFlipMs = Environment.TickCount64;
+    private bool _clockAudible;
+    private string _pendingTitle = string.Empty;
+    private int _pendingPolls;
+
+    /// <summary>Consecutive failed accessibility reads; the session is rebuilt when the tree dies.</summary>
+    private int _accessibilityFailures;
+
+    private readonly object _textClockGate = new();
+    private TimeSpan _textClockPosition;
+    private TimeSpan _textClockDuration;
+    private long _textClockAtMs;
+    private string _textClockTitle = string.Empty;
 
     /// <summary>Track keys whose cover lookup was already started (bounded; prevents retry storms).</summary>
     private readonly HashSet<string> _artworkLookups = new(StringComparer.Ordinal);
@@ -293,6 +383,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         _captionPoller = new BackgroundPoller("media-caption", FallbackPollInterval, PollPlayerCaption, _logger);
         _captionPoller.Start();
         _fallbackPoller.Start();
+        _kugouClockReader = new KugouClockReader();
     }
 
     protected override async ValueTask OnStopAsync(CancellationToken cancellationToken)
@@ -307,6 +398,8 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         _fallbackPoller?.Dispose();
         _fallbackPoller = null;
+        _kugouClockReader?.Dispose();
+        _kugouClockReader = null;
         _fallbackActive = false;
         ReleaseAccessibility();
         DetachSession();
@@ -319,25 +412,99 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// Fallback tick: when GSMTC has no active session, find the process that is actually producing
     /// sound and publish its window-title metadata. No artwork/timeline exists on this path.
     /// </summary>
+    /// <summary>
+    /// Follows the player's window caption, which changes within a poll of a track change.
+    /// </summary>
+    /// <remarks>
+    /// Two guards learned the hard way (2026-10-22): the caption is a transport verb ("下一首", "暂停") for
+    /// a moment while a switch is in flight and must never be published as a title, and a caption has to
+    /// survive one extra poll before it is believed, so a one-frame blip cannot rename the island.
+    /// </remarks>
     private void PollPlayerCaption()
     {
         var pid = Volatile.Read(ref _lastPlayerPid);
-        if (pid <= 0 || KugouWindowTitle.TryRead(pid) is not { Title.Length: > 0 } caption)
+        var caption = pid > 0 ? KugouWindowTitle.TryRead(pid) : null;
+        if (caption is not { Title.Length: > 0 } parsed)
+        {
+            // The caption is unusable right now (player command or product name). The settings file
+            // records the new title within a few seconds; use it so the island does not sit on the old
+            // song while the caption recovers.
+            if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is { } state
+                && TryParseStateTitle(state.RawTitle) is { } fromState
+                && !string.Equals(fromState.Title, Volatile.Read(ref _captionTitle), StringComparison.Ordinal))
+            {
+                PublishCaption(fromState.Title, fromState.Artist);
+            }
+
+            return;
+        }
+
+        if (string.Equals(parsed.Title, Volatile.Read(ref _captionTitle), StringComparison.Ordinal))
+        {
+            _captionPendingPolls = 0;
+            _captionPendingTitle = string.Empty;
+            return;
+        }
+
+        if (!string.Equals(parsed.Title, _captionPendingTitle, StringComparison.Ordinal))
+        {
+            _captionPendingTitle = parsed.Title;
+            _captionPendingPolls = 1;
+            return;
+        }
+
+        if (++_captionPendingPolls < 2)
         {
             return;
         }
 
-        if (string.Equals(caption.Title, Volatile.Read(ref _captionTitle), StringComparison.Ordinal))
-        {
-            return;
-        }
+        _captionPendingPolls = 0;
+        _captionPendingTitle = string.Empty;
+        PublishCaption(parsed.Title, parsed.Artist);
+    }
 
-        Volatile.Write(ref _captionTitle, caption.Title);
-        Volatile.Write(ref _captionArtist, caption.Artist);
+    /// <summary>Applies a confirmed track identity change to the published snapshot.</summary>
+    private void PublishCaption(string title, string artist)
+    {
+        Volatile.Write(ref _captionTitle, title);
+        Volatile.Write(ref _captionArtist, artist);
         // Force the next cross-check to treat this as a brand-new track.
         _frameTrackTitle = null;
         _lastSyncCheckMs = 0;
-        MediaDiagnostics.LogAlways($"track.caption title='{caption.Title}' artist='{caption.Artist}'");
+        MediaDiagnostics.LogAlways($"track.caption title='{title}' artist='{artist}'");
+
+        if (_fallbackLastSnapshot is not { IsEmpty: false } previous)
+        {
+            return;
+        }
+
+        var processName = previous.SourceDisplayName ?? "kugou";
+        Publish(previous with
+        {
+            Title = title,
+            Artist = artist,
+            TrackKey = "win|" + processName.ToLowerInvariant() + "|" + title + "|" + artist,
+            // The length belongs to the out-going track and must not be shown next to the new title; the
+            // position is left alone so a one-poll caption blip cannot rewind the bar.
+            Duration = TimeSpan.Zero,
+        });
+    }
+
+    /// <summary>Splits KuGou's "artist - title" state-file string.</summary>
+    private static (string Title, string Artist)? TryParseStateTitle(string? rawTitle)
+    {
+        if (string.IsNullOrWhiteSpace(rawTitle))
+        {
+            return null;
+        }
+
+        var parts = rawTitle.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+        {
+            return null;
+        }
+
+        return (string.Join(" - ", parts[1..]), parts[0]);
     }
 
     private void PollWindowFallback()
@@ -360,6 +527,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var candidate = MediaWindowFallback.FindCandidate();
         if (candidate is null)
         {
+            // Audio-session enumeration drops the player between tracks (and while its window is parked
+            // off-screen). Falling back to the caption of the last player we saw keeps the clock and the
+            // title running instead of freezing the island until the enumeration recovers.
+            candidate = CaptionCandidate();
             // A paused player vanishes from the render-session list. Using the DEVICE-wide meter here (as
             // this branch used to) only proved that some other app was making noise, so a paused KuGou
             // looked "playing" until the browser/game went quiet — the 5-10 s latency the user reported
@@ -449,13 +620,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         Interlocked.Exchange(ref _fallbackMissCount, 0);
         MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
-        candidate = EnrichWithAccessibility(candidate);
+        // One process meter reading per poll: it decides both whether the clock may advance and whether
+        // the island shows "playing" (KuGou's own transport glyph lies while it plays).
+        var playerPeak = MediaWindowFallback.GetProcessPeak(candidate.ProcessId);
+        candidate = EnrichWithAccessibility(candidate, playerPeak);
         // This gate WAS 5 s, which is exactly the "island follows a track change five seconds late" the user
         // reported: the window caption changes at once but the cross-check only ran every five seconds.
         if (candidate.HasTimeline && _timeProviderNow().ToUnixTimeMilliseconds() - _lastSyncCheckMs > 200)
         {
             _lastSyncCheckMs = _timeProviderNow().ToUnixTimeMilliseconds();
-            MediaDiagnostics.LogAlways($"sync.sample {candidate.Position.TotalSeconds,7:0.0}s lead={( _accessibilityLeadMs()):0}ms title='{candidate.Title}'");
+            MediaDiagnostics.LogAlways($"sync.sample {candidate.Position.TotalSeconds,7:0.0}s lead=0ms title='{candidate.Title}'");
         }
         // Cross-check the two independent clocks. The MSAA time text has no timestamp, so a frozen text
         // is re-stamped as "now" and every later sample agrees with our own extrapolation — an offset of
@@ -482,7 +656,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // "playing" after the song was paused).
         // Only THIS player's output counts: the device-wide meter also carries the browser, system
         // sounds and every other app, which is why a paused KuGou still looked like it was playing.
-        var playerPeak = MediaWindowFallback.GetProcessPeak(candidate.ProcessId);
         _audioSilentPolls = playerPeak > 0.0005 ? 0 : _audioSilentPolls + 1;
         if (playerPeak > 0.002)
         {
@@ -511,9 +684,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         // While a pause is fresh keep the 250 ms cadence: that is what makes the icon flip back within half
         // a second and what makes resume instant. Only a long pause may slow down.
         var fastPause = pausedForMs < 5000;
-        _fallbackPoller?.SetInterval(_powerModeProvider() == IslandPowerMode.Saver
-            ? (playing ? TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(5))
-            : (playing || fastPause ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(1)));
+        // While a track plays the poll is what feeds the island's clock, and it is cheap now that the
+        // position comes from the audio meter instead of a 900-node accessibility walk: keep it at 250 ms
+        // even in saver mode (the old 2-5 s cadence is what made the island lag ten seconds behind).
+        // While a fallback player has a timeline the poll IS the island's clock feed (the position comes
+        // from the audio meter, not from a 900-node accessibility walk), so keep it at 250 ms even in
+        // saver mode: the 2-5 s cadence is what left the island ten seconds behind the song.
+        _fallbackPoller?.SetInterval(playing || fastPause || candidate.HasTimeline
+            ? TimeSpan.FromMilliseconds(250)
+            : _powerModeProvider() == IslandPowerMode.Saver ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(1));
         var snapshot = new MediaSnapshot(
             "win:" + candidate.ProcessName,
             candidate.ProcessName,
@@ -542,6 +721,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         var positionMoved = candidate.HasTimeline
                             && previous is { PositionUpdatedAtUtc: var sampled } && sampled > DateTimeOffset.MinValue
                             && (previous.Position - candidate.Position).Duration() >= TimeSpan.FromMilliseconds(500);
+        // A catalogue lookup answers a second or two after the track starts; republish so the island picks
+        // the length up without waiting for the next position change.
+        var durationChanged = previous is not null && previous.Duration != snapshot.Duration;
         _fallbackActive = true;
         if (changed)
         {
@@ -556,7 +738,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             TryAttachFallbackArtwork(candidate);
         }
 
-        if (changed || positionMoved)
+        if (changed || positionMoved || durationChanged)
         {
             MediaDiagnostics.Log($"publish source=fallback app={snapshot.SourceAppUserModelId} title={snapshot.Title} playing={snapshot.IsPlaying}");
             _fallbackLastSnapshot = snapshot;
@@ -629,10 +811,35 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             };
         }
 
+        // The state file is the only absolute evidence at start-up (mid-song), so read it before the
+        // clock decides how to anchor.
+        if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is { } anchorState)
+        {
+            _lastKnownState = anchorState;
+        }
+
+        // The player's position is the audio it renders. Count those frames: exact, pause-aware, and
+        // independent of the 30 s settings file and of whether the accessibility tree answers today.
+        var textFresh = candidate.TimelineSource == PlayerTimelineSource.Accessibility;
+        var advanced = AdvanceKugouClock(candidate,
+            textFresh ? candidate.Position : null, textFresh, _timeProviderNow(), out var running);
+        if (advanced)
+        {
+            return candidate with
+            {
+                Position = _clockPosition,
+                PositionSampledAtUtc = _timeProviderNow(),
+                HasTimeline = true,
+                TimelineSource = textFresh ? PlayerTimelineSource.Accessibility : candidate.TimelineSource,
+            };
+        }
+
         if (PlayerPlaybackStateReader.TryReadKugou(_timeProviderNow()) is not { } state)
         {
             return candidate;
         }
+
+        _lastKnownState = state;
 
         var statePosition = state.Position;
 
@@ -731,31 +938,12 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFileValidFromUtc = _timeProviderNow();
         }
 
-        if (state.SampledAtUtc < _stateFileValidFromUtc)
+        if (state.SampledAtUtc < _stateFileValidFromUtc
+            && !state.RawTitle.Contains(candidate.Title, StringComparison.OrdinalIgnoreCase))
         {
-            // The state file still describes the PREVIOUS track. KuGou starts a new track at zero, so while
-            // the accessibility text agrees with that (a few seconds in), counting from the track change is
-            // far more accurate than a frozen text or the previous song's position (2026-10-22).
-            var sinceStart = _timeProviderNow() - _stateFileValidFromUtc;
-            // A freshly repainted clock text is the best evidence we have: trust it over counting from zero.
-            if (msaaIsFresh)
-            {
-                return candidate;
-            }
-
-            if (sinceStart >= TimeSpan.Zero
-                && sinceStart < TimeSpan.FromSeconds(90)
-                && candidate.Position >= TimeSpan.Zero
-                && candidate.Position < TimeSpan.FromSeconds(25))
-            {
-                return candidate with
-                {
-                    Position = sinceStart,
-                    PositionSampledAtUtc = _timeProviderNow(),
-                    HasTimeline = true,
-                };
-            }
-
+            // The write predates the track change AND names another track: it describes the PREVIOUS song.
+            // Counting "how long we have been watching" from the track change is what produced the
+            // 0:48-when-the-player-says-1:30 reports, so publish nothing until the player writes the new one.
             return candidate;
         }
 
@@ -764,16 +952,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             _stateFileWrittenAt = state.SampledAtUtc.UtcDateTime;
             _stateFilePlayingMs = 0;
             _audioAtWrite = _loopback.Consumed;
-        }
-        else if (_loopback.TryStart(candidate.ProcessId))
-        {
-            // The frame counter is exact: it only advances while audio is really rendered, so it needs no
-            // peak gate and cannot run faster or slower than the song (measured ratio 0.987-0.992).
-            var consumed = _loopback.Consumed - _audioAtWrite;
-            if (consumed > TimeSpan.Zero && consumed < TimeSpan.FromMinutes(5))
-            {
-                _stateFilePlayingMs = consumed.TotalMilliseconds;
-            }
         }
         else if (_lastPollAt is { } previous)
         {
@@ -851,86 +1029,167 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         };
     }
 
-    private WindowMediaCandidate EnrichWithAccessibility(WindowMediaCandidate candidate)
+    /// <summary>
+    /// Projects the last accessibility reading forward to "now" when the player's tree cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// The reading is the player's own clock (whole seconds, anchored on the second it flipped), and the
+    /// player's clock is driven by the audio it renders, so wall time is the right rate. While the meter
+    /// reports silence the projection freezes — otherwise a pause would keep the island counting.
+    /// </remarks>
+    /// <summary>Builds a candidate from the last player's window caption, or null when there is none.</summary>
+    private WindowMediaCandidate? CaptionCandidate()
+    {
+        var pid = Volatile.Read(ref _lastPlayerPid);
+        if (pid <= 0 || KugouWindowTitle.TryRead(pid) is not { Title.Length: > 0 } caption)
+        {
+            return null;
+        }
+
+        var text = string.IsNullOrEmpty(caption.Artist)
+            ? caption.Title + " - 酷狗音乐"
+            : caption.Artist + " - " + caption.Title + " - 酷狗音乐";
+        return MediaWindowFallback.Parse("KuGou", text) is { } parsed
+            ? parsed with { ProcessId = pid }
+            : null;
+    }
+
+    /// <summary>
+    /// Advances the fallback player's clock by the audio it renders, re-anchoring on every track change.
+    /// </summary>
+    /// <remarks>
+    /// <para>KuGou's position <em>is</em> the audio it has rendered: counting the frames of its own render
+    /// session therefore gives the same clock the player shows, at millisecond precision, and it stops by
+    /// itself while the player is paused. That beats every other source it offers (a 1 Hz accessibility
+    /// text that only answers intermittently, and a settings file written every 30 s).</para>
+    /// <para>Anchors: zero on a track change (the caption poll sees it within 250 ms), the settings file on
+    /// the first sighting after start (mid-song), and the accessibility text whenever that text is fresh
+    /// and disagrees by more than a second (seek or a wrong start).</para>
+    /// </remarks>
+    private bool AdvanceKugouClock(WindowMediaCandidate candidate, TimeSpan? textPosition, bool textFresh,
+        DateTimeOffset now, out bool running)
+    {
+        var nowMs = Environment.TickCount64;
+        var firstSighting = string.IsNullOrEmpty(_clockTitle);
+        var advancing = _clockAudible || nowMs - _lastTextFlipMs < 1500;
+
+        if (!string.Equals(_clockTitle, candidate.Title, StringComparison.Ordinal))
+        {
+            // The candidate title is already the CONFIRMED caption (PollPlayerCaption only publishes after
+            // two stable polls), so a change here is a real track switch: the new song starts at zero.
+            // Holding the previous position was what left the bar sitting at the old song's fill.
+            _clockTitle = candidate.Title;
+            _clockPosition = TimeSpan.Zero;
+            if (firstSighting && _lastKnownState is { } state)
+            {
+                // Started mid-song: the settings file plus the time since it was written is the only
+                // absolute evidence there is. Only usable while it names this track and is reasonably new.
+                var age = now - state.SampledAtUtc;
+                if (age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(60)
+                    && state.RawTitle.Contains(candidate.Title, StringComparison.OrdinalIgnoreCase))
+                {
+                    _clockPosition = state.Position + age;
+                }
+            }
+        }
+        else
+        {
+            // Carry the clock with wall time. The player renders audio at exactly one second per second,
+            // and every successful text read re-anchors it, so this only ever runs for the gap between two
+            // readings (≤ a few seconds) and cannot accumulate drift.
+            var elapsed = nowMs - _clockAtMs;
+            if (advancing && elapsed > 0 && elapsed < 60_000)
+            {
+                _clockPosition += TimeSpan.FromMilliseconds(elapsed);
+            }
+        }
+
+        // A fresh reading is the player's own clock: adopt it outright. When the text just flipped, the
+        // value is an exact whole second; otherwise it is that second plus the time since the flip.
+        if (textFresh && textPosition is { } text)
+        {
+            _clockPosition = text;
+            _lastTextFlipMs = nowMs;
+        }
+
+        _clockAtMs = nowMs;
+        running = advancing;
+        if (_clockPosition < TimeSpan.Zero)
+        {
+            _clockPosition = TimeSpan.Zero;
+        }
+
+        return true;
+    }
+
+    private bool TryProjectTextClock(WindowMediaCandidate candidate, bool audible, out (TimeSpan Position, TimeSpan Duration) projected)
+    {
+        projected = default;
+        lock (_textClockGate)
+        {
+            if (_textClockPosition <= TimeSpan.Zero
+                || !string.Equals(_textClockTitle, candidate.Title, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // Advance while the player is audible OR while readings are still arriving (a failed read is
+            // not proof of a pause: KuGou's DirectUI tree drops out for a few ticks at a time). After that
+            // the projection freezes, so a real pause cannot keep counting.
+            var sinceSuccess = Environment.TickCount64 - _textClockAtMs;
+            var elapsed = audible || sinceSuccess < 15_000 ? sinceSuccess : 0;
+            if (elapsed < 0 || elapsed > 120_000)
+            {
+                elapsed = 0;
+            }
+
+            projected = (
+                _textClockPosition + TimeSpan.FromMilliseconds(elapsed),
+                _textClockDuration);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Overlays the clock the dedicated reader thread sampled from the player's own "mm:ss" text.
+    /// </summary>
+    /// <remarks>
+    /// Nothing here touches COM: the poll must never block on the accessibility tree (a stale element costs
+    /// a ~2.5 s walk, which is what starved the clock and froze the island). The reader owns that cost on
+    /// its own thread and publishes a reading every 250 ms.
+    /// </remarks>
+    private WindowMediaCandidate EnrichWithAccessibility(WindowMediaCandidate candidate, double playerPeak)
     {
         if (candidate.ProcessId <= 0 || !MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
         {
-            ReleaseAccessibility();
             return candidate;
         }
 
-        var audible = MediaWindowFallback.TryGetAudioOutput(out var audioPeak);
-        var now = Environment.TickCount64;
-        PlayerAccessibilitySession? session;
-        lock (_accessibilityGate)
-        {
-            if (_accessibility is null || _accessibilityProcessId != candidate.ProcessId)
-            {
-                if (now < _accessibilityRetryAfterMs && !audible)
-                {
-                    MediaDiagnostics.Log($"fallback accessibility backoff remaining={_accessibilityRetryAfterMs - now}ms audio={audible} peak={audioPeak:0.000}");
-                    return candidate;
-                }
+        _clockAudible = playerPeak > 0.0005;
 
-                ReleaseAccessibilityLocked();
-                _accessibility = PlayerAccessibilitySession.TryCreate(candidate.ProcessId);
-                _accessibilityProcessId = _accessibility is null ? 0 : candidate.ProcessId;
-                if (_accessibility is null)
-                {
-                    _accessibilityRetryAfterMs = now + AccessibilityRetryBackoffMs;
-                    MediaDiagnostics.Log($"fallback accessibility create-failed retryIn={AccessibilityRetryBackoffMs}ms audio={audible} peak={audioPeak:0.000}");
-                    return candidate;
-                }
-
-                MediaDiagnostics.Log($"fallback accessibility attached app={candidate.ProcessName} pid={candidate.ProcessId}");
-            }
-
-            session = _accessibility;
-        }
-
-        if (session is not null && audible)
-        {
-            // A meter level is positive proof that the player is producing audio; do not let a
-            // transient MSAA failure hide it for the whole backoff window.
-            session.ResetReadBackoff();
-        }
-
-        if (session is { IsReadBackoffActive: true })
-        {
-            MediaDiagnostics.Log($"fallback accessibility read-backoff app={candidate.ProcessName} audio={audible} peak={audioPeak:0.000}");
-        }
-
-        if (session is null)
+        var reader = _kugouClockReader;
+        if (reader is null)
         {
             return candidate;
         }
 
-        // The transport glyph tells play/pause even in player modes that hide the time text; prefer it
-        // over the position heuristic, which needs a full settings write (~30 s) to see a pause.
-        var enriched = candidate;
-        if (session.TryReadPlaybackState(out var isPlaying))
+        reader.SetTarget(candidate.ProcessId, candidate.Title);
+        if (!reader.TryRead(out var sample)
+            || !string.Equals(sample.Title, candidate.Title, StringComparison.Ordinal))
         {
-            enriched = enriched with { IsPlayingHint = isPlaying };
+            // No reading for THIS track yet: publish no timeline rather than the previous song's clock.
+            return candidate with { Duration = TimeSpan.Zero };
         }
 
-        if (!session.TryReadTimeline(out var timeline))
+        return candidate with
         {
-            return enriched;
-        }
-
-        // The text is the FLOOR of the true position (mm:ss truncates) and the paint lags a little on top,
-        // which made the island sit a steady second behind the song. Half a second of lead cancels the
-        // truncation bias; the residual is then transport latency, well under a tenth (user report
-        // 2026-10-22: "还是比真实歌曲慢大概 1s").
-        return enriched with
-        {
-            Position = timeline.Position,
-            Duration = timeline.Duration,
-            // Back-dated by the reading's age: a one-second-resolution clock is stale by up to half a
-            // poll window the moment it is seen (see PlayerTimeline.Age).
-            PositionSampledAtUtc = _timeProviderNow() - timeline.Age,
+            Position = sample.Position,
+            Duration = sample.Duration > TimeSpan.Zero ? sample.Duration : candidate.Duration,
+            PositionSampledAtUtc = _timeProviderNow() - TimeSpan.FromMilliseconds(sample.AgeMs),
             HasTimeline = true,
             TimelineSource = PlayerTimelineSource.Accessibility,
+            TextFlipped = sample.Flipped,
+            TextShown = sample.Shown,
         };
     }
 

@@ -24,10 +24,70 @@ public static partial class KugouLyricCache
     private static DateTime _stamp = DateTime.MinValue;
     private static string? _root;
 
+    /// <summary>
+    /// Decoded documents by file path. The island asks for the current lyric on every frame, and decoding
+    /// a KRC (inflate + parse) per frame is both wasteful and a flicker source: a single failed read made
+    /// the caller fall back to a word-less source for one frame, which painted the whole line in the plain
+    /// foreground colour ("整句突然变白"). Cached until the file's timestamp changes.
+    /// </summary>
+    private static readonly Dictionary<string, (DateTime Stamp, LyricsDocument? Document)> DocumentCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Looks up and decodes the player's lyric file for a track.</summary>
     /// <param name="title">Track title as the player reports it.</param>
     /// <param name="artist">Track artist as the player reports it.</param>
     public static LyricsDocument? TryFind(string? title, string? artist)
+    {
+        var path = TryFindPath(title, artist);
+        if (path is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var stamp = File.GetLastWriteTimeUtc(path);
+            lock (Gate)
+            {
+                if (DocumentCache.TryGetValue(path, out var cached) && cached.Stamp == stamp)
+                {
+                    return cached.Document;
+                }
+            }
+
+            var decoded = KrcDecoder.TryDecode(File.ReadAllBytes(path));
+            var document = decoded?.Document is { Lines.Length: > 0 } value ? value : null;
+            lock (Gate)
+            {
+                if (DocumentCache.Count > 64)
+                {
+                    DocumentCache.Clear();
+                }
+
+                DocumentCache[path] = (stamp, document);
+            }
+
+            return document;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Locates the lyric file the player uses for a track, or null.
+    /// </summary>
+    /// <remarks>
+    /// The file name carries the player's own file hash
+    /// (<c>&lt;artist&gt; - &lt;title&gt;-&lt;32 hex&gt;-&lt;songId&gt;-00000000.krc</c>), which is the key the
+    /// catalogue answers with the song's exact length — see <see cref="Media.KugouDurationCatalog"/>.
+    /// </remarks>
+    public static string? TryFindPath(string? title, string? artist)
     {
         // The window scrape often carries the player's own chrome ("正在播放: 歌手 - 歌名"), which would
         // otherwise be part of the key and never match a file name. Reuse the same cleanup the cover
@@ -82,24 +142,7 @@ public static partial class KugouLyricCache
             path = hit;
         }
 
-        if (path is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var decoded = KrcDecoder.TryDecode(File.ReadAllBytes(path));
-            return decoded?.Document is { Lines.Length: > 0 } document ? document : null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
+        return path;
     }
 
     private static void Refresh()
