@@ -165,16 +165,34 @@ public sealed class JsonUiSettingsStore : IUiSettingsStore, IDisposable
     /// <inheritdoc />
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
-        Task writeTask;
-        lock (_gate)
+        // A debounce timer can already be queued when it is disposed. Wait until the pending sequence
+        // has actually reached disk instead of assuming one WritePendingAsync call won the race.
+        for (var attempt = 0; attempt < 100; attempt++)
         {
-            _debounceTimer?.Dispose();
-            _debounceTimer = null;
-            writeTask = _writeTask;
-        }
+            Task writeTask;
+            lock (_gate)
+            {
+                _debounceTimer?.Dispose();
+                _debounceTimer = null;
+                writeTask = _writeTask;
+            }
 
-        await writeTask.WaitAsync(cancellationToken).ConfigureAwait(false);
-        await WritePendingAsync().ConfigureAwait(false);
+            if (writeTask is not null)
+            {
+                await writeTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await WritePendingAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (_pending is null || _pendingSequence == _writtenSequence)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(5, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
