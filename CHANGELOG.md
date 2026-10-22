@@ -17,6 +17,7 @@
 - **退出 flag 提前**：`DisposeServices` 开头设置 `_shutdownStarted = true`，防止 `Exit` 触发的清理路径上仍有 SafeMode 重建任务启动；`Shutdown()` 原有 guard 保留。
 - **preview.14 发布 + smoke 通过**：包含 smoke fullscreen bypass 的 release `publish.ps1 -Version 2.0.0-preview.14 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `C58080C1...2EE38A0`。隔离 settings 的 release smoke exit 0，01 Compact、02-08 Expanded、09 Compact。
 - **release smoke 抑制 bypass**：`FLUIDBAR_SMOKE=1` 时跳过 fullscreen suppression，避免开发者桌面上的全屏前台窗口把 smoke 岛隐藏；普通运行仍启用抑制。Release app smoke 重新得到六页 Expanded。
+- **Settings 订阅提前**：`AppBootstrap` 在 `_settings` 创建后立即订阅 `Changed`，不再依赖 `StartShellIntegrationAsync` 成功；即使 tray/hotkey 初始化失败（或 `FLUIDBAR_NO_TRAY=1`），SafeMode 变更仍会触发 runtime rebuild。
 - **smoke 稳健性**：`SmokeAsync` 在点击前调用 `SimulatePointerLeft` + `PumpTimers`，清掉真实鼠标可能造成的 Peek/hover 初始态；debug smoke 重新稳定得到 6 个 Expanded 页面。
 - **preview.11 smoke**：隔离 settings 启动 exit 0，生成 settings.json/settings.json.bak/ui-page.json；本次 release smoke 的页面状态出现 Peek/Compact 时序差异，未作为六页展开证据；debug smoke 仍六页展开。
 - **preview.11 发布**：退出 flag / CalendarEventService 注入化后本地 `publish.ps1 -Version 2.0.0-preview.11 -SkipTests` 成功；zip 19.63 MB、无 PDB，exe SHA-256 `6325EBAB...9832F7`。

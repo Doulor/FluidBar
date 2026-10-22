@@ -79,6 +79,9 @@ internal sealed class AppBootstrap
             _settings = new SettingsController(initial, _settingsStore, _logger);
             _pageRegistry.SetOrder(initial.Plugins.PageOrder);
             _settings.Changed += (_, current) => _pageRegistry.SetOrder(current.Plugins.PageOrder);
+            // Safe-mode rebuild / tray / hotkey changes must work even when shell integration is
+            // unavailable (for example a headless smoke run with FLUIDBAR_NO_TRAY=1).
+            _settings.Changed += OnSettingsChanged;
 
             var pseudo = string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_PSEUDO"), "1", StringComparison.Ordinal);
             _localizer = LocalizationService.CreateDefault(
@@ -821,7 +824,6 @@ internal sealed class AppBootstrap
                 clearNotifications: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearNotifications()),
                 clearClipboard: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearClipboard()));
             await _shell.StartAsync(_settings!.Current.TrayIcon).ConfigureAwait(true);
-            _settings!.Changed += OnSettingsChanged;
         }
         catch (Exception ex)
         {
