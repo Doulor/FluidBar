@@ -449,6 +449,10 @@ internal sealed class AppBootstrap
             _settings?.Update(s => s with { AutoCollapseMs = 0, Language = "en-US" });
             await Task.Delay(1500).ConfigureAwait(true);
             await CaptureAsync("fluidbar-01-idle.png", log).ConfigureAwait(true);
+            // The real cursor may be hovering the pill when the smoke run starts; clear hover/peek so
+            // the simulated click always starts from Compact instead of leaving a Peek/Compact race.
+            _skiaHost?.SimulatePointerLeft();
+            _skiaHost?.PumpTimers();
             SimulatePrimaryClick();
             await Task.Delay(1800).ConfigureAwait(true);
             await CaptureAsync("fluidbar-02-expanded-home.png", log).ConfigureAwait(true);
