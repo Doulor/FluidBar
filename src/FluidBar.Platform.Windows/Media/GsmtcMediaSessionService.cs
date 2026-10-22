@@ -380,7 +380,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         MediaDiagnostics.Log($"fallback candidate app={candidate.ProcessName} title={candidate.Title} artist={candidate.Artist} audio={audioOutput} peak={audioPeak:0.000}");
 
         candidate = EnrichWithAccessibility(candidate);
-        if (candidate.HasTimeline && _timeProviderNow().ToUnixTimeMilliseconds() - _lastSyncCheckMs > 5000)
+        // This gate WAS 5 s, which is exactly the "island follows a track change five seconds late" the user
+        // reported: the window caption changes at once but the cross-check only ran every five seconds.
+        if (candidate.HasTimeline && _timeProviderNow().ToUnixTimeMilliseconds() - _lastSyncCheckMs > 200)
         {
             _lastSyncCheckMs = _timeProviderNow().ToUnixTimeMilliseconds();
             MediaDiagnostics.LogAlways($"sync.sample {candidate.Position.TotalSeconds,7:0.0}s lead={( _accessibilityLeadMs()):0}ms title='{candidate.Title}'");
