@@ -49,6 +49,9 @@ public enum IslandPlatformActionKind
     /// <summary>Mark every currently listed notification as read (opening the notification page).</summary>
     NotificationMarkAllRead,
 
+    /// <summary>Clear the island's local notification list (Action Center is not modified).</summary>
+    NotificationClearAll,
+
     /// <summary>Copy a clipboard row; <see cref="IslandPlatformAction.Text"/> is the row text.</summary>
     ClipboardCopy,
 

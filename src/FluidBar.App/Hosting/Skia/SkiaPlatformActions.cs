@@ -1328,6 +1328,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
             IslandPlatformActionKind.NotificationMarkAllRead => MarkAllNotificationsRead(),
+            IslandPlatformActionKind.NotificationClearAll => ClearNotifications(),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
@@ -1600,6 +1601,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private IslandActionResult MarkAllNotificationsRead()
     {
         _notifications.MarkAllRead();
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult ClearNotifications()
+    {
+        _notifications.ClearRecent();
         return IslandActionResult.Handled;
     }
 

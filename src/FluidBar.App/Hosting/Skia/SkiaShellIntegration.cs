@@ -22,6 +22,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     private readonly Action _settings;
     private readonly Action _market;
     private readonly Action _exit;
+    private readonly Action? _clearNotifications;
     private readonly ILocalizer? _localizer;
     private HotkeySettings _bindings;
     private bool _trayStarted;
@@ -36,13 +37,15 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         Action exit,
         HotkeySettings? bindings = null,
         ILocalizer? localizer = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Action? clearNotifications = null)
     {
         _toggle = toggle ?? throw new ArgumentNullException(nameof(toggle));
         _hide = hide ?? throw new ArgumentNullException(nameof(hide));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _market = market ?? throw new ArgumentNullException(nameof(market));
         _exit = exit ?? throw new ArgumentNullException(nameof(exit));
+        _clearNotifications = clearNotifications;
         _localizer = localizer;
         _bindings = bindings ?? new HotkeySettings();
 
@@ -117,15 +120,21 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
             ToolTip = tooltip,
             IconFilePath = TryExtractTrayIcon(),
         }, cancellationToken).ConfigureAwait(false);
-        _tray.SetMenuItems(
-        [
-            new TrayMenuItem("toggle", L(LocKeys.Tray.Open, "Open FluidBar")),
-            new TrayMenuItem("hide", L(LocKeys.Page.Home.HideIsland, "Hide island")),
-            new TrayMenuItem("settings", L(LocKeys.Tray.Settings, "Settings…")),
-            new TrayMenuItem("market", L(LocKeys.Tray.Market, "Plugin market…")),
-            TrayMenuItem.Separator,
-            new TrayMenuItem("exit", L(LocKeys.Tray.Exit, "Exit FluidBar")),
-        ]);
+        var menu = new List<TrayMenuItem>
+        {
+            new("toggle", L(LocKeys.Tray.Open, "Open FluidBar")),
+            new("hide", L(LocKeys.Page.Home.HideIsland, "Hide island")),
+            new("settings", L(LocKeys.Tray.Settings, "Settings…")),
+            new("market", L(LocKeys.Tray.Market, "Plugin market…")),
+        };
+        if (_clearNotifications is not null)
+        {
+            menu.Add(new TrayMenuItem("clear-notifications", L(LocKeys.Tray.ClearNotifications, "Clear notifications")));
+        }
+
+        menu.Add(TrayMenuItem.Separator);
+        menu.Add(new TrayMenuItem("exit", L(LocKeys.Tray.Exit, "Exit FluidBar")));
+        _tray.SetMenuItems(menu);
         await _tray.SetToolTipAsync(tooltip, cancellationToken).ConfigureAwait(false);
         _trayStarted = true;
     }
@@ -205,6 +214,12 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         {
             case "toggle":
                 _toggle();
+                break;
+            case "hide":
+                _hide();
+                break;
+            case "clear-notifications":
+                _clearNotifications?.Invoke();
                 break;
             case "settings":
                 _settings();

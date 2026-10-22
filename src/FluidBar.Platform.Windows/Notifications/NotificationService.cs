@@ -587,6 +587,27 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         return value.Length <= maxLength ? value : value[..maxLength];
     }
 
+    /// <summary>
+    /// Clears the island's local notification page. The Windows Action Center entries are untouched;
+    /// the history watermark stays primed, so the same live toasts are not replayed by the next poll.
+    /// </summary>
+    public void ClearRecent()
+    {
+        lock (_stateGate)
+        {
+            if (_recent.IsEmpty)
+            {
+                return;
+            }
+
+            _recent = ImmutableArray<NotificationEntry>.Empty;
+        }
+
+        Publish(new NotificationsSnapshot(_access, _recent));
+        _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.cleared",
+            "Notification page cleared locally.");
+    }
+
     /// <summary>Marks one toast as read; the next snapshot clears its unread dot.</summary>
     public void MarkRead(uint id)
     {

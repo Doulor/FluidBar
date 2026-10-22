@@ -363,6 +363,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Simulates the hide hotkey (hide without toggling).</summary>
     public void SimulateHideHotkey() => _controller.HandleHideHotkey();
 
+    /// <summary>Tray/diagnostic hook: clear the local notification page (Action Center is untouched).</summary>
+    public void ClearNotifications() => _controller.ClearNotifications();
+
     /// <summary>Simulates a page request (keyboard/gutter).</summary>
     /// <param name="page">Target page.</param>
     public void SimulatePageRequested(PageRef page) => _controller.HandlePageRequest(page);

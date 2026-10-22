@@ -541,6 +541,7 @@
     "Tray.Tooltip": "FluidBar — {status}",
     "Tray.Open": "Open FluidBar",
     "Tray.Settings": "Settings…",
+    "Tray.ClearNotifications": "Clear notifications",
     "Tray.Market": "Plugin market…",
     "Tray.Mode": "Mode",
     "Tray.Material": "Material",

@@ -810,7 +810,8 @@ internal sealed class AppBootstrap
                     Hide = _settings.Current.HotkeyHide,
                     Settings = _settings.Current.HotkeySettings,
                 },
-                localizer: _localizer);
+                localizer: _localizer,
+                clearNotifications: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearNotifications()));
             await _shell.StartAsync(_settings!.Current.TrayIcon).ConfigureAwait(true);
             _settings!.Changed += OnSettingsChanged;
         }

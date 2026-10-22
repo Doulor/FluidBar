@@ -958,6 +958,10 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Suppresses the island while a fullscreen foreground window owns the screen.</summary>
     public void HandleSuppressionChanged(bool suppressed) => ApplyInput(IslandInput.SuppressionChanged(suppressed));
 
+    /// <summary>Clears the local notification page through the platform seam.</summary>
+    public void ClearNotifications()
+        => _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationClearAll));
+
     /// <summary>Raises <see cref="SettingsRequested"/> (tray/hotkey seam).</summary>
     public void RequestSettings() => SettingsRequested?.Invoke();
 
