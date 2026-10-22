@@ -474,7 +474,7 @@
     "Settings.Advanced.FrameStats": "Show frame statistics",
     "Settings.Advanced.DeveloperMode": "Developer mode",
     "Settings.Advanced.SafeMode": "Safe mode",
-    "Settings.Advanced.SafeModeHint": "Community plugins stay disabled until you turn safe mode off.",
+    "Settings.Advanced.SafeModeHint": "Community plugins stay disabled until you turn safe mode off. Restart FluidBar to apply changes.",
     "Settings.Advanced.ThemeFollowSystem": "Follow the system theme",
     "Settings.Advanced.ThemeFollowSystemHint": "When off, the desktop theme from Appearance is used.",
     "Settings.Advanced.LanguageFollowSystem": "Follow the system language",
