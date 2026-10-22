@@ -349,6 +349,13 @@ public static class PageMetricsLayout
         return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight(metrics));
     }
 
+    /// <summary>Clipboard delete button (left of the pin button).</summary>
+    public static SKRect ClipboardDelete(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = ClipboardRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 82, row.MidY - 11, row.Right - 60, row.MidY + 11);
+    }
+
     /// <summary>Clipboard pin button (vertically centred in the row).</summary>
     public static SKRect ClipboardPin(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
@@ -620,6 +627,12 @@ public static class PageMetricsLayout
                     var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), 6, scrollOffset);
                     for (var i = 0; i < count; i++)
                     {
+                        if (ClipboardDelete(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.ClipboardDelete;
+                        }
+
                         if (ClipboardPin(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;

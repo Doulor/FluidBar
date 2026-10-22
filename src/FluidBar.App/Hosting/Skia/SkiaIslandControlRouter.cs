@@ -73,6 +73,10 @@ public static class SkiaIslandControlRouter
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, hit.Index)
                     : null;
+            case IslandPageControl.ClipboardDelete:
+                return HasRow(state.Pages.Clipboard.Items, hit.Index)
+                    ? new IslandPlatformAction(IslandPlatformActionKind.ClipboardRemove, hit.Index)
+                    : null;
             case IslandPageControl.Pin:
                 return HasRow(state.Pages.Clipboard.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.ClipboardPin, hit.Index)

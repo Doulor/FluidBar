@@ -761,8 +761,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         {
             var item = model.Items[i];
             var row = PageLayout.ClipboardRow(page, i, scroll);
-            var children = new List<UiaElementSnapshot>(2)
+            var children = new List<UiaElementSnapshot>(3)
             {
+                Node(
+                    $"island.page.3.row.{i}.delete",
+                    UiaElementRole.Button,
+                    L("Common.Delete", "Delete"),
+                    ToRect(PageLayout.ClipboardDelete(page, i, scroll)),
+                    UiaPatternKind.Invoke,
+                    new UiaElementState { IsFocusable = true }),
                 Node(
                     $"island.page.3.row.{i}.pin",
                     UiaElementRole.Button,
@@ -1315,6 +1322,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         var control = action switch
         {
             "dismiss" => IslandPageControl.Dismiss,
+            "delete" => IslandPageControl.ClipboardDelete,
             "pin" => IslandPageControl.Pin,
             "copy" => IslandPageControl.Copy,
             _ => IslandPageControl.Row,

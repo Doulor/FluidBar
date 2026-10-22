@@ -142,6 +142,27 @@ public sealed class ClipboardHistory
         };
     }
 
+    /// <summary>Removes one entry by its clipboard sequence number.</summary>
+    public bool Remove(uint sequence)
+    {
+        lock (_gate)
+        {
+            var node = _entries.First;
+            while (node is not null)
+            {
+                if (node.Value.Sequence == sequence)
+                {
+                    _entries.Remove(node);
+                    return true;
+                }
+
+                node = node.Next;
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Current immutable snapshot (newest first).</summary>
     public ClipboardSnapshot Snapshot()
     {

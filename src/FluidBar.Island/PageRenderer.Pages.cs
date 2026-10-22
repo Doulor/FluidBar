@@ -432,7 +432,7 @@ internal sealed partial class PageRenderer
             canvas,
             item.Preview,
             item.IsMonospace ? IslandType.RowMono : IslandType.RowTitle,
-            new SKRect(row.Left + 44, row.Top + 7, row.Right - 64, row.Top + 25),
+            new SKRect(row.Left + 44, row.Top + 7, row.Right - 88, row.Top + 25),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
@@ -483,20 +483,28 @@ internal sealed partial class PageRenderer
             canvas,
             item.TimeText,
             IslandType.RowMeta,
-            new SKRect(x, subTop, row.Right - 66, subBottom),
+            new SKRect(x, subTop, row.Right - 90, subBottom),
             _theme.ForegroundTertiary,
             TextAlign.Left,
             _opacity);
 
+        var delete = new SKRect(row.Right - 82, row.Top + 13, row.Right - 60, row.Top + 35);
         var pin = new SKRect(row.Right - 58, row.Top + 13, row.Right - 36, row.Top + 35);
         var copy = new SKRect(row.Right - 34, row.Top + 13, row.Right - 12, row.Top + 35);
         if (hovered)
         {
             _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
+            canvas.DrawRoundRect(delete, 6, 6, _fill);
             canvas.DrawRoundRect(pin, 6, 6, _fill);
             canvas.DrawRoundRect(copy, 6, 6, _fill);
         }
 
+        IconSet.Draw(
+            canvas,
+            IconKind.Close,
+            delete.Deflate(6),
+            Alpha(_theme.ForegroundTertiary, _opacity),
+            _icon);
         IconSet.Draw(
             canvas,
             IconKind.Pin,

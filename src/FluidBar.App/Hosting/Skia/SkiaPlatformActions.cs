@@ -1335,6 +1335,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
+            IslandPlatformActionKind.ClipboardRemove => RemoveClipboard(action.Index),
             IslandPlatformActionKind.AgentActivate => Defer(
                 action, "agent session activation is App-owned (no platform session-activate service)"),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
@@ -1612,6 +1613,23 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         _notifications.ClearRecent();
         return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult RemoveClipboard(int index)
+    {
+        var history = DisplayedClipboard();
+        if (index < 0 || index >= history.Count)
+        {
+            return Unsupported("the clipboard row no longer exists");
+        }
+
+        var entry = history[index];
+        _pinnedClipboard.Remove(PinKey(entry));
+        _pinKeyCache.Remove(entry.Sequence);
+        SaveClipboardPins();
+        return _clipboard.Remove(entry.Sequence)
+            ? IslandActionResult.Handled
+            : Unsupported("the clipboard row no longer exists");
     }
 
     private IslandActionResult ClearClipboard()

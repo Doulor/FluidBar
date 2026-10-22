@@ -627,6 +627,19 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
         }
     }
 
+    /// <summary>Removes one history entry (does not touch the system clipboard).</summary>
+    public bool Remove(uint sequence)
+    {
+        var history = _history;
+        if (history is null || !history.Remove(sequence))
+        {
+            return false;
+        }
+
+        Publish(history.Snapshot());
+        return true;
+    }
+
     /// <summary>Clears the bounded history (does not touch the system clipboard).</summary>
     public void ClearHistory()
     {

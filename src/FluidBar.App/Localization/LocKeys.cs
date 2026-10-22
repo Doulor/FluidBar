@@ -15,6 +15,8 @@ public static partial class LocKeys
         public const string Cancel = "Common.Cancel";
         /// <summary><c>Common.Close</c></summary>
         public const string Close = "Common.Close";
+        /// <summary><c>Common.Delete</c></summary>
+        public const string Delete = "Common.Delete";
         /// <summary><c>Common.Minimize</c></summary>
         public const string Minimize = "Common.Minimize";
         /// <summary><c>Common.Apply</c></summary>

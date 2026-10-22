@@ -756,6 +756,13 @@ public static class PageLayout
         return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight);
     }
 
+    /// <summary>Clipboard delete button rectangle.</summary>
+    public static SKRect ClipboardDelete(SKRect page, int index, float scrollOffset = 0)
+    {
+        var row = ClipboardRow(page, index, scrollOffset);
+        return new SKRect(row.Right - 82, row.Top + 13, row.Right - 60, row.Top + 35);
+    }
+
     /// <summary>Clipboard pin button rectangle.</summary>
     public static SKRect ClipboardPin(SKRect page, int index, float scrollOffset = 0)
     {

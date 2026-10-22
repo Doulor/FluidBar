@@ -5,6 +5,7 @@
   "messages": {
     "Common.Ok": "确定",
     "Common.Cancel": "取消",
+    "Common.Delete": "删除",
     "Common.Close": "关闭",
     "Common.Minimize": "最小化",
     "Common.Apply": "应用",

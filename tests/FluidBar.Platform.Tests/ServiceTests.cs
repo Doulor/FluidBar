@@ -69,6 +69,20 @@ public sealed class ClipboardHistoryTests
     }
 
     [Fact]
+    public void Remove_DropsMatchingEntry()
+    {
+        var history = new ClipboardHistory();
+        history.TryAdd(Entry(1, "a"), out _);
+        history.TryAdd(Entry(2, "b"), out _);
+
+        Assert.True(history.Remove(1));
+        var snapshot = history.Snapshot();
+        Assert.Single(snapshot.History);
+        Assert.Equal("b", snapshot.History[0].Text);
+        Assert.False(history.Remove(99));
+    }
+
+    [Fact]
     public void TryAdd_KeepsOnlyTheNewestImageEntries()
     {
         var history = new ClipboardHistory(maxEntries: 20, maxImageEntries: 2);

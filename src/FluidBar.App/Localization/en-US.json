@@ -5,6 +5,7 @@
   "messages": {
     "Common.Ok": "OK",
     "Common.Cancel": "Cancel",
+    "Common.Delete": "Delete",
     "Common.Close": "Close",
     "Common.Minimize": "Minimize",
     "Common.Apply": "Apply",

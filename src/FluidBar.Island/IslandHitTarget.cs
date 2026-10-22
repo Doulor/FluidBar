@@ -100,6 +100,9 @@ public enum IslandPageControl
     /// <summary>Pin/unpin a clipboard row.</summary>
     Pin,
 
+    /// <summary>Delete a clipboard row.</summary>
+    ClipboardDelete,
+
     /// <summary>Copy a clipboard row.</summary>
     Copy,
 
