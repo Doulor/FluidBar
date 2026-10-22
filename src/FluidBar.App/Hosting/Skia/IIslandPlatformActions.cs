@@ -58,6 +58,9 @@ public enum IslandPlatformActionKind
     /// <summary>Pin/unpin a clipboard row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     ClipboardPin,
 
+    /// <summary>Clear the island's clipboard history (the system clipboard is untouched).</summary>
+    ClipboardClearAll,
+
     /// <summary>Activate an agent session row; <see cref="IslandPlatformAction.Index"/> is the row.</summary>
     AgentActivate,
 

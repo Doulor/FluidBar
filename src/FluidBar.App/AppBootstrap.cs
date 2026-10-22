@@ -811,7 +811,8 @@ internal sealed class AppBootstrap
                     Settings = _settings.Current.HotkeySettings,
                 },
                 localizer: _localizer,
-                clearNotifications: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearNotifications()));
+                clearNotifications: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearNotifications()),
+                clearClipboard: () => Dispatcher.UIThread.Post(() => _skiaHost?.ClearClipboard()));
             await _shell.StartAsync(_settings!.Current.TrayIcon).ConfigureAwait(true);
             _settings!.Changed += OnSettingsChanged;
         }

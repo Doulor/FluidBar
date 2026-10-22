@@ -23,6 +23,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
     private readonly Action _market;
     private readonly Action _exit;
     private readonly Action? _clearNotifications;
+    private readonly Action? _clearClipboard;
     private readonly ILocalizer? _localizer;
     private HotkeySettings _bindings;
     private bool _trayStarted;
@@ -38,7 +39,8 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         HotkeySettings? bindings = null,
         ILocalizer? localizer = null,
         TimeProvider? timeProvider = null,
-        Action? clearNotifications = null)
+        Action? clearNotifications = null,
+        Action? clearClipboard = null)
     {
         _toggle = toggle ?? throw new ArgumentNullException(nameof(toggle));
         _hide = hide ?? throw new ArgumentNullException(nameof(hide));
@@ -46,6 +48,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         _market = market ?? throw new ArgumentNullException(nameof(market));
         _exit = exit ?? throw new ArgumentNullException(nameof(exit));
         _clearNotifications = clearNotifications;
+        _clearClipboard = clearClipboard;
         _localizer = localizer;
         _bindings = bindings ?? new HotkeySettings();
 
@@ -130,6 +133,11 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         if (_clearNotifications is not null)
         {
             menu.Add(new TrayMenuItem("clear-notifications", L(LocKeys.Tray.ClearNotifications, "Clear notifications")));
+        }
+
+        if (_clearClipboard is not null)
+        {
+            menu.Add(new TrayMenuItem("clear-clipboard", L(LocKeys.Tray.ClearClipboard, "Clear clipboard")));
         }
 
         menu.Add(TrayMenuItem.Separator);
@@ -220,6 +228,9 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
                 break;
             case "clear-notifications":
                 _clearNotifications?.Invoke();
+                break;
+            case "clear-clipboard":
+                _clearClipboard?.Invoke();
                 break;
             case "settings":
                 _settings();

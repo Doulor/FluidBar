@@ -542,6 +542,7 @@
     "Tray.Tooltip": "FluidBar — {status}",
     "Tray.Open": "打开 FluidBar",
     "Tray.Settings": "设置…",
+    "Tray.ClearClipboard": "清空剪贴板",
     "Tray.ClearNotifications": "清空通知",
     "Tray.Market": "插件市场…",
     "Tray.Mode": "模式",

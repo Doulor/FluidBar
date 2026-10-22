@@ -1449,6 +1449,8 @@ public static partial class LocKeys
         public const string Market = "Tray.Market";
         /// <summary><c>Tray.ClearNotifications</c></summary>
         public const string ClearNotifications = "Tray.ClearNotifications";
+        /// <summary><c>Tray.ClearClipboard</c></summary>
+        public const string ClearClipboard = "Tray.ClearClipboard";
         /// <summary><c>Tray.Mode</c></summary>
         public const string Mode = "Tray.Mode";
         /// <summary><c>Tray.Material</c></summary>

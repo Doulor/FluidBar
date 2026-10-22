@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板清空**：新增 `ClipboardClearAll` 动作与托盘“清空剪贴板”菜单项；只清岛内历史，不动系统当前剪贴板。
 - **剪贴板图片缩略图**：捕获 `CF_DIB` 后额外用 GDI+ 转出一张 PNG（仅 24/32bpp BI_RGB；失败则回退类型图标），剪贴板图片行现在显示真实缩略图而不是统一的图片图标。原始 DIB 仍保留用于复制回剪贴板。
 - **Agent 行死点击**：在真正接通会话聚焦/恢复之前，Agent 行不再映射 `AgentActivate`，UIA 行也去掉 Invoke pattern；此前点击只产生一个无人订阅的 deferred action，看起来像“坏了”。列表滚动/选中仍保留。
 - **安全模式提示**：安全模式设置文案明确“切换后需重启 FluidBar 生效”，避免用户以为保存即实时禁用/恢复社区插件。

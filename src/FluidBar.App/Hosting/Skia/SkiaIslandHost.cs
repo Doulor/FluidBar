@@ -366,6 +366,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Tray/diagnostic hook: clear the local notification page (Action Center is untouched).</summary>
     public void ClearNotifications() => _controller.ClearNotifications();
 
+    /// <summary>Tray/diagnostic hook: clear the local clipboard history.</summary>
+    public void ClearClipboard() => _controller.ClearClipboard();
+
     /// <summary>Simulates a page request (keyboard/gutter).</summary>
     /// <param name="page">Target page.</param>
     public void SimulatePageRequested(PageRef page) => _controller.HandlePageRequest(page);

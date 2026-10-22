@@ -962,6 +962,10 @@ public sealed class SkiaIslandController : IDisposable
     public void ClearNotifications()
         => _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationClearAll));
 
+    /// <summary>Clears the local clipboard history through the platform seam.</summary>
+    public void ClearClipboard()
+        => _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.ClipboardClearAll));
+
     /// <summary>Raises <see cref="SettingsRequested"/> (tray/hotkey seam).</summary>
     public void RequestSettings() => SettingsRequested?.Invoke();
 

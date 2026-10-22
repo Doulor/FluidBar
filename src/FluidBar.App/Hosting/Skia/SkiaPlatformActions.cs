@@ -1334,6 +1334,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.NotificationClearAll => ClearNotifications(),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
+            IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
             IslandPlatformActionKind.AgentActivate => Defer(
                 action, "agent session activation is App-owned (no platform session-activate service)"),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
@@ -1610,6 +1611,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private IslandActionResult ClearNotifications()
     {
         _notifications.ClearRecent();
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult ClearClipboard()
+    {
+        _clipboard.ClearHistory();
         return IslandActionResult.Handled;
     }
 
