@@ -11,7 +11,7 @@ public sealed class PerfAuditTests
 {
     private static SKBitmap Canvas(out SKCanvas canvas)
     {
-        var bitmap = new SKBitmap(new SKImageInfo(882, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
+        var bitmap = new SKBitmap(new SKImageInfo(1287, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
         canvas = new SKCanvas(bitmap);
         return bitmap;
     }

@@ -18,7 +18,8 @@ public sealed class IslandHitTestTests
     public void Compact_idle_center_hits_the_pill()
     {
         var state = IslandTestFixtures.Idle();
-        var hit = Hit(state, 90, 42);
+        var shell = IslandMetrics.ShellRect(state);
+        var hit = Hit(state, shell.MidX, shell.MidY);
         Assert.Equal(IslandHitKind.Compact, hit.Kind);
         Assert.True(hit.IsInteractive);
         Assert.True(hit.IsShell);

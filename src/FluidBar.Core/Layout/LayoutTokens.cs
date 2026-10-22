@@ -50,7 +50,7 @@ public static class LayoutTokens
     /// <summary>Fixed per-monitor host surface width (488 DIP) for every mode.</summary>
     public const double HostSurfaceWidth = ExpandedWidth + (2 * WindowPadding);
 
-    /// <summary>Float/flush host surface width (588 DIP): 440 panel + 24 bleed + 100 extra lane for the 540 DIP notification cap.</summary>
+    /// <summary>Float/flush host surface width (858 DIP): room for the 810 DIP notification cap.</summary>
     public const double HostSurfaceFloatWidth = NotificationMaxWidth + (2 * WindowPadding);
 
     /// <summary>
@@ -337,8 +337,8 @@ public static class LayoutTokens
     /// <summary>Minimum notification-card width (short, unclipped messages stay here).</summary>
     public const double NotificationMinWidth = 360;
 
-    /// <summary>Maximum notification-card width after the requested +50% cap (360 → 540).</summary>
-    public const double NotificationMaxWidth = 540;
+    /// <summary>Maximum notification-card width after the requested +50% cap (540 → 810).</summary>
+    public const double NotificationMaxWidth = 810;
 
     /// <summary>Squarer notification-card radius measured from the reference screenshot (~43 px at 2×).</summary>
     public const double NotificationCornerRadius = 21;

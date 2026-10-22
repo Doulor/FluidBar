@@ -53,7 +53,7 @@ public sealed class RenderTimingTests
                         os = RuntimeInformation.OSDescription,
                         framework = RuntimeInformation.FrameworkDescription,
                         dpiScale = IslandTestFixtures.Scale,
-                        surface = "488x384 DIP (882x576 px)",
+                        surface = "488x384 DIP (1287x576 px)",
                     },
                     expandedFull = full,
                     expandedDirty = dirty,
@@ -132,7 +132,7 @@ public sealed class RenderTimingTests
         # FluidBar island MVP — render timings
 
         Environment: {Environment.MachineName} · {RuntimeInformation.OSDescription} · {RuntimeInformation.FrameworkDescription}
-        DPI: 150 % (1.5×) · host surface 488×384 DIP → 882×576 px (dock 882×666 px)
+        DPI: 150 % (1.5×) · host surface 488×384 DIP → 1287×576 px (dock 1287×666 px)
         Canvas: CPU raster, premultiplied BGRA, warm caches, unpaced.
 
         | Frame | mean ms | p99 ms | max ms | frames |

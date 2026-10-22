@@ -16,7 +16,7 @@ public sealed class LayeredHostTests
         var floatSize = LayeredSurfaceSize.ForMode(LayeredHostMode.Float);
         var dockSize = LayeredSurfaceSize.ForMode(LayeredHostMode.Dock);
 
-        Assert.Equal(588, floatSize.WidthDip);
+        Assert.Equal(858, floatSize.WidthDip);
         Assert.Equal(384, floatSize.HeightDip);
         Assert.Equal(488, dockSize.WidthDip);
         Assert.Equal(444, dockSize.HeightDip);
@@ -43,10 +43,10 @@ public sealed class LayeredHostTests
     }
 
     [Theory]
-    [InlineData(1.0, 588, 384)]
-    [InlineData(1.25, 735, 480)]
-    [InlineData(1.5, 882, 576)]
-    [InlineData(2.0, 1176, 768)]
+    [InlineData(1.0, 858, 384)]
+    [InlineData(1.25, 1073, 480)]
+    [InlineData(1.5, 1287, 576)]
+    [InlineData(2.0, 1716, 768)]
     public void SurfaceSize_ToPixels_CeilsAtTheGivenScale(double scale, int expectedWidth, int expectedHeight)
     {
         var pixels = LayeredSurfaceSize.Float.ToPixels(scale);
@@ -70,8 +70,8 @@ public sealed class LayeredHostTests
     }
 
     [Theory]
-    [InlineData(1.1, 647, 423)] // 488*1.1=536.8, 384*1.1=422.4: both must ceil
-    [InlineData(1.75, 1029, 672)] // 488*1.75=854, 384*1.75=672
+    [InlineData(1.1, 944, 423)] // 488*1.1=536.8, 384*1.1=422.4: both must ceil
+    [InlineData(1.75, 1502, 672)] // 488*1.75=854, 384*1.75=672
     public void SurfaceSize_ToPixels_CeilsFractionalPixels(double scale, int expectedWidth, int expectedHeight)
     {
         var pixels = LayeredSurfaceSize.Float.ToPixels(scale);
@@ -85,7 +85,7 @@ public sealed class LayeredHostTests
     [Fact]
     public void SurfaceSize_ShellLocalOffset_IsPanelTopForAllModes()
     {
-        Assert.Equal(new VisualPoint(74, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
+        Assert.Equal(new VisualPoint(209, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
 
         // Core dock composition keeps the panel at the top (24..308); the dock strip lives below
         // it (316..368) and the archipelago strip below that (376..408). The host must not shift
@@ -105,7 +105,7 @@ public sealed class LayeredHostTests
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Peek));
         Assert.Equal(new VisualPoint(24, 24),
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Expanded));
-        Assert.Equal(new VisualPoint(74, 24),
+        Assert.Equal(new VisualPoint(209, 24),
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float, ShellForm.Compact));
 
         // Local rects the renderer paints in dock mode: panel 24..308, strip 316..368, arch 376..408.
@@ -202,7 +202,7 @@ public sealed class LayeredHostTests
 
         Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);
         Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
-        Assert.Equal(882, computed.SurfaceSizePx.Width);
+        Assert.Equal(1287, computed.SurfaceSizePx.Width);
         Assert.Equal(576, computed.SurfaceSizePx.Height);
         Assert.Equal(
             (int)Math.Round(placement.ShellLocalOffset.X * 1.5, MidpointRounding.AwayFromZero),

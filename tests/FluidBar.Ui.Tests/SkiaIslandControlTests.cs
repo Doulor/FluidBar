@@ -377,7 +377,7 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void Notification_width_grows_only_for_long_text_up_to_the_540_cap()
+    public void Notification_width_grows_only_for_long_text_up_to_the_810_cap()
     {
         using var shortFixture = ControllerFixture.Create();
         shortFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
