@@ -106,6 +106,34 @@ public sealed class CoreSettingsAdapterTests
     }
 
     [Fact]
+    public async Task Adapter_FlushWaitsForQueuedDebounceWrites()
+    {
+        var fs = new InMemorySettingsFileSystem();
+        var options = new SettingsStoreOptions
+        {
+            SettingsPath = @"C:\test\settings.json",
+            KeepBackup = false,
+        };
+        var logger = FluidBar.Core.Diagnostics.NullAppLogger.Instance;
+        var store = new SettingsStore(fs, options, logger);
+        using var adapter = new CoreSettingsStoreAdapter(store, logger, TimeSpan.Zero);
+        var initial = await adapter.LoadAsync();
+
+        for (var i = 0; i < 20; i++)
+        {
+            adapter.QueueSave(initial with { Language = i % 2 == 0 ? "zh-Hans" : "en-US" });
+        }
+
+        await adapter.FlushAsync();
+
+        var reloadedStore = new SettingsStore(fs, options, logger);
+        using var reloaded = new CoreSettingsStoreAdapter(reloadedStore, logger);
+        var loaded = await reloaded.LoadAsync();
+        Assert.Equal("en-US", loaded.Language);
+        Assert.True(adapter.SaveCount >= 1);
+    }
+
+    [Fact]
     public async Task Adapter_PersistsThroughCoreStore_AndLoadsBack()
     {
         var fs = new InMemorySettingsFileSystem();
