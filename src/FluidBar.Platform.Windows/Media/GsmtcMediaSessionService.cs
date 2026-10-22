@@ -656,7 +656,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 position = candidate.Position;
             }
 
-            if (Environment.TickCount64 - _lastFrameLogTick > 400)
+            if (Environment.TickCount64 - _lastFrameLogTick > 2000)
             {
                 _lastFrameLogTick = Environment.TickCount64;
                 MediaDiagnostics.LogAlways(
