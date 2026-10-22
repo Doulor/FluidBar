@@ -154,10 +154,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private string? _captionTitle;
     private string? _captionArtist;
 
-    /// <summary>Candidate caption awaiting a second identical reading (debounce) and how often it was seen.</summary>
-    private string? _captionCandidate;
-    private int _captionCandidateCount;
-
     /// <summary>Timestamp of the previous poll, used to accumulate the above.</summary>
     private DateTimeOffset? _lastPollAt;
 
@@ -305,30 +301,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         }
 
         if (string.Equals(caption.Title, Volatile.Read(ref _captionTitle), StringComparison.Ordinal))
-        {
-            _captionCandidateCount = 0;
-            return;
-        }
-
-        // Radio shows and "special" entries put slashes and separators into the caption; those are not song
-        // names and following them made the title flip between polls, which reset the clock every 250 ms and
-        // froze the position (measured 2026-10-22).
-        if (caption.Title.Contains('/', StringComparison.Ordinal) || caption.Title.Length > 80)
-        {
-            _captionCandidateCount = 0;
-            return;
-        }
-
-        // Require two identical readings: a single one is often the transient "song still loading" state.
-        if (!string.Equals(caption.Title, Volatile.Read(ref _captionCandidate), StringComparison.Ordinal))
-        {
-            Volatile.Write(ref _captionCandidate, caption.Title);
-            _captionCandidateCount = 1;
-            return;
-        }
-
-        _captionCandidateCount++;
-        if (_captionCandidateCount < 2)
         {
             return;
         }
