@@ -32,6 +32,19 @@ public sealed class SkiaPlatformActionsTests
     }
 
     [Fact]
+    public async Task MediaQueue_WithoutASession_ReportsThePlayerUnavailable()
+    {
+        var settings = CreateSettings();
+        await using var actions = new SkiaPlatformActions(settings);
+
+        AssertUnsupported(
+            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.MediaQueue)),
+            "no active media session to open");
+
+        settings.Dispose();
+    }
+
+    [Fact]
     public async Task UnstartedQuickToggles_ReportThatTheServiceIsNotRunning()
     {
         var settings = CreateSettings();
