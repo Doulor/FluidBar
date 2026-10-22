@@ -72,11 +72,7 @@ internal sealed class ClipboardSearchWindow : Window
             },
         };
 
-        Opened += (_, _) =>
-        {
-            _query.Focus();
-            _query.SelectAll();
-        };
+        Opened += (_, _) => FocusQuery();
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
@@ -84,5 +80,12 @@ internal sealed class ClipboardSearchWindow : Window
                 Close();
             }
         };
+    }
+
+    /// <summary>Focuses the query and selects the existing text so typing replaces it.</summary>
+    public void FocusQuery()
+    {
+        _query.Focus();
+        _query.SelectAll();
     }
 }

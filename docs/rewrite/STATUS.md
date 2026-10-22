@@ -21,6 +21,7 @@
 - **剪贴板缩略图**：`CF_DIB` → PNG（24/32bpp），图片行显示真实缩略图，解码失败回退图标。
 - **剪贴板清空**：清空历史时筛选复位为“全部”。
 - **preview.4**：rank 修正后本地 publish 成功（zip 19.62 MB、无 PDB）。
+- **搜索再次聚焦**：FocusQuery 复用已有窗口并全选。
 - **搜索随岛收起**：Host StateChanged + 关闭搜索。
 - **preview.7**：a11y/select-all/calendar-dispose 后本地 publish 成功（19.62 MB、无 PDB）。
 - **日历回调**：Dispose 退订 + `_disposed` guard。

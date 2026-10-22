@@ -1141,6 +1141,7 @@ internal sealed class AppBootstrap
         if (_clipboardSearchWindow is { } existing)
         {
             BringToFront(existing);
+            existing.FocusQuery();
             return;
         }
 
