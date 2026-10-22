@@ -616,8 +616,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 // PREVIOUS track for a few seconds, so anchoring to it made the new song start at the old
                 // position (measured 223 s, 2026-10-22). Only the very first sighting (app start, mid-song)
                 // uses the state file, because there the song really is somewhere in the middle.
+                // Anchor as precisely as possible: a fresh state-file write describes the new song, so
+                // "what it says + how long ago it was written" is the true position now. Detection itself
+                // costs ~1.5 s (caption poll + repaint), and anchoring to zero at detection time made the
+                // new song permanently ~1.5 s behind (measured 2026-10-22).
                 var firstSighting = _frameAnchorInitialised == false;
-                if (firstSighting)
+                var stateIsFresh = sinceWrite > TimeSpan.Zero && sinceWrite < TimeSpan.FromSeconds(10);
+                if (firstSighting || (stateIsFresh && statePosition < TimeSpan.FromSeconds(30)))
                 {
                     _frameAnchorInitialised = true;
                     _frameAnchorPosition = statePosition;
@@ -651,7 +656,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 position = candidate.Position;
             }
 
-            if (Environment.TickCount64 - _lastFrameLogTick > 4500)
+            if (Environment.TickCount64 - _lastFrameLogTick > 400)
             {
                 _lastFrameLogTick = Environment.TickCount64;
                 MediaDiagnostics.LogAlways(
