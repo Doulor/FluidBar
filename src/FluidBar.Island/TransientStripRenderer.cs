@@ -200,14 +200,14 @@ internal sealed class TransientStripRenderer : IDisposable
             return new IslandHitTarget(IslandHitKind.RailSlot, frame.Page + 1);
         }
 
-        // Every dot in a cluster jumps to the farthest page in that direction (left → 01, right → 06),
-        // exactly like the prototype's shared far-dot target. The 3 DIP dots keep the prototype's
-        // 7×15 invisible hit area, so neighbouring targets never overlap.
+        // Each dot jumps to the page it stands for (nearest dot first: the page just before the previous
+        // pill / just after the next one). They used to share one far target per cluster, which made three
+        // different dots behave identically (user report 2026-10-22).
         for (var i = 0; i < frame.LeftDots; i++)
         {
             if (DotHitRect(_dotsLeft[i]).Contains(x, y))
             {
-                return new IslandHitTarget(IslandHitKind.DotLeft, 0);
+                return new IslandHitTarget(IslandHitKind.DotLeft, Math.Max(0, frame.Page - 2 - i));
             }
         }
 
@@ -215,7 +215,7 @@ internal sealed class TransientStripRenderer : IDisposable
         {
             if (DotHitRect(_dotsRight[i]).Contains(x, y))
             {
-                return new IslandHitTarget(IslandHitKind.DotRight, LastPage);
+                return new IslandHitTarget(IslandHitKind.DotRight, Math.Min(LastPage, frame.Page + 2 + i));
             }
         }
 

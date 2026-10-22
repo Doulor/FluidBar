@@ -27,12 +27,17 @@ public readonly record struct SkiaStripGeometry(
     SKRect OverflowLeft = default,
     SKRect OverflowRight = default)
 {
-    /// <summary>Target page for a left dot index (every dot in the cluster jumps to page 01).</summary>
-    public int LeftDotPage(int index) => index >= 0 && index < DotsLeft.Length ? 0 : -1;
+    /// <summary>
+    /// Target page for a left dot index (nearest dot first). Dot 0 is the page just before the previous
+    /// pill, so the cluster maps onto the pages it actually stands for instead of every dot jumping to
+    /// page 01 — three dots that all did the same thing read as "点不了、毫无作用" (user report 2026-10-22).
+    /// </summary>
+    public int LeftDotPage(int index)
+        => index >= 0 && index < DotsLeft.Length ? Math.Max(0, Page - 2 - index) : -1;
 
-    /// <summary>Target page for a right dot index (every dot in the cluster jumps to the last page).</summary>
+    /// <summary>Target page for a right dot index (nearest dot first, mirror of <see cref="LeftDotPage"/>).</summary>
     public int RightDotPage(int index)
-        => index >= 0 && index < DotsRight.Length ? PageCount - 1 : -1;
+        => index >= 0 && index < DotsRight.Length ? Math.Min(PageCount - 1, Page + 2 + index) : -1;
 }
 
 /// <summary>

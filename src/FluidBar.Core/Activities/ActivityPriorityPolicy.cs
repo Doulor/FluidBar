@@ -31,8 +31,8 @@ public static class ActivityPriorityPolicy
     /// <summary>Rank of <see cref="ActivityKind.Brightness"/>.</summary>
     public const int BrightnessRank = 8;
 
-    /// <summary>Rank of <see cref="ActivityKind.Notification"/> (highest: notifications always own the primary island).</summary>
-    public const int NotificationRank = 0;
+    /// <summary>Rank of <see cref="ActivityKind.Notification"/> (spec 2.3 rank 9; clipboard still preempts).</summary>
+    public const int NotificationRank = 9;
 
     /// <summary>Rank of <see cref="ActivityKind.Agent"/> (lead-brief extension).</summary>
     public const int AgentRank = 10;

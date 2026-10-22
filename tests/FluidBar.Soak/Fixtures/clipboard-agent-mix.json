@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "clipboard-agent-mix",
-  "description": "Clipboard/agent/lock-key mix with TTL expiry; notification rank 0 owns the primary slot until its TTL expires.",
+  "description": "Clipboard/agent/lock-key mix with TTL expiry; clipboard preempts the transient notification, then volume/agent follow.",
   "seed": 1103,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -88,7 +88,7 @@
     {
       "atEventIndex": 0,
       "stateKind": "Compact",
-      "page": "Clipboard",
+      "page": "builtin.clipboard",
       "primaryKind": "Clipboard",
       "title": "Hello world",
       "ghostCount": 0,
@@ -98,7 +98,7 @@
     {
       "atEventIndex": 1,
       "stateKind": "Compact",
-      "page": "Clipboard",
+      "page": "builtin.clipboard",
       "primaryKind": "Clipboard",
       "title": "Hello world",
       "ghostCount": 1,
@@ -108,7 +108,7 @@
     {
       "atEventIndex": 2,
       "stateKind": "Compact",
-      "page": "Clipboard",
+      "page": "builtin.clipboard",
       "primaryKind": "Clipboard",
       "title": "Hello world",
       "ghostCount": 2,
@@ -118,43 +118,42 @@
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 1,
+      "page": "builtin.clipboard",
+      "primaryKind": "Clipboard",
+      "title": "Hello world",
+      "ghostCount": 2,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 2,
+      "page": "builtin.home",
+      "primaryKind": "Volume",
+      "title": "Volume",
+      "ghostCount": 1,
       "badgeCount": 0,
-      "showsWave": false
+      "showsWave": false,
+      "hudLabelKey": "Hud.Volume"
     },
     {
       "atEventIndex": 5,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 2,
+      "page": "builtin.agent",
+      "primaryKind": "Agent",
+      "title": "Agent finished",
+      "ghostCount": 1,
       "badgeCount": 0,
-      "progressPercent": null,
       "showsWave": false
     },
     {
       "atEventIndex": 6,
       "stateKind": "Compact",
-      "page": "Agent",
+      "page": "builtin.agent",
       "primaryKind": "Agent",
       "title": "Agent finished",
       "ghostCount": 0,
       "badgeCount": 0,
-      "progressPercent": null,
       "showsWave": false
     }
   ]

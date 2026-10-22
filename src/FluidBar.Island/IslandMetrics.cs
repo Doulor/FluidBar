@@ -130,7 +130,7 @@ public static class IslandMetrics
     public const double DotHitWidth = 7;
 
     /// <summary>Dot hit-target height (15 DIP; `.far-dot::after` insets −6 px vertically).</summary>
-    public const double DotHitHeight = 15;
+    public const double DotHitHeight = 22;
 
     /// <summary>
     /// Legacy square dot hit size (12 DIP). Superseded by <see cref="DotHitWidth"/> /

@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "notification-burst",
-  "description": "Notification burst: same-kind replacement, notification stays primary over clipboard/media, and retracts back to idle.",
+  "description": "Notification burst: same-kind replacement, clipboard preempts a transient notification, media follows, and retracts back to idle.",
   "seed": 1102,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -73,7 +73,7 @@
     {
       "atEventIndex": 0,
       "stateKind": "Compact",
-      "page": "Notifications",
+      "page": "builtin.notifications",
       "primaryKind": "Notification",
       "title": "Build finished",
       "ghostCount": 0,
@@ -83,7 +83,7 @@
     {
       "atEventIndex": 1,
       "stateKind": "Compact",
-      "page": "Notifications",
+      "page": "builtin.notifications",
       "primaryKind": "Notification",
       "title": "New message",
       "ghostCount": 0,
@@ -93,43 +93,40 @@
     {
       "atEventIndex": 2,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 1,
+      "page": "builtin.clipboard",
+      "primaryKind": "Clipboard",
+      "title": "Copied",
+      "ghostCount": 0,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 2,
+      "page": "builtin.clipboard",
+      "primaryKind": "Clipboard",
+      "title": "Copied",
+      "ghostCount": 1,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "Notifications",
-      "primaryKind": "Notification",
-      "title": "New message",
-      "ghostCount": 1,
+      "page": "builtin.media",
+      "primaryKind": "Media",
+      "title": "Lo-fi beats",
+      "ghostCount": 0,
       "badgeCount": 0,
-      "progressPercent": null,
-      "showsWave": false
+      "progressPercent": 0,
+      "showsWave": true
     },
     {
       "atEventIndex": 5,
       "stateKind": "Compact",
-      "page": "Media",
-      "primaryKind": null,
-      "title": null,
+      "page": "builtin.media",
       "ghostCount": 0,
       "badgeCount": 0,
-      "progressPercent": null,
       "showsWave": false
     }
   ]
