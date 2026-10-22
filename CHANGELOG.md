@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
 - **通知优先级修正**：`ActivityPriorityPolicy.NotificationRank` 从 0 改为规范表 rank 9。rank 0 让通知无条件压过剪贴板/查找等用户发起反馈，与 spec 2.3（lookup 1、clipboard 2…notification 9）冲突；现在剪贴板能抢占瞬时 toast，通知仍高于 battery/agent/media。同步更新 `notification-burst` / `clipboard-agent-mix` fixture 与 Core/Integration 断言。全量测试 **2596 passed / 0 failed**。
 - **架构门禁修正**：`No_ui_thread_blocking_calls_in_product_sources` 扫描到 `ProcessLoopbackCapture` 和 `KugouMemoryPosition` 的专用后台线程 `Thread.Sleep`；这两个文件本来就在独立 worker 上运行，不属于 UI 线程阻塞。规则现在显式豁免这两个文件，其余产品代码仍禁止阻塞调用。Architecture 18/18 通过，全量失败从 3 降到 2（剩余是两条既有 Integration rank 断言）。
 - **重置设置补漏**：高级页“重置”没有恢复 `PowerMode` 和 `LyricOffsetMs`，用户点重置后省电模式/歌词偏移仍保留自定义值；现在一并恢复默认值，扩展 `SettingsResetArmingTests` 覆盖。
