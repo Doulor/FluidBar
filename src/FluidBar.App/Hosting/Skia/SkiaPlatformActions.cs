@@ -351,6 +351,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var volume = _volume.Current;
         var brightness = _brightness.Current;
         var clipboard = _clipboard.Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
+        PrunePinKeyCache(clipboard);
         var now = _time.GetLocalNow();
         var culture = _localizer?.CurrentCulture ?? CultureInfo.CurrentCulture;
         int? batteryPercent = battery is { HasBattery: true } ? battery.Percent : null;
@@ -1715,6 +1716,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         ClipboardFilter.Files => LocKeys.Clipboard.File,
         _ => LocKeys.Clipboard.All,
     }) ?? _clipboardFilter.ToString();
+
+    private void PrunePinKeyCache(IReadOnlyList<ClipboardEntry> history)
+    {
+        if (_pinKeyCache.Count == 0)
+        {
+            return;
+        }
+
+        var live = history.Select(entry => entry.Sequence).ToHashSet();
+        foreach (var key in _pinKeyCache.Keys.Where(sequence => !live.Contains(sequence)).ToArray())
+        {
+            _pinKeyCache.Remove(key);
+        }
+    }
 
     /// <summary>Current clipboard search query (null when not searching).</summary>
     public string? ClipboardSearchQuery => _clipboardSearchQuery;

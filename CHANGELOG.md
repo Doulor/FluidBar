@@ -14,6 +14,7 @@
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
 - **preview.4 发布**：rank 修正后本地 `publish.ps1 -Version 2.0.0-preview.4 -SkipTests` 成功；zip 19.62 MB、无 PDB，exe SHA-256 `1559F8FF...C5B7602`。
+- **剪贴板 pin 缓存裁剪**：`_pinKeyCache` 之前只增不减，历史淘汰后仍保留每个 sequence→SHA-256 映射；现在每次 snapshot 按当前 history 的 sequence 裁剪，长会话不再累积过期 pin 缓存。
 - **VisualRect.Union 单测**：覆盖两矩形合并、任一侧 Empty、双侧 Empty，锁住 rail 重绘的 damage 合并语义。
 - **MediaQueue 真正接线**：`43703f4` 只加了 `OpenMediaPlayer()`，switch 分支仍是 `Unsupported`，按钮实际不会打开播放器；现在 `MediaQueue => OpenMediaPlayer()`，功能与 UIA/标签一致。
 - **设置变更后的 deadline**：`ApplyEnvironmentChanged` 之前只重建 controller，旧的 `AutoCollapseDeadline`/`AutoHideDeadline` 仍生效；把 AutoCollapseMs 改成 0 后仍会在原 deadline 收起。现在 SettingsChanged 按时长重算/清除 expanded deadline，compact 的 AutoHide 同样处理。新增 Core 单测。
