@@ -227,7 +227,7 @@ if `%APPDATA%\FluidBar\settings.ui.json` exists and no Core `settings.json` exis
 legacy App model, maps it through `ApplyToCore`, saves it via Core, and renames the legacy file to
 `settings.ui.json.imported` (corrupt legacy files are preserved; an existing Core file always wins).
 This runs inside the first background `LoadAsync`, never on the UI thread.
-**Paused-file one-liner** (platform-owner/Lead applies when `AppBootstrap` is handed back): replace
+**Applied 2026-10-22**: the paused-file one-liner was applied when `AppBootstrap` was handed back: replace
 `new JsonUiSettingsStore(JsonUiSettingsStore.DefaultPath, _logger)` with
 `CoreSettingsStoreAdapter.CreateDefault(_logger)`, then remove the `settings.ui.json` adapter.
 Tests cover mapping round-trip, Core-owned preservation and persistence via `InMemorySettingsFileSystem`.

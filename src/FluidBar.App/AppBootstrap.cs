@@ -45,7 +45,7 @@ internal sealed class AppBootstrap
     private SkiaIslandHost? _skiaHost;
     private SkiaShellIntegration? _shell;
     private SkiaPlatformActions? _platformActions;
-    private JsonUiSettingsStore? _settingsStore;
+    private CoreSettingsStoreAdapter? _settingsStore;
     private PluginRuntime? _pluginRuntime;
     private readonly PluginIslandEventAdapter _pluginEventAdapter = new();
     private readonly PageRegistry _pageRegistry = new();
@@ -72,7 +72,7 @@ internal sealed class AppBootstrap
     {
         try
         {
-            _settingsStore = new JsonUiSettingsStore(JsonUiSettingsStore.DefaultPath, _logger);
+            _settingsStore = CoreSettingsStoreAdapter.CreateDefault(_logger);
             var initial = await _settingsStore.LoadAsync().ConfigureAwait(true);
             _settings = new SettingsController(initial, _settingsStore, _logger);
             _pageRegistry.SetOrder(initial.Plugins.PageOrder);
