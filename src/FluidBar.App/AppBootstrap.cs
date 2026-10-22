@@ -826,6 +826,13 @@ internal sealed class AppBootstrap
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.Advanced.SafeMode != current.Advanced.SafeMode && !_shutdownStarted)
+        {
+            // Safe mode is part of plugin-runtime composition, not just a visual toggle. Rebuild the
+            // runtime so turning it on/off takes effect without a full app restart.
+            Dispatcher.UIThread.Post(() => _ = RebuildPluginRuntimeAsync());
+        }
+
         if (_shell is null)
         {
             return;
@@ -851,6 +858,28 @@ internal sealed class AppBootstrap
             Settings = current.HotkeySettings,
         };
         Dispatcher.UIThread.Post(() => _ = ApplyHotkeysAsync(bindings));
+    }
+
+    private async Task RebuildPluginRuntimeAsync()
+    {
+        try
+        {
+            var old = _pluginRuntime;
+            _pluginRuntime = null;
+            if (old is not null)
+            {
+                await old.DisposeAsync().ConfigureAwait(true);
+            }
+
+            await StartPluginRuntimeAsync().ConfigureAwait(true);
+            _logger.Information(LogCategories.Plugin, "plugin.runtime.rebuilt",
+                "Plugin runtime rebuilt after a safe-mode change.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Plugin, "plugin.runtime.rebuild-failed",
+                "The plugin runtime could not be rebuilt after a safe-mode change.", ex);
+        }
     }
 
     private async Task ApplyTrayVisibilityAsync(bool visible)
