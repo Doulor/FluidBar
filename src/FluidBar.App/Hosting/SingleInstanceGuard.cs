@@ -17,6 +17,14 @@ internal static class SingleInstanceGuard
     /// <summary>Acquires the per-session mutex. Returns false when another instance already owns it.</summary>
     public static bool TryAcquire()
     {
+        // Development/acceptance runs often need a second instance while the user's build is open.
+        // Production never sets this variable.
+        if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_ALLOW_MULTI_INSTANCE"), "1",
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
         return createdNew;
     }
