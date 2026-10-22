@@ -657,6 +657,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             if (wroteNow
                 && _frameAnchorInitialised
                 && sinceTrackChange > TimeSpan.FromSeconds(3)
+                && state.SampledAtUtc > _frameTrackChangedAtUtc
                 && statePosition > TimeSpan.Zero)
             {
                 var writeAge = _timeProviderNow() - state.SampledAtUtc;
@@ -685,15 +686,19 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 // costs ~1.5 s (caption poll + repaint), and anchoring to zero at detection time made the
                 // new song permanently ~1.5 s behind (measured 2026-10-22).
                 var firstSighting = _frameAnchorInitialised == false;
-                var stateIsFresh = sinceWrite > TimeSpan.Zero && sinceWrite < TimeSpan.FromSeconds(10);
-                if (firstSighting || (stateIsFresh && statePosition < TimeSpan.FromSeconds(30)))
+                if (firstSighting)
                 {
+                    // Joining mid-song (app start): seed from the player's current reading, because the song
+                    // really is somewhere in the middle.
                     _frameAnchorInitialised = true;
                     _frameAnchorPosition = statePosition;
                     _frameAnchorAudio = audio - sinceWrite;
                 }
                 else
                 {
+                    // A new song ALWAYS starts at zero. The state file still describes the previous track at
+                    // this instant, so using it made the next song begin at the old position (reported
+                    // 2026-10-22: switching at 0:30 made the new song start at 0:30).
                     _frameAnchorPosition = TimeSpan.Zero;
                     _frameAnchorAudio = audio;
                 }
