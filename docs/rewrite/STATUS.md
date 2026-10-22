@@ -24,6 +24,7 @@
 - **preview.14**：含 smoke bypass 的 release 发布，六页 Expanded smoke 通过。
 - **preview.16**：surrogate 修复发布，release smoke 六页 Expanded 通过。
 - **Lyric 测试**：mean/p95 阈值，全量稳定 2617/0。
+- **preview.17**：release smoke 10 张图，含搜索窗口。
 - **搜索 smoke**：`FLUIDBAR_SMOKE_SEARCH=1` 输出 fluidbar-10-search.png。
 - **日历权限失效**：清空 stale counts。
 - **自更新等待 PID**：真实运行进程 + self-replace 覆盖测试。
