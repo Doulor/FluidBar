@@ -72,7 +72,9 @@ internal sealed class AppBootstrap
     {
         try
         {
-            _settingsStore = CoreSettingsStoreAdapter.CreateDefault(_logger);
+            // Optional data-root override for isolated smoke/portable runs; production uses %APPDATA%.
+            var settingsRoot = Environment.GetEnvironmentVariable("FLUIDBAR_SETTINGS_DIR");
+            _settingsStore = CoreSettingsStoreAdapter.CreateDefault(_logger, settingsRoot);
             var initial = await _settingsStore.LoadAsync().ConfigureAwait(true);
             _settings = new SettingsController(initial, _settingsStore, _logger);
             _pageRegistry.SetOrder(initial.Plugins.PageOrder);
