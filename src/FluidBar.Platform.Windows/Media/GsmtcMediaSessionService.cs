@@ -622,9 +622,32 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             var wall = _timeProviderNow() - _clockOrigin;
             if (!string.Equals(_clockTitle, candidate.Title, StringComparison.Ordinal))
             {
+                var firstSighting = _clockTitle is null;
                 _clockTitle = candidate.Title;
-                _clock.AnchorToTrackStart(audio, wall);
-                _clockPendingAnchor = true;
+                if (firstSighting)
+                {
+                    // Joining mid-song (app start): seed from the best absolute reading we have instead of
+                    // pretending the song just began - otherwise the island restarted every song at 0:00.
+                    var seedAge = TimeSpan.Zero;
+                    var seed = candidate.Position;
+                    if (seed <= TimeSpan.Zero)
+                    {
+                        seed = statePosition;
+                        seedAge = _timeProviderNow() - state.SampledAtUtc;
+                        if (seedAge < TimeSpan.Zero || seedAge > TimeSpan.FromSeconds(30))
+                        {
+                            seedAge = TimeSpan.Zero;
+                        }
+                    }
+
+                    _clock.Anchor(seed, audio - seedAge, wall - seedAge);
+                    _clockPendingAnchor = false;
+                }
+                else
+                {
+                    _clock.AnchorToTrackStart(audio, wall);
+                    _clockPendingAnchor = true;
+                }
             }
 
             var position = _clock.Advance(audio, wall, _loopback.IsAvailable);
