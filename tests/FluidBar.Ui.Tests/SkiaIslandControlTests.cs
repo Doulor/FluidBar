@@ -400,8 +400,7 @@ public sealed class SkiaIslandControlTests
         longFixture.RunToRest();
         longFixture.Settle();
         var state = longFixture.Controller.RenderState;
-        Assert.True(state.ShellWidth > LayoutTokens.NotificationMinWidth);
-        Assert.True(state.ShellWidth <= LayoutTokens.NotificationMaxWidth);
+        Assert.Equal(LayoutTokens.NotificationMaxWidth, state.ShellWidth, 1);
         Assert.True(IslandMetrics.ShellRect(state).Right <= HostSurface.Float.Width + 0.5f);
     }
 
