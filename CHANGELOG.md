@@ -13,6 +13,7 @@
 - **单实例**：`SingleInstanceGuard`（Local session mutex）+ `LayeredWindowHost.ActivateMessage`；重复启动退出并让已运行实例打开设置。
 - **不再回退演示数据**：新增 `EmptyIslandDataSource`；平台 seam 失败或 Avalonia fallback 时显示空态，而不是假的 Spotify/Teams/剪贴板内容。
 - **定时器/GC**：所有帧循环停止路径统一走 `StopFrameLoopForIdle()`，恢复 15.6 ms timer resolution、默认 GC latency 并安排 idle trim。修复前首次动画后系统 timer 一直停在 1 ms（本机 `NtQueryTimerResolution` 实测）。
+- **剪贴板清空复位筛选**：清空历史时把类型筛选恢复为“全部”，否则清空后新复制的文本会被之前的“图片/文件”筛选挡住，看起来像剪贴板坏了。
 - **崩溃日志真正接线**：`CrashLog.Install()` 之前只存在于注释里，`Program.Main` 从未调用；现在启动第一步就安装 `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException` 处理器。
 - **剪贴板筛选空态**：总历史为空时不再绘制筛选 chip，避免空列表上出现一个没有意义的“全部”按钮。
 - **未读数只算未读**：`UnreadCount` 之前直接取 `Recent.Length`，打开通知页标记已读后角标仍不减；现在按 `ReadIds` 过滤，只统计未读 toast。

@@ -1692,6 +1692,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         // time the same content is copied, which makes "clear" feel ineffective.
         _pinnedClipboard.Clear();
         _pinKeyCache.Clear();
+        _clipboardFilter = ClipboardFilter.All;
         SaveClipboardPins();
         _clipboard.ClearHistory();
         return IslandActionResult.Handled;
