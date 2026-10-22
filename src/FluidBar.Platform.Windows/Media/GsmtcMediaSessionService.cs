@@ -138,15 +138,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
-
-    /// <summary>Set when playback resumes: the next cross-check re-anchors on the clock text.</summary>
-    private bool _forceReanchor;
-
-    /// <summary>True right after a track change until the player writes the new song's position.</summary>
-    private bool _pendingTrackAnchor;
-
-    /// <summary>Wall-clock instant matching the frame anchor, used when the capture is not producing frames.</summary>
-    private DateTimeOffset _frameAnchorWall = DateTimeOffset.MinValue;
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string? _captionArtist;
@@ -374,10 +365,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     // Keep the paused track on screen. Hiding it after 5 s made the island disappear
                     // whenever the level probe mis-read a playing player as silent (user report
                     // 2026-10-22: "音乐灵动岛不显示了").
-                    // Pausing freezes the clock in the app; force the next cross-check to adopt the player's reading
-            // so the frozen value is exact and the resume continues from it (2026-10-22).
-            _forceReanchor = true;
-            Publish(retained with { IsPlaying = false });
+                    Publish(retained with { IsPlaying = false });
 
                     _fallbackPoller?.SetInterval(FallbackPollInterval);
                     return;
@@ -639,28 +627,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     _frameAnchorInitialised = true;
                     _frameAnchorPosition = statePosition;
                     _frameAnchorAudio = audio - sinceWrite;
-                    _frameAnchorWall = _timeProviderNow() - sinceWrite;
                 }
                 else
                 {
                     _frameAnchorPosition = TimeSpan.Zero;
                     _frameAnchorAudio = audio;
-                    _frameAnchorWall = _timeProviderNow();
                 }
-
-                _pendingTrackAnchor = true;
-                // The player usually restarts its audio stream on a track change; the old capture then yields
-                // nothing and the position freezes, so reopen it for the new song.
-                _loopback.Reset();
             }
 
-            // Frames are the exact source, but the capture can die (player restarts its stream, device
-            // change). Falling back to wall time keeps the clock moving instead of freezing, and the next
-            // re-anchor corrects it.
-            var anchorWall = _frameAnchorWall == DateTimeOffset.MinValue ? _timeProviderNow() : _frameAnchorWall;
-            var position = _loopback.IsAvailable
-                ? _frameAnchorPosition + (audio - _frameAnchorAudio)
-                : _frameAnchorPosition + (_timeProviderNow() - anchorWall);
+            var position = _frameAnchorPosition + (audio - _frameAnchorAudio);
             if (position < TimeSpan.Zero)
             {
                 position = TimeSpan.Zero;
@@ -671,35 +646,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // Re-anchor on every fresh reading, not only on big jumps: the text is authoritative at the
             // instant it repaints, so following it keeps the residual error at the text's own 1 s rounding
             // instead of letting the anchor's error persist for the whole 30 s window.
-            // A track change leaves the anchor on "start of song" until the player writes the new position,
-            // which happens within a couple of seconds. Adopting that write is the silent equivalent of the
-            // user's pause/resume trick and removes the ~2 s offset a new song otherwise carries.
-            if (_pendingTrackAnchor)
-            {
-                var writeAge = _timeProviderNow() - state.SampledAtUtc;
-                if (writeAge >= TimeSpan.Zero && writeAge < TimeSpan.FromSeconds(5))
-                {
-                    _frameAnchorAudio = audio - writeAge;
-                    _frameAnchorPosition = statePosition;
-                    _frameAnchorWall = _timeProviderNow() - writeAge;
-                    position = statePosition + writeAge;
-                    _pendingTrackAnchor = false;
-                }
-            }
-
-            // Playback resuming is a perfect synchronisation point: the player restarts exactly where it
-            // stopped, so adopting its reading then (even before the text repaints) clears the accumulated
-            // offset. This automates the pause/resume trick the user discovered on 2026-10-22.
-            var forced = _forceReanchor;
-            _forceReanchor = false;
-            if (candidate.Position > TimeSpan.Zero
-                && (forced || msaaIsFresh)
+            if (msaaIsFresh
+                && candidate.Position > TimeSpan.Zero
                 && (candidate.Position - position).Duration() > TimeSpan.FromSeconds(0.4)
                 && (candidate.Position - position).Duration() < TimeSpan.FromSeconds(30))
             {
                 _frameAnchorAudio = audio;
                 _frameAnchorPosition = candidate.Position;
-                _frameAnchorWall = _timeProviderNow();
                 position = candidate.Position;
             }
 

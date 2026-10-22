@@ -62,20 +62,7 @@ internal sealed class ProcessLoopbackCapture : IDisposable
             Interlocked.Exchange(ref _frames, 0);
         }
 
-        // Report ready even before the first frame arrives: the caller falls back to wall time until then,
-        // and returning false here made every poll take the legacy path instead (2026-10-22).
-        return true;
-    }
-
-    /// <summary>
-    /// Drops the current capture so the background thread opens a new one. KuGou recreates its audio stream
-    /// on some track changes, after which the old capture client stops producing frames and the published
-    /// position freezes (measured 2026-10-22).
-    /// </summary>
-    public void Reset()
-    {
-        Interlocked.Exchange(ref _targetPid, 0);
-        Interlocked.Exchange(ref _frames, 0);
+        return IsAvailable;
     }
 
     public void Dispose()
@@ -115,14 +102,6 @@ internal sealed class ProcessLoopbackCapture : IDisposable
                 {
                     Interlocked.Add(ref _frames, frames);
                     Interlocked.Exchange(ref _lastFrameTick, Environment.TickCount64);
-                }
-                else if (Environment.TickCount64 - Interlocked.Read(ref _lastFrameTick) > 2000)
-                {
-                    // The stream went away (track change, device change, player restart): reopen it.
-                    session.Dispose();
-                    session = null;
-                    activePid = 0;
-                    Thread.Sleep(200);
                 }
 
                 Thread.Sleep(10);
