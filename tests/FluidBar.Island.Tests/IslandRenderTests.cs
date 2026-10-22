@@ -8,8 +8,8 @@ namespace FluidBar.Island.Tests;
 public sealed class IslandRenderTests
 {
     [Theory]
-    [InlineData(IslandMode.Float, 858, 384)]
-    [InlineData(IslandMode.Flush, 858, 384)]
+    [InlineData(IslandMode.Float, 1263, 384)]
+    [InlineData(IslandMode.Flush, 1263, 384)]
     [InlineData(IslandMode.Dock, 488, 444)]
     public void Measure_returns_the_fixed_host_surface(IslandMode mode, double width, double height)
     {
@@ -48,7 +48,7 @@ public sealed class IslandRenderTests
         };
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(1287, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var expected = LayoutTokens.CompactSize(state.Compact!.Value.Kind);
@@ -90,7 +90,7 @@ public sealed class IslandRenderTests
         var state = IslandTestFixtures.Expanded(page);
 
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(1287, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.Equal(576, bitmap.Height);
 
         var shell = IslandMetrics.ShellRect(state);
@@ -158,7 +158,7 @@ public sealed class IslandRenderTests
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
 
         Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(
-            bitmap, new SKRect(0, 0, 858, 384), IslandTestFixtures.Scale, 0));
+            bitmap, new SKRect(0, 0, 1263, 384), IslandTestFixtures.Scale, 0));
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class IslandRenderTests
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Expanded(1, pagePosition: 0.5) with { ReducedMotion = true };
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(1287, bitmap.Width);
+        Assert.Equal(1895, bitmap.Width);
         Assert.True(IslandTestFixtures.CountOpaqueInside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale) > 2000);
     }
 
@@ -210,7 +210,7 @@ public sealed class IslandRenderTests
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Expanded(1);
-        using var bitmap = new SKBitmap(new SKImageInfo(1287, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var bitmap = new SKBitmap(new SKImageInfo(1895, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
         using var canvas = new SKCanvas(bitmap);
         renderer.Render(canvas, state, IslandTestFixtures.Scale);
 

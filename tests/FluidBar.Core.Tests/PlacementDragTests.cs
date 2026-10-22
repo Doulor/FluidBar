@@ -192,7 +192,7 @@ public class PlacementDragTests
             foreach (var fraction in offsets)
             {
                 var dropped = new VisualRect(
-                    (work.Width - 858) * fraction,
+                    (work.Width - 1263) * fraction,
                     (work.Height - 384) * fraction,
                     488,
                     384);

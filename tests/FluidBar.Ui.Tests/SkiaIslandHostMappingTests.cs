@@ -174,11 +174,11 @@ public sealed class SkiaIslandHostMappingTests
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        fixture.Controller.HandleDragStarted(300, 90, timestampMs: 0);
+        fixture.Controller.HandleDragStarted(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 0);
         Assert.True(fixture.Controller.Pager.IsDragging);
 
-        fixture.Controller.HandleDragMoved(-100, 90, timestampMs: 16);
-        fixture.Controller.HandleDragEnded(-100, 90, timestampMs: 32);
+        fixture.Controller.HandleDragMoved(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276 - 400, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 16);
+        fixture.Controller.HandleDragEnded(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276 - 400, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 32);
 
         Assert.Equal(1, fixture.Controller.Pager.SelectedIndex);
         Assert.Equal(PageRef.Media, fixture.Controller.State.Page);
@@ -249,10 +249,10 @@ public sealed class SkiaIslandHostMappingTests
         using var fixture = ControllerFixture.Create();
         fixture.ExpandAndSettle();
 
-        fixture.Controller.HandleDragStarted(300, 90, timestampMs: 0);
+        fixture.Controller.HandleDragStarted(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 0);
         Assert.True(fixture.Controller.Archipelago.IsVisible);
-        fixture.Controller.HandleDragMoved(-100, 90, timestampMs: 16);
-        fixture.Controller.HandleDragEnded(-100, 90, timestampMs: 32);
+        fixture.Controller.HandleDragMoved(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276 - 400, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 16);
+        fixture.Controller.HandleDragEnded(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276 - 400, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 32);
         fixture.RunToRest();
 
         var strip = fixture.Controller.RenderState.Archipelago;

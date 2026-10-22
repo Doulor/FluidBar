@@ -2198,7 +2198,7 @@ public sealed class SkiaIslandController : IDisposable
         var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
 
         // The notification card only grows when its text actually needs the room; short messages keep
-        // the 360 DIP token. The cap is 810 DIP (the second requested +50% over 540).
+        // the 360 DIP token. The cap is 1215 DIP (the third requested +50%).
         if (compactKind == ActivityKind.Notification && _compact.Model is { } notificationModel)
         {
             var measured = MeasureNotificationWidth(notificationModel, settings.FontScale);
@@ -3623,7 +3623,8 @@ private void HandlePageControl(in IslandHitTarget hit)
             return false;
         }
 
-        return _compact.Kind == ActivityKind.Media && _compact.Model.IsActive;
+        return (_compact.Kind == ActivityKind.Media && _compact.Model.IsActive)
+            || (_compact.Kind == ActivityKind.Notification && _compact.Model.ShowsAudioWave);
     }
 
     private void InvalidateDirty(VisualRect damage)
@@ -3804,6 +3805,14 @@ private void HandlePageControl(in IslandHitTarget hit)
         }
 
         var shell = IslandMetrics.ShellRect(_renderState);
+        if (_compact.Kind == ActivityKind.Notification)
+        {
+            // The notification card paints its spectrum at the far right, not in the media text lane.
+            var scale = (float)_renderState.FontScale;
+            return new VisualRect(shell.Right - (45f * scale), shell.Top + 3,
+                48f * scale, Math.Max(24f, shell.Height - 6));
+        }
+
         // Same rectangle the compact media renderer paints the wave in (it tracks the adaptive width).
         var wave = CompactMediaLayout.WaveRect((float)shell.Width, (float)shell.Height);
         return new VisualRect(

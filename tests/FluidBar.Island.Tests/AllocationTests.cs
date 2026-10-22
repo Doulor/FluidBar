@@ -14,7 +14,7 @@ public sealed class AllocationTests
         var notifications = IslandTestFixtures.Expanded(2);
         var widgets = IslandTestFixtures.Expanded(5);
 
-        using var bitmap = new SKBitmap(new SKImageInfo(1287, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var bitmap = new SKBitmap(new SKImageInfo(1895, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
         using var canvas = new SKCanvas(bitmap);
 
         // Warm every text layout, shadow, path and icon for every surface (including pages 2 and 5).
@@ -68,7 +68,7 @@ public sealed class AllocationTests
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Agent();
 
-        using var bitmap = new SKBitmap(new SKImageInfo(1287, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var bitmap = new SKBitmap(new SKImageInfo(1895, 576, SKColorType.Bgra8888, SKAlphaType.Premul));
         using var canvas = new SKCanvas(bitmap);
         for (var i = 0; i < 8; i++)
         {

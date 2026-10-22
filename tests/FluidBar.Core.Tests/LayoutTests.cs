@@ -204,7 +204,7 @@ public class LayoutTests
 
             // Host surface is per-mode fixed; the shell remains 440x284.
             Assert.Equal(host, result.HostSurface);
-            Assert.Equal(mode == IslandMode.Dock ? 488 : 858, host.Width, Eps);
+            Assert.Equal(mode == IslandMode.Dock ? 488 : 1263, host.Width, Eps);
             Assert.Equal(expectedHostHeight, host.Height, Eps);
             Assert.Equal(expectedHostHeight, result.Placement.WindowSizeDip.Height, Eps);
             Assert.Equal(host.Width, result.Placement.WindowSizeDip.Width, Eps);
@@ -518,9 +518,9 @@ public class LayoutTests
         Assert.Equal(444, dockHost.Height, Eps);
         Assert.Equal(76, floatHost.BottomAllowance, Eps);
         Assert.Equal(136, dockHost.BottomAllowance, Eps);
-        Assert.Equal(new VisualRect(209, 24, 440, 284), floatHost.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(411.5, 24, 440, 284), floatHost.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(24, 24, 440, 284), dockHost.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(253, 316, 352, 32), floatHost.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(455.5, 316, 352, 32), floatHost.ArchipelagoStripLocal);
         Assert.Equal(new VisualRect(24, 316, 440, 52), dockHost.DockStripLocal);
         Assert.Equal(new VisualRect(68, 376, 352, 32), dockHost.ArchipelagoStripLocal);
         Assert.True(floatHost.BottomBandLocal.Height > floatHost.BottomPadding);
@@ -884,9 +884,9 @@ public class LayoutTests
         var monitor = Monitor(96);
         var placement = WindowPlacementConverter.PlaceWindow(new VisualRect(100, 100, 440, 284), monitor);
 
-        Assert.Equal(858, placement.WindowSizeDip.Width, Eps);
+        Assert.Equal(1263, placement.WindowSizeDip.Width, Eps);
         Assert.Equal(384, placement.WindowSizeDip.Height, Eps);
-        Assert.Equal(new VisualRect(76, 76, 858, 384), placement.WindowVisual);
+        Assert.Equal(new VisualRect(76, 76, 1263, 384), placement.WindowVisual);
         Assert.Equal(new VisualPoint(24, 24), placement.ShellLocalOffset);
     }
 
@@ -902,9 +902,9 @@ public class LayoutTests
                     Request(form, mode, IslandAnchor.TopCenter, compactKind: ActivityKind.Media),
                     monitor);
                 var expectedHeight = mode == IslandMode.Dock ? 444 : 384;
-                Assert.Equal(mode == IslandMode.Dock ? 976 : 1716, result.Placement.WindowPixel.Width);
+                Assert.Equal(mode == IslandMode.Dock ? 976 : 2526, result.Placement.WindowPixel.Width);
                 Assert.Equal(WindowPlacementConverter.Ceil(expectedHeight * monitor.Scale), result.Placement.WindowPixel.Height);
-                Assert.Equal(mode == IslandMode.Dock ? 488 : 858, result.Placement.WindowSizeDip.Width, Eps);
+                Assert.Equal(mode == IslandMode.Dock ? 488 : 1263, result.Placement.WindowSizeDip.Width, Eps);
                 Assert.Equal(expectedHeight, result.Placement.WindowSizeDip.Height, Eps);
             }
         }

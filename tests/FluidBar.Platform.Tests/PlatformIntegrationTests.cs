@@ -269,7 +269,7 @@ public sealed class PlatformIntegrationTests : IAsyncLifetime
         try
         {
             Assert.NotEqual(IntPtr.Zero, host.Handle);
-            Assert.Equal(1287, host.SurfaceSizePx.Width);   // 858 DIP * 1.5
+            Assert.Equal(1895, host.SurfaceSizePx.Width);   // 1263 DIP * 1.5
             Assert.Equal(576, host.SurfaceSizePx.Height);  // 384 DIP * 1.5
 
             var exStyle = NativeMethods.User32.GetWindowLongPtr(host.Handle, NativeMethods.GWL_EXSTYLE).ToInt64();
@@ -280,12 +280,12 @@ public sealed class PlatformIntegrationTests : IAsyncLifetime
             // One SetWindowPos: the panel top-left lands 24 DIP inside the window.
             var shell = new FluidBar.Core.Layout.VisualRect(100, 40, 440, 284);
             var placement = host.Place(monitor, shell, LayeredHostMode.Float);
-            Assert.Equal((int)Math.Round((100 - 209) * 1.5), placement.WindowPixel.X);
+            Assert.Equal((int)Math.Round((100 - 411.5) * 1.5), placement.WindowPixel.X);
             Assert.Equal((int)Math.Round((40 - 24) * 1.5), placement.WindowPixel.Y);
             NativeMethods.User32.GetWindowRect(host.Handle, out var windowRect);
             Assert.Equal(placement.WindowPixel.X, windowRect.Left);
             Assert.Equal(placement.WindowPixel.Y, windowRect.Top);
-            Assert.Equal(1287, windowRect.Width);
+            Assert.Equal(1895, windowRect.Width);
             Assert.Equal(576, windowRect.Height);
 
             // A full frame and a dirty frame must both be accepted by UpdateLayeredWindow.

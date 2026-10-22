@@ -379,7 +379,7 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void Notification_width_grows_only_for_long_text_up_to_the_810_cap()
+    public void Notification_width_grows_only_for_long_text_up_to_the_1215_cap()
     {
         using var shortFixture = ControllerFixture.Create();
         shortFixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
@@ -404,6 +404,38 @@ public sealed class SkiaIslandControlTests
         var state = longFixture.Controller.RenderState;
         Assert.Equal(LayoutTokens.NotificationMaxWidth, state.ShellWidth, 1);
         Assert.True(IslandMetrics.ShellRect(state).Right <= HostSurface.Float.Width + 0.5f);
+    }
+
+    [Fact]
+    public void Notification_spectrum_phase_advances_while_media_is_playing()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
+        {
+            Title = "Midnight City",
+            Subtitle = "M83",
+            IsActive = true,
+            ShowsAudioWave = true,
+            ProgressPercent = 42,
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "QQ",
+            Body = "New message",
+            SourceName = "QQ",
+        }, 2, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var before = fixture.Controller.RenderState.MotionPhase;
+        for (var i = 0; i < 4; i++)
+        {
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(16));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        }
+
+        Assert.True(fixture.Controller.RenderState.MotionPhase > before);
     }
 
     private static SKRect Page(int page, ControllerFixture fixture)
