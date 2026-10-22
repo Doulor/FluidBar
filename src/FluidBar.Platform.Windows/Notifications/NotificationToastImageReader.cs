@@ -9,7 +9,7 @@ namespace FluidBar.Platform.Windows.Notifications;
 /// notification database payload and is not part of the WinRT projection. The database is opened
 /// read-only; failure always returns null so callers can fall back to the app icon.
 /// </summary>
-internal static class NotificationToastImageReader
+public static class NotificationToastImageReader
 {
     private const int SqliteOk = 0;
     private const int SqliteRow = 100;
@@ -54,6 +54,37 @@ internal static class NotificationToastImageReader
         {
             return null;
         }
+    }
+
+    /// <summary>Returns the toast's activation URI from its <c>launch</c> attribute, if present.</summary>
+    public static string? TryReadLaunch(uint notificationId)
+    {
+        try
+        {
+            if (!File.Exists(DatabasePath))
+            {
+                return null;
+            }
+
+            var xml = ReadPayload(notificationId);
+            if (string.IsNullOrWhiteSpace(xml))
+            {
+                return null;
+            }
+
+            return FindLaunch(xml);
+
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static string? FindLaunch(string xml)
+    {
+        var launch = XDocument.Parse(xml).Root?.Attribute("launch")?.Value;
+        return string.IsNullOrWhiteSpace(launch) ? null : launch;
     }
 
     private static string? ReadPayload(uint notificationId)

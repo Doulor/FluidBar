@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using FluidBar.App.Island;
 using FluidBar.App.Localization;
@@ -1231,8 +1232,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 "no audio-output picker service exists (needs an IAudioOutputService over IMMDeviceEnumerator)"),
             IslandPlatformActionKind.MediaQueue => Unsupported(
                 "no media queue service exists (the GSMTC snapshot exposes no queue)"),
-            IslandPlatformActionKind.NotificationActivate => Defer(
-                action, "no public Windows API activates another app's toast; open the toast from Action Center instead"),
+            IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
             IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
             IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
@@ -1514,6 +1514,61 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         var copyText = action.Text;
         _ = RunAsync(() => _clipboard.SetTextAsync(copyText), "island.actions.notification-copy-code");
         return IslandActionResult.Handled;
+    }
+
+    /// <summary>
+    /// Opens the notification's originating app/action. WinRT cannot activate another app's toast,
+    /// but the toast XML carries the app's <c>launch</c> protocol URI (QQ uses a ntqq:// deep link);
+    /// use it first, then fall back to the running app's executable.
+    /// </summary>
+    private IslandActionResult ActivateNotification(int index)
+    {
+        var recent = _notifications.Current?.Recent ?? ImmutableArray<NotificationEntry>.Empty;
+        if (index < 0 || index >= Math.Min(PageNotificationLimit, recent.Length))
+        {
+            return Unsupported("the notification row no longer exists");
+        }
+
+        var entry = recent[index];
+        var launch = NotificationToastImageReader.TryReadLaunch(entry.Id);
+        if (!string.IsNullOrWhiteSpace(launch))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(launch) { UseShellExecute = true });
+                return IslandActionResult.Handled;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Platform, "island.actions.notification-launch-failed",
+                    $"Launching notification URI '{launch}' failed; falling back to the app executable.", ex);
+            }
+        }
+
+        try
+        {
+            foreach (var process in Process.GetProcesses())
+            {
+                if (!process.ProcessName.Equals(entry.AppName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var path = process.MainModule?.FileName;
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                    return IslandActionResult.Handled;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Platform, "island.actions.notification-app-launch-failed",
+                "Opening the notification app executable failed.", ex);
+        }
+
+        return Unsupported("the notification has no launch URI and no running app executable");
     }
 
     /// <summary>

@@ -41,4 +41,22 @@ public sealed class NotificationToastImageReaderTests
 
         Assert.Equal(@"D:\pictures\hero.jpg", NotificationToastImageReader.FindImageSource(xml));
     }
+
+    [Fact]
+    public void FindLaunch_ReturnsTheToastProtocolUri()
+    {
+        const string xml = """
+            <toast launch="ntqq-notification://externalCommand?subcmd=openExternalWindow;peerUid=42;scene=aio;">
+              <visual>
+                <binding template="ToastGeneric">
+                  <text>QQ message</text>
+                </binding>
+              </visual>
+            </toast>
+            """;
+
+        Assert.Equal(
+            "ntqq-notification://externalCommand?subcmd=openExternalWindow;peerUid=42;scene=aio;",
+            NotificationToastImageReader.FindLaunch(xml));
+    }
 }

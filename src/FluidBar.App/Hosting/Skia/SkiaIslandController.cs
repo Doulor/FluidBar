@@ -1396,6 +1396,15 @@ public sealed class SkiaIslandController : IDisposable
                 return ActivateSecondaryNotification();
 
             case IslandHitKind.Compact:
+                if (_compact.Kind == ActivityKind.Notification)
+                {
+                    // The compact notification card is itself the notification action: open the
+                    // originating app (QQ deep link) instead of expanding the island first.
+                    DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, 0),
+                        0);
+                    return true;
+                }
+
                 if (hit.Control == IslandPageControl.PlayPause)
                 {
                     DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.MediaTogglePlay), hit.PageIndex);

@@ -342,9 +342,10 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void Notification_takes_the_normal_island_position_and_opens_the_notifications_page()
+    public void Notification_takes_the_normal_island_position_and_activates_the_source_app()
     {
-        using var fixture = ControllerFixture.Create();
+        var actions = new RecordingIslandPlatformActions();
+        using var fixture = ControllerFixture.Create(actions: actions);
         fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
         {
             Title = "Midnight City",
@@ -371,9 +372,10 @@ public sealed class SkiaIslandControlTests
         fixture.Controller.HandlePointerReleased(primary.MidX, primary.MidY);
         fixture.RunToRest();
 
-        var expanded = fixture.Controller.RenderState;
-        Assert.Equal(ShellForm.Expanded, expanded.Form);
-        Assert.Equal(PageSlotKind.Notifications, expanded.Pages.PageSlotAt(expanded.PageIndex)?.Kind);
+        var action = Assert.Single(actions.Calls);
+        Assert.Equal(IslandPlatformActionKind.NotificationActivate, action.Kind);
+        Assert.Equal(0, action.Index);
+        Assert.Equal(ShellForm.Compact, fixture.Controller.RenderState.Form);
     }
 
     [Fact]

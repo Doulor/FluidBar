@@ -59,7 +59,10 @@ public static class SkiaIslandStateBuilder
             && (content.Media?.IsPlaying == true
                 || island.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Media && ghost.IsActive));
         var isNotification = kind == ActivityKind.Notification;
-        var notification = isNotification ? FindNotification(content, model.SourceName, model.Title) : null;
+        var notification = isNotification
+            ? FindNotification(content, model.SourceName, model.Title)
+                ?? (content.Notifications.IsDefaultOrEmpty ? null : content.Notifications[0])
+            : null;
         var notificationTime = isNotification
             ? notification?.TimeText ?? localizer.Get(LocKeys.Notifications.JustNow)
             : null;
