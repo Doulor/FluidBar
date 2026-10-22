@@ -865,8 +865,14 @@ internal sealed class AppBootstrap
 
     private async Task RebuildPluginRuntimeAsync()
     {
+        await _pluginRuntimeRebuildGate.WaitAsync().ConfigureAwait(true);
         try
         {
+            if (_shutdownStarted)
+            {
+                return;
+            }
+
             var old = _pluginRuntime;
             _pluginRuntime = null;
             if (old is not null)
@@ -891,6 +897,10 @@ internal sealed class AppBootstrap
         {
             _logger.Warning(LogCategories.Plugin, "plugin.runtime.rebuild-failed",
                 "The plugin runtime could not be rebuilt after a safe-mode change.", ex);
+        }
+        finally
+        {
+            _pluginRuntimeRebuildGate.Release();
         }
     }
 
@@ -1242,6 +1252,7 @@ internal sealed class AppBootstrap
         }
     }
     private bool _clipboardSearchWasPinned;
+    private readonly SemaphoreSlim _pluginRuntimeRebuildGate = new(1, 1);
     private bool _shutdownStarted;
     private int _servicesDisposed;
 
