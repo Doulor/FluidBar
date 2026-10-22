@@ -43,7 +43,8 @@ internal sealed class ControllerFixture : IDisposable
         IIslandPlatformActions? actions = null,
         RecordingAppLogger? logger = null,
         Func<SystemAppearanceSnapshot>? appearance = null,
-        MediaPillPreferences? mediaPill = null)
+        MediaPillPreferences? mediaPill = null,
+        int? restoredPage = null)
     {
         var time = new FakeTimeProvider();
         var localizer = new FakeLocalizer();
@@ -61,7 +62,7 @@ internal sealed class ControllerFixture : IDisposable
             PlatformActions = actions,
             TargetFrameRate = 120,
             AppearanceSnapshot = appearance,
-        }, mediaPill: mediaPill ?? MediaPillPreferences.Default);
+        }, mediaPill: mediaPill ?? MediaPillPreferences.Default, restoredPage: restoredPage);
         controller.Start();
         return new ControllerFixture(controller, settingsController, data, time, recording);
     }

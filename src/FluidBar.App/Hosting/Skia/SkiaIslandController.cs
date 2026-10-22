@@ -212,7 +212,7 @@ public sealed class SkiaIslandController : IDisposable
     /// <param name="dispatcher">Optional dispatcher (defaults to a UI-thread synchronization-context dispatcher).</param>
     /// <param name="mediaPill">Media pill preferences (defaults to the media plugin's settings file).</param>
     public SkiaIslandController(SkiaIslandHostOptions options, SkiaHostDispatcher? dispatcher = null,
-        MediaPillPreferences? mediaPill = null)
+        MediaPillPreferences? mediaPill = null, int? restoredPage = null)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _mediaPill = mediaPill ?? new MediaPillPreferences();
@@ -236,13 +236,13 @@ public sealed class SkiaIslandController : IDisposable
         var profile = _settings.Current.BuildMotionProfile(
             SkiaIslandThemeMapper.ReducedMotion(_settings.Current, _appearance()));
         _motion = new SkiaIslandMotion(profile);
+        _archipelago = new SkiaArchipelago(profile);
         // The page count is not final at construction time, so the restored index is remembered here and
         // applied on the first frame where the pager knows how many pages exist (see ApplyRestoredPage).
-        _pendingRestoredPage = PageSelectionStore.Load();
+        _pendingRestoredPage = restoredPage ?? PageSelectionStore.Load();
         _pager = new SkiaPager(IndexOfPage(State.Page), Math.Max(1, _pages.PageCount));
         _pager.PageChanged += OnPagerPageChanged;
         ApplyRestoredPage();
-        _archipelago = new SkiaArchipelago(profile);
 
         _settings.Changed += OnSettingsChanged;
         _data.Changed += OnDataChanged;
