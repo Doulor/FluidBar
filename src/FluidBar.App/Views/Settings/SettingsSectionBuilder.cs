@@ -1319,6 +1319,8 @@ public static class SettingsSectionBuilder
             {
                 Language = AppSettings.Default.Language,
                 Theme = AppSettings.Default.Theme,
+                PowerMode = AppSettings.Default.PowerMode,
+                LyricOffsetMs = AppSettings.Default.LyricOffsetMs,
                 StartWithWindows = AppSettings.Default.StartWithWindows,
                 TrayIcon = AppSettings.Default.TrayIcon,
                 AutoUpdate = AppSettings.Default.AutoUpdate,

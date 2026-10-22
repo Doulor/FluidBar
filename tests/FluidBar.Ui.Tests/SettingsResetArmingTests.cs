@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Settings;
+using FluidBar.Core.Configuration;
 
 namespace FluidBar.Ui.Tests;
 
@@ -28,6 +29,8 @@ public sealed class SettingsResetArmingTests
                 Palette = "nord",
                 PanelRadius = 34,
                 Mode = "flush",
+                PowerMode = IslandPowerMode.Saver,
+                LyricOffsetMs = 300,
                 Advanced = new AdvancedSettings { FrameStats = true, SafeMode = true },
             });
             var window = new SettingsWindow(controller, localizer, SettingsWindowSection.Advanced);
@@ -55,6 +58,8 @@ public sealed class SettingsResetArmingTests
             Assert.Equal("obsidian", controller.Current.Palette);
             Assert.Equal(30, Math.Round(controller.Current.PanelRadius));
             Assert.Equal("float", controller.Current.Mode);
+            Assert.Equal(IslandPowerMode.Performance, controller.Current.PowerMode);
+            Assert.Equal(0, controller.Current.LyricOffsetMs);
             Assert.False(controller.Current.Advanced.FrameStats);
             Assert.False(controller.Current.Advanced.SafeMode);
 
