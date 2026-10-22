@@ -1,4 +1,5 @@
 using FluidBar.Platform.Windows.Calendar;
+using FluidBar.Platform.Windows.Diagnostics;
 
 namespace FluidBar.Platform.Tests;
 
@@ -31,6 +32,32 @@ public sealed class CalendarEventServiceTests
         Assert.False(CalendarEventService.CountsEqual(
             forward,
             CalendarEventService.CountByDay([first, first, second])));
+    }
+
+    [Fact]
+    public async Task RefreshForTest_updates_counts_and_only_raises_when_content_changes()
+    {
+        var first = new DateTimeOffset(2026, 10, 22, 9, 0, 0, TimeSpan.FromHours(8));
+        var second = new DateTimeOffset(2026, 10, 22, 18, 0, 0, TimeSpan.FromHours(8));
+        var calls = 0;
+        await using var service = new CalendarEventService(
+            NullPlatformLogger.Instance,
+            readStarts: _ =>
+            {
+                calls++;
+                return Task.FromResult<IReadOnlyList<DateTimeOffset>>([first, second]);
+            });
+        var changes = 0;
+        service.Changed += (_, _) => changes++;
+
+        await service.RefreshForTestAsync();
+        Assert.Equal(1, calls);
+        Assert.Equal(2, service.Counts[new DateOnly(2026, 10, 22)]);
+        Assert.Equal(1, changes);
+
+        await service.RefreshForTestAsync();
+        Assert.Equal(2, calls);
+        Assert.Equal(1, changes);
     }
 
     [Fact]

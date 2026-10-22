@@ -13,6 +13,7 @@ public sealed class CalendarEventService : IAsyncDisposable
 {
     private readonly IPlatformLogger _logger;
     private readonly TimeProvider _time;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<DateTimeOffset>>> _readStarts;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly CancellationToken _lifetimeToken;
     private ITimer? _timer;
@@ -21,10 +22,14 @@ public sealed class CalendarEventService : IAsyncDisposable
     private ImmutableDictionary<DateOnly, int> _counts = ImmutableDictionary<DateOnly, int>.Empty;
 
     /// <summary>Creates the service; call <see cref="StartAsync"/> once.</summary>
-    public CalendarEventService(IPlatformLogger logger, TimeProvider? timeProvider = null)
+    public CalendarEventService(
+        IPlatformLogger logger,
+        TimeProvider? timeProvider = null,
+        Func<CancellationToken, Task<IReadOnlyList<DateTimeOffset>>>? readStarts = null)
     {
         _logger = logger ?? NullPlatformLogger.Instance;
         _time = timeProvider ?? TimeProvider.System;
+        _readStarts = readStarts ?? ReadWindowsStartsAsync;
         _lifetimeToken = _lifetime.Token;
     }
 
@@ -56,15 +61,13 @@ public sealed class CalendarEventService : IAsyncDisposable
     {
         try
         {
-            var store = await AppointmentManager.RequestStoreAsync(AppointmentStoreAccessType.AllCalendarsReadOnly);
-            if (store is null || cancellationToken.IsCancellationRequested)
+            if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
 
-            var start = new DateTimeOffset(DateTime.Today);
-            var appointments = await store.FindAppointmentsAsync(start, TimeSpan.FromDays(62));
-            var next = CountByDay(appointments.Select(appointment => appointment.StartTime));
+            var starts = await _readStarts(cancellationToken);
+            var next = CountByDay(starts);
             if (!CountsEqual(next, _counts))
             {
                 Volatile.Write(ref _counts, next);
@@ -96,6 +99,21 @@ public sealed class CalendarEventService : IAsyncDisposable
         }
 
         return true;
+    }
+
+    internal Task RefreshForTestAsync() => RefreshAsync(_lifetimeToken);
+
+    private static async Task<IReadOnlyList<DateTimeOffset>> ReadWindowsStartsAsync(CancellationToken cancellationToken)
+    {
+        var store = await AppointmentManager.RequestStoreAsync(AppointmentStoreAccessType.AllCalendarsReadOnly);
+        if (store is null)
+        {
+            return [];
+        }
+
+        var start = new DateTimeOffset(DateTime.Today);
+        var appointments = await store.FindAppointmentsAsync(start, TimeSpan.FromDays(62));
+        return appointments.Select(appointment => appointment.StartTime).ToArray();
     }
 
     /// <summary>Pure date bucketing used by the refresh loop and unit tests.</summary>
