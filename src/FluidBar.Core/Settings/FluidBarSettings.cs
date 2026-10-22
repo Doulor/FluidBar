@@ -442,7 +442,7 @@ public static class BuiltinPlugins
 public sealed record PluginsSettings
 {
     /// <summary>Enabled plugin ids.</summary>
-    public ImmutableArray<string> Enabled { get; init; } = [BuiltinPlugins.Media, BuiltinPlugins.Clipboard];
+    public ImmutableArray<string> Enabled { get; init; } = [BuiltinPlugins.Media, BuiltinPlugins.Clipboard, BuiltinPlugins.Notifications];
 
     /// <summary>Update channel (<c>stable</c> or <c>beta</c>).</summary>
     public string Channel { get; init; } = "stable";

@@ -87,6 +87,7 @@ public class SettingsSerializationTests
         Assert.NotNull(parsed);
         Assert.Equal(IslandMode.Float, parsed!.Island.Mode);
         Assert.Equal(0.96, parsed.Appearance.FillOpacity, 1e-9);
+        Assert.Contains(BuiltinPlugins.Notifications, parsed.Plugins.Enabled);
     }
 
     [Fact]
