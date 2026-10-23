@@ -1,7 +1,8 @@
 # 液态玻璃 · 网页原型（选型用）
 
 > 直接双击 `index.html` 用 **Edge / Chrome** 打开（`backdrop-filter` + SVG 滤镜只在 Chromium 内核可用）。
-> 默认打开 B（折射玻璃）；全览模式会把 6 个版本同时渲染在一个页面里。
+> 默认打开 B（折射玻璃）；全览模式会把 7 个版本同时渲染在一个页面里。
+> 右侧「微调」可以实时改 **模糊 / 染色 / 饱和 / 边缘高光 / 折射强度**，点「复制参数」把数值发我。
 > 顶部可切换 6 个版本；也可以按 `1`–`6` 切换、`B` 开关背景模糊、`G` 全览对比。
 
 ## 为什么重做
@@ -24,6 +25,7 @@
 | D | 厚镜玻璃 | 强折射 | blur 16px · IOR 2.4 · 折射带 26px | 最接近 iOS 26 lensing，视觉冲击最强 |
 | E | 水色玻璃 | 折射 + 青色染色 | blur 12px · tint rgba(26,96,122,.28) | 媒体播放态 / 品牌色，但会改变背景色相 |
 | F | 烟灰玻璃 | CSS blur | blur 34px · sat 150% · tint 46% | 深色桌面/亮壁纸，最接近现在的深色岛 |
+| G | 纯玻璃 | CSS blur | blur 26px · sat 170% · tint 30% · **无描边** | 觉得"边"很假时选这个，只有模糊+染色+柔和阴影 |
 
 截图：
 
@@ -31,7 +33,7 @@
 |---|---|
 | [`shots/grid.jpg`](shots/grid.jpg) | 页面「全览」模式实拍（6 个版本同屏，含真实 backdrop-filter） |
 | [`shots/overview.jpg`](shots/overview.jpg) | 6 个版本各裁一张的 3×2 拼图 |
-| `shots/A-frosted.jpg` … `F-smoke.jpg` | 单版本截图 |
+| `shots/A-frosted.jpg` … `G-pure.jpg` | 单版本截图（7 张） |
 | [`shots/A-frosted-blur-off.jpg`](shots/A-frosted-blur-off.jpg) | 同一版本关掉 `backdrop-filter` 的对照（"模糊" vs "只是变暗"） |
 | [`shots/B-vs-reference.jpg`](shots/B-vs-reference.jpg) | B 版本 vs 参考实现 `archisvaze/liquid-glass` |
 

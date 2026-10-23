@@ -77,6 +77,18 @@
       </div>
       <p id="vDesc"></p>
       <dl id="vMeta"></dl>
+      <div class="tuner" id="tuner">
+        <h3>微调 <span>（实时生效，可复制数值给我）</span></h3>
+        <label>模糊 <input type="range" id="tBlur" min="0" max="44" step="1"><output id="tBlurV"></output></label>
+        <label>染色 <input type="range" id="tTint" min="0" max="60" step="1"><output id="tTintV"></output></label>
+        <label>饱和 <input type="range" id="tSat" min="100" max="260" step="5"><output id="tSatV"></output></label>
+        <label>边缘高光 <input type="range" id="tEdge" min="0" max="100" step="2"><output id="tEdgeV"></output></label>
+        <label id="tRefractRow">折射 <input type="range" id="tRefract" min="0" max="200" step="5"><output id="tRefractV"></output></label>
+        <div class="tuner-actions">
+          <button type="button" id="copyParams">复制参数</button>
+          <span id="copyHint"></span>
+        </div>
+      </div>
       <div class="hintbox">
         <b>看什么</b>
         <ul>
