@@ -434,3 +434,21 @@
 
 回归测试 `White_backdrops_stay_dark_enough_for_white_labels`：纯白背景 + 液态玻璃，采样壳体空白处的亮度必须 < 0.45
 （修前 0.58，修后 <0.45）。
+
+### 15.6 白底上的音乐卡片 + 亮暗切换的线性过渡（2026-10-23 反馈）
+
+**音乐卡片灰字看不清**：上一轮只加强了 scrim，纯白背景下壳体仍在 0.49 亮度。这轮：
+
+- `BackdropTintMaxFactor` 1.75 → **2.60**（纯白背景下染色约 0.78 alpha，壳体亮度 < 0.35）。
+- 新增 `IslandRenderer.AdaptThemeForBackdrop`：亮背景时把 `ForegroundSecondary` / `ForegroundTertiary`
+  向亮色插值（#9B9BA5 → #D2D8E2），灰字在深色玻璃上有对比度。
+- 测试 `Expanded_media_panel_on_white_keeps_the_card_readable`（纯白背景，展开面板 5 个采样点亮度 < 0.35；
+  修前 0.49）。
+
+**亮暗切换瞬变**：玻璃的染色/遮罩/文字都是背景亮度的纯函数，桌面一变就跳。这轮改成缓动：
+
+- `BackdropLuminanceSmoother`（Core）：指数缓动，时间常数 160 ms，单帧步长上限 50 ms（避免空闲后第一帧跳变），
+  与帧率无关；测试 4 例（首帧只走一点 / 几个时间常数内收敛 / 33ms 与 16.5ms 步进结果一致 / Reset 直接到位）。
+- `SkiaIslandHost`：每帧推进平滑值，采到的背景图做 **160 ms 交叉淡入**（`PreviousBackdrop` + `BackdropBlend`，
+  背景图按 1/6 缩放后很小，复制一份安全且便宜），期间帧循环保持运行。
+- 测试 `Backdrop_captures_cross_fade_instead_of_swapping`：黑图→白图 交叉 0.5 时亮度落在两者之间。

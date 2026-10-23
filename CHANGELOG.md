@@ -2,6 +2,15 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 白底音乐卡片可读性 + 亮暗切换线性过渡
+
+- 纯白背景下染色上限 1.75 → 2.60（壳体亮度 0.49 → <0.35）；`AdaptThemeForBackdrop` 在亮背景时提亮次要/三级文字。
+  新测试 `Expanded_media_panel_on_white_keeps_the_card_readable`。
+- 新增 `BackdropLuminanceSmoother`（160 ms 指数缓动，单帧上限 50 ms）+ 背景图 160 ms 交叉淡入
+  （`PreviousBackdrop`/`BackdropBlend`），玻璃的染色不再随桌面瞬变；帧循环在过渡期间保活。
+- 新测试 4 例平滑器 + `Backdrop_captures_cross_fade_instead_of_swapping`。
+- 全量 2663 测试绿。
+
 ## 2026-10-23 — 白底白字可读性
 
 - 亮背景 scrim 加强：`ScrimMaxAlpha` 0.30 → 0.62、`ScrimHeightFactor` 0.55 → 0.72；纯白背景下染色上限 1.40 → 1.75。

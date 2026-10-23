@@ -1,4 +1,5 @@
 using FluidBar.Core.Activities;
+using SkiaSharp;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Interaction;
 
@@ -93,6 +94,15 @@ public readonly record struct IslandRenderState
     /// <see langword="null"/> keeps the legacy <see cref="Form"/>-based visibility.
     /// </summary>
     public double? ChromeOpacity { get; init; }
+
+    /// <summary>
+    /// Previous backdrop capture, cross-faded with <see cref="Backdrop"/> so a desktop that changes
+    /// brightness does not swap the glass content in one frame.
+    /// </summary>
+    public SKImage? PreviousBackdrop { get; init; }
+
+    /// <summary>Cross-fade weight of <see cref="Backdrop"/> against <see cref="PreviousBackdrop"/> (0..1).</summary>
+    public double BackdropBlend { get; init; } = 1.0;
 
     /// <summary>
     /// Yield progress 0..1 (0 = interactive, 1 = fully yielded). Drives the "soften" animation that is

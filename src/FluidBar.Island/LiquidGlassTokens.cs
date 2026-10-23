@@ -23,7 +23,7 @@ public static class LiquidGlassTokens
     public const double BackdropTintMinFactor = 0.90;
 
     /// <summary>Adaptive tint upper bound.</summary>
-    public const double BackdropTintMaxFactor = 1.75;
+    public const double BackdropTintMaxFactor = 2.60;
 
     /// <summary>
     /// Vibrancy scrim: extra background wash behind the top text band when the backdrop is bright.

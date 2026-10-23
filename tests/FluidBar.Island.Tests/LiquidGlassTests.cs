@@ -245,6 +245,94 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Expanded_media_panel_on_white_keeps_the_card_readable()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var white = new SKBitmap(info);
+        using (var canvas = new SKCanvas(white))
+        {
+            canvas.Clear(SKColors.White);
+        }
+
+        using var image = SKImage.FromBitmap(white);
+        using var panel = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var worst = 0d;
+        foreach (var fraction in new[] { 0.15, 0.35, 0.55, 0.75, 0.92 })
+        {
+            var x = (int)Math.Round((shell.Left + 10) * IslandTestFixtures.Scale);
+            var y = (int)Math.Round((shell.Top + (shell.Height * fraction)) * IslandTestFixtures.Scale);
+            var pixel = panel.GetPixel(x, y);
+            var luma = ((0.2126 * pixel.Red) + (0.7152 * pixel.Green) + (0.0722 * pixel.Blue)) / 255.0;
+            worst = Math.Max(worst, luma);
+        }
+
+        // White labels (and the grey media subtitle) need a dark card surface: without the heavy tint the
+        // panel stayed near-white and the music card's text disappeared (reported 2026-10-23).
+        Assert.True(worst < 0.35, $"the expanded panel must darken on white backdrops, worst luma {worst:0.00}");
+    }
+
+    [Fact]
+    public void Backdrop_captures_cross_fade_instead_of_swapping()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.MediaCompact() with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var darkBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(darkBitmap))
+        {
+            canvas.Clear(new SKColor(0x20, 0x20, 0x20));
+        }
+
+        using var lightBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(lightBitmap))
+        {
+            canvas.Clear(new SKColor(0xE0, 0xE0, 0xE0));
+        }
+
+        using var dark = SKImage.FromBitmap(darkBitmap);
+        using var light = SKImage.FromBitmap(lightBitmap);
+
+        using var solidDark = renderer.RenderToBitmap(
+            state with { Backdrop = dark, BackdropBlend = 1, BackdropLuminance = 0.5 }, IslandTestFixtures.Scale);
+        using var solidLight = renderer.RenderToBitmap(
+            state with { Backdrop = light, BackdropBlend = 1, BackdropLuminance = 0.5 }, IslandTestFixtures.Scale);
+        using var mid = renderer.RenderToBitmap(
+            state with
+            {
+                Backdrop = light,
+                PreviousBackdrop = dark,
+                BackdropBlend = 0.5,
+                BackdropLuminance = 0.5,
+            },
+            IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var x = (int)Math.Round((shell.Left + 6) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round(shell.MidY * IslandTestFixtures.Scale);
+        var lumaDark = Luma(solidDark.GetPixel(x, y));
+        var lumaLight = Luma(solidLight.GetPixel(x, y));
+        var lumaMid = Luma(mid.GetPixel(x, y));
+
+        Assert.True(lumaLight > lumaDark + 20, $"the two captures must differ ({lumaDark:0} vs {lumaLight:0})");
+        Assert.True(
+            lumaMid > lumaDark + 3 && lumaMid < lumaLight - 3,
+            $"the blended frame must sit between them ({lumaDark:0} .. {lumaMid:0} .. {lumaLight:0})");
+    }
+
+    [Fact]
     public void White_backdrops_stay_dark_enough_for_white_labels()
     {
         var theme = Liquid;

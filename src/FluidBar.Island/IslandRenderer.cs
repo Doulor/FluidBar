@@ -470,6 +470,38 @@ public sealed class IslandRenderer : IDisposable
         return SKColorFilter.CreateColorMatrix(matrix);
     }
 
+    /// <summary>
+    /// Bright desktops turn the glass into dark glass (heavy tint), which leaves the grey secondary text
+    /// too dim; lift it towards the primary ink so labels and subtitles stay readable on white pages.
+    /// </summary>
+    private static IslandTheme AdaptThemeForBackdrop(IslandTheme theme, in IslandRenderState state)
+    {
+        if (theme.Material != IslandMaterial.LiquidGlass || state.Backdrop is null)
+        {
+            return theme;
+        }
+
+        var luminance = Math.Clamp(state.BackdropLuminance, 0, 1);
+        if (luminance <= 0.55)
+        {
+            return theme;
+        }
+
+        var t = (float)Math.Clamp((luminance - 0.55) / 0.45, 0, 1);
+        return theme with
+        {
+            ForegroundSecondary = Mix(theme.ForegroundSecondary, new SKColor(0xD2, 0xD8, 0xE2), t),
+            ForegroundTertiary = Mix(theme.ForegroundTertiary, new SKColor(0xB6, 0xBE, 0xCA), t),
+        };
+    }
+
+    private static SKColor Mix(SKColor from, SKColor to, float t)
+        => new(
+            (byte)(from.Red + ((to.Red - from.Red) * t)),
+            (byte)(from.Green + ((to.Green - from.Green) * t)),
+            (byte)(from.Blue + ((to.Blue - from.Blue) * t)),
+            from.Alpha);
+
     private void DrawSceneWithMaterialBlend(SKCanvas canvas, in IslandRenderState state, float dpiScale)
     {
         // Material swap (spec 3.4: 180 ms cross-fade). The shell body is painted twice with premultiplied
@@ -490,7 +522,7 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawSceneCore(SKCanvas canvas, in IslandRenderState state, float dpiScale, IslandTheme theme)
     {
-        _theme = theme;
+        _theme = AdaptThemeForBackdrop(theme, state);
         var shell = IslandMetrics.ShellRect(state);
         var opacity = (float)Math.Clamp(state.Opacity, 0, 1);
         var press = (float)Math.Clamp(state.PressScale, 0.5, 1.5);
@@ -1153,6 +1185,18 @@ public sealed class IslandRenderer : IDisposable
     /// <summary>Paints the blurred desktop capture inside the shell silhouette (liquid glass).</summary>
     private void DrawBackdrop(SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity)
     {
+        var blend = (float)Math.Clamp(state.BackdropBlend, 0, 1);
+        if (state.PreviousBackdrop is { } previous && blend < 0.999f)
+        {
+            DrawBackdropCore(canvas, state, path, previous, opacity * (1f - blend), lensBand: false);
+        }
+
+        DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: true);
+    }
+
+    private void DrawBackdropCore(
+        SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity, bool lensBand)
+    {
         var surface = IslandMetrics.SurfaceSize(state.Mode);
         var origin = state.ShellOrigin;
         var destination = new SKRect(
@@ -1178,7 +1222,7 @@ public sealed class IslandRenderer : IDisposable
                 state.ShellHeight * LiquidGlassTokens.RimBandHeightFactor,
                 LiquidGlassTokens.RimBandMinDip,
                 LiquidGlassTokens.RimBandMaxDip);
-        if (state.RefractionScale > 1.001 && bandDip >= 1)
+        if (lensBand && state.RefractionScale > 1.001 && bandDip >= 1)
         {
             var centre = new SKPoint((float)state.ShellWidth / 2f, (float)state.ShellHeight / 2f);
             var s = (float)state.RefractionScale;

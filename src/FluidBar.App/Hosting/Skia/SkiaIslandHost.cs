@@ -147,6 +147,18 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Manual soften (right-click); null only when the feature is disabled.</summary>
     private SoftYieldCoordinator? _softYield;
 
+    /// <summary>Eased backdrop luminance so the glass tint follows desktop brightness changes smoothly.</summary>
+    private readonly FluidBar.Core.Interaction.BackdropLuminanceSmoother _luminanceSmoother = new();
+    private long _luminanceStampMs;
+    private bool _luminanceAnimating;
+    private SKImage? _backdropCurrent;
+    private SKBitmap? _backdropPreviousBitmap;
+    private SKImage? _backdropPrevious;
+    private long _backdropBlendStartMs;
+
+    /// <summary>Cross-fade duration between two captures, in ms.</summary>
+    private const double BackdropCrossfadeMs = 160;
+
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
@@ -578,6 +590,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         _softYield?.Dispose();
         _softYield = null;
+        _backdropPrevious?.Dispose();
+        _backdropPreviousBitmap?.Dispose();
         _uiaSource.Dispose();
         _controller.Dispose();
         _backdrop.Dispose();
@@ -1427,8 +1441,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             var yieldAnimating = _softYield is not null && _softYield.Step(NowMs());
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
-            var painted = RenderAllLocked(forceFull: yieldAnimating);
-            if (yieldAnimating)
+            var painted = RenderAllLocked(forceFull: yieldAnimating || _luminanceAnimating);
+            if (yieldAnimating || _luminanceAnimating)
             {
                 EnsureFrameLoop();
             }
@@ -2015,8 +2029,27 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         EnsureFrameLoop();
     }
 
+    private static SKBitmap? CopyImage(SKImage image)
+    {
+        if (image.Width <= 0 || image.Height <= 0)
+        {
+            return null;
+        }
+
+        var bitmap = new SKBitmap(new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        if (!image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0))
+        {
+            bitmap.Dispose();
+            return null;
+        }
+
+        return bitmap;
+    }
+
     private void OnBackdropUpdated()
     {
+        // The luminance ramp needs frames; the clock is stopped while the island idles.
+        EnsureFrameLoop();
         if (_disposed)
         {
             return;
@@ -2117,10 +2150,33 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             var backdrop = _backdrop.Get(rect, islandMask, allowComposedCapture: true);
             if (backdrop is not null)
             {
+                var now = NowMs();
+                var delta = _luminanceStampMs == 0 ? 16 : now - _luminanceStampMs;
+                _luminanceStampMs = now;
+
+                // Cross-fade the previous capture: the baked image is small (1/6 scale), so keeping a copy
+                // is cheap and the provider is free to dispose its own frames.
+                if (!ReferenceEquals(backdrop, _backdropCurrent))
+                {
+                    _backdropPrevious?.Dispose();
+                    _backdropPreviousBitmap?.Dispose();
+                    _backdropPreviousBitmap = _backdropCurrent is null ? null : CopyImage(_backdropCurrent);
+                    _backdropPrevious = _backdropPreviousBitmap is null ? null : SKImage.FromBitmap(_backdropPreviousBitmap);
+                    _backdropCurrent = backdrop;
+                    _backdropBlendStartMs = now;
+                }
+
+                var blend = _backdropPrevious is null
+                    ? 1d
+                    : Math.Clamp((now - _backdropBlendStartMs) / BackdropCrossfadeMs, 0, 1);
+                var smoothed = _luminanceSmoother.Step(_backdrop.LuminanceFor(rect), delta);
+                _luminanceAnimating = !_luminanceSmoother.IsSettled || blend < 1;
                 renderState = state with
                 {
                     Backdrop = backdrop,
-                    BackdropLuminance = _backdrop.LuminanceFor(rect),
+                    PreviousBackdrop = blend < 1 ? _backdropPrevious : null,
+                    BackdropBlend = blend,
+                    BackdropLuminance = smoothed,
                 };
             }
         }
