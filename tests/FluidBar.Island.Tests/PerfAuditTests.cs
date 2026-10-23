@@ -66,6 +66,34 @@ public sealed class PerfAuditTests
     }
 
     [Fact]
+    public void Liquid_glass_overlays_are_bounded_and_reported()
+    {
+        var theme = IslandTestFixtures.Theme.WithMaterial(IslandMaterial.LiquidGlass);
+        using var renderer = new IslandRenderer(theme);
+        using var bitmap = Canvas(out var canvas);
+        for (var i = 0; i < 30; i++)
+        {
+            var state = (IslandTestFixtures.MediaCompact() with
+            {
+                Theme = theme,
+                ShellWidth = 140 + (i * 9),
+                ShellHeight = 36 + ((i % 7) * 6),
+            });
+            renderer.Render(canvas, state, IslandTestFixtures.Scale);
+        }
+
+        var stats = renderer.ResourceStats;
+        Assert.InRange(stats.LiquidGlassOverlayCount, 1, 4);
+        Assert.True(stats.LiquidGlassOverlayBytes > 0, "liquid-glass cache did not account any pixels");
+        Assert.True(
+            stats.LiquidGlassOverlayBytes <= 4L * 1200L * 1000L,
+            $"liquid-glass cache retained {stats.LiquidGlassOverlayBytes} B; expected <= 4 * ~1.2 MB");
+        Assert.True(
+            stats.CachedImageBytes >= stats.LiquidGlassOverlayBytes,
+            "cached image accounting must include the liquid-glass overlays");
+    }
+
+    [Fact]
     public void Artwork_is_decoded_downscaled_and_bounded()
     {
         using var cover = new SKBitmap(new SKImageInfo(1024, 1024, SKColorType.Bgra8888, SKAlphaType.Premul));

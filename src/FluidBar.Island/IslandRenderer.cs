@@ -70,6 +70,9 @@ public sealed class IslandRenderer : IDisposable
     private readonly SKPaint _stroke = new() { IsAntialias = true };
     private readonly SKPaint _clear = new() { IsAntialias = false, BlendMode = SKBlendMode.Src };
     private readonly SKPaint _glassPaint = new() { IsAntialias = true };
+    // Material cross-fade context (spec 3.4): when set, the shell body is painted twice with Plus.
+    private IslandTheme? _bodyFrom;
+    private float _bodyMix = 1f;
 
     private readonly LiquidGlassPainter _liquidGlass = new();
 
@@ -138,6 +141,8 @@ public sealed class IslandRenderer : IDisposable
         _shadows.Count,
         _shadows.PixelBytes,
         _shadows.Builds,
+        _liquidGlass.OverlayCount,
+        _liquidGlass.OverlayBytes,
         _art.Count,
         _artwork.Count,
         _artwork.PixelBytes,
@@ -382,7 +387,25 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawScene(SKCanvas canvas, in IslandRenderState state, float dpiScale)
     {
-        _theme = state.Theme ?? IslandTheme.Dark;
+        // Material swap (spec 3.4: 180 ms cross-fade). The shell body is painted twice with premultiplied
+        // additive compositing — old material at (1-t), new at t — so the ramp is a true cross-fade while
+        // costing one extra body pass instead of two full-surface SaveLayers (~7.7 ms on CPU).
+        _bodyFrom = state.PreviousTheme;
+        _bodyMix = (float)Math.Clamp(state.MaterialBlend, 0, 1);
+        try
+        {
+            DrawSceneCore(canvas, state, dpiScale, state.Theme ?? IslandTheme.Dark);
+        }
+        finally
+        {
+            _bodyFrom = null;
+            _bodyMix = 1f;
+        }
+    }
+
+    private void DrawSceneCore(SKCanvas canvas, in IslandRenderState state, float dpiScale, IslandTheme theme)
+    {
+        _theme = theme;
         var shell = IslandMetrics.ShellRect(state);
         var opacity = (float)Math.Clamp(state.Opacity, 0, 1);
         var press = (float)Math.Clamp(state.PressScale, 0.5, 1.5);
@@ -804,6 +827,22 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawShellBody(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity)
     {
+        if (_bodyFrom is { } from && _bodyMix < 0.999f)
+        {
+            var saved = _theme;
+            _theme = from;
+            DrawShellBodyPass(canvas, state, path, opacity * (1f - _bodyMix), SKBlendMode.Plus);
+            _theme = saved;
+            DrawShellBodyPass(canvas, state, path, opacity * _bodyMix, SKBlendMode.Plus);
+            return;
+        }
+
+        DrawShellBodyPass(canvas, state, path, opacity, SKBlendMode.SrcOver);
+    }
+
+    private void DrawShellBodyPass(
+        SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity, SKBlendMode blend)
+    {
         var materialGlass = _theme.Material == IslandMaterial.SimulatedGlass;
         var materialLiquid = _theme.Material == IslandMaterial.LiquidGlass;
         var fillOpacity = materialLiquid
@@ -818,7 +857,7 @@ public sealed class IslandRenderer : IDisposable
         var splitVisible = state.SplitIslets.Length > 0 && state.SplitProgress > 0.01;
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
-        _fill.BlendMode = splitVisible ? SKBlendMode.Src : SKBlendMode.SrcOver;
+        _fill.BlendMode = blend == SKBlendMode.SrcOver && splitVisible ? SKBlendMode.Src : blend;
         _fill.Color = splitVisible
             ? SplitFillColor(fillOpacity, opacity)
             : Alpha(_theme.Background, fillOpacity * opacity);
@@ -831,8 +870,10 @@ public sealed class IslandRenderer : IDisposable
             _glassPaint.Style = SKPaintStyle.Fill;
             _glassPaint.Shader = shader;
             _glassPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(0x20 * opacity, 0, 255));
+            _glassPaint.BlendMode = blend;
             canvas.DrawPath(path, _glassPaint);
             _glassPaint.Shader = null;
+            _glassPaint.BlendMode = SKBlendMode.SrcOver;
         }
         else if (materialLiquid)
         {
@@ -853,7 +894,8 @@ public sealed class IslandRenderer : IDisposable
                 pointerY,
                 state.HasPointer,
                 state.ShellRadii.GetHashCode(),
-                state.ShellMorphing);
+                state.ShellMorphing,
+                blend);
         }
 
         // Prototype2 declares `.island { border: 0 }`: the shell has no rim/outline at all. The old

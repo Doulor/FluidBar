@@ -365,6 +365,37 @@ public sealed class SkiaIslandHostMappingTests
     }
 
     [Fact]
+    public void MaterialSwitch_RunsThe180msCrossFade()
+    {
+        using var fixture = ControllerFixture.Create(
+            AppSettings.Default with { Material = AppMaterial.Obsidian, AutoCollapseMs = 0, AutoHideMs = 0 });
+        fixture.Settle();
+
+        Assert.False(fixture.Controller.MaterialSwapActive);
+        Assert.Equal(1.0, fixture.Controller.MaterialSwapProgress, 3);
+
+        fixture.Settings.Update(s => s with { Material = AppMaterial.LiquidGlass });
+
+        Assert.True(fixture.Controller.MaterialSwapActive, "a material change must start the cross-fade");
+        var start = fixture.Controller.RenderState;
+        Assert.Equal(IslandMaterial.LiquidGlass, start.Theme.Material);
+        Assert.NotNull(start.PreviousTheme);
+        Assert.Equal(IslandMaterial.Obsidian, start.PreviousTheme!.Material);
+        Assert.InRange(start.MaterialBlend, 0.0, 0.15);
+
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(90));
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.True(fixture.Controller.MaterialSwapActive);
+        Assert.InRange(fixture.Controller.MaterialSwapProgress, 0.3, 0.8);
+
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(120));
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.False(fixture.Controller.MaterialSwapActive, "the swap must end after 180 ms");
+        Assert.Equal(1.0, fixture.Controller.RenderState.MaterialBlend, 3);
+        Assert.Null(fixture.Controller.RenderState.PreviousTheme);
+    }
+
+    [Fact]
     public void ThemeMapping_ReducedMotion_IsResolvedFromSettings()
     {
         Assert.True(SkiaIslandThemeMapper.ReducedMotion(AppSettings.Default with { ReducedMotion = ReducedMotionPreference.On }));

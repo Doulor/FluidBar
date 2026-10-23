@@ -148,32 +148,94 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Material_swap_cross_fades_between_the_two_materials()
+    {
+        var obsidian = IslandTheme.Dark.WithMaterial(IslandMaterial.Obsidian);
+        var liquid = IslandTheme.Dark.WithMaterial(IslandMaterial.LiquidGlass);
+        using var renderer = new IslandRenderer();
+
+        var baseState = IslandTestFixtures.MediaCompact();
+        var obsidianState = baseState with { Theme = obsidian };
+        var liquidState = baseState with { Theme = liquid };
+
+        using var obsidianBitmap = renderer.RenderToBitmap(obsidianState, IslandTestFixtures.Scale);
+        using var liquidBitmap = renderer.RenderToBitmap(liquidState, IslandTestFixtures.Scale);
+        using var startBitmap = renderer.RenderToBitmap(
+            liquidState with { PreviousTheme = obsidian, MaterialBlend = 0 }, IslandTestFixtures.Scale);
+        using var endBitmap = renderer.RenderToBitmap(
+            liquidState with { PreviousTheme = obsidian, MaterialBlend = 1 }, IslandTestFixtures.Scale);
+        using var midBitmap = renderer.RenderToBitmap(
+            liquidState with { PreviousTheme = obsidian, MaterialBlend = 0.5 }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(liquidState);
+        var px = (int)Math.Round((shell.Left + (shell.Width / 2)) * IslandTestFixtures.Scale);
+        var py = (int)Math.Round((shell.Top + (shell.Height * 0.62)) * IslandTestFixtures.Scale);
+
+        var start = startBitmap.GetPixel(px, py);
+        var end = endBitmap.GetPixel(px, py);
+        var mid = midBitmap.GetPixel(px, py);
+        var plainObsidian = obsidianBitmap.GetPixel(px, py);
+        var plainLiquid = liquidBitmap.GetPixel(px, py);
+
+        Assert.True(Math.Abs(start.Alpha - plainObsidian.Alpha) <= 3,
+            $"blend 0 must equal the old material (alpha {start.Alpha} vs {plainObsidian.Alpha})");
+        Assert.True(Math.Abs(end.Alpha - plainLiquid.Alpha) <= 3,
+            $"blend 1 must equal the new material (alpha {end.Alpha} vs {plainLiquid.Alpha})");
+
+        var expected = (plainObsidian.Alpha + plainLiquid.Alpha) / 2.0;
+        Assert.True(Math.Abs(mid.Alpha - expected) <= 10,
+            $"midpoint alpha {mid.Alpha} should sit between {plainObsidian.Alpha} and {plainLiquid.Alpha}");
+        Assert.True(mid.Alpha < plainObsidian.Alpha && mid.Alpha > plainLiquid.Alpha,
+            "the cross-fade must be monotonic between the two materials");
+    }
+
+    [Fact]
     public void Liquid_glass_settled_frames_stay_in_budget_and_allocate_nothing()
     {
-        var theme = Liquid;
-        var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
-        using var renderer = new IslandRenderer(theme);
-        using var surface = renderer.CreateSurface(state, IslandTestFixtures.Scale);
+        var liquid = Liquid;
+        var obsidian = IslandTheme.Dark.WithMaterial(IslandMaterial.Obsidian);
+        var liquidState = IslandTestFixtures.Expanded(1) with { Theme = liquid };
+        var obsidianState = IslandTestFixtures.Expanded(1) with { Theme = obsidian };
+
+        using var liquidRenderer = new IslandRenderer(liquid);
+        using var obsidianRenderer = new IslandRenderer(obsidian);
+        using var surface = liquidRenderer.CreateSurface(liquidState, IslandTestFixtures.Scale);
+
+        // Warm every cache, then measure both materials in the same process: an absolute budget is
+        // meaningless on a loaded CI box, so the gate is the ratio against the opaque baseline.
         for (var i = 0; i < 24; i++)
         {
-            renderer.Render(surface.Canvas, state, IslandTestFixtures.Scale);
+            liquidRenderer.Render(surface.Canvas, liquidState, IslandTestFixtures.Scale);
+            obsidianRenderer.Render(surface.Canvas, obsidianState, IslandTestFixtures.Scale);
         }
 
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 40; i++)
         {
-            renderer.Render(surface.Canvas, state, IslandTestFixtures.Scale);
+            liquidRenderer.Render(surface.Canvas, liquidState, IslandTestFixtures.Scale);
         }
 
         var perFrame = (GC.GetAllocatedBytesForCurrentThread() - before) / 40.0;
         Assert.True(perFrame < 1024, $"liquid-glass warm frames allocated {perFrame:0.0} B/frame");
 
-        // Generous ceiling: the reported budget is ~0.55-0.61 ms for a full prototype frame on the
-        // maintainer's machine; CI machines are slower and noisier.
-        Assert.True(renderer.Stats.MeanMilliseconds < 4.0,
-            $"liquid-glass frame cost {renderer.Stats.MeanMilliseconds:0.00} ms exceeds the ceiling");
-    }
+        var liquidMean = Measure(liquidRenderer, surface, liquidState);
+        var obsidianMean = Measure(obsidianRenderer, surface, obsidianState);
+        Assert.True(liquidMean < 8.0,
+            $"liquid-glass frame cost {liquidMean:0.00} ms exceeds the absolute ceiling");
+        Assert.True(liquidMean < (obsidianMean * 3.0) + 1.5,
+            $"liquid-glass ({liquidMean:0.00} ms) is more than 3x the opaque baseline ({obsidianMean:0.00} ms)");
 
+        static double Measure(IslandRenderer renderer, SKSurface surface, IslandRenderState state)
+        {
+            renderer.ResetStats();
+            for (var i = 0; i < 40; i++)
+            {
+                renderer.Render(surface.Canvas, state, IslandTestFixtures.Scale);
+            }
+
+            return renderer.Stats.MeanMilliseconds;
+        }
+    }
     [Fact]
     public void Overlay_cache_is_bounded_across_shell_sizes()
     {

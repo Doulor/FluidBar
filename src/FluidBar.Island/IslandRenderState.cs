@@ -189,6 +189,16 @@ public readonly record struct IslandRenderState
     /// <summary>Resolved theme (palette + material).</summary>
     public IslandTheme Theme { get; init; }
 
+    /// <summary>
+    /// Theme the shell is cross-fading *from* after a material switch (null when no swap is running).
+    /// The renderer paints both themes with premultiplied additive compositing so the 180 ms swap is a
+    /// true cross-fade instead of a pop (spec 3.4).
+    /// </summary>
+    public IslandTheme? PreviousTheme { get; init; }
+
+    /// <summary>Material swap progress 0..1 (1 = no swap). Only read when <see cref="PreviousTheme"/> is set.</summary>
+    public double MaterialBlend { get; init; } = 1;
+
     /// <summary>Detached mini-island strip state.</summary>
     public ArchipelagoState Archipelago { get; init; }
 

@@ -23,6 +23,8 @@
 | [`contracts/island-uia.md`](contracts/island-uia.md) | 岛 UIA 无障碍（元素树/模式/键盘/限制） |
 | [`contracts/host-transparency.md`](contracts/host-transparency.md) | 透明问题调查与结论 |
 | [`contracts/integration.md`](contracts/integration.md) | 跨项目集成测试与 SDK↔Core 映射 |
+| [`liquid-glass-lab/`](liquid-glass-lab/index.html) | 液态玻璃网页原型（6 个版本，选型用） |
+| [`research/liquid-glass.md`](research/liquid-glass.md) | 液态玻璃材质调研（17 个参考仓库 + emilkowalski/skills）、参数、实测、截图 |
 | [`research/`](research/) | v1 审计、参考设计、技术栈、插件生态、渲染 spike |
 | [`docs/plugin/`](../plugin/) | 插件作者/维护者文档（快速开始、签名、发布、审核） |
 | [`CHANGELOG.md`](../../CHANGELOG.md) | 变更记录 |

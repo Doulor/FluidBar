@@ -81,6 +81,7 @@ internal sealed class LiquidGlassPainter : IDisposable
     /// True while the shell size is animating: the overlay is then baked at half resolution in 4 DIP
     /// buckets (a rebake per frame at full resolution would cost ~5 ms during expand/collapse).
     /// </param>
+    /// <param name="blend">Blend mode used while the material cross-fade paints this pass.</param>
     public void Draw(
         SKCanvas canvas,
         SKPath path,
@@ -90,7 +91,8 @@ internal sealed class LiquidGlassPainter : IDisposable
         float pointerY,
         bool hasPointer,
         int shapeKey = 0,
-        bool morphing = false)
+        bool morphing = false,
+        SKBlendMode blend = SKBlendMode.SrcOver)
     {
         if (bounds.Width < 4 || bounds.Height < 4 || opacity <= 0.002f)
         {
@@ -117,6 +119,7 @@ internal sealed class LiquidGlassPainter : IDisposable
         canvas.Save();
         canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
         _paint.Shader = null;
+        _paint.BlendMode = blend;
         _paint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(opacity * 255f, 0, 255));
         var sampling = overlay.Image.Width == (int)Math.Round(bounds.Width * dpi)
             ? new SKSamplingOptions(SKFilterMode.Nearest)
@@ -130,6 +133,8 @@ internal sealed class LiquidGlassPainter : IDisposable
         }
 
         canvas.Restore();
+
+        _paint.BlendMode = SKBlendMode.SrcOver;
 
         // Transient (morph) overlays are per-frame; release the wrapper now that the blit has landed.
         if (overlay.Transient)

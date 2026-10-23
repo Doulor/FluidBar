@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FluidBar · 液态玻璃实验室</title>
+  <link rel="stylesheet" href="lab.css">
+</head>
+<body data-variant="b">
+  <svg id="svg-defs" width="0" height="0" aria-hidden="true" focusable="false"></svg>
+
+  <header class="bar">
+    <div class="brand">
+      <span class="logo"></span>
+      <div>
+        <strong>液态玻璃实验室</strong>
+        <span class="sub">1–6 切换 · B 模糊开关 · G 全览对比</span>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="材质版本"></nav>
+    <label class="toggle">
+      <input type="checkbox" id="blurToggle" checked>
+      <span>背景模糊</span>
+    </label>
+    <button class="ghost" id="gridBtn" type="button">全览 (G)</button>
+  </header>
+
+  <main id="single">
+    <section class="stage" id="stage" aria-label="预览">
+      <img class="wallpaper" src="assets/wallpaper.jpg" alt="">
+      <div class="fake-window">
+        <div class="fw-titlebar"><i></i><i></i><i></i></div>
+        <div class="fw-body">
+          <h3>Quarterly review</h3>
+          <p>The island floats above real content. A good glass material must blur this text,
+             lift the background saturation and keep its own labels readable.</p>
+          <div class="fw-chart"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+      </div>
+
+      <div class="island-wrap">
+        <div class="glass compact" data-shape="compact">
+          <div class="art"></div>
+          <div class="copy">
+            <b>Midnight City</b>
+            <span>M83 · Hurry Up, We're Dreaming</span>
+          </div>
+          <div class="wave"><i></i><i></i><i></i><i></i></div>
+        </div>
+
+        <div class="glass expanded" data-shape="expanded">
+          <div class="x-head">
+            <div class="x-clock">14:32</div>
+            <div class="x-date">Sun, Oct 18 · Partly sunny 18°</div>
+            <div class="x-dots"><i class="on"></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="x-grid">
+            <button class="tile on" type="button"><span class="ic">◉</span><b>Wi-Fi</b><small>Home-5G</small></button>
+            <button class="tile" type="button"><span class="ic">◍</span><b>Bluetooth</b><small>Off</small></button>
+            <button class="tile on" type="button"><span class="ic">☾</span><b>Dark</b><small>On</small></button>
+            <button class="tile" type="button"><span class="ic">✦</span><b>Focus</b><small>Off</small></button>
+          </div>
+          <div class="x-media">
+            <div class="art small"></div>
+            <div class="copy"><b>Afterglow</b><span>Nova Lane · Night Drive</span></div>
+            <div class="wave big"><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+          <div class="x-slider"><i style="width:38%"></i></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <span class="kicker" id="vKicker">A</span>
+        <h2 id="vName">磨砂玻璃</h2>
+      </div>
+      <p id="vDesc"></p>
+      <dl id="vMeta"></dl>
+      <div class="hintbox">
+        <b>看什么</b>
+        <ul>
+          <li>岛后面那段文字和图表是不是被真正模糊了（不是变暗）</li>
+          <li>边缘有没有一层薄薄的折射/高光，而不是一圈厚黑边</li>
+          <li>白字压在玻璃上还看不看得清</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <section id="grid" hidden aria-label="全部版本对比"></section>
+
+  <script src="lab.js"></script>
+</body>
+</html>

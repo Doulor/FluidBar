@@ -93,7 +93,8 @@
 |---|---|---|
 | 稳定帧 mean / p95（多次运行） | 0.38–0.44 / 0.43–0.68 ms | 0.62–0.68 / 0.68–1.02 ms |
 | 稳定帧分配 | 0 B | 0 B |
-| 首帧（烘焙） | — | 4.9 ms（一次性） |
+| 首帧（烘焙） | — | 5 ms（一次性） |
+| 材质切换交叉淡入帧（180 ms） | — | 2.4–3.0 ms |
 | 展开弹簧帧 mean / max（前半段，含阴影） | 1.66–1.76 / 3.73–4.13 ms | 2.11–2.17 / 4.21–4.24 ms |
 | 展开弹簧帧 mean / max（后半段，无阴影） | — | 0.91 / 1.61 ms |
 | 主体 alpha（中心） | 251 | 176（亚克力 183） |
@@ -110,6 +111,25 @@
    `DwmEnableBlurBehindWindow`/`SetWindowCompositionAttribute` 做真模糊，再把本 painter 降级为「光学叠加层」。
 2. **色散是固定的**：真实色散随背景亮度变化；需要背景采样才能做动态强度。
 3. **光晕不扩散到邻近玻璃**：iOS 的 illumination 会在 `GlassEffectContainer` 内扩散，当前只在指针所在壳体内。
-4. 若后续要「材质切换」过渡，可按 `MotionTokens.MaterialSwapMs`（180 ms）在两套 overlay 之间 cross-fade。
+4. ~~材质切换过渡~~：已按规范 3.4 实现——`SkiaIslandController` 在材质变化时记录旧 theme，
+   `IslandRenderer` 用 premultiplied `Plus` 把旧/新壳体各画一遍（(1-t) / t），180 ms 完成。
+   首版用整场景 `SaveLayer` 交叉淡入，实测 7.7 ms/帧（超 8.33 ms 预算），改为壳体双 pass 后
+   降到 2.4–3.0 ms；文字内容只画一次，不会重影。
 5. `docs/rewrite/prototype2` 已支持 `data-material="liquid"`（CSS 近似：内阴影透镜边缘 + 顶部高光 +
    底边焦散 + 一条固定光泽带）；它只是设计参考，真实透镜/焦散/色散以渲染器和 `liquid-glass-shots/` 为准。
+
+## 8. 2026-10-23 返工：先做网页原型（用户反馈"像老式电视"）
+
+用户反馈第一版不合格：只有深色填充 + 一圈透镜/高光，没有背景模糊。结论：液态玻璃的第一要素是
+**背景高斯模糊**，不是描边。已按"先原型、再移植"重做：
+
+- 原型：`docs/rewrite/liquid-glass-lab/index.html`（6 个版本，Edge/Chrome 打开，1–6 切换、B 开关模糊、G 全览）。
+- 6 个版本：A 磨砂 / B 折射 / C 清透 / D 厚镜 / E 水色 / F 烟灰；B/D/E 用 `backdrop-filter: url(#svgFilter)`
+  做 SDF 位移 + 色散，A/C/F 用纯 CSS blur。
+- 截图：`docs/rewrite/liquid-glass-lab/shots/`（含 `A-frosted-blur-off.jpg` 对照，证明"模糊"与"只是变暗"的差别）。
+- 关键技术验证：分层窗口挡不住背景，但 **`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` 之后
+  `BitBlt` 能抓到窗口背后的桌面**（探针实测：窗口区域像素从 255,0,0 变成桌面 67,69,74）。所以 App 里
+  可以做"抓屏 → 高斯模糊 → 贴进壳体"的真背景模糊，再把原型的折射/色散在 Skia 里逐像素实现。
+- 原型实现细节：`lab.js` 里的 `refractionProfile` / `displacementMap` / `specularMap` 移植自
+  `archisvaze/liquid-glass`（MIT），滤镜链参考 `rdev/liquid-glass-react`（MIT）。注意 SVG 滤镜必须用
+  `DOMParser` 以 SVG 方式插入，`div.innerHTML` 会把 `feGaussianBlur` 小写化导致滤镜静默失效。

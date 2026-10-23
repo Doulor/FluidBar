@@ -233,6 +233,8 @@ public sealed class SkiaHostPerfProbe
             ["shadowImages"] = stats.ShadowCacheCount,
             ["shadowBytes"] = stats.ShadowPixelBytes,
             ["shadowBuilds"] = stats.ShadowBuilds,
+            ["liquidGlassImages"] = stats.LiquidGlassOverlayCount,
+            ["liquidGlassBytes"] = stats.LiquidGlassOverlayBytes,
             ["artworkImages"] = stats.ArtworkCount,
             ["artworkBytes"] = stats.ArtworkPixelBytes,
             ["artworkBuilds"] = stats.ArtworkBuilds,

@@ -15,11 +15,13 @@
   Release/150% DPI 实测展开面板 0.62–0.68 ms mean、0 B/frame 分配（Obsidian 0.38–0.44 ms）；
   展开弹簧帧前半段 2.11 ms（Obsidian 1.66，阴影烘焙占大头）、后半段 0.91 ms；首帧烘焙 5 ms（一次性）。
 - **设置预览**：300×62 实时预览同步液态玻璃（同一套 `LiquidGlassTokens`），meta 行显示 `liquid-glass`。
+- **材质切换交叉淡入**：按设计规范 3.4，材质切换现在走 180 ms 交叉淡入（`SkiaIslandController` 记录旧 theme，
+  渲染器用 premultiplied `Plus` 把旧/新壳体各画一遍）；整场景 SaveLayer 版本实测 7.7 ms/帧，改为壳体双 pass 后 2.4–3.0 ms。
 - **文档**：新增 [docs/rewrite/research/liquid-glass.md](docs/rewrite/research/liquid-glass.md)（17 个液态玻璃仓库 + emilkowalski/skills = 18 个参考仓库 +
   参数表 + 实测）与 [对照截图](docs/rewrite/research/liquid-glass-shots/README.md)，更新 `contracts/ui.md` 材质段
   与 `DECISIONS.md` I15。
-- **测试**：Island 458 全绿（新增 `LiquidGlassTests` 7 条：透明度排序、顶部亮/底部焦散、中性色、指针光晕、
-  帧预算/零分配、缓存有界、渲染冒烟）、Core 653（含 `liquid-glass` 往返与别名）、UI 525（映射/预览/SafeMode 降级）。
+- **测试**：Island 460 全绿（`LiquidGlassTests` 8 条：透明度排序、顶部亮/底部焦散、中性色、指针光晕、
+  帧预算/零分配、缓存有界、交叉淡入、渲染冒烟）、Core 653（含 `liquid-glass` 往返与别名）、UI 528（映射/预览/SafeMode 降级/材质切换）。
 
 ## 2026-10-22 — 预览版 v1 第一轮硬化：输入状态机 / 全屏 / 单实例 / 空态回退
 

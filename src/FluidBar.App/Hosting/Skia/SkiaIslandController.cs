@@ -3,6 +3,7 @@ using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.State;
+using FluidBar.App.Theme;
 using FluidBar.Core;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Configuration;
@@ -146,6 +147,14 @@ public sealed class SkiaIslandController : IDisposable
     private ActivityKey? _splitPinnedKey;
     private ExpandedPageContent _pages = ExpandedPageContent.Empty;
     private IslandTheme _theme = IslandTheme.Dark;
+
+    // Material swap (spec 3.4): the shell cross-fades from the previous theme for 180 ms instead of
+    // popping. The renderer paints both shell bodies with premultiplied additive (Plus) compositing.
+    private IslandTheme? _materialSwapFrom;
+    private long _materialSwapStartedMs = -1;
+
+    /// <summary>Material cross-fade duration (ms), from the shared design tokens.</summary>
+    public const int MaterialSwapMs = UiDurations.MaterialSwap;
     private string _structuralSignature = string.Empty;
     private string _dynamicSignature = string.Empty;
     private string _agentTimingSignature = string.Empty;
@@ -324,13 +333,21 @@ public sealed class SkiaIslandController : IDisposable
     public bool HasSpinningSplitRing => _hasRenderState && IslandMetrics.HasSpinningSplitRing(_renderState);
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
-    public bool IsAnimating => !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
+    public bool IsAnimating => MaterialSwapActive || !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
         || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
     public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
+
+    /// <summary>Whether the 180 ms material cross-fade is running (diagnostics/tests).</summary>
+    public bool MaterialSwapActive => _materialSwapStartedMs >= 0;
+
+    /// <summary>Material cross-fade progress 0..1 (1 when idle; diagnostics/tests).</summary>
+    public double MaterialSwapProgress => _materialSwapStartedMs < 0
+        ? 1
+        : Math.Clamp((NowMs() - _materialSwapStartedMs) / (double)MaterialSwapMs, 0, 1);
 
     /// <summary>
     /// Whether the agent spinner / indeterminate progress needs continuous 60 fps frames. True only
@@ -709,6 +726,26 @@ public sealed class SkiaIslandController : IDisposable
         _lastTrackTransitionArtwork = artwork;
     }
 
+    /// <summary>Ends the material cross-fade once its 180 ms budget has elapsed.</summary>
+    private void StepMaterialSwap()
+    {
+        if (_materialSwapStartedMs < 0)
+        {
+            return;
+        }
+
+        if (NowMs() - _materialSwapStartedMs >= MaterialSwapMs)
+        {
+            _materialSwapStartedMs = -1;
+            _materialSwapFrom = null;
+            InvalidateFull();
+            return;
+        }
+
+        // The whole shell blends, so every swap frame is a full frame.
+        InvalidateFull();
+    }
+
     /// <summary>Steps the track transition and stores the current scale/opacity multipliers.</summary>
     private void StepTrackTransition()
     {
@@ -801,6 +838,7 @@ public sealed class SkiaIslandController : IDisposable
         var now = _time.GetLocalNow();
         var trackTransitionWasRunning = IsTrackTransitionAnimating;
         StepTrackTransition();
+        StepMaterialSwap();
         var motionWasRunning = !_motion.IsAtRest;
         _motion.Step(dt);
 
@@ -2834,6 +2872,14 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         var appearance = _appearance();
+        if (previous.Material != current.Material)
+        {
+            // Capture the *old* material before the new settings are mapped, then let the frame loop
+            // run the cross-fade (MaterialSwapActive keeps IsAnimating true).
+            _materialSwapFrom = SkiaIslandThemeMapper.Map(previous, appearance);
+            _materialSwapStartedMs = NowMs();
+        }
+
         var previousProfile = previous.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(previous, appearance));
         var currentProfile = current.BuildMotionProfile(SkiaIslandThemeMapper.ReducedMotion(current, appearance));
         if (previousProfile != currentProfile)
@@ -3584,6 +3630,10 @@ private void HandlePageControl(in IslandHitTarget hit)
             SecondaryCompact = null,
             Pages = _pages,
             Theme = _theme,
+            PreviousTheme = _materialSwapStartedMs < 0 ? null : _materialSwapFrom,
+            MaterialBlend = _materialSwapStartedMs < 0
+                ? 1
+                : Math.Clamp((NowMs() - _materialSwapStartedMs) / (double)MaterialSwapMs, 0, 1),
             Archipelago = _options.EnableArchipelago
                 ? _archipelago.ToState(_pager.PagePosition, _pages.PageCount) with
                 {

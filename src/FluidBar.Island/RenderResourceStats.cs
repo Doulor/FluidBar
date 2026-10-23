@@ -11,6 +11,8 @@ namespace FluidBar.Island;
 /// <param name="ShadowCacheCount">Cached shadow images.</param>
 /// <param name="ShadowPixelBytes">Retained shadow pixel bytes (BGRA, actual image size).</param>
 /// <param name="ShadowBuilds">Shadow images baked since construction.</param>
+/// <param name="LiquidGlassOverlayCount">Baked liquid-glass overlays retained.</param>
+/// <param name="LiquidGlassOverlayBytes">Retained liquid-glass overlay pixel bytes (BGRA).</param>
 /// <param name="ArtShaderCount">Cached gradient shaders.</param>
 /// <param name="ArtworkCount">Cached decoded covers.</param>
 /// <param name="ArtworkPixelBytes">Retained artwork pixel bytes (BGRA).</param>
@@ -25,6 +27,8 @@ public readonly record struct RenderResourceStats(
     int ShadowCacheCount,
     long ShadowPixelBytes,
     long ShadowBuilds,
+    int LiquidGlassOverlayCount,
+    long LiquidGlassOverlayBytes,
     int ArtShaderCount,
     int ArtworkCount,
     long ArtworkPixelBytes,
@@ -34,8 +38,8 @@ public readonly record struct RenderResourceStats(
     long TextApproxBytes,
     int NumberTextCount)
 {
-    /// <summary>Pixel bytes attributed to cached images (shadow + artwork).</summary>
-    public long CachedImageBytes => ShadowPixelBytes + ArtworkPixelBytes;
+    /// <summary>Pixel bytes attributed to cached images (shadow + liquid glass + artwork).</summary>
+    public long CachedImageBytes => ShadowPixelBytes + LiquidGlassOverlayBytes + ArtworkPixelBytes;
 
     /// <summary>Approximate total retained bytes across all tracked caches.</summary>
     public long TotalApproxBytes => CachedImageBytes + TextApproxBytes;
