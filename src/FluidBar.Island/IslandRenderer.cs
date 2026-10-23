@@ -1219,11 +1219,12 @@ public sealed class IslandRenderer : IDisposable
             // Dissolve on top of a FULL-opacity base. Fading both images in/out (old at 1-t, new at t)
             // leaves the composite alpha at 1-(1-t)·(1-t)... in practice ~88 % at t = 0.5, so the desktop
             // showed through sharp once per capture — the "island flashes transparent" report.
-            // Both passes include the refraction band: the rim used to come only from the *new* capture,
-            // so during every cross-fade the rim showed 100 % of the new frame while the interior was still
-            // the old one — a faint rim flicker at capture cadence (reported 2026-10-23).
-            DrawBackdropCore(canvas, state, path, previous, opacity, lensBand: true);
-            DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: true);
+            // No refraction band while the two captures dissolve: the band is a magnified re-blit of the
+            // backdrop, so drawing it from both images (or only from the new one) made the rim brightness
+            // pulse at capture cadence — the "the outer rim always looks blurry and flickers" report.
+            // The band comes back as soon as the fade settles.
+            DrawBackdropCore(canvas, state, path, previous, opacity, lensBand: false);
+            DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: false);
             return;
         }
 
@@ -1271,7 +1272,7 @@ public sealed class IslandRenderer : IDisposable
             // Three nested bands instead of one hard-clipped band: the inner edge of a single band shows
             // as a visible seam between "refracted rim" and "flat middle", which the user reported.
             Span<float> widths = [1.0f, 0.68f, 0.40f];
-            Span<float> alphas = [0.34f, 0.30f, 0.26f];
+            Span<float> alphas = [0.22f, 0.19f, 0.16f];
             for (var i = 0; i < widths.Length; i++)
             {
                 var band = LensBand(path, bandDip * widths[i]);
