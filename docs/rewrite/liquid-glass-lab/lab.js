@@ -29,7 +29,7 @@
       meta: [["模糊", "26 px"], ["饱和", "170%"], ["染色", "rgba(8,10,14,.30)"], ["折射", "无"], ["边缘", "无"]] }
   ];
 
-  var state = { variant: "b", blur: true, grid: false, tune: {} };
+  var state = { variant: "b", blur: true, grid: false, realSize: false, tune: {} };
   var uid = 0;
   var rebuildTimer = 0;
 
@@ -298,6 +298,13 @@
 
   $("#blurToggle").addEventListener("change", function (e) { setBlur(e.target.checked); });
   $("#gridBtn").addEventListener("click", function () { setGrid(!state.grid); });
+  $("#sizeBtn").addEventListener("click", function () {
+    state.realSize = !state.realSize;
+    document.body.dataset.size = state.realSize ? "real" : "lab";
+    $("#sizeBtn").classList.toggle("active", state.realSize);
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(function () { applyGlass($("#stage"), state.tune); }, 60);
+  });
 
   function bindTuner(inputId, key) {
     $(inputId).addEventListener("input", function (e) {
@@ -362,6 +369,7 @@
     renderTuner(variantById(state.variant), state.tune);
     applyGlass($("#stage"), state.tune);
   }
+  if (q.get("size") === "real") { $("#sizeBtn").click(); }
   if (q.get("blur") === "off") { setBlur(false); }
   if (q.get("grid") === "1") { setGrid(true); }
   if (q.get("probe") === "1") {

@@ -355,3 +355,14 @@ body[data-blur="off"] .glass::before { backdrop-filter: none !important; -webkit
   border: 0; border-radius: 7px; padding: 5px 10px; cursor: pointer; font-weight: 600;
 }
 #copyHint { font-size: 10.5px; color: #7f8a99; }
+
+/* ---------------------------------------------------------------- real island size */
+
+/* The app's real geometry: compact pill 132x36, expanded panel 440x284. */
+body[data-size="real"] .glass.compact { width: 132px; height: 36px; border-radius: 18px; padding: 0 10px; gap: 7px; }
+body[data-size="real"] .glass.compact .art { width: 20px; height: 20px; border-radius: 6px; }
+body[data-size="real"] .glass.compact .copy b { font-size: 10.5px; }
+body[data-size="real"] .glass.compact .copy span { font-size: 8.5px; }
+body[data-size="real"] .glass.compact .wave { display: none; }
+body[data-size="real"] .glass.expanded { width: 440px; height: 284px; border-radius: 28px; }
+body[data-size="real"] .island-wrap { gap: 18px; }

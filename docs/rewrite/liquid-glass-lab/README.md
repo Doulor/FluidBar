@@ -3,6 +3,7 @@
 > 直接双击 `index.html` 用 **Edge / Chrome** 打开（`backdrop-filter` + SVG 滤镜只在 Chromium 内核可用）。
 > 默认打开 B（折射玻璃）；全览模式会把 7 个版本同时渲染在一个页面里。
 > 右侧「微调」可以实时改 **模糊 / 染色 / 饱和 / 边缘高光 / 折射强度**，点「复制参数」把数值发我。
+> 「真实尺寸」把预览切到 App 的实际几何：紧凑胶囊 **132×36**、展开面板 **440×284**（截图 `shots/real-size.jpg`）。
 > 顶部可切换 6 个版本；也可以按 `1`–`6` 切换、`B` 开关背景模糊、`G` 全览对比。
 
 ## 为什么重做
@@ -36,6 +37,7 @@
 | `shots/A-frosted.jpg` … `G-pure.jpg` | 单版本截图（7 张） |
 | [`shots/A-frosted-blur-off.jpg`](shots/A-frosted-blur-off.jpg) | 同一版本关掉 `backdrop-filter` 的对照（"模糊" vs "只是变暗"） |
 | [`shots/B-vs-reference.jpg`](shots/B-vs-reference.jpg) | B 版本 vs 参考实现 `archisvaze/liquid-glass` |
+| [`shots/real-size.jpg`](shots/real-size.jpg) | 真实尺寸模式（132×36 胶囊 + 440×284 面板，与 App 一致） |
 
 ## 可读性（同一张亮壁纸实测）
 
