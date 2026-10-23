@@ -324,10 +324,24 @@ public sealed class TextEngine : IDisposable
             _ => area.Left,
         };
         var baseline = area.Top + ((area.Height - layout.Height) / 2) - layout.Ascent;
-        _paint.Color = opacity >= 0.999f
+        var resolved = opacity >= 0.999f
             ? color
             : color.WithAlpha((byte)Math.Clamp(color.Alpha * opacity, 0, 255));
 
+        // Light text gets a soft dark shadow so white labels stay readable on a white/photo backdrop
+        // (reported 2026-10-23). Cheap: one extra text pass, no blur filter, no allocation.
+        var luminance = ((0.2126 * resolved.Red) + (0.7152 * resolved.Green) + (0.0722 * resolved.Blue)) / 255.0;
+        if (luminance > 0.55)
+        {
+            _paint.Color = new SKColor(0, 0, 0, (byte)Math.Clamp(resolved.Alpha * 0.45f, 0, 255));
+            _paint.MaskFilter = maskFilter;
+            for (var i = 0; i < layout.Blobs.Length; i++)
+            {
+                canvas.DrawText(layout.Blobs[i], x + layout.Offsets[i], baseline + 0.9f, _paint);
+            }
+        }
+
+        _paint.Color = resolved;
         _paint.MaskFilter = maskFilter;
         for (var i = 0; i < layout.Blobs.Length; i++)
         {

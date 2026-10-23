@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 白底白字可读性
+
+- 亮背景 scrim 加强：`ScrimMaxAlpha` 0.30 → 0.62、`ScrimHeightFactor` 0.55 → 0.72；纯白背景下染色上限 1.40 → 1.75。
+- `TextEngine` 给浅色文字加一次深色投影（0.9 DIP / 45% 黑），照片与中间调背景也能读。
+- 新测试 `White_backdrops_stay_dark_enough_for_white_labels`：纯白背景壳体亮度 < 0.45（修前 0.58）。
+- 全量 2657 测试绿。
+
 ## 2026-10-23 — 修复柔化的两个显示问题（主岛透明 / 小岛被截断）
 
 - **主岛变纯透明**：① 右键切换没请求帧，帧时钟停着时淡出会卡在中间值 → `ApplyYieldPassthrough` 调

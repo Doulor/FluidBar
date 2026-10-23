@@ -245,6 +245,37 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void White_backdrops_stay_dark_enough_for_white_labels()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.MediaCompact() with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var white = new SKBitmap(info);
+        using (var canvas = new SKCanvas(white))
+        {
+            canvas.Clear(SKColors.White);
+        }
+
+        using var image = SKImage.FromBitmap(white);
+        using var panel = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
+
+        // The empty padding inside the pill's left end: no text or artwork there, so the sample is the
+        // material the labels sit on.
+        var shell = IslandMetrics.ShellRect(state);
+        var x = (int)Math.Round((shell.Left + 6) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round(shell.MidY * IslandTestFixtures.Scale);
+        var pixel = panel.GetPixel(x, y);
+        var luma = ((0.2126 * pixel.Red) + (0.7152 * pixel.Green) + (0.0722 * pixel.Blue)) / 255.0;
+
+        Assert.True(luma < 0.45, $"white labels need a dark enough surface, got luma {luma:0.00}");
+    }
+
+    [Fact]
     public void Split_capsules_render_the_backdrop_like_the_shell()
     {
         var theme = Liquid;

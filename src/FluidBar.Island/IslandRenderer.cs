@@ -1050,7 +1050,7 @@ public sealed class IslandRenderer : IDisposable
         // which still guards against an accent-tinted rim ever coming back).
     }
 
-    /// <summary>Scrim alpha for a backdrop luminance (0 below the threshold, up to 0.30 on white).</summary>
+    /// <summary>Dark scrim alpha for a backdrop luminance (0 below the threshold, up to 0.62 on white).</summary>
     private static double ScrimAlpha(double luminance)
     {
         var span = 1.0 - LiquidGlassTokens.ScrimLuminanceThreshold;
