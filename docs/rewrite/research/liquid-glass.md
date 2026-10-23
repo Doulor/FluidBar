@@ -471,3 +471,18 @@
 - 测试：`White_backdrops_flip_the_shell_to_light_glass_with_dark_ink`（白底：玻璃亮度 > 127 且标题带存在
   亮度 < 0.4 的深色像素）、`Bright_backdrops_use_light_glass_and_dark_backdrops_dark_glass`、
   `Expanded_media_panel_on_white_flips_to_light_glass`。
+
+### 15.8 小岛转圈圈把主岛"带闪"（2026-10-23）
+
+用户反馈：主岛旁边一个蓝色 agent 小岛一直转圈，主岛就一闪一闪。
+
+根因不在渲染，而在**抓屏自抠图**：为了"窗口可见 + 窗口级模糊"，抓屏包含我们自己的窗口，再把岛自身的像素抹掉。
+最开始只抹了**壳体矩形**，而分裂胶囊画在壳体**外面**——于是胶囊（含旋转的蓝色环）被原样抓进背景图，
+经 1/6 降采样 + 高斯后变成壳体里一团随旋转脉动的蓝色，随 400 ms 抓屏节奏"闪"。
+
+修复：`IslandBackdropProvider` 的 mask 从单个矩形改成**矩形列表**；宿主把壳体（外扩 18 DIP）和
+**每个分裂胶囊**（外扩 8 DIP，`IslandMetrics.SplitIsletRects`）都交给它，逐个做水平边缘延展。
+这样任何岛面自身的动画都不会再进到别的岛的玻璃里——"岛与岛光效同步"保留（它们仍是同一材质、同一套光效），
+但不再互相串扰。
+
+测试 `IslandBackdropMaskTests`：两个矩形都被抹平（左暗右亮的测试帧上，被遮区域变成渐变）。

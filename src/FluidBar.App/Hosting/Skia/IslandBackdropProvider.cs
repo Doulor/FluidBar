@@ -66,7 +66,7 @@ internal sealed class IslandBackdropProvider : IDisposable
     /// <param name="force">Ignore the throttle (material switch, explicit refresh).</param>
     public SKImage? Get(
         (int X, int Y, int Width, int Height) screenRect,
-        (int X, int Y, int Width, int Height)? islandMask = null,
+        (int X, int Y, int Width, int Height)[]? islandMasks = null,
         bool allowComposedCapture = true,
         bool force = false)
     {
@@ -89,7 +89,7 @@ internal sealed class IslandBackdropProvider : IDisposable
                 }
             }
 
-            ScheduleCapture(screenRect, islandMask, allowComposedCapture, force);
+            ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force);
             return Latest();
         }
     }
@@ -144,7 +144,7 @@ internal sealed class IslandBackdropProvider : IDisposable
 
     private void ScheduleCapture(
         (int X, int Y, int Width, int Height) screenRect,
-        (int X, int Y, int Width, int Height)? islandMask,
+        (int X, int Y, int Width, int Height)[]? islandMasks,
         bool allowComposedCapture,
         bool force)
     {
@@ -163,12 +163,12 @@ internal sealed class IslandBackdropProvider : IDisposable
         }
 
         _lastCaptureTicks = now;
-        _pending = Task.Run(() => CaptureAndBake(screenRect, islandMask, allowComposedCapture));
+        _pending = Task.Run(() => CaptureAndBake(screenRect, islandMasks, allowComposedCapture));
     }
 
     private void CaptureAndBake(
         (int X, int Y, int Width, int Height) screenRect,
-        (int X, int Y, int Width, int Height)? islandMask,
+        (int X, int Y, int Width, int Height)[]? islandMasks,
         bool allowComposedCapture)
     {
         var frame = ScreenBackdropCapture.TryCapture(
@@ -183,9 +183,12 @@ internal sealed class IslandBackdropProvider : IDisposable
             return;
         }
 
-        if (islandMask is { } mask)
+        if (islandMasks is { Length: > 0 } masks)
         {
-            MaskIslandArea(captured, mask);
+            foreach (var mask in masks)
+            {
+                MaskIslandArea(captured, mask);
+            }
         }
 
         var baked = Bake(captured, out var luminance);
@@ -255,9 +258,11 @@ internal sealed class IslandBackdropProvider : IDisposable
     /// <summary>
     /// Replaces the island's own pixels in a composed capture with a horizontal edge-extend fill: the
     /// capture is taken with the window visible (so the island stays visible in screen shares), and the
-    /// smear disappears under the 1/6 downsample + Gaussian.
+    /// smear disappears under the 1/6 downsample + Gaussian. Every island surface is masked — the shell
+    /// *and* the split capsules: skipping the capsules baked their rotating agent ring into the glass and
+    /// made the main pill blink with it (reported 2026-10-23).
     /// </summary>
-    private static void MaskIslandArea(BackdropFrame frame, in (int X, int Y, int Width, int Height) mask)
+    internal static void MaskIslandArea(BackdropFrame frame, in (int X, int Y, int Width, int Height) mask)
     {
         var x0 = Math.Clamp(mask.X, 0, frame.Width - 1);
         var y0 = Math.Clamp(mask.Y, 0, frame.Height - 1);

@@ -2141,13 +2141,31 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // provider which pixels to smear away before blurring.
             var surfaceDip = entry.Host.SurfaceSizeDip;
             var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
-            const double maskMarginDip = 14.0;
-            var islandMask = (
-                X: (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
-                Y: (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
-                Width: (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
-                Height: (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi));
-            var backdrop = _backdrop.Get(rect, islandMask, allowComposedCapture: true);
+            const double maskMarginDip = 18.0;
+            var masks = new List<(int X, int Y, int Width, int Height)>
+            {
+                (
+                    (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
+                    (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
+                    (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
+                    (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi)),
+            };
+
+            // Split capsules live outside the shell: mask them too, otherwise the rotating agent ring is
+            // captured into the glass and the main pill blinks with it.
+            if (state.SplitIslets.Length > 0 && state.SplitProgress > 0.01)
+            {
+                foreach (var islet in FluidBar.Island.IslandMetrics.SplitIsletRects(state))
+                {
+                    masks.Add((
+                        (int)Math.Round((islet.Left - 8) * dpi),
+                        (int)Math.Round((islet.Top - 8) * dpi),
+                        (int)Math.Round((islet.Width + 16) * dpi),
+                        (int)Math.Round((islet.Height + 16) * dpi)));
+                }
+            }
+
+            var backdrop = _backdrop.Get(rect, masks.ToArray(), allowComposedCapture: true);
             if (backdrop is not null)
             {
                 var now = NowMs();
