@@ -20,8 +20,8 @@ public sealed class SettingsWindowChromeTests
     [Fact]
     public async Task Window_UsesSquareFullBleedShell_SoDwmCanRoundTheWindow()
     {
-        // Chrome contract: no window decorations; the shell is a square, full-bleed panel (radius 0) so DWM
-        // can cut the rounded corner out of the panel itself; window surface and panel share one colour.
+        // Chrome contract: no window decorations; the shell uses the same 22 DIP radius as the glass
+        // surface, while DWM can still cut the native window corner. Window surface and panel share one colour.
         var state = await AvaloniaTest.Run(() =>
         {
             var localizer = TestFixtures.CreateLocalizer("en-US");

@@ -57,8 +57,8 @@ public sealed class SkiaPlatformActionsTests
             actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Bluetooth)),
             "Bluetooth radio service is not running");
         AssertUnsupported(
-            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Focus)),
-            "FocusAssistService is not running");
+            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Pomodoro)),
+            "owned by the island controller");
 
         settings.Dispose();
     }
@@ -160,45 +160,17 @@ public sealed class SkiaPlatformActionsTests
     }
 
     [Fact]
-    public async Task FocusQuickToggle_LimitedAccess_ReportsUnsupportedWithoutDispatching()
+    public async Task PomodoroQuickToggle_IsOwnedByTheIslandController()
     {
+        // The pomodoro needs no Windows API, so it lives in SkiaIslandController; the platform seam must
+        // report that plainly instead of pretending to toggle something.
         var settings = CreateSettings();
-        var wifi = new FakeRadioToggleService(new RadioSnapshot(
-            PlatformRadioKind.Wifi, RadioAvailability.Available, true, "WLAN"));
-        var bluetooth = new FakeRadioToggleService(new RadioSnapshot(
-            PlatformRadioKind.Bluetooth, RadioAvailability.Available, true, "Bluetooth"));
-        var focus = new FakeFocusAssistService(new FocusAssistSnapshot(false,
-            FocusAssistAvailability.LimitedAccessDenied,
-            "Windows focus sessions are a Limited Access Feature " +
-            "(feature id com.microsoft.windows.focussessionmanager.1)"));
-        await using var actions = CreateActions(settings, wifi, bluetooth, focus);
+        await using var actions = new SkiaPlatformActions(settings);
 
         var result = actions.Invoke(new IslandPlatformAction(
-            IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Focus));
+            IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Pomodoro));
 
-        AssertUnsupported(result, "Limited Access");
-        Assert.Empty(focus.Requests);
-        settings.Dispose();
-    }
-
-    [Fact]
-    public async Task FocusQuickToggle_Available_DispatchesTheInjectedService()
-    {
-        var settings = CreateSettings();
-        var wifi = new FakeRadioToggleService(new RadioSnapshot(
-            PlatformRadioKind.Wifi, RadioAvailability.Available, true, "WLAN"));
-        var bluetooth = new FakeRadioToggleService(new RadioSnapshot(
-            PlatformRadioKind.Bluetooth, RadioAvailability.Available, true, "Bluetooth"));
-        var focus = new FakeFocusAssistService(new FocusAssistSnapshot(false, FocusAssistAvailability.Available));
-        await using var actions = CreateActions(settings, wifi, bluetooth, focus);
-
-        var result = actions.Invoke(new IslandPlatformAction(
-            IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Focus));
-
-        Assert.Equal(IslandActionOutcome.Handled, result.Outcome);
-        await WaitUntilAsync(() => focus.Requests.Count == 1);
-        Assert.True(focus.Requests[0]);
-        Assert.True(actions.IsFocusActive);
+        AssertUnsupported(result, "owned by the island controller");
         settings.Dispose();
     }
 

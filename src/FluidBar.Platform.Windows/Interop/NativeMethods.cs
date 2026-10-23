@@ -1137,6 +1137,18 @@ internal static partial class NativeMethods
         [DllImport(Lib)]
         internal static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Margins
+        {
+            internal int Left;
+            internal int Right;
+            internal int Top;
+            internal int Bottom;
+        }
+
+        [DllImport(Lib)]
+        internal static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
+
         [DllImport(Lib)]
         internal static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
     }

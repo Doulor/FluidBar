@@ -479,7 +479,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 $"island.page.0.toggle.{i}",
                 UiaElementRole.Button,
                 toggle.Label,
-                ToRect(PageMetricsLayout.HomeToggle(page, i, togglesMetrics)),
+                ToRect(PageMetricsLayout.HomeToggle(page, i, Math.Min(4, home.Toggles.Count), togglesMetrics)),
                 toggle.IsEnabled ? UiaPatternKind.Toggle | UiaPatternKind.Invoke : UiaPatternKind.None,
                 new UiaElementState
                 {

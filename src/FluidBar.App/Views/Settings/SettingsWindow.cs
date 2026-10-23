@@ -4,12 +4,17 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Styling;
+using System.Runtime.InteropServices;
 using Avalonia.Threading;
 using System.Diagnostics;
 using FluidBar.App.Localization;
+using FluidBar.App.Rendering;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
+using FluidBar.Island;
 using FluidBar.Platform.Windows.Hosting;
 
 namespace FluidBar.App.Views.Settings;
@@ -64,20 +69,19 @@ public sealed class SettingsWindow : Window, ILocalizable
     private bool _firstFramePreparing;
     private string? _status;
     private SettingsPalette _palette;
-    private LayeredRect? _entranceSource;
-    private double _entranceScale = 1;
-    private DispatcherTimer? _geometryTimer;
-    private DispatcherTimer? _contentTimer;
-    private bool _entranceStarted;
+    private readonly bool _liquidGlass;
+    private bool _centerFade;
     private bool _exitStarted;
     private bool _allowClose;
-    private bool _geometryAnimating;
+    private bool _layeredStyleAdded;
+    private double _windowAlpha = 1;
+    private AvaloniaFrameClock? _fadeClock;
+    private ScaleTransform? _fadeScale;
+    private TranslateTransform? _fadeTranslate;
+    private TransformGroup? _fadeTransform;
 
-    /// <summary>Duration of the Layer Bloom window expansion.</summary>
-    internal static TimeSpan EntranceDuration { get; } = TimeSpan.FromMilliseconds(560);
-
-    /// <summary>Duration of the Layer Bloom return-to-island collapse.</summary>
-    internal static TimeSpan ExitDuration { get; } = TimeSpan.FromMilliseconds(420);
+    private static readonly TimeSpan FadeInDuration = TimeSpan.FromMilliseconds(280);
+    private static readonly TimeSpan FadeOutDuration = TimeSpan.FromMilliseconds(180);
 
     /// <summary>Creates the settings window.</summary>
     public SettingsWindow(
@@ -109,6 +113,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         });
         _section = section;
         _palette = SettingsPalette.For(ResolvePaletteTheme(settings.Current.Theme));
+        _liquidGlass = settings.Current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
 
         // .settings-window { width: min(900px, 100vw - 48px); height: min(620px, 100vh - 48px) }
         Width = SettingsMetrics.WindowWidth;
@@ -118,7 +123,9 @@ public sealed class SettingsWindow : Window, ILocalizable
         WindowDecorations = WindowDecorations.None;
         Title = localizer.Get(LocKeys.Settings.Title);
         Background = Brushes.Transparent;
-        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
+        TransparencyLevelHint = _liquidGlass
+            ? [WindowTransparencyLevel.AcrylicBlur]
+            : [WindowTransparencyLevel.Transparent];
         // Until the first frame is painted the platform fills the window with this fallback; Avalonia's
         // default is a light system colour, which is exactly the grey plate users see before the panel.
         TransparencyBackgroundFallback = new SolidColorBrush(_palette.Window);
@@ -132,8 +139,8 @@ public sealed class SettingsWindow : Window, ILocalizable
         _bleed = new Border { IsVisible = false };
         _shell = new Border
         {
-            CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius),
-            BorderThickness = new Thickness(SettingsMetrics.WindowBorder),
+            CornerRadius = new CornerRadius(0),
+            BorderThickness = new Thickness(0),
             ClipToBounds = true,
             Child = BuildLayout(),
         };
@@ -155,37 +162,18 @@ public sealed class SettingsWindow : Window, ILocalizable
     }
 
     /// <summary>
-    /// Starts the settings window at the island shell rectangle and lets it grow into the normal
-    /// 900×620 window. The island itself stays visible: only the settings window moves and expands.
+    /// Enables the centered fade used when the app opens settings. The island is not involved:
+    /// the window appears at its normal centered position and fades/scale-settles in place.
     /// </summary>
-    /// <param name="source">Island shell rectangle in physical screen pixels.</param>
-    /// <param name="scale">Screen DIP scaling for the island's monitor.</param>
-    public void PrepareEntrance(LayeredRect source, double scale)
+    public void EnableCenterFade()
     {
-        if (source.Width <= 0 || source.Height <= 0 || !double.IsFinite(scale) || scale <= 0)
-        {
-            return;
-        }
-
-        _entranceSource = source;
-        _entranceScale = scale;
-        WindowStartupLocation = WindowStartupLocation.Manual;
-        Position = new PixelPoint(source.X, source.Y);
-        Width = Math.Max(1, source.Width / scale);
-        Height = Math.Max(1, source.Height / scale);
-
-        if (_shell.Child is Control content)
-        {
-            // Keep the panel content on its final 900×620 layout while the window itself grows.
-            // The shell clips the overflow, so the window reveals more of the real panel instead of
-            // showing an empty coloured plate until the geometry animation finishes.
-            content.Width = SettingsMetrics.WindowWidth;
-            content.Height = SettingsMetrics.WindowHeight;
-            content.HorizontalAlignment = HorizontalAlignment.Left;
-            content.VerticalAlignment = VerticalAlignment.Top;
-            content.Opacity = 0.55;
-            content.IsHitTestVisible = false;
-        }
+        _centerFade = true;
+        Opacity = 0;
+        _fadeScale = new ScaleTransform(0.985, 0.985);
+        _fadeTranslate = new TranslateTransform(0, 10);
+        _fadeTransform = new TransformGroup { Children = { _fadeScale, _fadeTranslate } };
+        _shell.RenderTransformOrigin = RelativePoint.Center;
+        _shell.RenderTransform = _fadeTransform;
     }
 
     private static IMarketplaceUiService CreateDefaultMarketplace(ILocalizer localizer)
@@ -255,7 +243,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         // Plan B is the default: this platform does not deliver client alpha and DWM's own rounded corner
         // drags a composited edge band around the window, so the default is a clean square panel (no
         // rounding, no edge band). The alpha path stays available through FLUIDBAR_WINDOW_ALPHA=1.
-        var alphaUsable = forcedAlpha;
+        var alphaUsable = forcedAlpha || _liquidGlass;
         ChromeMode = alphaUsable ? SettingsWindowChrome.Transparent : SettingsWindowChrome.Opaque;
 
         if (ChromeMode == SettingsWindowChrome.Transparent)
@@ -263,12 +251,16 @@ public sealed class SettingsWindow : Window, ILocalizable
             // Primary path: the surface carries per-pixel alpha, so the window background is fully
             // transparent and the only painted thing is the 22 DIP rounded panel.
             Background = Brushes.Transparent;
-            _shell.CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius);
-            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
+            // Liquid glass uses the original full-bleed square shell and lets DWM round the native
+            // window (the same logic as the opaque chrome). Anything else paints a second radius inside
+            // DWM's 8 DIP cut and leaves a square band around it.
+            _shell.CornerRadius = new CornerRadius(_liquidGlass ? 0 : SettingsMetrics.WindowRadius);
+            _shell.BorderThickness = new Thickness(_liquidGlass ? 0 : SettingsMetrics.WindowBorder);
             if (forcedAlpha && roundingHandle != IntPtr.Zero)
             {
                 _ = WindowDwmPolicy.TryDisableRounding(roundingHandle, out _);
             }
+
         }
         else
         {
@@ -279,7 +271,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             DwmRoundingActive = false;
             Background = new SolidColorBrush(_palette.Window);
             _shell.CornerRadius = new CornerRadius(0);
-            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
+            _shell.BorderThickness = new Thickness(0);
 
             // Default: let DWM round the window itself (8 DIP, the radius the system supports). The shell
             // stays square and fills the whole window rect, so DWM cuts the corner out of the panel and no
@@ -307,226 +299,188 @@ public sealed class SettingsWindow : Window, ILocalizable
         ApplyCornerRegion("opened");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
             Avalonia.Threading.DispatcherPriority.Loaded);
-        if (!forcedAlpha)
+        if (!forcedAlpha && !_liquidGlass)
         {
+            // Acrylic is composited by DWM, so the alpha probe would misread the already-blurred
+            // backdrop as an opaque surface and replace it with the square opaque fallback.
             Avalonia.Threading.Dispatcher.UIThread.Post(VerifyAlphaOrFallBack,
                 Avalonia.Threading.DispatcherPriority.Background);
         }
 
-        if (_entranceSource is not null)
+        if (_centerFade)
         {
-            Dispatcher.UIThread.Post(StartEntranceAnimation, DispatcherPriority.Loaded);
+            ApplyWindowAlpha(0);
+            Dispatcher.UIThread.Post(StartCenterFadeIn, DispatcherPriority.Loaded);
         }
     }
 
-    /// <summary>Starts the window expansion from the island shell rectangle.</summary>
-    private void StartEntranceAnimation()
+    private async void StartCenterFadeIn()
     {
-        if (_closed || _entranceStarted)
+        if (!_centerFade || _closed)
         {
             return;
         }
 
-        if (_entranceSource is not { } source || ResolveTarget(source) is not { } target)
+        // Let the first layout/composition pass finish while the window is still alpha 0. Starting the
+        // opacity curve in the same dispatcher turn as the first paint made the opening frames hitch.
+        await Task.Delay(70);
+        if (_closed || _exitStarted)
         {
-            RevealContent();
             return;
         }
 
-        _entranceStarted = true;
-        var from = CurrentPixelRect(_entranceScale, source);
-        AnimateGeometry(from, target, _entranceScale, EntranceDuration, EaseOutCubic, RevealContent);
+        Opacity = 1;
+        ApplyWindowAlpha(0);
+        FadeOpacity(0, 1, FadeInDuration);
     }
 
-    private PixelRect? ResolveTarget(LayeredRect source)
+    private void FadeOpacity(double from, double to, TimeSpan duration, Action? completed = null)
     {
-        var screen = Screens.ScreenFromPoint(new PixelPoint(source.X, source.Y)) ?? Screens.Primary;
-        if (screen is null)
-        {
-            return null;
-        }
-
-        var scale = screen.Scaling > 0 && double.IsFinite(screen.Scaling) ? screen.Scaling : _entranceScale;
-        var width = Math.Max(1, (int)Math.Round(SettingsMetrics.WindowWidth * scale));
-        var height = Math.Max(1, (int)Math.Round(SettingsMetrics.WindowHeight * scale));
-        var work = screen.WorkingArea;
-        return new PixelRect(
-            work.X + Math.Max(0, (work.Width - width) / 2),
-            work.Y + Math.Max(0, (work.Height - height) / 2),
-            width,
-            height);
-    }
-
-    private PixelRect CurrentPixelRect(double scale, LayeredRect fallback)
-    {
-        var bounds = Bounds;
-        var width = (int)Math.Round(bounds.Width * scale);
-        var height = (int)Math.Round(bounds.Height * scale);
-        if (width <= 0 || height <= 0)
-        {
-            return new PixelRect(fallback.X, fallback.Y, fallback.Width, fallback.Height);
-        }
-
-        return new PixelRect(Position.X, Position.Y, width, height);
-    }
-
-    private void AnimateGeometry(PixelRect from, PixelRect to, double scale, TimeSpan duration,
-        Func<double, double> easing, Action completed)
-    {
-        _geometryTimer?.Stop();
-        _geometryAnimating = true;
+        _fadeClock?.Stop();
+        _fadeClock ??= new AvaloniaFrameClock(this);
+        ApplyWindowAlpha(from);
         var stopwatch = Stopwatch.StartNew();
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
-        timer.Tick += (_, _) =>
+        _fadeClock.Start(_ =>
         {
             var progress = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
-            var eased = easing(progress);
-            var rect = new PixelRect(
-                (int)Math.Round(from.X + ((to.X - from.X) * eased)),
-                (int)Math.Round(from.Y + ((to.Y - from.Y) * eased)),
-                Math.Max(1, (int)Math.Round(from.Width + ((to.Width - from.Width) * eased))),
-                Math.Max(1, (int)Math.Round(from.Height + ((to.Height - from.Height) * eased))));
-            ApplyWindowRect(rect, scale);
+            ApplyWindowAlpha(from + ((to - from) * EaseOutCubic(progress)));
+            ApplyFadeTransform(to >= from ? progress : 1 - progress);
             if (progress < 1)
             {
                 return;
             }
 
-            timer.Stop();
-            if (ReferenceEquals(_geometryTimer, timer))
+            _fadeClock?.Stop();
+            if (to >= from && _liquidGlass)
             {
-                _geometryTimer = null;
-            }
-
-            _geometryAnimating = false;
-            ApplyCornerRegion("geometry-complete");
-            completed();
-        };
-        _geometryTimer = timer;
-        timer.Start();
-    }
-
-    private void ApplyWindowRect(PixelRect rect, double scale)
-    {
-        Position = new PixelPoint(rect.X, rect.Y);
-        Width = Math.Max(1, rect.Width / scale);
-        Height = Math.Max(1, rect.Height / scale);
-    }
-
-    private void RevealContent()
-    {
-        if (_shell.Child is not Control content || _closed)
-        {
-            return;
-        }
-
-        content.IsVisible = true;
-        content.IsHitTestVisible = true;
-        FadeContent(content, content.Opacity > 0.01 ? content.Opacity : 0.55, 1,
-            TimeSpan.FromMilliseconds(180));
-    }
-
-    private void FadeContent(Control content, double from, double to, TimeSpan duration, Action? completed = null)
-    {
-        _contentTimer?.Stop();
-        content.Opacity = from;
-        var stopwatch = Stopwatch.StartNew();
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
-        timer.Tick += (_, _) =>
-        {
-            var progress = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
-            content.Opacity = from + ((to - from) * EaseOutCubic(progress));
-            if (progress < 1)
-            {
-                return;
-            }
-
-            timer.Stop();
-            if (ReferenceEquals(_contentTimer, timer))
-            {
-                _contentTimer = null;
+                // Layered windows and the DWM acrylic backdrop don't mix: while WS_EX_LAYERED is
+                // present DWM leaves the acrylic surface square. The fade only needs the layered
+                // alpha; drop it once the panel is fully visible so DWM can round the acrylic.
+                RemoveLayeredWindowStyle();
             }
 
             completed?.Invoke();
-        };
-        _contentTimer = timer;
-        timer.Start();
+        });
     }
 
-    /// <summary>Plays the return-to-island animation before allowing the window to close.</summary>
+    private void ApplyFadeTransform(double progress)
+    {
+        if (_fadeScale is null || _fadeTranslate is null)
+        {
+            return;
+        }
+
+        var eased = EaseOutCubic(Math.Clamp(progress, 0, 1));
+        _fadeScale.ScaleX = 0.985 + (0.015 * eased);
+        _fadeScale.ScaleY = 0.985 + (0.015 * eased);
+        _fadeTranslate.Y = 10 * (1 - eased);
+    }
+
+    private void ApplyWindowAlpha(double alpha)
+        => ApplyWindowAlpha(TryGetPlatformHandle()?.Handle ?? IntPtr.Zero, alpha);
+
+    private void ApplyWindowAlpha(IntPtr handle, double alpha)
+    {
+        _windowAlpha = Math.Clamp(alpha, 0, 1);
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (!_layeredStyleAdded)
+        {
+            var style = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+            if ((style & WsExLayered) == 0)
+            {
+                SetWindowLongPtr(handle, GwlExStyle, new IntPtr(style | WsExLayered));
+                _layeredStyleAdded = true;
+            }
+        }
+
+        _ = SetLayeredWindowAttributes(handle, 0, (byte)Math.Round(_windowAlpha * 255), LwaAlpha);
+    }
+
+    private void RemoveLayeredWindowStyle()
+    {
+        if (!_layeredStyleAdded)
+        {
+            return;
+        }
+
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var style = GetWindowLongPtr(handle, GwlExStyle).ToInt64();
+        if ((style & WsExLayered) != 0)
+        {
+            SetWindowLongPtr(handle, GwlExStyle, new IntPtr(style & ~WsExLayered));
+        }
+
+        _layeredStyleAdded = false;
+        _ = SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
+        // Re-assert the no-shadow policy after the layered style change; otherwise DWM re-adds its
+        // rectangular shadow/frame around the already rounded client area.
+        _ = WindowCornerRegion.TryDisableNonClientRendering(handle, out _);
+        _ = WindowCornerRegion.TryRemoveDwmBorder(handle, out _);
+    }
+
+    private const int GwlExStyle = -20;
+    private const long WsExLayered = 0x00080000;
+    private const uint LwaAlpha = 0x00000002;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
+        uint uFlags);
+
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpFrameChanged = 0x0020;
+
+    /// <summary>Fades the centered settings window out before closing it.</summary>
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        if (_entranceSource is not null && !_allowClose && !_exitStarted)
+        if (_centerFade && !_allowClose && !_exitStarted)
         {
             e.Cancel = true;
-            StartExitAnimation();
+            _exitStarted = true;
+            _fadeClock?.Stop();
+            FadeOpacity(_windowAlpha, 0, FadeOutDuration, () =>
+            {
+                _allowClose = true;
+                Close();
+            });
             return;
         }
 
         base.OnClosing(e);
     }
 
-    private void StartExitAnimation()
-    {
-        if (_exitStarted || _closed)
-        {
-            return;
-        }
-
-        _exitStarted = true;
-        _geometryTimer?.Stop();
-        _geometryTimer = null;
-        _geometryAnimating = false;
-
-        var source = _entranceSource!.Value;
-        var content = _shell.Child as Control;
-        if (content is not null)
-        {
-            content.IsHitTestVisible = false;
-        }
-
-        var from = CurrentPixelRect(_entranceScale, source);
-        if (content is not null)
-        {
-            // Fade only to a visible veil; the shrink itself is the dominant exit motion. Waiting for
-            // opacity 0 first made the panel look empty for most of the collapse.
-            FadeContent(content, content.Opacity > 0.01 ? content.Opacity : 0.55, 0.15,
-                TimeSpan.FromMilliseconds(180));
-        }
-
-        StartExitGeometry(from, source, content);
-    }
-
-    private void StartExitGeometry(PixelRect from, LayeredRect source, Control? content)
-    {
-        AnimateGeometry(from, new PixelRect(source.X, source.Y, source.Width, source.Height),
-            _entranceScale, ExitDuration, EaseInCubic, () =>
-            {
-                if (content is not null)
-                {
-                    content.IsVisible = false;
-                    content.Opacity = 0;
-                }
-
-                _allowClose = true;
-                Close();
-            });
-    }
-
     /// <inheritdoc />
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
-        _geometryTimer?.Stop();
-        _contentTimer?.Stop();
+        _fadeClock?.Dispose();
         base.OnClosed(e);
     }
 
     private static double EaseOutCubic(double progress)
         => 1 - Math.Pow(1 - progress, 3);
-
-    private static double EaseInCubic(double progress)
-        => progress * progress * progress;
 
     /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
     public IReadOnlyList<string> FirstFrameSteps => _firstFrameSteps;
@@ -584,6 +538,13 @@ public sealed class SettingsWindow : Window, ILocalizable
             _firstFramePreparing = true;
             try
             {
+                // Set the layered alpha before the first composited frame. Doing this only in
+                // OnOpened allows one full-opacity frame to flash through.
+                if (_centerFade && msg == WmShowWindow)
+                {
+                    ApplyWindowAlpha(hwnd, 0);
+                }
+
                 var radius = WindowCornerRegion.RadiusPx(SettingsMetrics.WindowRadius, RenderScaling);
                 var argb = ((uint)_palette.Window.A << 24) | ((uint)_palette.Window.R << 16) |
                     ((uint)_palette.Window.G << 8) | _palette.Window.B;
@@ -610,8 +571,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     /// <param name="reason">Why the region is being re-applied (kept in <see cref="RegionTrace"/>).</param>
     private void ApplyCornerRegion(string reason)
     {
-        if (_closed || _geometryAnimating
-            || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
+        if (_closed || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
         {
             return;
         }
@@ -743,6 +703,16 @@ public sealed class SettingsWindow : Window, ILocalizable
         _ = WindowFirstFrame.Prepare(handle, radius, argb);
     }
 
+    private static Color Blend(Color from, Color to, double amount)
+    {
+        var t = Math.Clamp(amount, 0, 1);
+        return Color.FromArgb(
+            255,
+            (byte)Math.Round(from.R + ((to.R - from.R) * t)),
+            (byte)Math.Round(from.G + ((to.G - from.G) * t)),
+            (byte)Math.Round(from.B + ((to.B - from.B) * t)));
+    }
+
     private void ApplyChrome()
     {
         if (_bleed is not null)
@@ -750,11 +720,24 @@ public sealed class SettingsWindow : Window, ILocalizable
             // The layer must be the exact panel colour: it is only there to cover the platform surface
             // between DWM's corner cut and the painted arc.
             _bleed.Background = new SolidColorBrush(_palette.Window);
-            _bleed.IsVisible = ChromeMode == SettingsWindowChrome.Opaque;
+            _bleed.IsVisible = !_liquidGlass && ChromeMode == SettingsWindowChrome.Opaque;
         }
 
-        _shell.Background = new SolidColorBrush(_palette.Window);
-        _shell.BorderBrush = _palette.LineStrongBrush;
+        var liquid = _settings.Current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
+        if (liquid)
+        {
+            var window = _palette.Window;
+            _shell.Background = new SolidColorBrush(Color.FromArgb(0x74, window.R, window.G, window.B));
+            _shell.BorderBrush = Brushes.Transparent;
+            _shell.BorderThickness = new Thickness(0);
+        }
+        else
+        {
+            _shell.Background = new SolidColorBrush(_palette.Window);
+            _shell.BorderBrush = _palette.LineStrongBrush;
+            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
+        }
+
         ApplyWindowSurface();
     }
 
@@ -1335,6 +1318,13 @@ public sealed class SettingsWindow : Window, ILocalizable
             RebuildTitleBarBrushes();
             RebuildNav();
             RebuildContent();
+            return;
+        }
+
+        if (previous.Material != current.Material)
+        {
+            ApplyChrome();
+            RebuildTitleBarBrushes();
             return;
         }
 

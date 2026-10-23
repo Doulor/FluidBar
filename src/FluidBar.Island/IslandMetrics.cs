@@ -653,10 +653,14 @@ public static class PageLayout
     public static SKRect HomeWeather(SKRect page) => new(page.Left + 300, page.Top + 28, page.Left + 400, page.Top + 62);
 
     /// <summary>Home quick-toggle rectangle for an index (0..3).</summary>
-    public static SKRect HomeToggle(SKRect page, int index)
+    public static SKRect HomeToggle(SKRect page, int index) => HomeToggle(page, index, 4);
+
+    /// <summary>Home quick-toggle rectangle for an index out of <paramref name="count"/> tiles.</summary>
+    public static SKRect HomeToggle(SKRect page, int index, int count)
     {
         const float gap = 6f;
-        var width = (400f - (gap * 3)) / 4f;
+        var tiles = Math.Clamp(count, 1, 4);
+        var width = (400f - (gap * (tiles - 1))) / tiles;
         var left = page.Left + (index * (width + gap));
         return new SKRect(left, page.Top + 74, left + width, page.Top + 112);
     }
@@ -867,7 +871,8 @@ public static class PageLayout
         float y,
         out int index,
         float scrollOffset,
-        int itemCount)
+        int itemCount,
+        int toggleCount = 4)
     {
         index = -1;
         switch (kind)
@@ -883,9 +888,9 @@ public static class PageLayout
                     return IslandPageControl.MediaCard;
                 }
 
-                for (var i = 0; i < 4; i++)
+                for (var i = 0; i < Math.Clamp(toggleCount, 1, 4); i++)
                 {
-                    if (HomeToggle(pageRect, i).Contains(x, y))
+                    if (HomeToggle(pageRect, i, toggleCount).Contains(x, y))
                     {
                         index = i;
                         return IslandPageControl.QuickToggle;

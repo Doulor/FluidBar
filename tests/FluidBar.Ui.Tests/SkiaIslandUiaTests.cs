@@ -104,6 +104,7 @@ public sealed class SkiaIslandUiaTests
         Assert.Equal(100.0, volume.State.RangeMaximum);
         Assert.NotNull(brightness);
         Assert.Equal(78.0, brightness!.State.RangeValue);
+        // Four tiles: Wi-Fi, Bluetooth, pomodoro and the dark/light theme switch (user request 2026-10-24).
         Assert.Equal(4, body!.Children.Count(child => child.Id.StartsWith("island.page.0.toggle.", StringComparison.Ordinal)));
     }
 
@@ -545,12 +546,12 @@ public sealed class SkiaIslandUiaTests
         using var _source = source;
         fixture.ExpandAndSettle();
 
-        source.Perform(new UiaElementActionRequest(UiaElementAction.Toggle, "island.page.0.toggle.3"));
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Toggle, "island.page.0.toggle.1"));
 
         var call = Assert.Single(actions.Calls);
         Assert.Equal(IslandPlatformActionKind.QuickToggle, call.Kind);
-        Assert.Equal(IslandQuickToggle.Theme, call.Toggle);
-        Assert.Equal(3, call.Index);
+        Assert.Equal(IslandQuickToggle.Bluetooth, call.Toggle);
+        Assert.Equal(1, call.Index);
     }
 
     [Fact]

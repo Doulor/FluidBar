@@ -247,7 +247,8 @@ public static class SkiaIslandHitTest
             return IslandPageControl.NotificationClear;
         }
 
-        var control = PageMetricsLayout.HitTest(kind, pageRect, x, y, metrics, scroll, count, out index);
+        var control = PageMetricsLayout.HitTest(kind, pageRect, x, y, metrics, scroll, count, out index,
+            state.Pages.Home.Toggles.Count);
 
         // Declared-but-unavailable controls are inert: no click target, so nothing can look clickable
         // and then do nothing. The renderer greys them and prints the localized reason instead.

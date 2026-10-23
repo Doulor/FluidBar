@@ -718,3 +718,14 @@ blend = 0.25 / 0.5 / 0.75 时壳体中心 alpha 必须 > 240（修前 224 / 191�
 
 测试补了第二段断言：`strip.Next`（26 DIP 紧邻岛）区域内液态与黑曜石必须有 > 100 像素差异。
 把紧邻岛改回固定色后该断言失败（exit 1），说明它确实在测这件事。
+
+### 15.23 Home 快捷区四格（2026-10-24）
+
+用户："做一个专注（番茄钟），再放一个深色浅色主题切换，一排包括 wifi 和蓝牙总共 4 个。"
+
+- 第 2 格：番茄钟。`PomodoroTimer`（纯状态：Toggle / Tick / 完成态）由 `SkiaIslandController` 持有，
+  `_time.CreateTimer` 1 Hz 推进；`DispatchControl` 在 seam 判空之前拦截，因此没有平台服务也能工作。
+- 第 3 格：深/浅色。`IslandQuickToggle.Theme` 的后端（`SettingsController.Update(Theme)`）早就写好，
+  这次只是重新把格子画出来并保持持久化。
+- 第 1/2 格仍是 Wi-Fi / 蓝牙，顺序与 `IslandQuickToggle` 枚举一致（Wifi=0, Bluetooth=1, Pomodoro=2, Theme=3）。
+- 空态细节：`HomeToggleModel` 的 label 直接承载倒计时文本（`24:30`），不需要改渲染器布局。

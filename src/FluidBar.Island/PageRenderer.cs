@@ -266,7 +266,7 @@ internal sealed partial class PageRenderer : IDisposable
         for (var i = 0; i < count; i++)
         {
             var toggle = toggles![i];
-            var rect = PageMetricsLayout.HomeToggle(page, i, m);
+            var rect = PageMetricsLayout.HomeToggle(page, i, count, m);
             var enabled = toggle.IsEnabled;
             var alpha = (enabled ? 1f : 0.45f) * _opacity;
             _fill.Style = SKPaintStyle.Fill;

@@ -15,6 +15,7 @@ namespace FluidBar.Platform.Windows.Hosting;
 public static class WindowDwmPolicy
 {
     private const int DwmWindowCornerPreference = 33;
+    private const int DwmSystemBackdropType = 38;
 
     /// <summary>Asks DWM to round the window's own corners (Windows 11).</summary>
     /// <param name="hwnd">Top-level window handle.</param>
@@ -29,6 +30,55 @@ public static class WindowDwmPolicy
     /// <returns>True when DWM accepted the attribute.</returns>
     public static bool TryDisableRounding(IntPtr hwnd, out string? error)
         => TrySetPreference(hwnd, 1, "DONOTROUND", out error);
+
+    /// <summary>Enables the Windows 11 acrylic system backdrop (blurred desktop behind a transparent client).</summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false.</param>
+    /// <returns>True when DWM accepted the system-backdrop attribute.</returns>
+    public static bool TryEnableAcrylicBackdrop(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var backdrop = 3; // DWMSBT_TRANSIENTWINDOW (acrylic)
+        var hr = NativeMethods.DwmApi.DwmSetWindowAttribute(hwnd, DwmSystemBackdropType, ref backdrop,
+            Marshal.SizeOf<int>());
+        if (hr < 0)
+        {
+            error = $"DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE=acrylic) failed: 0x{hr:X8}";
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Extends the DWM frame into the whole client area so the system backdrop fills it.</summary>
+    /// <param name="hwnd">Top-level window handle.</param>
+    /// <param name="error">Failure description when the call returns false.</param>
+    /// <returns>True when DWM accepted the frame extension.</returns>
+    public static bool TryExtendFrameIntoClientArea(IntPtr hwnd, out string? error)
+    {
+        error = null;
+        if (hwnd == IntPtr.Zero)
+        {
+            error = "window handle is zero";
+            return false;
+        }
+
+        var margins = new NativeMethods.DwmApi.Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+        var hr = NativeMethods.DwmApi.DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        if (hr < 0)
+        {
+            error = $"DwmExtendFrameIntoClientArea failed: 0x{hr:X8}";
+            return false;
+        }
+
+        return true;
+    }
 
     /// <summary>Reads back the DWM corner preference (diagnostics).</summary>
     /// <param name="hwnd">Top-level window handle.</param>

@@ -89,8 +89,8 @@ public enum IslandQuickToggle
     /// <summary>Bluetooth toggle (slot 1).</summary>
     Bluetooth = 1,
 
-    /// <summary>Focus Assist toggle (slot 2).</summary>
-    Focus = 2,
+    /// <summary>Pomodoro / focus timer toggle (slot 2).</summary>
+    Pomodoro = 2,
 
     /// <summary>App/island theme toggle (slot 3, rendered as "System"/moon).</summary>
     Theme = 3,
@@ -164,4 +164,5 @@ public interface IIslandPlatformActions
     /// <param name="action">Action to dispatch.</param>
     /// <returns>Whether a service handled it, it was deferred, or no service exists.</returns>
     IslandActionResult Invoke(in IslandPlatformAction action);
+
 }

@@ -36,11 +36,20 @@ public static class PageMetricsLayout
         page.Left + 300, page.Top + BodyTop, page.Left + 400,
         page.Top + BodyTop + 34 + metrics.LineGrow(IslandType.WeatherTemp) + metrics.LineGrow(IslandType.WeatherCondition));
 
-    /// <summary>Home quick-toggle rectangle for an index (0..3).</summary>
+    /// <summary>Home quick-toggle rectangle for an index (0..3) when four tiles are painted.</summary>
     public static SKRect HomeToggle(SKRect page, int index, in FontScaleMetrics metrics)
+        => HomeToggle(page, index, 4, metrics);
+
+    /// <summary>
+    /// Home quick-toggle rectangle for an index out of <paramref name="count"/> tiles. The row always
+    /// spans the same width, so two tiles (Wi-Fi and Bluetooth only) stretch to fill it instead of
+    /// leaving half the row empty.
+    /// </summary>
+    public static SKRect HomeToggle(SKRect page, int index, int count, in FontScaleMetrics metrics)
     {
         const float gap = 6f;
-        var width = (400f - (gap * 3)) / 4f;
+        var tiles = Math.Clamp(count, 1, 4);
+        var width = (400f - (gap * (tiles - 1))) / tiles;
         var left = page.Left + (index * (width + gap));
         var top = HomeDate(page, metrics).Bottom;
         return new SKRect(left, top, left + width, top + 38 + metrics.LineGrow(IslandType.Toggle));
@@ -493,7 +502,8 @@ public static class PageMetricsLayout
     /// offset and the row count, so painted rows and click targets never drift.
     /// </summary>
     public static IslandPageControl HitTest(
-        PageSlotKind kind, SKRect pageRect, float x, float y, in FontScaleMetrics metrics, float scrollOffset, int itemCount, out int index)
+        PageSlotKind kind, SKRect pageRect, float x, float y, in FontScaleMetrics metrics, float scrollOffset,
+        int itemCount, out int index, int toggleCount = 4)
     {
         index = -1;
         var scrolled = kind is PageSlotKind.Home or PageSlotKind.Media or PageSlotKind.Widgets
@@ -513,9 +523,9 @@ public static class PageMetricsLayout
                     return IslandPageControl.MediaCard;
                 }
 
-                for (var i = 0; i < 4; i++)
+                for (var i = 0; i < Math.Clamp(toggleCount, 1, 4); i++)
                 {
-                    if (HomeToggle(scrolled, i, metrics).Contains(x, y))
+                    if (HomeToggle(scrolled, i, toggleCount, metrics).Contains(x, y))
                     {
                         index = i;
                         return IslandPageControl.QuickToggle;

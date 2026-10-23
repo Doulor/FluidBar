@@ -1589,8 +1589,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 return ToggleRadio(_wifi, "Wi-Fi", "island.actions.wifi-toggle");
             case IslandQuickToggle.Bluetooth:
                 return ToggleRadio(_bluetooth, "Bluetooth", "island.actions.bluetooth-toggle");
-            case IslandQuickToggle.Focus:
-                return ToggleFocus();
+            case IslandQuickToggle.Pomodoro:
+                // Handled by SkiaIslandController (no platform service involved); reaching this point
+                // means the seam was called directly, which is a caller bug, not an unsupported feature.
+                return Unsupported("the pomodoro tile is owned by the island controller");
             case IslandQuickToggle.Theme:
                 try
                 {
