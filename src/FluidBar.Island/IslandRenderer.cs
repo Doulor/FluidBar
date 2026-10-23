@@ -1219,7 +1219,10 @@ public sealed class IslandRenderer : IDisposable
             // Dissolve on top of a FULL-opacity base. Fading both images in/out (old at 1-t, new at t)
             // leaves the composite alpha at 1-(1-t)·(1-t)... in practice ~88 % at t = 0.5, so the desktop
             // showed through sharp once per capture — the "island flashes transparent" report.
-            DrawBackdropCore(canvas, state, path, previous, opacity, lensBand: false);
+            // Both passes include the refraction band: the rim used to come only from the *new* capture,
+            // so during every cross-fade the rim showed 100 % of the new frame while the interior was still
+            // the old one — a faint rim flicker at capture cadence (reported 2026-10-23).
+            DrawBackdropCore(canvas, state, path, previous, opacity, lensBand: true);
             DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: true);
             return;
         }
@@ -1305,7 +1308,7 @@ public sealed class IslandRenderer : IDisposable
         _strokePaint.StrokeWidth = (float)bandDip * 2f;
         var created = _strokePaint.GetFillPath(path) ?? new SKPath();
         _strokePaint.Style = SKPaintStyle.Fill;
-        if (_lensBands.Count >= 4)
+        if (_lensBands.Count >= 8)
         {
             // Bounded cache: three widths for one shell size; a size change evicts the oldest slot.
             _lensBands[0].Path.Dispose();
@@ -1318,7 +1321,7 @@ public sealed class IslandRenderer : IDisposable
 
     private SKShader? _scrimShader;
     private (int Width, int Height) _scrimKey;
-    private readonly List<(SKPath Path, (double Width, double Height, double Band) Key)> _lensBands = new(4);
+    private readonly List<(SKPath Path, (double Width, double Height, double Band) Key)> _lensBands = new(8);
     private readonly SKPaint _strokePaint = new() { IsAntialias = true };
 
     private SKShader GetGlassShader(float height)

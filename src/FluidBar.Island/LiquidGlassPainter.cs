@@ -48,8 +48,10 @@ internal sealed class LiquidGlassPainter : IDisposable
     private int _scratchWidth;
     private int _scratchHeight;
     private SKShader? _pointerGlow;
-    private ShaderSet? _edgeSet;
-    private (int Width, int Height) _edgeKey;
+    // Several island surfaces (panel, capsules, ghosts) can share one frame with different sizes; a single
+    // slot rebuilt the whole shader set whenever the size alternated — per-frame churn that showed up as a
+    // faint rim flicker on the expanded card (reported 2026-10-23).
+    private readonly List<((int Width, int Height) Key, ShaderSet Set)> _edgeSets = new(4);
     private bool _disposed;
 
     /// <summary>Number of baked overlays currently retained (diagnostics).</summary>
@@ -254,15 +256,23 @@ internal sealed class LiquidGlassPainter : IDisposable
     private ShaderSet EdgeSetRef(SKRect bounds)
     {
         var key = ((int)Math.Round(bounds.Width * 4), (int)Math.Round(bounds.Height * 4));
-        if (_edgeSet is not null && _edgeKey == key)
+        foreach (var entry in _edgeSets)
         {
-            return _edgeSet;
+            if (entry.Key == key)
+            {
+                return entry.Set;
+            }
         }
 
-        _edgeSet?.Dispose();
-        _edgeKey = key;
-        _edgeSet = new ShaderSet(bounds.Width, bounds.Height);
-        return _edgeSet;
+        if (_edgeSets.Count >= 4)
+        {
+            _edgeSets[0].Set.Dispose();
+            _edgeSets.RemoveAt(0);
+        }
+
+        var created = new ShaderSet(bounds.Width, bounds.Height);
+        _edgeSets.Add((key, created));
+        return created;
     }
 
     private Overlay? GetOverlay(SKPath path, SKRect bounds, float dpi, int shapeKey, bool morphing)
@@ -410,8 +420,12 @@ internal sealed class LiquidGlassPainter : IDisposable
         _scratchBitmap = null;
         _pointerGlow?.Dispose();
         _pointerGlow = null;
-        _edgeSet?.Dispose();
-        _edgeSet = null;
+        foreach (var entry in _edgeSets)
+        {
+            entry.Set.Dispose();
+        }
+
+        _edgeSets.Clear();
         _scratch.Dispose();
         _paint.Dispose();
         _stroke.Dispose();
