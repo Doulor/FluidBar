@@ -42,6 +42,11 @@ internal sealed class ProcessLoopbackCapture : IDisposable
     public bool IsAvailable => Environment.TickCount64 - Interlocked.Read(ref _lastFrameTick) < 1500;
 
     /// <summary>Points the capture at a process. Safe to call at any rate; only changes restart counting.</summary>
+    /// <remarks>
+    /// False means the capture is currently producing frames for a DIFFERENT process: two players
+    /// polling in turns used to steal the target from each other, resetting the frame count on every
+    /// switch. The loser keeps its previous timeline instead.
+    /// </remarks>
     public bool TryStart(int processId)
     {
         if (processId <= 0)
@@ -53,7 +58,7 @@ internal sealed class ProcessLoopbackCapture : IDisposable
         // constantly restarts counting, so keep whichever target is currently producing frames.
         if (IsAvailable)
         {
-            return true;
+            return Volatile.Read(ref _targetPid) == processId;
         }
 
         if (Interlocked.CompareExchange(ref _targetPid, processId, processId) != processId)

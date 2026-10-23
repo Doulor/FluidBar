@@ -240,6 +240,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private TimeSpan _frameAnchorPosition;
     private long _lastFrameLogTick;
     private bool _frameAnchorInitialised;
+
+    /// <summary>
+    /// Frame-count clock state for the Qishui candidate — same design as the KuGou frame clock, but
+    /// Soda has no settings file, so the only re-anchor source is its UIA clock text.
+    /// </summary>
+    private string? _qishuiFrameTrackTitle;
+    private TimeSpan _qishuiFrameAnchorAudio;
+    private TimeSpan _qishuiFrameAnchorPosition;
+    private bool _qishuiFrameAnchorReady;
+    private long _qishuiFrameLogTick;
+
     private int _lastPlayerPid;
     private string? _captionTitle;
     private string _captionPendingTitle = string.Empty;
@@ -1187,7 +1198,17 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// </remarks>
     private WindowMediaCandidate EnrichWithAccessibility(WindowMediaCandidate candidate, double playerPeak)
     {
-        if (candidate.ProcessId <= 0 || !MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
+        if (candidate.ProcessId <= 0)
+        {
+            return candidate;
+        }
+
+        if (MediaWindowFallback.IsQishuiProcessName(candidate.ProcessName))
+        {
+            return EnrichWithQishuiClock(candidate);
+        }
+
+        if (!MediaWindowFallback.IsKugouProcessName(candidate.ProcessName))
         {
             return candidate;
         }
@@ -1220,6 +1241,83 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
         };
     }
 
+    /// <summary>
+    /// Overlays a playback position for Soda Music from the audio frames it renders.
+    /// </summary>
+    /// <remarks>
+    /// <para>The identity (title/artist/duration) came from the queue cache in <c>FindCandidate</c>; this
+    /// adds the position. Soda's own clocks are unusable as a source without extra dependencies (its
+    /// Chromium renderer exposes no MSAA names; the UIA tree would pull the WPF stack back into this
+    /// project), so the position is counted from the audio frames the player renders — the same primary
+    /// clock KuGou uses. Frames advance while the player renders (focus-independent), stop on pause and
+    /// keep counting when the window is minimised.</para>
+    /// <para>Without an absolute anchor the count drifts by the measured capture ratio (~1.3 % slow, i.e.
+    /// seconds over a long track), which is acceptable for a fallback: the SMTC session is the primary
+    /// path whenever Soda publishes one (current builds do). A track change anchors at zero; a position
+    /// that runs past the queue-cache duration re-anchors (loop/replay).</para>
+    /// </remarks>
+    private WindowMediaCandidate EnrichWithQishuiClock(WindowMediaCandidate candidate)
+    {
+        if (!_loopback.TryStart(candidate.ProcessId))
+        {
+            if (Environment.TickCount64 - _qishuiFrameLogTick > 5000)
+            {
+                _qishuiFrameLogTick = Environment.TickCount64;
+                MediaDiagnostics.LogAlways(
+                    $"sync.qishui-noframe pid={candidate.ProcessId} title='{candidate.Title}'");
+            }
+
+            // No frame capture: keep the queue-cache duration but publish no timeline.
+            return candidate;
+        }
+
+        var audio = _loopback.Consumed;
+        if (!string.Equals(_qishuiFrameTrackTitle, candidate.Title, StringComparison.Ordinal))
+        {
+            _qishuiFrameTrackTitle = candidate.Title;
+            _qishuiFrameAnchorPosition = TimeSpan.Zero;
+            _qishuiFrameAnchorAudio = audio;
+            _qishuiFrameAnchorReady = true;
+        }
+
+        if (!_qishuiFrameAnchorReady)
+        {
+            _qishuiFrameAnchorPosition = TimeSpan.Zero;
+            _qishuiFrameAnchorAudio = audio;
+            _qishuiFrameAnchorReady = true;
+        }
+
+        var position = _qishuiFrameAnchorPosition + (audio - _qishuiFrameAnchorAudio);
+        if (position < TimeSpan.Zero)
+        {
+            position = TimeSpan.Zero;
+        }
+
+        // A position past the known duration means the player looped or restarted the track.
+        if (candidate.Duration > TimeSpan.Zero && position > candidate.Duration + TimeSpan.FromSeconds(1))
+        {
+            _qishuiFrameAnchorAudio = audio;
+            _qishuiFrameAnchorPosition = TimeSpan.Zero;
+            position = TimeSpan.Zero;
+        }
+
+        if (Environment.TickCount64 - _qishuiFrameLogTick > 2000)
+        {
+            _qishuiFrameLogTick = Environment.TickCount64;
+            MediaDiagnostics.LogAlways(
+                $"sync.qishui-frame pos={position.TotalSeconds:0.0}s anchor={_qishuiFrameAnchorPosition.TotalSeconds:0.0}s "
+                + $"duration={candidate.Duration.TotalSeconds:0.0}s title='{candidate.Title}'");
+        }
+
+        return candidate with
+        {
+            Position = position,
+            PositionSampledAtUtc = _timeProviderNow(),
+            HasTimeline = true,
+            TimelineSource = PlayerTimelineSource.AudioFrames,
+        };
+    }
+
     private void ReleaseAccessibility()
     {
         lock (_accessibilityGate)
@@ -1243,10 +1341,14 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private bool DetermineFallbackPlaying(WindowMediaCandidate candidate)
     {
         // A frozen position only means "paused" after the source has refreshed without moving; the
-        // accessibility timeline refreshes every second, the settings file every ~30 s.
-        var staleAfter = candidate.TimelineSource == PlayerTimelineSource.Accessibility
-            ? FallbackPlaybackTracker.AccessibilityStaleAfter
-            : FallbackPlaybackTracker.StateFileStaleAfter;
+        // frame-count and accessibility timelines refresh every 250 ms / second, the settings file
+        // only every ~30 s.
+        var staleAfter = candidate.TimelineSource switch
+        {
+            PlayerTimelineSource.Accessibility => FallbackPlaybackTracker.AccessibilityStaleAfter,
+            PlayerTimelineSource.AudioFrames => FallbackPlaybackTracker.AccessibilityStaleAfter,
+            _ => FallbackPlaybackTracker.StateFileStaleAfter,
+        };
         return _fallbackPlayback.Observe(candidate.TrackKey, candidate.HasTimeline, candidate.Position,
             candidate.PositionSampledAtUtc, staleAfter);
     }

@@ -11,7 +11,7 @@ namespace FluidBar.Ui.Tests;
 /// </summary>
 public sealed class KaraokeSweepTests
 {
-    private static IslandContent MediaContent(double positionMs, bool playing) => new()
+    private static IslandContent MediaContent(double positionMs, bool playing, double highlight = -1) => new()
     {
         Media = new MediaSessionData
         {
@@ -20,7 +20,9 @@ public sealed class KaraokeSweepTests
             Source = "KuGou",
             LyricLine = "Together we stand 30 feet tall",
             NextLyricLine = "We got a fire that burns within",
-            LyricHighlight = 0,
+            // The platform publishes the highlight it froze at; -1 keeps the historical 0 for the
+            // tests that assert sweep motion rather than the published phase.
+            LyricHighlight = highlight >= 0 ? highlight : 0,
             PositionMs = positionMs,
             IsPlaying = playing,
             HasTimeline = true,
@@ -127,6 +129,43 @@ public sealed class KaraokeSweepTests
             }
 
             Assert.False(fixture.Controller.IsKaraokeAnimating);
+        });
+    }
+
+    [Fact]
+    public Task Karaoke_sweep_resumes_on_the_frame_the_pause_ends()
+    {
+        return AvaloniaTest.Run(() =>
+        {
+            using var fixture = StartMedia();
+            fixture.ExpandAndSettle();
+            fixture.GoToPage(1);
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(300));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            var beforePause = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+
+            // Pause: the page keeps the phase the platform froze at (300 ms into a 30-char line = 0.1),
+            // and the sweep stops advancing (covered above).
+            fixture.Data.Update(_ => MediaContent(300, playing: false, highlight: 0.1));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            var frozen = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+            Assert.False(fixture.Controller.IsKaraokeAnimating);
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(2_000));
+
+            // Resume with the same sampled position (the player's clock has not flipped yet):
+            // nothing in the sample paths un-pauses the karaoke clock, so the sweep used to stay
+            // frozen until the drift crossed the 2.5 s seek threshold and snapped forward.
+            fixture.Data.Update(_ => MediaContent(300, playing: true, highlight: 0.1));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            Assert.True(fixture.Controller.IsKaraokeAnimating, "resume must un-pause the sweep clock");
+
+            fixture.Time.Advance(TimeSpan.FromMilliseconds(80));
+            fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+            var resumed = fixture.Controller.RenderState.Pages.Media.LyricHighlight;
+            Assert.True(resumed > frozen + 1e-6,
+                $"{resumed} should resume past {frozen} (before pause: {beforePause})");
+            Assert.True(resumed - frozen < 0.05,
+                $"resume must not jump ({frozen} -> {resumed}, before pause: {beforePause})");
         });
     }
 

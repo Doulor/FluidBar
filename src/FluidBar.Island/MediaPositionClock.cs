@@ -150,6 +150,15 @@ public sealed class MediaPositionClock
             return true;
         }
 
+        // A play-state change must fold the extrapolated position into the anchor first. `_playing`
+        // alone decides whether PositionAt extrapolates, so flipping it while keeping the old anchor
+        // rewound the picture to that anchor on pause and dropped the pause length on resume.
+        if (playing != _playing)
+        {
+            _anchorPositionMs = expected;
+            _anchorAtMs = nowMs;
+        }
+
         // Keep the anchor and remember the drift so it can be eased out instead of jumping backwards.
         _driftMs = diff;
         _driftAtMs = nowMs;

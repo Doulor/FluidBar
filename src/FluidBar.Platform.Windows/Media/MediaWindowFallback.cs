@@ -114,6 +114,12 @@ internal enum PlayerTimelineSource
 
     /// <summary>Position read from the player's accessibility tree (updated every second).</summary>
     Accessibility,
+
+    /// <summary>
+    /// Position counted from the player's rendered audio frames (250 ms poll; advances while the
+    /// player renders, stops on pause and keeps running when the UI tree goes stale).
+    /// </summary>
+    AudioFrames,
 }
 
 /// <summary>Media snapshot derived from a player window title (players without SMTC/GSMTC support).</summary>
@@ -159,6 +165,9 @@ internal static class MediaWindowFallback
     [
         new("kugou", ["酷狗音乐", "酷狗"], PlaylistFirst: true),
         new("kgmusic", ["酷狗音乐", "酷狗"], PlaylistFirst: true),
+        // Soda's caption never carries the track name (see QishuiQueueReader), so the rule exists only
+        // to make FindCandidate pick the process up; the metadata comes from the player's queue cache.
+        new("sodamusic", ["汽水音乐"], PlaylistFirst: false),
         new("qqmusic", ["QQ音乐", "QQ 音乐"], PlaylistFirst: false),
         new("cloudmusic", ["网易云音乐", "网易云"], PlaylistFirst: false),
         new("netease", ["网易云音乐"], PlaylistFirst: false),
@@ -255,6 +264,24 @@ internal static class MediaWindowFallback
             if (FindRule(processName) is not { } rule)
             {
                 continue;
+            }
+
+            // Soda exposes no track name in any caption; its queue cache is the identity source.
+            if (IsSodaRule(rule))
+            {
+                var fromQueue = QishuiQueueReader.TryRead();
+                if (fromQueue is null)
+                {
+                    continue;
+                }
+
+                return new WindowMediaCandidate(
+                    "sodamusic",
+                    fromQueue.Title,
+                    fromQueue.Artist,
+                    "win|sodamusic|" + fromQueue.Title + "|" + fromQueue.Artist,
+                    ProcessId: process.Id,
+                    Duration: fromQueue.Duration);
             }
 
             string windowTitle;
@@ -396,6 +423,39 @@ internal static class MediaWindowFallback
         var rule = FindRule(processName);
         return rule is not null && IsKugouRule(rule);
     }
+
+    /// <summary>True for the Soda Music rule (caption-less player; identity comes from its queue cache).</summary>
+    internal static bool IsQishuiProcessName(string processName)
+    {
+        var rule = FindRule(processName);
+        return rule is not null && IsSodaRule(rule);
+    }
+
+    /// <summary>True when the process id belongs to a Soda Music player (best-effort name lookup).</summary>
+    internal static bool IsQishuiPid(int processId)
+    {
+        if (processId <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return IsQishuiProcessName(process.ProcessName);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsSodaRule(PlayerRule rule)
+        => rule.Process.Contains("sodamusic", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsKugouRule(PlayerRule rule)
         => rule.Process.Contains("kugou", StringComparison.OrdinalIgnoreCase)
