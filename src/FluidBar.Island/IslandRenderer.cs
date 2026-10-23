@@ -601,13 +601,20 @@ public sealed class IslandRenderer : IDisposable
                 shell.Left + (shell.Width + ghostWidth) / 2,
                 shell.Top + (float)offsets[i] + (spinWave * 7f) + ghostHeight);
             var layerOpacity = (float)opacities[i] * (1f - (0.45f * spinWave));
-            _fill.Color = Alpha(_theme.Background,
-                fillOpacity * layerOpacity * compactOpacity);
-            canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _fill);
-            if (_theme.Material == IslandMaterial.LiquidGlass)
+            var ghostAlpha = layerOpacity * compactOpacity;
+            using var ghostPath = new SKPath();
+            ghostPath.AddRoundRect(new SKRoundRect(ghost, ghostHeight / 2, ghostHeight / 2));
+
+            // Stacked ghosts are full island surfaces: same liquid-glass treatment as the shell and the
+            // split capsules instead of an opaque pill with a separate overlay.
+            if (!TryPaintBackdropSurface(canvas, state, ghostPath, ghost, ghostAlpha, 0, 0))
             {
-                _liquidGlass.DrawRoundRect(
-                    canvas, ghost, ghostHeight / 2, fillOpacity * layerOpacity * compactOpacity);
+                _fill.Color = Alpha(_theme.Background, fillOpacity * ghostAlpha);
+                canvas.DrawRoundRect(ghost, ghostHeight / 2, ghostHeight / 2, _fill);
+                if (_theme.Material == IslandMaterial.LiquidGlass)
+                {
+                    _liquidGlass.DrawRoundRect(canvas, ghost, ghostHeight / 2, fillOpacity * ghostAlpha);
+                }
             }
 
             // Key line: without it the ghost silhouette disappears into the dark shell/desktop
@@ -722,16 +729,21 @@ public sealed class IslandRenderer : IDisposable
             var alpha = Math.Clamp(progress * 1.35f, 0, 1) * opacity;
             var radius = rect.Width / 2;
 
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.BlendMode = SKBlendMode.Src;
-            _fill.Color = SplitFillColor(fillOpacity, alpha);
-            canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
-            _fill.BlendMode = SKBlendMode.SrcOver;
-
-            if (_theme.Material == IslandMaterial.LiquidGlass)
+            using var isletPath = new SKPath();
+            isletPath.AddCircle(rect.MidX, rect.MidY, radius);
+            if (!TryPaintBackdropSurface(canvas, state, isletPath, rect, alpha, 0, 0))
             {
-                _liquidGlass.DrawCircle(canvas, new SKPoint(rect.MidX, rect.MidY), radius, alpha);
+                _fill.Style = SKPaintStyle.Fill;
+                _fill.Shader = null;
+                _fill.BlendMode = SKBlendMode.Src;
+                _fill.Color = SplitFillColor(fillOpacity, alpha);
+                canvas.DrawCircle(rect.MidX, rect.MidY, radius, _fill);
+                _fill.BlendMode = SKBlendMode.SrcOver;
+
+                if (_theme.Material == IslandMaterial.LiquidGlass)
+                {
+                    _liquidGlass.DrawCircle(canvas, new SKPoint(rect.MidX, rect.MidY), radius, alpha);
+                }
             }
 
             if (islet.Kind == ActivityKind.Agent)
@@ -984,6 +996,68 @@ public sealed class IslandRenderer : IDisposable
     private static double AdaptiveTint(double luminance)
         => LiquidGlassTokens.BackdropTintMinFactor
             + ((LiquidGlassTokens.BackdropTintMaxFactor - LiquidGlassTokens.BackdropTintMinFactor) * Math.Clamp(luminance, 0, 1));
+
+    /// <summary>
+    /// Paints the liquid-glass treatment (blurred desktop + adaptive tint + edge finish) on *any* island
+    /// surface: the shell, split capsules, stacked ghosts and future plugin islands. Returns false when
+    /// there is no backdrop or the material is not liquid glass, so the caller keeps its opaque fallback.
+    /// </summary>
+    /// <param name="canvas">Target canvas.</param>
+    /// <param name="state">Render state (backdrop + luminance).</param>
+    /// <param name="path">Surface silhouette in the canvas' current space.</param>
+    /// <param name="bounds">Surface bounds in the same space (drives the rim shader).</param>
+    /// <param name="alpha">Layer opacity 0..1.</param>
+    /// <param name="originX">Canvas translation X already applied (0 for surface-space callers).</param>
+    /// <param name="originY">Canvas translation Y already applied.</param>
+    private bool TryPaintBackdropSurface(
+        SKCanvas canvas,
+        in IslandRenderState state,
+        SKPath path,
+        SKRect bounds,
+        float alpha,
+        float originX,
+        float originY)
+    {
+        if (_theme.Material != IslandMaterial.LiquidGlass || state.Backdrop is not { } backdrop || alpha <= 0.002f)
+        {
+            return false;
+        }
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var destination = new SKRect(
+            -originX,
+            -originY,
+            (float)surface.Width - originX,
+            (float)surface.Height - originY);
+        var source = new SKRect(0, 0, backdrop.Width, backdrop.Height);
+
+        canvas.Save();
+        canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+        _glassPaint.Shader = null;
+        _glassPaint.BlendMode = SKBlendMode.SrcOver;
+        _glassPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(alpha * 255f, 0, 255));
+        canvas.DrawImage(backdrop, source, destination, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
+
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.BlendMode = SKBlendMode.SrcOver;
+        _fill.Color = Alpha(
+            _theme.Background,
+            (float)(LiquidGlassTokens.BackdropTintAlpha * AdaptiveTint(state.BackdropLuminance)) * alpha);
+        canvas.DrawPath(path, _fill);
+
+        var haze = (1.0 - Math.Clamp(state.BackdropLuminance, 0, 1)) * LiquidGlassTokens.HazeMaxAlpha * alpha;
+        if (haze > 0.002)
+        {
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(haze * 255f, 0, 255));
+            canvas.DrawPath(path, _fill);
+        }
+
+        _glassPaint.Color = SKColors.White;
+        _liquidGlass.DrawEdgeOnly(canvas, path, bounds, alpha, state.BackdropLuminance);
+        canvas.Restore();
+        return true;
+    }
 
     /// <summary>Paints the blurred desktop capture inside the shell silhouette (liquid glass).</summary>
     private void DrawBackdrop(SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity)

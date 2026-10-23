@@ -1,3 +1,4 @@
+using FluidBar.Core.Activities;
 using FluidBar.Core.Layout;
 using SkiaSharp;
 
@@ -211,6 +212,86 @@ public sealed class LiquidGlassTests
                 IslandTestFixtures.Scale);
             IslandTestFixtures.SavePng(expanded, Path.Combine(dir, $"expanded-{name}.png"));
         }
+    }
+
+    [Fact]
+    public void Split_capsules_render_the_backdrop_like_the_shell()
+    {
+        var theme = Liquid;
+        var islets = new List<IslandSplitIslet>
+        {
+            new(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent, 0, null, true),
+        };
+        var state = IslandTestFixtures.MediaCompact() with
+        {
+            Theme = theme,
+            SplitProgress = 1,
+            SplitIsletHeight = 40,
+            SplitIslets = islets.ToArray(),
+        };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var bright = new SKBitmap(info);
+        using (var canvas = new SKCanvas(bright))
+        {
+            canvas.Clear(new SKColor(0xF0, 0xF0, 0xF0));
+        }
+
+        using var image = SKImage.FromBitmap(bright);
+        using var withBackdrop = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.94 }, IslandTestFixtures.Scale);
+        using var withoutBackdrop = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
+        var x = (int)Math.Round((ball.Left + (ball.Width * 0.22)) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((ball.MidY + (ball.Height * 0.22)) * IslandTestFixtures.Scale);
+
+        var glass = Luma(withBackdrop.GetPixel(x, y));
+        var opaque = Luma(opaquePixel(withoutBackdrop, x, y));
+
+        Assert.True(
+            glass > opaque + 40,
+            $"the split capsule must show the blurred desktop (glass {glass:0} vs opaque {opaque:0})");
+
+        static SKColor opaquePixel(SKBitmap bitmap, int px, int py) => bitmap.GetPixel(px, py);
+    }
+
+    [Fact]
+    public void Stacked_ghost_layers_render_the_backdrop_like_the_shell()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.MediaCompact() with { Theme = theme, GhostCount = 1, StackSpin = 0 };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var bright = new SKBitmap(info);
+        using (var canvas = new SKCanvas(bright))
+        {
+            canvas.Clear(new SKColor(0xF0, 0xF0, 0xF0));
+        }
+
+        using var image = SKImage.FromBitmap(bright);
+        using var withBackdrop = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.94 }, IslandTestFixtures.Scale);
+        using var withoutBackdrop = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var ghostTop = shell.Top + LayoutTokens.GhostOffsetY1;
+        var ghostHeight = shell.Height * LayoutTokens.GhostScale1;
+        var x = (int)Math.Round((shell.Left + (shell.Width * 0.5)) * IslandTestFixtures.Scale);
+        // The shell paints over the ghosts, so sample the strip only the first ghost occupies.
+        var y = (int)Math.Round((shell.Top - 3) * IslandTestFixtures.Scale);
+
+        var glass = Luma(withBackdrop.GetPixel(x, y));
+        var opaque = Luma(withoutBackdrop.GetPixel(x, y));
+        Assert.True(
+            glass > opaque + 30,
+            $"a stacked ghost must show the blurred desktop (glass {glass:0} vs opaque {opaque:0})");
     }
 
     [Fact]

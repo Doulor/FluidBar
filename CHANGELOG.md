@@ -2,6 +2,14 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 液态玻璃覆盖所有岛面（分裂 / 堆叠 / 未来插件岛）
+
+- 新增共享入口 `IslandRenderer.TryPaintBackdropSurface`：任何岛面给轮廓就能得到"模糊桌面 + 自适应染色 +
+  暗底 haze + 边缘高光"，无背景图时返回 false 由调用方回退。
+- 分裂胶囊、多岛堆叠残影从"不透明球/pill + 独立叠加层"改为走同一入口；次生紧凑岛经 `DrawShellBody` 自动继承。
+- 新增测试 `Split_capsules_render_the_backdrop_like_the_shell`、`Stacked_ghost_layers_render_the_backdrop_like_the_shell`。
+- 全量 2645 测试绿。
+
 ## 2026-10-23 — 窗口级模糊恢复（自抠图）+ 折射带羽化
 
 - **窗口级模糊 + 岛可见**：默认不再设 `WDA_EXCLUDEFROMCAPTURE`（它会让岛从抓屏/串流里消失），

@@ -274,3 +274,24 @@
 带外是原图，内边缘必然出现阶跃。改成**三层嵌套带**（宽度 1.0 / 0.68 / 0.40 × band，alpha 0.34 / 0.30 / 0.26），
 折射强度向外衰减；测试 `Refraction_band_fades_out_instead_of_stepping_at_its_inner_edge` 以 1 DIP 步长扫过
 1–18 DIP，要求相邻步长 < 22/255（硬边会远超）。
+
+### 10.9 液态玻璃是"所有岛面"的材质，不是主壳专属
+
+用户要求：分裂小岛、多岛堆叠的小岛、以及以后插件新增的岛，都必须和主壳**同一地位**，而不是补丁。
+
+实现：抽出一个共享入口 `IslandRenderer.TryPaintBackdropSurface(canvas, state, path, bounds, alpha, originX, originY)`——
+任何"岛面"（壳体、分裂胶囊、堆叠残影、将来的插件岛）只要给出轮廓路径和边界，就得到同一套处理：
+模糊桌面（按路径裁剪）→ 自适应染色 → 暗底 haze → 边缘高光（`DrawEdgeOnly`）。没有背景图时返回 false，
+调用方保留自己的不透明回退。
+
+已接入的三处：
+
+| 岛面 | 轮廓 | 说明 |
+|---|---|---|
+| 主壳 | 圆角矩形路径 | 额外加折射带 / vibrancy scrim（壳体的专属增强） |
+| 分裂胶囊 | 圆 | 原来是不透明圆球 + 独立的液体叠加层 |
+| 多岛堆叠残影 | 圆角矩形 | 原来是不透明 pill + 独立叠加层 |
+
+测试：`Split_capsules_render_the_backdrop_like_the_shell`、`Stacked_ghost_layers_render_the_backdrop_like_the_shell`
+（亮背景 vs 无背景，采样点亮度差 > 40 / > 30）。次生紧凑岛（secondary compact）复用了 `DrawShellBody`，
+自动继承同一材质。
