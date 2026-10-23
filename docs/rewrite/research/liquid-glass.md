@@ -141,14 +141,17 @@
 
 - `FluidBar.Platform.Windows/Hosting/ScreenBackdropCapture.cs`：`WDA_EXCLUDEFROMCAPTURE` + `CreateDIBSection` +
   `BitBlt`，按窗口物理像素矩形抓取（失败返回 null，渲染回落到染色填充）。
-- `FluidBar.App/Hosting/Skia/IslandBackdropProvider.cs`：1/6 降采样 + `SKImageFilter.CreateBlur(2,2)` 烘焙，
-  按窗口矩形缓存 ≤2 份，节流 400 ms，硬下限 120 ms（拖动时最多落后一帧）；移动窗口（矩形变化）时重抓；
-  只在真正渲染的帧里抓屏，空闲仍是 0 帧。
+- `FluidBar.App/Hosting/Skia/IslandBackdropProvider.cs`：1/6 降采样 + `SKImageFilter.CreateBlur(2,2)` +
+  1.55× 保亮度饱和度矩阵烘焙，按窗口矩形缓存 ≤2 份，节流 400 ms，硬下限 120 ms；移动窗口时重抓；
+  只在真正渲染的帧里触发，空闲仍是 0 帧。
+- **抓屏必须异步**：实测 `BitBlt` 732×576 = **6.5 ms/次**（`StretchBlt` 缩到 1/6 仍是 6.75 ms——开销在"读屏幕"本身，
+  不在拷贝）。6.5 ms 落在 8.33 ms 帧预算里必然掉帧，所以抓屏放到线程池：渲染线程永远画"最新已完成"的那张，
+  抓完再替换；被替换的 `SKImage` 延后 2 帧释放（`DrainRetired`），避免绘制中途被 dispose。
 - `IslandRenderState.Backdrop` + `IslandRenderer.DrawBackdrop`：在壳体路径内绘制模糊桌面，再叠
   `BackdropTintAlpha = 0.30` 的染色；`LiquidGlassPainter.DrawEdgeOnly` 只画 1 px 键线 + 顶部高光 + 底部焦散 +
   冷色边缘（没有 veil、没有 rim band、没有 sheen）——即"去掉老式电视的厚边"。
 - 交叉淡入期间（`Plus` 混合）不画背景图，避免两份叠加。
-- 实测：全量测试 2637 绿；真实 App 冒烟 118 帧、退出码 0；展开态壳体横向采样
+- 实测：全量测试 2637 绿；真实 App 冒烟 113 帧、退出码 0（首帧回落染色填充，抓屏落地后切换为背景图）；展开态壳体横向采样
   #09121e → #2d353f → #27303b → #3c444e（同一帧内有明显空间变化，说明确实是背景内容而不是纯色填充）。
 
 - 烘焙时叠 **1.55× 饱和度**（`SKColorFilter.CreateColorMatrix`，保亮度矩阵）：参考实现（rdev/archisvaze/Apple .regular）

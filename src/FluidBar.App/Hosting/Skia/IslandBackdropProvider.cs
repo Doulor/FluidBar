@@ -8,15 +8,16 @@ namespace FluidBar.App.Hosting.Skia;
 /// <summary>
 /// Supplies the liquid-glass material with a blurred snapshot of the desktop behind the island.
 /// <para>
-/// The window is marked <c>WDA_EXCLUDEFROMCAPTURE</c> by the layered host, so a GDI capture of its
-/// screen rectangle returns what is *behind* it. The frame is downsampled 1/6 and blurred once, then
-/// cached: captures are throttled to <see cref="RefreshMs"/> and re-taken when the window moves, so a
-/// settled island pays ~3 ms every 400 ms and nothing per frame.
+/// The window is marked <c>WDA_EXCLUDEFROMCAPTURE</c> by the layered host, so a GDI capture of its screen
+/// rectangle returns what is *behind* it. A screen read costs ~6.5 ms (GPU→CPU sync in the compositor),
+/// which does not fit a frame budget, so captures run on the thread pool and the renderer always paints
+/// the newest finished image: no frame ever waits for the capture. Frames are downsampled 1/6, blurred
+/// and saturated once, then cached per window rectangle (≤2) and throttled to <see cref="RefreshMs"/>.
 /// </para>
 /// </summary>
 internal sealed class IslandBackdropProvider : IDisposable
 {
-    /// <summary>Minimum time between two captures (ms).</summary>
+    /// <summary>Minimum time between two captures of the same rectangle (ms).</summary>
     public const int RefreshMs = 400;
 
     /// <summary>Hard floor between two captures, even while the window is being dragged (ms).</summary>
@@ -33,7 +34,15 @@ internal sealed class IslandBackdropProvider : IDisposable
 
     private const int MaxEntries = 2;
 
+    /// <summary>Frames a replaced image is kept alive before it is disposed (a draw may still use it).</summary>
+    private const int RetireFrames = 2;
+
+    private readonly object _gate = new();
     private readonly Dictionary<(int X, int Y, int Width, int Height), (SKImage Image, double Luminance, long At)> _frames = new(MaxEntries);
+    private readonly Queue<(SKImage Image, long RetiredAt)> _retired = new();
+
+    private Task? _pending;
+    private long _frame;
     private long _lastCaptureTicks;
     private bool _disposed;
 
@@ -44,86 +53,165 @@ internal sealed class IslandBackdropProvider : IDisposable
     public long CaptureFailures { get; private set; }
 
     /// <summary>
-    /// Returns the blurred backdrop for a window rectangle, refreshing it at most every
-    /// <see cref="RefreshMs"/>. Returns the previous image when a capture fails.
+    /// Returns the newest blurred backdrop for a window rectangle and schedules a refresh when it is due.
+    /// Never blocks on the screen read; call once per rendered frame.
     /// </summary>
     /// <param name="screenRect">Window rectangle in physical screen pixels.</param>
-    /// <param name="force">Bypass the throttle (material switch, explicit refresh).</param>
+    /// <param name="force">Ignore the throttle (material switch, explicit refresh).</param>
     public SKImage? Get((int X, int Y, int Width, int Height) screenRect, bool force = false)
     {
-        if (_disposed || screenRect.Width <= 0 || screenRect.Height <= 0)
+        lock (_gate)
         {
-            return Latest();
-        }
+            _frame++;
+            DrainRetired();
 
-        var now = Stopwatch.GetTimestamp();
-
-        // A drag moves the window every frame; capturing per frame would cost ~3 ms each. The floor
-        // keeps the backdrop at most one drag-frame stale instead of turning a drag into 60 captures/s.
-        var sinceLast = _lastCaptureTicks == 0
-            ? double.MaxValue
-            : (now - _lastCaptureTicks) * 1000.0 / Stopwatch.Frequency;
-        if (!force && sinceLast < MinCaptureIntervalMs)
-        {
-            return _frames.TryGetValue(screenRect, out var recent) ? recent.Image : Latest();
-        }
-
-        if (_frames.TryGetValue(screenRect, out var cached))
-        {
-            var elapsedMs = (now - cached.At) * 1000.0 / Stopwatch.Frequency;
-            if (!force && elapsedMs < RefreshMs)
+            if (_disposed || screenRect.Width <= 0 || screenRect.Height <= 0)
             {
-                return cached.Image;
+                return Latest();
             }
 
-            if (force && elapsedMs < RefreshMs / 2)
+            if (!force && _frames.TryGetValue(screenRect, out var cached))
             {
-                return cached.Image;
+                var ageMs = (Stopwatch.GetTimestamp() - cached.At) * 1000.0 / Stopwatch.Frequency;
+                if (ageMs < RefreshMs)
+                {
+                    return cached.Image;
+                }
             }
-        }
 
-        var frame = ScreenBackdropCapture.TryCapture(
-            screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height);
-        if (frame is not { } captured)
-        {
-            CaptureFailures++;
+            ScheduleCapture(screenRect, force);
             return Latest();
         }
+    }
 
-        var baked = Bake(captured, out var luminance);
-        if (baked is null)
+    /// <summary>Mean luminance 0..1 of the cached capture for a rectangle (0.5 when unknown).</summary>
+    public double LuminanceFor((int X, int Y, int Width, int Height) screenRect)
+    {
+        lock (_gate)
         {
-            CaptureFailures++;
-            return Latest();
+            return _frames.TryGetValue(screenRect, out var frame) ? frame.Luminance : 0.5;
         }
-
-        if (_frames.TryGetValue(screenRect, out var previous))
-        {
-            previous.Image.Dispose();
-        }
-        else if (_frames.Count >= MaxEntries)
-        {
-            // Keep the two most recent monitor rects only.
-            var oldest = _frames.OrderBy(pair => pair.Value.At).First();
-            _frames.Remove(oldest.Key);
-            oldest.Value.Image.Dispose();
-        }
-
-        _frames[screenRect] = (baked, luminance, now);
-        _lastCaptureTicks = now;
-        CaptureCount++;
-        return baked;
     }
 
     /// <summary>Drops every cached capture (the next frame re-captures).</summary>
     public void Invalidate()
     {
-        foreach (var entry in _frames.Values)
+        lock (_gate)
         {
-            entry.Image.Dispose();
+            foreach (var entry in _frames.Values)
+            {
+                _retired.Enqueue((entry.Image, _frame));
+            }
+
+            _frames.Clear();
+            _lastCaptureTicks = 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            foreach (var entry in _frames.Values)
+            {
+                entry.Image.Dispose();
+            }
+
+            _frames.Clear();
+            while (_retired.Count > 0)
+            {
+                _retired.Dequeue().Image.Dispose();
+            }
+        }
+    }
+
+    private void ScheduleCapture((int X, int Y, int Width, int Height) screenRect, bool force)
+    {
+        if (_pending is { IsCompleted: false })
+        {
+            return;
         }
 
-        _frames.Clear();
+        var now = Stopwatch.GetTimestamp();
+        var sinceLastMs = _lastCaptureTicks == 0
+            ? double.MaxValue
+            : (now - _lastCaptureTicks) * 1000.0 / Stopwatch.Frequency;
+        if (!force && sinceLastMs < MinCaptureIntervalMs)
+        {
+            return;
+        }
+
+        _lastCaptureTicks = now;
+        _pending = Task.Run(() => CaptureAndBake(screenRect));
+    }
+
+    private void CaptureAndBake((int X, int Y, int Width, int Height) screenRect)
+    {
+        var frame = ScreenBackdropCapture.TryCapture(screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height);
+        if (frame is not { } captured)
+        {
+            lock (_gate)
+            {
+                CaptureFailures++;
+            }
+
+            return;
+        }
+
+        var baked = Bake(captured, out var luminance);
+        if (baked is null)
+        {
+            lock (_gate)
+            {
+                CaptureFailures++;
+            }
+
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                baked.Dispose();
+                return;
+            }
+
+            if (_frames.TryGetValue(screenRect, out var previous))
+            {
+                _retired.Enqueue((previous.Image, _frame));
+                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp());
+            }
+            else
+            {
+                if (_frames.Count >= MaxEntries)
+                {
+                    var oldest = _frames.OrderBy(pair => pair.Value.At).First();
+                    _retired.Enqueue((oldest.Value.Image, _frame));
+                    _frames.Remove(oldest.Key);
+                }
+
+                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp());
+            }
+
+            CaptureCount++;
+        }
+    }
+
+    /// <summary>Disposes images that no in-flight frame can still reference (UI thread, start of a frame).</summary>
+    private void DrainRetired()
+    {
+        while (_retired.Count > 0 && _frame - _retired.Peek().RetiredAt >= RetireFrames)
+        {
+            _retired.Dequeue().Image.Dispose();
+        }
     }
 
     private SKImage? Latest()
@@ -131,13 +219,8 @@ internal sealed class IslandBackdropProvider : IDisposable
             ? null
             : _frames.OrderBy(pair => pair.Value.At).Last().Value.Image;
 
-    /// <summary>Mean luminance 0..1 of the cached capture for a rectangle (0.5 when unknown).</summary>
-    public double LuminanceFor((int X, int Y, int Width, int Height) screenRect)
-        => _frames.TryGetValue(screenRect, out var frame) ? frame.Luminance : 0.5;
-
     private static SKImage? Bake(in BackdropFrame frame, out double luminance)
     {
-        luminance = 0.5;
         var width = Math.Max(1, frame.Width / Downsample);
         var height = Math.Max(1, frame.Height / Downsample);
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -195,22 +278,5 @@ internal sealed class IslandBackdropProvider : IDisposable
             r, g, b + s, 0, 0,
             0, 0, 0, 1, 0,
         ];
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        foreach (var entry in _frames.Values)
-        {
-            entry.Image.Dispose();
-        }
-
-        _frames.Clear();
     }
 }
