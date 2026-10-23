@@ -155,6 +155,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private SKBitmap? _backdropPreviousBitmap;
     private SKImage? _backdropPrevious;
     private long _backdropBlendStartMs;
+    private bool _awaitingFirstGlass;
 
     private long _flashLoggedMs;
 
@@ -1386,7 +1387,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // controller's animation flags.
         var yieldActive = _softYield?.IsActive == true;
         if (!IslandFrameLoopPolicy.ShouldRun(
-                _controller.IsAnimating || yieldActive,
+                _controller.IsAnimating || yieldActive || _awaitingFirstGlass,
                 _controller.IsAgentAnimating,
                 keepIdleFrames))
         {
@@ -1453,7 +1454,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
             var painted = RenderAllLocked(forceFull: yieldAnimating || _luminanceAnimating);
-            if (yieldAnimating || _luminanceAnimating)
+            if (yieldAnimating || _luminanceAnimating || _awaitingFirstGlass)
             {
                 EnsureFrameLoop();
             }
@@ -2350,6 +2351,29 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 : 1.5f);
         }
 
+        // Liquid glass without its backdrop capture falls back to the old opaque fill, which is what the
+        // user saw for a split second at startup ("looks like the first version, ugly"). Defer the very
+        // first paint until a capture exists, with a hard deadline so the island can never stay invisible.
+        if (!entry.FirstGlassPainted
+            && state.IsVisible
+            && state.Theme.Material == FluidBar.Island.IslandMaterial.LiquidGlass
+            && renderState.Backdrop is null)
+        {
+            if (entry.ShownAtMs == 0)
+            {
+                entry.ShownAtMs = NowMs();
+            }
+
+            if (NowMs() - entry.ShownAtMs < 900)
+            {
+                _awaitingFirstGlass = true;
+                return 0;
+            }
+        }
+
+        entry.FirstGlassPainted = true;
+        _awaitingFirstGlass = false;
+
         var started = Stopwatch.GetTimestamp();
         var frame = entry.Host.BeginFrame();
         var surface = EnsureSurface(entry, frame);
@@ -2821,6 +2845,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         /// <summary>True when the off-screen surface was just (re)created and still needs one full paint.</summary>
         public bool SurfaceNeedsFull { get; set; }
+
+        /// <summary>Timestamp (monotonic ms) when this window first showed content.</summary>
+        public long ShownAtMs { get; set; }
+
+        /// <summary>True once the first frame with a real backdrop has been painted.</summary>
+        public bool FirstGlassPainted { get; set; }
 
         /// <summary>Fresh monitor snapshot for this window (work area/DPI updated on display changes).</summary>
         public CoreMonitorInfo Monitor { get; set; }
