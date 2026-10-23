@@ -156,6 +156,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private SKImage? _backdropPrevious;
     private long _backdropBlendStartMs;
 
+    /// <summary>Opt-in per-frame trace for the "island blinks" investigation (FLUIDBAR_BLINK_LOG=1).</summary>
+    private readonly bool _blinkLog = Environment.GetEnvironmentVariable("FLUIDBAR_BLINK_LOG") == "1";
+    private double _blinkLastOpacity = -1;
+    private bool _blinkLastBackdrop;
+
     /// <summary>Cross-fade duration between two captures, in ms.</summary>
     private const double BackdropCrossfadeMs = 160;
 
@@ -2029,6 +2034,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         EnsureFrameLoop();
     }
 
+    private static string RenderClockMark()
+        => DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+
     private static SKBitmap? CopyImage(SKImage image)
     {
         if (image.Width <= 0 || image.Height <= 0)
@@ -2166,6 +2174,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
 
             var backdrop = _backdrop.Get(rect, masks.ToArray(), allowComposedCapture: true);
+
+            // Sticky: a frame without a fresh capture (first frames, cache eviction, failed grab) must keep
+            // the previous image instead of falling back to the flat translucent fill — that fallback made
+            // the island flash "transparent" for a frame (reported 2026-10-23).
+            backdrop ??= _backdropCurrent;
             if (backdrop is not null)
             {
                 var now = NowMs();
@@ -2203,6 +2216,28 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         if (_softYield is not null)
         {
             renderState = renderState with { YieldProgress = _softYield.Progress };
+        }
+
+        if (_blinkLog)
+        {
+            var hasBackdrop = renderState.Backdrop is not null;
+            if (Math.Abs(renderState.Opacity - _blinkLastOpacity) > 0.01 || hasBackdrop != _blinkLastBackdrop)
+            {
+                _blinkLastOpacity = renderState.Opacity;
+                _blinkLastBackdrop = hasBackdrop;
+                try
+                {
+                    System.IO.File.AppendAllText(
+                        System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-frames.log"),
+                        RenderClockMark() + " visible=" + state.IsVisible + " opacity=" + renderState.Opacity.ToString("0.00")
+                        + " backdrop=" + hasBackdrop + " yield=" + renderState.YieldProgress.ToString("0.00")
+                        + " lum=" + renderState.BackdropLuminance.ToString("0.00") + "\n");
+                }
+                catch
+                {
+                    // diagnostics only
+                }
+            }
         }
 
         var probeAllocStart = IslandFrameProbe.Enabled ? GC.GetAllocatedBytesForCurrentThread() : 0L;

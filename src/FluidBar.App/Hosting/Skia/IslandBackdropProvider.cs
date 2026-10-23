@@ -38,7 +38,7 @@ internal sealed class IslandBackdropProvider : IDisposable
     private const int MaxEntries = 2;
 
     /// <summary>Frames a replaced image is kept alive before it is disposed (a draw may still use it).</summary>
-    private const int RetireFrames = 2;
+    private const int RetireFrames = 12;
 
     private readonly object _gate = new();
     private readonly Dictionary<(int X, int Y, int Width, int Height), (SKImage Image, double Luminance, long At)> _frames = new(MaxEntries);
