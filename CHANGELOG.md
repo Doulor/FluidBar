@@ -10,6 +10,13 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 堆叠环形图标推广到分裂小岛
+
+- 抽出共享实现 `AgentRingStack.Draw`，紧凑胶囊与分裂小岛共用同一套环语言、配色与合并动效。
+- 数量统一来自 `IslandRenderState.AgentLiveCount`（Running/Waiting 会话数，夹 1..3）。
+- 新增测试 `The_split_satellite_ball_uses_the_same_stacked_glyph`（强制 count=1 即失败，已实测）。
+- 全量 2672 测试绿。
+
 ## 2026-10-24 — 多 agent 堆叠环形图标（最多 3 个）
 
 - 新增 `AgentRingStack`：1 个 = 原圆环；2 个 = 内层逆时针 1.35 s 环（色相 +42°）；

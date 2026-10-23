@@ -36,6 +36,61 @@ public sealed class AgentRingStackTests
     }
 
     [Fact]
+    public void The_split_satellite_ball_uses_the_same_stacked_glyph()
+    {
+        var one = CountSatelliteRingPixels(1);
+        var two = CountSatelliteRingPixels(2);
+
+        Assert.True(two > one * 1.25,
+            $"the satellite ball must stack the same rings (one={one}, two={two})");
+    }
+
+    private static int CountSatelliteRingPixels(int liveAgents)
+    {
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var state = IslandTestFixtures.Compact(
+                new CompactActivity(
+                    ActivityKind.Agent,
+                    new CompactModel { Title = "Agent", Subtitle = "运行中", Status = CompactStatus.Info }))
+            with
+        {
+            SplitProgress = 1,
+            SplitIsletHeight = 40,
+            AgentAnimationSeconds = 0.31,
+            AgentLiveCount = liveAgents,
+            SplitIslets =
+            [
+                new(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent, 0, null, true, null, null, CompactStatus.Info),
+            ],
+        };
+
+        SKBitmap? last = null;
+        for (var frame = 0; frame < 24; frame++)
+        {
+            last?.Dispose();
+            last = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        }
+
+        using var bitmap = last!;
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
+        var scale = IslandTestFixtures.Scale;
+        var count = 0;
+        for (var y = (int)(ball.Top * scale); y < (int)(ball.Bottom * scale); y++)
+        {
+            for (var x = (int)(ball.Left * scale); x < (int)(ball.Right * scale); x++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.Alpha > 60 && pixel.Blue > pixel.Red + 25)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    [Fact]
     public void More_than_three_agents_are_clamped()
     {
         Assert.Equal(3, AgentRingStack.Clamp(9));

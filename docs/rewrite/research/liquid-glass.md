@@ -750,3 +750,18 @@ blend = 0.25 / 0.5 / 0.75 时壳体中心 alpha 必须 > 240（修前 224 / 191�
   `AgentRingStack.Clamp` 夹到 1..3（>3 不显示新图形）。
 - 回归测试 `AgentRingStackTests`：2 个 agent 必须比 1 个多 25% 以上环像素；3 个时中心颜色必须变化 >20。
   把 `AgentLiveCount` 强制成 1 后两条都失败（已实测），说明测试真的在测这件事。
+
+### 15.24 堆叠环形图标推广到分裂小岛（2026-10-24）
+
+上一条只改了紧凑胶囊里的 agent 图标；分裂模式下那个独立小圆球还是单环（用户："一起改"）。
+
+做法是把绘制逻辑**抽成一份共享实现** `AgentRingStack.Draw(...)`（底圆、外弧、内环、中心点、两条合并进度
+与配色全部在里面），紧凑胶囊和分裂小岛都调它：
+
+- 紧凑胶囊：`_secondRing` / `_centreDot` 两个进度字段（在 `CompactRenderer`）。
+- 分裂小岛：`_splitRing2` / `_splitDot`（在 `IslandRenderer`），半径用 `SplitRingRadiusFactor`。
+- 数量来源统一：`IslandRenderState.AgentLiveCount`（`SkiaIslandController.CountLiveAgents()` 统计
+  agent 页里 Tone=Info/Warning 的会话数，夹 1..3）；紧凑胶囊另有 `CompactModel.AgentLiveCount`（同一规则）。
+
+回归测试补 `The_split_satellite_ball_uses_the_same_stacked_glyph`：2 个 agent 的小球必须比 1 个多 25% 环像素。
+把 `state.AgentLiveCount` 强制成 1 后失败（已实测：one=286, two=286）。

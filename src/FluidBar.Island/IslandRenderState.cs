@@ -239,6 +239,9 @@ public readonly record struct IslandRenderState
     /// <summary>Width of the refraction band in DIP (0 = scale with the shell height).</summary>
     public double RefractionBandDip { get; init; }
 
+    /// <summary>Live agent sessions (1..3): drives the stacked ring glyph everywhere it is painted.</summary>
+    public int AgentLiveCount { get; init; } = 1;
+
     /// <summary>Detached mini-island strip state.</summary>
     public ArchipelagoState Archipelago { get; init; }
 

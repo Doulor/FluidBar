@@ -130,6 +130,103 @@ public static class AgentRingStack
     public static double SecondRingRotationDegrees(double seconds)
         => double.IsFinite(seconds) ? -((seconds / SecondRingPeriodSeconds) * 360.0 % 360.0) : 0;
 
+    /// <summary>
+    /// Paints the stacked glyph: base circle, outer arc, (optionally) the counter-rotating second ring and
+    /// the centre dot. Shares one implementation so the compact pill, the split satellite and any future
+    /// host render the identical language.
+    /// </summary>
+    /// <param name="canvas">Target canvas.</param>
+    /// <param name="stroke">Reusable stroke paint (style/width/cap are set here).</param>
+    /// <param name="fill">Reusable fill paint (centre dot).</param>
+    /// <param name="glow">Reusable fill paint with a blur mask filter (centre dot halo).</param>
+    /// <param name="centre">Glyph centre in canvas coordinates.</param>
+    /// <param name="radius">Outer ring centre-line radius in DIP.</param>
+    /// <param name="strokeWidth">Outer ring stroke width in DIP.</param>
+    /// <param name="liveAgents">Live agent sessions (clamped to 1..3).</param>
+    /// <param name="animationSeconds">Elapsed animation time (drives both rotations).</param>
+    /// <param name="secondRingBlend">0..1 merge progress of the second ring.</param>
+    /// <param name="centreDotBlend">0..1 merge progress of the centre dot.</param>
+    /// <param name="alpha">Layer opacity 0..1.</param>
+    /// <param name="accent">Base accent colour.</param>
+    /// <param name="reducedMotion">Freezes the rotations when true.</param>
+    /// <param name="baseRingAlpha">Alpha of the faint base circle (0 disables it).</param>
+    public static void Draw(
+        SKCanvas canvas,
+        SKPaint stroke,
+        SKPaint fill,
+        SKPaint glow,
+        SKPoint centre,
+        float radius,
+        float strokeWidth,
+        int liveAgents,
+        double animationSeconds,
+        float secondRingBlend,
+        float centreDotBlend,
+        float alpha,
+        SKColor accent,
+        bool reducedMotion,
+        float baseRingAlpha = 0.18f)
+    {
+        var agents = Clamp(liveAgents);
+
+        stroke.Style = SKPaintStyle.Stroke;
+        stroke.StrokeCap = SKStrokeCap.Butt;
+        stroke.StrokeWidth = strokeWidth;
+        stroke.Shader = null;
+
+        if (baseRingAlpha > 0f)
+        {
+            stroke.Color = WithAlpha(accent, baseRingAlpha * alpha);
+            canvas.DrawCircle(centre.X, centre.Y, radius, stroke);
+        }
+
+        var rotation = reducedMotion ? 0 : AgentMotion.RingRotationDegrees(animationSeconds);
+        stroke.Color = WithAlpha(accent, alpha);
+        canvas.DrawArc(
+            new SKRect(centre.X - radius, centre.Y - radius, centre.X + radius, centre.Y + radius),
+            AgentMotion.ArcStartDegrees + (float)rotation,
+            AgentMotion.ArcSweepDegrees,
+            false,
+            stroke);
+
+        if (agents >= 2 && secondRingBlend > 0.01f)
+        {
+            var secondRadius = radius * (SecondRingMergeFactor
+                - ((SecondRingMergeFactor - SecondRingRadiusFactor) * secondRingBlend));
+            var secondColor = HueShift(accent, 42f);
+            var secondAlpha = secondRingBlend * alpha;
+
+            stroke.StrokeWidth = strokeWidth * (0.6f + (0.4f * secondRingBlend));
+            stroke.Color = WithAlpha(secondColor, baseRingAlpha * 0.8f * secondAlpha);
+            canvas.DrawCircle(centre.X, centre.Y, secondRadius, stroke);
+
+            var secondRotation = reducedMotion ? 0 : SecondRingRotationDegrees(animationSeconds);
+            stroke.Color = WithAlpha(secondColor, secondAlpha);
+            canvas.DrawArc(
+                new SKRect(centre.X - secondRadius, centre.Y - secondRadius,
+                    centre.X + secondRadius, centre.Y + secondRadius),
+                AgentMotion.ArcStartDegrees + (float)secondRotation,
+                AgentMotion.ArcSweepDegrees,
+                false,
+                stroke);
+            stroke.StrokeWidth = strokeWidth;
+        }
+
+        if (agents >= 3 && centreDotBlend > 0.01f)
+        {
+            var dotColor = HueShift(accent, -46f);
+            var dotRadius = DotRadiusDip * centreDotBlend;
+            fill.Style = SKPaintStyle.Fill;
+            glow.Color = WithAlpha(dotColor, 0.45f * centreDotBlend * alpha);
+            canvas.DrawCircle(centre.X, centre.Y, dotRadius * 2.1f, glow);
+            fill.Color = WithAlpha(dotColor, centreDotBlend * alpha);
+            canvas.DrawCircle(centre.X, centre.Y, dotRadius, fill);
+        }
+    }
+
+    private static SKColor WithAlpha(SKColor color, float alpha)
+        => color.WithAlpha((byte)Math.Clamp(alpha * 255f, 0, 255));
+
     /// <summary>Rotates a colour's hue by <paramref name="degrees"/> keeping saturation/value.</summary>
     /// <param name="color">Source colour.</param>
     /// <param name="degrees">Hue offset in degrees.</param>

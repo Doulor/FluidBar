@@ -2337,6 +2337,22 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Applies the split policy's presentation order to the visible stack.</summary>
+    /// <summary>Running/waiting agent sessions (capped at the glyph's three slots).</summary>
+    private int CountLiveAgents()
+    {
+        var items = _pages.Agent.Items;
+        var live = 0;
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i].Tone is CompactStatus.Info or CompactStatus.Warning)
+            {
+                live++;
+            }
+        }
+
+        return FluidBar.Island.AgentRingStack.Clamp(live <= 0 ? 1 : live);
+    }
+
     private void ReorderSplitVisible(int wheelSteps = 0)
     {
         if (_schedulerState.Visible.Length < 2 && wheelSteps == 0)
@@ -3652,6 +3668,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
             AgentAnimationSeconds = _agentAnimationSeconds,
+            AgentLiveCount = CountLiveAgents(),
             // A focused rail glass paints its own prototype accent outline in the strip renderer, so
             // the generic page-control ring stays off for those slots.
             FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,
