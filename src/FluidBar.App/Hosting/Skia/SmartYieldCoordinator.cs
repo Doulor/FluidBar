@@ -21,6 +21,7 @@ internal sealed class SmartYieldCoordinator : IDisposable
 
     private YieldState _lastState = YieldState.Interactive;
     private double _progress;
+    private YieldSample? _lastSample;
     private bool _animating;
     private long _animStartMs;
     private double _animFrom;
@@ -61,8 +62,16 @@ internal sealed class SmartYieldCoordinator : IDisposable
     public double Progress => _progress;
 
     /// <summary>
+    /// True while the island is softened or still fading: the host must keep its frame loop alive so the
+    /// 3 s restore timer keeps ticking and the fade can finish.
+    /// </summary>
+    public bool IsActive => _engine.ShouldPassThrough || _progress > 0.001;
+
+    /// <summary>
     /// Advances the soften animation towards the engine's target and reports whether another frame is
     /// needed. Materials are irrelevant here: the renderer applies the effect to the whole scene.
+    /// Also ticks the *time-based* engine rules (the 3 s restore) even when the pointer is still, which
+    /// is why the host keeps asking for frames while the island is not fully interactive.
     /// </summary>
     /// <param name="nowMs">Monotonic clock in milliseconds.</param>
     public bool Step(long nowMs)
@@ -72,12 +81,13 @@ internal sealed class SmartYieldCoordinator : IDisposable
             return false;
         }
 
+        TickEngine(nowMs);
         var target = _engine.ShouldPassThrough ? 1d : 0d;
         if (Math.Abs(_progress - target) < 0.001)
         {
             _animating = false;
             _progress = target;
-            return false;
+            return _engine.ShouldPassThrough || _progress > 0.001;
         }
 
         if (!_animating)
@@ -100,6 +110,29 @@ internal sealed class SmartYieldCoordinator : IDisposable
         }
 
         return true;
+    }
+
+    /// <summary>Applies the time-based state transitions (3 s restore, cooldown) using the last sample.</summary>
+    private void TickEngine(long nowMs)
+    {
+
+        if (_engine.State is YieldState.Interactive)
+        {
+            return;
+        }
+
+        if (_shellProvider() is not { } info)
+        {
+            Restore();
+            return;
+        }
+
+        var shell = new YieldShell(info.Shell.X, info.Shell.Y, info.Shell.Width, info.Shell.Height);
+        var transition = _engine.Tick(shell, Context(info.Shell, info.Dragging, nowMs), nowMs);
+        if (transition.Changed)
+        {
+            Apply(transition);
+        }
     }
 
     /// <summary>Feeds one pointer position in physical screen pixels.</summary>
@@ -126,6 +159,7 @@ internal sealed class SmartYieldCoordinator : IDisposable
 
         var context = Context(info.Shell, info.Dragging, now);
         var sample = new YieldSample(x, y, now);
+        _lastSample = sample;
         var shell = new YieldShell(info.Shell.X, info.Shell.Y, info.Shell.Width, info.Shell.Height);
         var transition = _engine.Update(sample, shell, context, now);
         if (transition.Changed)
@@ -143,7 +177,32 @@ internal sealed class SmartYieldCoordinator : IDisposable
         }
     }
 
-    /// <summary>Manual restore (tray command, settings change, host reset).</summary>
+    /// <summary>
+    /// Right-click gesture: soften now when interactive, restore when already softened. Manual state is
+    /// still governed by the 3 s restore timer so the island cannot be left invisible by accident.
+    /// </summary>
+    public void Toggle()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_engine.ShouldPassThrough)
+        {
+            Restore();
+            return;
+        }
+
+        _engine.ForceYield(_clock());
+        _lastState = YieldState.Yielding;
+        _animating = false;
+        _applyPassthrough(true);
+        _logger.Information(LogCategories.Render, "island.yield.manual-soften",
+            "Smart yield softened the island by hand (right-click).");
+    }
+
+    /// <summary>Manual restore (right-click, settings change, host reset).</summary>
     public void Restore()
     {
         if (_disposed)

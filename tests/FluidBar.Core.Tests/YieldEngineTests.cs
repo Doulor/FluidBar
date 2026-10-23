@@ -103,29 +103,74 @@ public sealed class YieldEngineTests
     }
 
     [Fact]
-    public void Yield_is_held_for_the_minimum_time_before_cooling_down()
+    public void Yield_restores_three_seconds_after_the_last_activity_near_the_island()
     {
-        var engine = new YieldEngine(new YieldOptions { MinYieldMs = 600, CooldownMs = 900 });
+        var engine = new YieldEngine(new YieldOptions { RestoreAfterMs = 3000 });
         Approach(engine, startY: 600, endY: 120, step: 30, stepMs: 8, new YieldContext(ForegroundMaximized: true));
         Assert.Equal(YieldState.Yielding, engine.State);
 
-        // Pointer leaves: the yield must still be held for MinYieldMs after it started.
-        var held = Feed(engine, Sample(200, 800, 200));
+        // Pointer parked far away: still yielding right before the 3 s window closes.
+        var held = Feed(engine, Sample(200, 900, 2500));
         Assert.Equal(YieldState.Yielding, held.Current);
+        Assert.True(held.ShouldPassThrough);
 
-        var stillHeld = Feed(engine, Sample(200, 800, 400));
-        Assert.Equal(YieldState.Yielding, stillHeld.Current);
-
-        // After the minimum hold (and the leave delay) it falls back to Cooldown.
-        var after = Feed(engine, Sample(200, 800, 900));
+        // 3 s without activity near the shell → restore.
+        var after = Feed(engine, Sample(200, 900, 3400));
         Assert.Equal(YieldState.Cooldown, after.Current);
         Assert.False(after.ShouldPassThrough);
     }
 
     [Fact]
+    public void Activity_near_the_island_keeps_the_yield_alive()
+    {
+        var engine = new YieldEngine(new YieldOptions { RestoreAfterMs = 3000 });
+        Approach(engine, startY: 600, endY: 120, step: 30, stepMs: 8, new YieldContext(ForegroundMaximized: true));
+        Assert.Equal(YieldState.Yielding, engine.State);
+
+        // Pointer hovering next to the island resets the restore timer.
+        var near = Feed(engine, Sample(1060, 130, 2500));
+        Assert.Equal(YieldState.Yielding, near.Current);
+
+        var stillNear = Feed(engine, Sample(1060, 130, 5000));
+        Assert.Equal(YieldState.Yielding, stillNear.Current);
+
+        var away = Feed(engine, Sample(200, 900, 8100));
+        Assert.Equal(YieldState.Cooldown, away.Current);
+    }
+
+    [Fact]
+    public void A_tick_never_counts_as_pointer_activity()
+    {
+        var engine = new YieldEngine(new YieldOptions { RestoreAfterMs = 3000 });
+        engine.ForceYield(0);
+
+        // Time-only ticks must not refresh the "3 s without activity" window (a parked pointer).
+        Assert.Equal(YieldState.Yielding, engine.Tick(Shell, default, 1000).Current);
+        Assert.Equal(YieldState.Yielding, engine.Tick(Shell, default, 2500).Current);
+        var restored = engine.Tick(Shell, default, 3100);
+        Assert.Equal(YieldState.Cooldown, restored.Current);
+        Assert.False(restored.ShouldPassThrough);
+    }
+
+    [Fact]
+    public void Manual_soften_holds_until_the_restore_timer_expires()
+    {
+        var engine = new YieldEngine(new YieldOptions { RestoreAfterMs = 3000 });
+        engine.ForceYield(1000);
+        Assert.True(engine.ShouldPassThrough);
+
+        var held = engine.Update(Sample(300, 900, 2500), Shell, default, 2500);
+        Assert.Equal(YieldState.Yielding, held.Current);
+
+        var restored = engine.Update(Sample(300, 900, 4100), Shell, default, 4100);
+        Assert.Equal(YieldState.Cooldown, restored.Current);
+        Assert.False(restored.ShouldPassThrough);
+    }
+
+    [Fact]
     public void Cooldown_blocks_an_immediate_re_yield()
     {
-        var engine = new YieldEngine(new YieldOptions { MinYieldMs = 100, CooldownMs = 1000 });
+        var engine = new YieldEngine(new YieldOptions { RestoreAfterMs = 100, CooldownMs = 1000 });
         Approach(engine, startY: 600, endY: 120, step: 30, stepMs: 8, new YieldContext(ForegroundMaximized: true));
         var t = Feed(engine, Sample(200, 800, 5000));
         Assert.Equal(YieldState.Cooldown, t.Current);

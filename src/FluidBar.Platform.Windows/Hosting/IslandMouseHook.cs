@@ -16,6 +16,7 @@ public sealed class IslandMouseHook : IDisposable
     private const int WhMouseLl = 14;
     internal const int WmMouseMove = 0x0200;
     internal const int WmLButtonDown = 0x0201;
+    internal const int WmRButtonDown = 0x0204;
     internal const int WmLButtonUp = 0x0202;
     internal const int WmMouseWheel = 0x020A;
     private readonly PlatformMessageHost _host;
@@ -50,6 +51,12 @@ public sealed class IslandMouseHook : IDisposable
 
     /// <summary>Pointer released inside an island rectangle.</summary>
     public event Action<float, float>? PointerReleased;
+
+    /// <summary>
+    /// Right button pressed on the island. Always consumed (never leaks to the window below) and fired
+    /// even while the island yields, so a right-click can soften or restore it by hand.
+    /// </summary>
+    public event Action<float, float>? RightPressed;
 
     /// <summary>Pointer moved inside an island rectangle.</summary>
     public event Action<float, float>? PointerMoved;
@@ -264,6 +271,13 @@ public sealed class IslandMouseHook : IDisposable
         var wheel = message == WmMouseWheel
             ? unchecked((short)((long)data.mouseData >> 16)) / 120.0
             : 0;
+        if (message == WmRButtonDown && IsInsideInteractive(x, y))
+        {
+            // Right-click is the manual soften/restore gesture: always ours, never passed through.
+            RightPressed?.Invoke(x, y);
+            return new IntPtr(1);
+        }
+
         var route = _gesture.Route(ClassifyLocked(x, y), message, wheel);
 
         // Deliver in the same order the old inline switch did. A press inside/release outside now
@@ -312,6 +326,14 @@ public sealed class IslandMouseHook : IDisposable
         return route.Consume
             ? new IntPtr(1)
             : CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
+    }
+
+    private bool IsInsideInteractive(int x, int y)
+    {
+        lock (_gate)
+        {
+            return Classify(_regions, _watchRegions, x, y) == HookRegionKind.Interactive;
+        }
     }
 
     private HookRegionKind ClassifyLocked(int x, int y)

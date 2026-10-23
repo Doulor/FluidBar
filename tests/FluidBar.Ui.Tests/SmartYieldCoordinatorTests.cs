@@ -44,13 +44,14 @@ public sealed class SmartYieldCoordinatorTests
         Approach(coordinator, () => now, ms => now += ms);
         Assert.Contains(true, applied);
 
-        for (var i = 0; i < 60; i++)
+        // The island restores 3 s after the last activity near it.
+        for (var i = 0; i < 40; i++)
         {
-            now += 20;
+            now += 100;
             coordinator.PointerMoved(200, 800);
         }
 
-        Assert.False(applied[^1], "input must be restored after the pointer leaves");
+        Assert.False(applied[^1], "input must be restored 3 s after the pointer leaves");
     }
 
     [Fact]
@@ -79,6 +80,22 @@ public sealed class SmartYieldCoordinatorTests
     }
 
     [Fact]
+    public void Right_click_softens_and_restores_manually()
+    {
+        var applied = new List<bool>();
+        long now = 1000;
+        using var coordinator = Create(applied, () => now);
+
+        coordinator.Toggle();
+        Assert.True(applied[^1], "right-click must soften the island");
+        Assert.True(coordinator.Progress < 0.5);
+
+        now += 200;
+        coordinator.Toggle();
+        Assert.False(applied[^1], "a second right-click must restore it");
+    }
+
+    [Fact]
     public void Soften_animation_moves_the_progress_and_settles()
     {
         var applied = new List<bool>();
@@ -87,20 +104,22 @@ public sealed class SmartYieldCoordinatorTests
 
         Approach(coordinator, () => now, ms => now += ms);
         Assert.Contains(true, applied);
-        Assert.Equal(0d, coordinator.Progress, 3);
 
         // The engine is yielding; stepping the animation must ease the progress towards 1.
         Assert.True(coordinator.Step(now));
         Assert.True(coordinator.Step(now + 120) && coordinator.Progress > 0.2 && coordinator.Progress < 1);
         coordinator.Step(now + 400);
         Assert.Equal(1d, coordinator.Progress, 3);
-        Assert.False(coordinator.Step(now + 500));
+
+        // While the island is yielded the host keeps ticking so the 3 s restore timer can fire.
+        Assert.True(coordinator.Step(now + 500));
 
         // Restoring the input animates back to 1 → 0.
         coordinator.Restore();
         Assert.True(coordinator.Step(now + 520));
         coordinator.Step(now + 1200);
         Assert.Equal(0d, coordinator.Progress, 3);
+        Assert.False(coordinator.Step(now + 1300));
     }
 
     [Fact]

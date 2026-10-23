@@ -575,6 +575,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             _mouseHook.PointerMovedAnywhere -= OnHookPointerMovedAnywhere;
             _mouseHook.PointerPressed -= OnHookPointerPressedForYield;
+            _mouseHook.RightPressed -= OnHookRightPressed;
         }
 
         _smartYield?.Dispose();
@@ -1357,7 +1358,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // painted. With no ring the island must not keep a timer alive even in Performance mode.
         var keepIdleFrames = profile.KeepIdleFrames && _controller.RenderState.IsVisible
             && _controller.HasSpinningSplitRing;
-        if (!IslandFrameLoopPolicy.ShouldRun(_controller.IsAnimating, _controller.IsAgentAnimating, keepIdleFrames))
+
+        // A softened island still needs ticks: the 3 s restore timer and the fade live outside the
+        // controller's animation flags.
+        var yieldActive = _smartYield?.IsActive == true;
+        if (!IslandFrameLoopPolicy.ShouldRun(
+                _controller.IsAnimating || yieldActive,
+                _controller.IsAgentAnimating,
+                keepIdleFrames))
         {
             StopFrameLoopForIdle();
             return;
@@ -1962,13 +1970,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     }
 
     /// <summary>
-    /// Starts the predictive yield coordinator when enabled (FLUIDBAR_SMART_YIELD=1 until the settings
-    /// row lands). It only observes pointer movement and flips input pass-through; every decision lives
-    /// in <see cref="FluidBar.Core.Interaction.YieldEngine"/>.
+    /// Starts the predictive yield coordinator. On by default; FLUIDBAR_SMART_YIELD=0 turns the whole
+    /// mechanism (including the right-click soften/restore gesture) off. It only observes pointer
+    /// movement and flips input pass-through; every decision lives in
+    /// <see cref="FluidBar.Core.Interaction.YieldEngine"/>.
     /// </summary>
     private void StartSmartYield()
     {
-        if (Environment.GetEnvironmentVariable("FLUIDBAR_SMART_YIELD") != "1" || _mouseHook is null)
+        var setting = Environment.GetEnvironmentVariable("FLUIDBAR_SMART_YIELD");
+        if (string.Equals(setting, "0", StringComparison.Ordinal) || _mouseHook is null)
         {
             return;
         }
@@ -1980,6 +1990,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _logger);
         _mouseHook.PointerMovedAnywhere += OnHookPointerMovedAnywhere;
         _mouseHook.PointerPressed += OnHookPointerPressedForYield;
+        _mouseHook.RightPressed += OnHookRightPressed;
         _logger.Information(LogCategories.Render, "island.yield.enabled",
             "Smart yield enabled (predictive input pass-through).");
     }
@@ -1987,6 +1998,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private void OnHookPointerMovedAnywhere(int x, int y) => _smartYield?.PointerMoved(x, y);
 
     private void OnHookPointerPressedForYield(float x, float y) => _smartYield?.NoteInteraction();
+
+    private void OnHookRightPressed(float x, float y) => _smartYield?.Toggle();
 
     /// <summary>Shell rectangle in physical screen pixels plus the drag flag, or null when hidden.</summary>
     private ((int X, int Y, int Width, int Height) Shell, bool Dragging)? ShellForYield()

@@ -349,3 +349,27 @@
   `YieldProgress`；宿主 `OnFrame` 里每帧推进并强制整帧重绘，动画结束自动停表。
 - 测试：`YieldSoftenTests`（3 材质 × 2 项：淡到 ~25%、边缘变软）、`SmartYieldCoordinatorTests` 增加
   progress 动画用例。
+
+## 14. 让位控制：右键手动 + 3 秒自动恢复 + 进程降权
+
+用户定稿：「固定柔化」「右键手动柔化/恢复」「不要托盘菜单」「3 秒没交互就恢复」「降权」。
+
+- **右键**：`IslandMouseHook` 新增 `WM_RBUTTONDOWN` 处理——在岛矩形内**始终由我们消费**（即使正在让位，
+  点击也不会漏到下面的窗口），转发成 `RightPressed` → `SmartYieldCoordinator.Toggle()`：
+  - 当前可交互 → `YieldEngine.ForceYield()` 立即柔化；
+  - 当前已柔化 → `Restore()` 立即恢复。
+- **3 秒自动恢复**：`YieldOptions.RestoreAfterMs = 3000` + `ActivityRadiusPx = 56`（岛周围 56 px 内的指针
+  活动会刷新计时）。关键实现细节：
+  - `YieldEngine.Tick(shell, ctx, now)`：只推进时间类规则，**不产生指针活动**，否则"停在岛上的指针"会
+    永远刷新 3 秒窗口、永远不恢复；
+  - `Tick` 也**不允许从 Interactive 发起新的让位**（分数只在真实样本里更新，否则恢复后会被旧高分立刻
+    再次让位）；
+  - 宿主帧循环必须为让位保活（`IslandFrameLoopPolicy` 只看 controller 的动画标志，柔化不在其中），
+    否则淡出结束后再也没有 tick。
+- **默认开启**：`FLUIDBAR_SMART_YIELD=0` 可整体关闭（含右键手势）。
+- **降权**：`Program.ApplyProcessPriority()` 启动即把进程设为 `BelowNormal`（`FLUIDBAR_PRIORITY=normal` 可回退），
+  岛是纯展示层，不和前台应用抢 CPU。
+- 端到端实测（DPI-aware 注入输入，岛区域亮度）：静止 44 → 右键 25（柔化）→ 3 秒后 44（恢复）；
+  另一次右键序列 44 → 25 → 44 → 27（再次柔化），进程优先级 `BelowNormal`。
+- 测试：引擎新增「tick 不算活动」「手动柔化保持到计时结束」；协调器新增「右键柔化/恢复」「淡出结束后宿主
+  仍需 tick」。

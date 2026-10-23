@@ -20,6 +20,10 @@ internal static class Program
         // optional here; the file entry is the important part when the process is already dying.
         CrashLog.Install();
 
+        // 降权：the island is a passive overlay, so the process runs below normal priority and never
+        // competes with the foreground app for CPU. FLUIDBAR_PRIORITY=normal keeps the old behaviour.
+        ApplyProcessPriority();
+
         // One island per session: a second launch would create a second layered window, a second
         // WH_MOUSE_LL hook and a second tray icon, and both processes would overwrite settings.
         if (!SingleInstanceGuard.TryAcquire())
@@ -35,6 +39,27 @@ internal static class Program
         finally
         {
             SingleInstanceGuard.Release();
+        }
+    }
+
+    private static void ApplyProcessPriority()
+    {
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("FLUIDBAR_PRIORITY"),
+                "normal",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            process.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+        }
+        catch (Exception)
+        {
+            // Priority is a nicety; a locked-down host may refuse it.
         }
     }
 

@@ -115,17 +115,20 @@ public sealed record YieldOptions
     /// <summary>How long a recent island click keeps suppressing a yield, in ms.</summary>
     public int RecentInteractionMs { get; init; } = 900;
 
-    /// <summary>Minimum time a yield is held before it may end, in ms.</summary>
-    public int MinYieldMs { get; init; } = 600;
+    /// <summary>Restore the island after this long without pointer activity near it, in ms.</summary>
+    public int RestoreAfterMs { get; init; } = 3000;
+
+    /// <summary>Radius around the shell (px) that still counts as "interacting with the island".</summary>
+    public double ActivityRadiusPx { get; init; } = 56;
 
     /// <summary>Cooldown after a yield, in ms.</summary>
-    public int CooldownMs { get; init; } = 900;
+    public int CooldownMs { get; init; } = 400;
 
     /// <summary>Candidate state times out after this long without confirmation, in ms.</summary>
     public int CandidateTimeoutMs { get; init; } = 800;
 
-    /// <summary>Longest a yield may last before it falls back to Interactive, in ms.</summary>
-    public int MaxYieldMs { get; init; } = 8000;
+    /// <summary>Hard cap on a single yield, in ms (protects against a stuck pointer sitting on the shell).</summary>
+    public int MaxYieldMs { get; init; } = 30_000;
 
     /// <summary>Score at or above which the engine starts watching (Candidate).</summary>
     public int CandidateThreshold => Sensitivity switch
@@ -165,6 +168,7 @@ public sealed class YieldEngine
     private long _stateSinceMs;
     private long _lastInsideMs = long.MinValue;
     private long _insideSinceMs = long.MinValue;
+    private long _lastNearMs = long.MinValue;
     private long _lastInteractionMs = long.MinValue;
     private double _score;
 
@@ -185,6 +189,9 @@ public sealed class YieldEngine
     /// <summary>Number of samples currently buffered (bounded by <see cref="YieldOptions.HistorySize"/>).</summary>
     public int HistoryCount => _history.Count;
 
+    /// <summary>Timestamp of the last pointer activity near the shell (diagnostics/tests).</summary>
+    public long LastNearMs => _lastNearMs;
+
     /// <summary>The island should stop consuming pointer input while yielding.</summary>
     public bool ShouldPassThrough => _state == YieldState.Yielding;
 
@@ -203,6 +210,11 @@ public sealed class YieldEngine
             _lastInteractionMs = nowMs;
         }
 
+        if (shell.DistanceTo(sample.X, sample.Y) <= _options.ActivityRadiusPx)
+        {
+            _lastNearMs = nowMs;
+        }
+
         if (shell.Contains(sample.X, sample.Y))
         {
             _lastInsideMs = nowMs;
@@ -217,7 +229,41 @@ public sealed class YieldEngine
         }
 
         _score = ComputeScore(sample, shell, context, nowMs);
-        Advance(sample, shell, context, nowMs);
+        AdvanceCore(context, nowMs);
+
+        return new YieldTransition(previous, _state, _score, ShouldPassThrough);
+    }
+
+    /// <summary>Forces a yield (right-click "soften now"), held until the restore timer expires.</summary>
+    /// <param name="nowMs">Monotonic "now".</param>
+    public void ForceYield(long nowMs)
+    {
+        _state = YieldState.Yielding;
+        _stateSinceMs = nowMs;
+        _lastNearMs = nowMs;
+    }
+
+    /// <summary>
+    /// Advances only the time-based rules (restore timer, cooldown) without a new pointer sample. A tick
+    /// must **not** count as pointer activity, otherwise a pointer parked on the island would refresh the
+    /// "3 s without activity" window forever and the island could never come back.
+    /// </summary>
+    /// <param name="shell">Island shell rectangle.</param>
+    /// <param name="context">Window/interaction context.</param>
+    /// <param name="nowMs">Monotonic "now".</param>
+    public YieldTransition Tick(in YieldShell shell, in YieldContext context, long nowMs)
+    {
+        var previous = _state;
+        if (context.ManualRestoreRequested)
+        {
+            ForceInteractive(nowMs);
+        }
+        else if (_state != YieldState.Interactive)
+        {
+            // Never start a *new* yield from a tick: the score is only refreshed by real pointer samples,
+            // so a stale high score would immediately re-yield the island right after it came back.
+            AdvanceCore(context, nowMs);
+        }
 
         return new YieldTransition(previous, _state, _score, ShouldPassThrough);
     }
@@ -306,7 +352,7 @@ public sealed class YieldEngine
         return Math.Clamp(score, -100, 100);
     }
 
-    private void Advance(in YieldSample sample, in YieldShell shell, in YieldContext context, long nowMs)
+    private void AdvanceCore(in YieldContext context, long nowMs)
     {
         if (context.ManualRestoreRequested)
         {
@@ -314,7 +360,6 @@ public sealed class YieldEngine
             return;
         }
 
-        var inside = shell.Contains(sample.X, sample.Y, padding: 4);
         switch (_state)
         {
             case YieldState.Interactive:
@@ -338,13 +383,13 @@ public sealed class YieldEngine
                 break;
 
             case YieldState.Yielding:
-                var heldMs = nowMs - _stateSinceMs;
-                var leftMs = _lastInsideMs == long.MinValue ? long.MaxValue : nowMs - _lastInsideMs;
-                if (heldMs >= _options.MaxYieldMs)
-                {
-                    Transition(YieldState.Cooldown, nowMs);
-                }
-                else if (heldMs >= _options.MinYieldMs && !inside && leftMs >= 250 && _score <= _options.ExitThreshold)
+                // The island comes back 3 s after the last pointer activity near it (user rule), with a
+                // hard cap so a pointer parked on the shell cannot hold it forever.
+                var lastActivity = Math.Max(
+                    _stateSinceMs,
+                    _lastNearMs == long.MinValue ? _stateSinceMs : _lastNearMs);
+                if (nowMs - _stateSinceMs >= _options.MaxYieldMs
+                    || nowMs - lastActivity >= _options.RestoreAfterMs)
                 {
                     Transition(YieldState.Cooldown, nowMs);
                 }
