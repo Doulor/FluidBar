@@ -52,6 +52,12 @@ internal sealed class LiquidGlassPainter : IDisposable
     // slot rebuilt the whole shader set whenever the size alternated — per-frame churn that showed up as a
     // faint rim flicker on the expanded card (reported 2026-10-23).
     private readonly List<((int Width, int Height) Key, ShaderSet Set)> _edgeSets = new(4);
+
+    // The rim's key line and specular sheen scale with the backdrop luminance (0.04→0.28 and 0.18→0.55).
+    // Feeding it the frame-rate luminance made the outer ring "breathe" with every 120 ms capture while the
+    // calm interior barely moved — the "only the outer ring flickers" report. The rim now only re-scales
+    // when the backdrop brightness really changes.
+    private float _edgeLuminance = -1f;
     private bool _disposed;
 
     /// <summary>Number of baked overlays currently retained (diagnostics).</summary>
@@ -168,7 +174,13 @@ internal sealed class LiquidGlassPainter : IDisposable
         // On a black desktop a fixed 28 % white outline reads as a drawn ring ("not glass"). The edge
         // therefore scales with the backdrop: a faint shape line plus a top-only sheen on dark content,
         // the full prototype edge only when there is something bright to separate from.
-        var lum = (float)Math.Clamp(backdropLuminance, 0, 1);
+        var measured = (float)Math.Clamp(backdropLuminance, 0, 1);
+        if (_edgeLuminance < 0 || Math.Abs(measured - _edgeLuminance) >= 0.15f)
+        {
+            _edgeLuminance = measured;
+        }
+
+        var lum = _edgeLuminance;
         var keyAlpha = 0.04f + (0.24f * lum);
         var sheenAlpha = 0.18f + (0.37f * lum);
 
