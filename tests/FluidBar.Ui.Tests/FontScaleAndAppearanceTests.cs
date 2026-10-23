@@ -101,9 +101,8 @@ public sealed class FontScaleAndAppearanceTests
         fixture.Controller.RefreshSystemAppearance();
         fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
 
-        // Live appearance refresh still updates accent + reduced motion, but the island stays Obsidian:
-        // the desktop theme only affects windows.
-        Assert.Equal(IslandThemeMode.Dark, fixture.Controller.RenderState.Theme.Mode);
+        // "System" follows Windows: a light Windows theme now flips the island to porcelain as well.
+        Assert.Equal(IslandThemeMode.Light, fixture.Controller.RenderState.Theme.Mode);
         Assert.True(fixture.Controller.Motion.ReducedMotion);
         AssertAccent(0xFF, 0x5A, 0x00, fixture.Controller.RenderState.Theme.Accent, fixture);
     }

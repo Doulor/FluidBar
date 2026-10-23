@@ -41,11 +41,14 @@ public static class SkiaIslandThemeMapper
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        // The island itself is always Obsidian. The "desktop theme" setting explicitly only affects the
-        // desktop, the demo console and the settings window; mapping it onto the island made the panel
-        // light and — with acrylic — turn into a translucent grey veil over the desktop (the reported
-        // left-side grey layer). Island palettes remain dark-surface tokens.
-        var theme = IslandTheme.Dark;
+        // Dark/Light is a first-class island choice (home quick tile, user request 2026-10-24). "System"
+        // resolves against the Windows app theme so "follow Windows" stays a real mapping.
+        var theme = settings.Theme switch
+        {
+            AppTheme.Light => IslandTheme.Light,
+            AppTheme.System => appearance.LightTheme ? IslandTheme.Light : IslandTheme.Dark,
+            _ => IslandTheme.Dark,
+        };
         theme = ApplyPalette(theme, settings.Palette);
 
         // Safe mode forces the Tier 0 opaque material (spec §8.4).

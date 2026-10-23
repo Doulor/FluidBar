@@ -56,9 +56,7 @@ public sealed class SkiaPlatformActionsTests
         AssertUnsupported(
             actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Bluetooth)),
             "Bluetooth radio service is not running");
-        AssertUnsupported(
-            actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Pomodoro)),
-            "owned by the island controller");
+
 
         settings.Dispose();
     }
@@ -156,21 +154,6 @@ public sealed class SkiaPlatformActionsTests
             "no Bluetooth radio");
         Assert.Empty(wifi.Requests);
         Assert.Empty(bluetooth.Requests);
-        settings.Dispose();
-    }
-
-    [Fact]
-    public async Task PomodoroQuickToggle_IsOwnedByTheIslandController()
-    {
-        // The pomodoro needs no Windows API, so it lives in SkiaIslandController; the platform seam must
-        // report that plainly instead of pretending to toggle something.
-        var settings = CreateSettings();
-        await using var actions = new SkiaPlatformActions(settings);
-
-        var result = actions.Invoke(new IslandPlatformAction(
-            IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Pomodoro));
-
-        AssertUnsupported(result, "owned by the island controller");
         settings.Dispose();
     }
 

@@ -114,9 +114,8 @@ public sealed class SkiaIslandControlTests
             }
         }
 
-        // Four tiles (user request 2026-10-24): Wi-Fi, Bluetooth, pomodoro, theme. The pomodoro is owned by
-        // the controller (pure state, no platform service), so it raises no seam call — the other three do.
-        Assert.Equal(4, toggles.Count);
+        // Three tiles (user request 2026-10-24): Wi-Fi, Bluetooth and the dark/light theme switch.
+        Assert.Equal(3, toggles.Count);
         Assert.Equal(3, actions.Calls.Count);
         Assert.All(actions.Calls, call => Assert.Equal(IslandPlatformActionKind.QuickToggle, call.Kind));
         Assert.Equal(
@@ -265,20 +264,19 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
-    public void Home_shows_the_four_requested_live_quick_toggles()
+    public void Home_shows_the_three_requested_live_quick_toggles()
     {
         using var fixture = ControllerFixture.Create(AppSettings.Default with { Theme = AppTheme.Light });
         fixture.ExpandAndSettle();
 
         var toggles = fixture.Controller.RenderState.Pages.Home.Toggles;
-        Assert.Equal(4, toggles.Count);
+        Assert.Equal(3, toggles.Count);
         Assert.All(toggles, toggle => Assert.True(toggle.IsEnabled));
         Assert.Equal(
             new[]
             {
                 FluidBar.Island.IconKind.Wifi,
                 FluidBar.Island.IconKind.Bluetooth,
-                FluidBar.Island.IconKind.Timer,
                 FluidBar.Island.IconKind.Sun,
             },
             toggles.Select(toggle => toggle.Icon));

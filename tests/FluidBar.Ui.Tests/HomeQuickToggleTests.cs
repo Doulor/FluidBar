@@ -24,11 +24,10 @@ public class HomeQuickToggleTests
             EmptyIsland(),
             localizer);
 
-        Assert.Equal(4, pages.Home.Toggles.Count);
+        Assert.Equal(3, pages.Home.Toggles.Count);
         Assert.Equal(IconKind.Wifi, pages.Home.Toggles[0].Icon);
         Assert.Equal(IconKind.Bluetooth, pages.Home.Toggles[1].Icon);
-        Assert.Equal(IconKind.Timer, pages.Home.Toggles[2].Icon);
-        Assert.Equal(IconKind.Moon, pages.Home.Toggles[3].Icon);
+        Assert.Equal(IconKind.Moon, pages.Home.Toggles[2].Icon);
         Assert.True(pages.Home.Toggles[0].IsOn);
         Assert.False(pages.Home.Toggles[1].IsOn);
         Assert.All(pages.Home.Toggles, toggle => Assert.True(toggle.IsEnabled));
@@ -46,55 +45,11 @@ public class HomeQuickToggleTests
         var light = SkiaIslandStateBuilder.BuildPages(content, island, localizer,
             new AppSettings { Theme = AppTheme.Light });
 
-        Assert.Equal(IconKind.Moon, dark.Home.Toggles[3].Icon);
-        Assert.False(dark.Home.Toggles[3].IsOn);
-        Assert.Equal(IconKind.Sun, light.Home.Toggles[3].Icon);
-        Assert.True(light.Home.Toggles[3].IsOn);
+        Assert.Equal(IconKind.Moon, dark.Home.Toggles[2].Icon);
+        Assert.False(dark.Home.Toggles[2].IsOn);
+        Assert.Equal(IconKind.Sun, light.Home.Toggles[2].Icon);
+        Assert.True(light.Home.Toggles[2].IsOn);
     });
-
-    [Fact]
-    public Task Pomodoro_tile_shows_the_countdown_while_running() => AvaloniaTest.Run(() =>
-    {
-        var localizer = TestFixtures.CreateLocalizer("zh-CN");
-        var content = new IslandContent();
-        var island = EmptyIsland();
-
-        var timer = new PomodoroTimer();
-        var now = new DateTimeOffset(2026, 10, 24, 9, 0, 0, TimeSpan.Zero);
-
-        var idle = SkiaIslandStateBuilder.BuildPages(content, island, localizer, null, timer.Snapshot);
-        Assert.False(idle.Home.Toggles[2].IsOn);
-        Assert.Equal("专注", idle.Home.Toggles[2].Label);
-
-        timer.Toggle(now);
-        Assert.True(timer.Tick(now + TimeSpan.FromSeconds(30)));
-        var running = SkiaIslandStateBuilder.BuildPages(content, island, localizer, null, timer.Snapshot);
-        Assert.True(running.Home.Toggles[2].IsOn);
-        Assert.Equal("24:30", running.Home.Toggles[2].Label);
-    });
-
-    [Fact]
-    public void Pomodoro_completes_after_its_duration_and_can_restart()
-    {
-        var timer = new PomodoroTimer(TimeSpan.FromMinutes(25));
-        var now = new DateTimeOffset(2026, 10, 24, 9, 0, 0, TimeSpan.Zero);
-
-        timer.Toggle(now);
-        Assert.True(timer.Snapshot.IsRunning);
-
-        timer.Tick(now + TimeSpan.FromMinutes(10));
-        Assert.True(timer.Snapshot.IsRunning);
-        Assert.Equal("15:00", timer.Snapshot.Text);
-
-        Assert.True(timer.Tick(now + TimeSpan.FromMinutes(25)));
-        Assert.False(timer.Snapshot.IsRunning);
-        Assert.True(timer.Snapshot.IsComplete);
-        Assert.Equal("完成", timer.Snapshot.Text);
-
-        timer.Toggle(now + TimeSpan.FromMinutes(26));
-        Assert.True(timer.Snapshot.IsRunning);
-        Assert.False(timer.Snapshot.IsComplete);
-    }
 
     private static IslandViewModel EmptyIsland() => new()
     {

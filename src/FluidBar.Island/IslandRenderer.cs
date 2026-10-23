@@ -482,7 +482,7 @@ public sealed class IslandRenderer : IDisposable
     /// </summary>
     private static IslandTheme AdaptThemeForBackdrop(IslandTheme theme, in IslandRenderState state)
     {
-        if (theme.Material != IslandMaterial.LiquidGlass || state.Backdrop is null)
+        if (theme.Material != IslandMaterial.LiquidGlass || state.Backdrop is null || !state.FollowBackdropPalette)
         {
             return theme;
         }

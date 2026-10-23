@@ -89,11 +89,8 @@ public enum IslandQuickToggle
     /// <summary>Bluetooth toggle (slot 1).</summary>
     Bluetooth = 1,
 
-    /// <summary>Pomodoro / focus timer toggle (slot 2).</summary>
-    Pomodoro = 2,
-
-    /// <summary>App/island theme toggle (slot 3, rendered as "System"/moon).</summary>
-    Theme = 3,
+    /// <summary>App/island theme toggle (slot 2, sun/moon).</summary>
+    Theme = 2,
 }
 
 /// <summary>

@@ -360,9 +360,9 @@ public sealed class SkiaIslandHostMappingTests
         Assert.Equal(IslandThemeMode.Dark, dark.Mode);
         Assert.Equal(IslandMaterial.Obsidian, dark.Material);
 
-        // The desktop theme never repaints the island (it stays Obsidian by design); only the palette does.
+        // Dark/Light is a real island choice since the home theme tile exists (user request 2026-10-24).
         var light = SkiaIslandThemeMapper.Map(AppSettings.Default with { Theme = AppTheme.Light });
-        Assert.Equal(IslandThemeMode.Dark, light.Mode);
+        Assert.Equal(IslandThemeMode.Light, light.Mode);
 
         var acrylic = SkiaIslandThemeMapper.Map(AppSettings.Default with { Material = AppMaterial.Acrylic });
         Assert.Equal(IslandMaterial.SimulatedGlass, acrylic.Material);

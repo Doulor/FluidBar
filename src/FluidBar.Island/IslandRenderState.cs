@@ -230,6 +230,12 @@ public readonly record struct IslandRenderState
     /// <summary>Lens magnification of the backdrop inside the rim band (1.0 = no refraction).</summary>
     public double RefractionScale { get; init; } = LiquidGlassTokens.RefractionScale;
 
+    /// <summary>
+    /// Whether liquid glass may flip the palette to follow the desktop luminance. Explicit dark/light
+    /// theme choices turn this off so the user's pick is what they see.
+    /// </summary>
+    public bool FollowBackdropPalette { get; init; } = true;
+
     /// <summary>Width of the refraction band in DIP (0 = scale with the shell height).</summary>
     public double RefractionBandDip { get; init; }
 

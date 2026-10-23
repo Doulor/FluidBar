@@ -46,8 +46,6 @@ public sealed class SkiaIslandController : IDisposable
     private readonly IIslandDataSource _data;
     private readonly TimeProvider _time;
     private readonly SkiaHostDispatcher _dispatcher;
-    private readonly FluidBar.App.State.PomodoroTimer _pomodoro = new();
-    private ITimer? _pomodoroTicker;
     private readonly EventHub _hub;
     private readonly ActivityScheduler _scheduler = new();
     private readonly Func<SystemAppearanceSnapshot> _appearance;
@@ -2120,7 +2118,7 @@ public sealed class SkiaIslandController : IDisposable
         TrackCompactLyric();
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
         _pages = ApplyPageScroll(ApplyCopyFeedback(
-            SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings, _pomodoro.Snapshot),
+            SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings),
             _time.GetLocalNow())) with
         {
             PluginPages = _pluginPages,
@@ -3032,15 +3030,6 @@ private void HandlePageControl(in IslandHitTarget hit)
     /// </summary>
     private void DispatchControl(in IslandPlatformAction action, int page)
     {
-        // The pomodoro lives in the controller: pure state plus a one-second tick, so it needs neither a
-        // platform service nor a seam and stays testable without any hardware.
-        if (action.Kind == IslandPlatformActionKind.QuickToggle
-            && action.Toggle == IslandQuickToggle.Pomodoro)
-        {
-            TogglePomodoro();
-            return;
-        }
-
         if (_platformActions is null)
         {
             if (TryRaiseLegacyMediaCommand(action.Kind))
@@ -3079,59 +3068,6 @@ private void HandlePageControl(in IslandHitTarget hit)
                     result.Reason ?? "no platform service backs this control");
                 break;
         }
-    }
-
-    /// <summary>
-    /// Starts/stops the home quick-tile pomodoro. While it runs a one-second ticker repaints the label, so
-    /// the island costs exactly one frame per displayed second and none when idle.
-    /// </summary>
-    private void TogglePomodoro()
-    {
-        if (!_pomodoro.Toggle(_time.GetLocalNow()))
-        {
-            return;
-        }
-
-        if (_pomodoro.Snapshot.IsRunning)
-        {
-            _pomodoroTicker ??= _time.CreateTimer(
-                static state => ((SkiaIslandController)state!).OnPomodoroTick(), this,
-                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-        }
-        else
-        {
-            StopPomodoroTicker();
-        }
-
-        InvalidateFull();
-        FrameRequested?.Invoke();
-        StateChanged?.Invoke();
-    }
-
-    private void OnPomodoroTick()
-    {
-        _dispatcher.Post(() =>
-        {
-            if (!_pomodoro.Tick(_time.GetLocalNow()))
-            {
-                return;
-            }
-
-            if (!_pomodoro.Snapshot.IsRunning)
-            {
-                StopPomodoroTicker();
-            }
-
-            InvalidateFull();
-            FrameRequested?.Invoke();
-            StateChanged?.Invoke();
-        });
-    }
-
-    private void StopPomodoroTicker()
-    {
-        _pomodoroTicker?.Dispose();
-        _pomodoroTicker = null;
     }
 
     /// <summary>Starts the "copied" confirmation for the clipboard row that was just dispatched.</summary>
@@ -3661,6 +3597,8 @@ private void HandlePageControl(in IslandHitTarget hit)
         _renderState = new IslandRenderState
         {
             Mode = mode,
+            // An explicit dark/light pick outranks the glass' own "follow the desktop" palette.
+            FollowBackdropPalette = _settings.Current.Theme == AppTheme.System,
             Form = form,
             ShellWidth = _motion.Width,
             ShellHeight = _motion.Height,

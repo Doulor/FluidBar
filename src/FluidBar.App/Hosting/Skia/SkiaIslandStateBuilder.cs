@@ -117,8 +117,7 @@ public static class SkiaIslandStateBuilder
         IslandContent content,
         IslandViewModel island,
         ILocalizer localizer,
-        AppSettings? settings = null,
-        FluidBar.App.State.PomodoroSnapshot pomodoro = default)
+        AppSettings? settings = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(island);
@@ -148,12 +147,6 @@ public static class SkiaIslandStateBuilder
                     content.IsWifiEnabled ?? content.IsOnline),
                 new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth),
                     content.IsBluetoothEnabled ?? false),
-                // Pomodoro (user request 2026-10-24): replaces the dead Focus tile — it needs no Windows
-                // API, so it is a real button. The label carries the countdown while it runs.
-                new HomeToggleModel(
-                    IslandIcon.Timer,
-                    pomodoro.IsRunning || pomodoro.IsComplete ? pomodoro.Text : "专注",
-                    pomodoro.IsRunning || pomodoro.IsComplete),
                 // Theme (user request 2026-10-24): one tap flips dark/light and persists it.
                 new HomeToggleModel(
                     settings?.Theme == AppTheme.Light ? IslandIcon.Sun : IslandIcon.Moon,
