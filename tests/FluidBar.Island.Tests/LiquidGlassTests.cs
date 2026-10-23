@@ -148,6 +148,72 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Preview_images_for_black_photo_and_white_backdrops()
+    {
+        var dir = Environment.GetEnvironmentVariable("FLUIDBAR_PREVIEW_DIR");
+        if (string.IsNullOrEmpty(dir))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(dir);
+        var theme = Liquid;
+        using var renderer = new IslandRenderer(theme);
+        foreach (var (name, luminance) in new[] { ("black", 0.0), ("photo", 0.45), ("white", 0.98) })
+        {
+            var surface = IslandMetrics.SurfaceSize(IslandMode.Float);
+            using var backdrop = new SKBitmap(new SKImageInfo(
+                (int)(surface.Width * IslandTestFixtures.Scale),
+                (int)(surface.Height * IslandTestFixtures.Scale),
+                SKColorType.Bgra8888, SKAlphaType.Premul));
+            using (var canvas = new SKCanvas(backdrop))
+            {
+                var v = (byte)(luminance * 255);
+                canvas.Clear(new SKColor(v, v, v));
+            }
+
+            using var image = SKImage.FromBitmap(backdrop);
+            using var compact = renderer.RenderToBitmap(
+                CompactState(theme) with { Backdrop = image, BackdropLuminance = luminance },
+                IslandTestFixtures.Scale);
+            IslandTestFixtures.SavePng(compact, Path.Combine(dir, $"compact-{name}.png"));
+
+            // Edge profile: peak luma in a 4 DIP band along each side (shell coordinates, not the shadow).
+            var shell = IslandMetrics.ShellRect(CompactState(theme));
+            double Band(int fromX, int fromY, int toX, int toY)
+            {
+                var peak = 0d;
+                for (var d = 0; d < 6; d++)
+                {
+                    var px = (int)Math.Round((shell.Left + fromX + ((toX - fromX) * d)) * IslandTestFixtures.Scale);
+                    var py = (int)Math.Round((shell.Top + fromY + ((toY - fromY) * d)) * IslandTestFixtures.Scale);
+                    peak = Math.Max(peak, Luma(compact.GetPixel(px, py)));
+                }
+
+                return Math.Round(peak, 1);
+            }
+
+            var metrics = new
+            {
+                name,
+                left = Band(1, (int)(shell.Height / 2), 1, (int)(shell.Height / 2)),
+                top = Band((int)(shell.Width / 2), 1, (int)(shell.Width / 2), 1),
+                bottom = Band((int)(shell.Width / 2), (int)shell.Height - 1, (int)(shell.Width / 2), (int)shell.Height - 1),
+                centre = Math.Round(Luma(compact.GetPixel(
+                    (int)Math.Round((shell.Left + (shell.Width / 2)) * IslandTestFixtures.Scale),
+                    (int)Math.Round((shell.Top + (shell.Height / 2)) * IslandTestFixtures.Scale))), 1),
+            };
+            File.AppendAllText(Path.Combine(dir, "metrics.jsonl"), System.Text.Json.JsonSerializer.Serialize(metrics) + Environment.NewLine);
+
+            var expandedState = IslandTestFixtures.Expanded(1) with { Theme = theme };
+            using var expanded = renderer.RenderToBitmap(
+                expandedState with { Backdrop = image, BackdropLuminance = luminance },
+                IslandTestFixtures.Scale);
+            IslandTestFixtures.SavePng(expanded, Path.Combine(dir, $"expanded-{name}.png"));
+        }
+    }
+
+    [Fact]
     public void Glass_edges_fade_out_on_a_black_backdrop()
     {
         var theme = Liquid;
