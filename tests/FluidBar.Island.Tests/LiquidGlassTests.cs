@@ -148,6 +148,55 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Glass_edges_fade_out_on_a_black_backdrop()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var black = new SKBitmap(info);
+        using (var canvas = new SKCanvas(black))
+        {
+            canvas.Clear(SKColors.Black);
+        }
+
+        using var image = SKImage.FromBitmap(black);
+        using var dark = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.0 }, IslandTestFixtures.Scale);
+        using var bright = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var y = (int)Math.Round((shell.Top + (shell.Height / 2)) * IslandTestFixtures.Scale);
+
+        // Peak luma across the left rim band: that is where the 1 DIP key line sits.
+        double PeakEdge(SKBitmap bitmap)
+        {
+            var peak = 0d;
+            for (var d = 0; d <= 6; d++)
+            {
+                var px = (int)Math.Round((shell.Left + d) * IslandTestFixtures.Scale);
+                peak = Math.Max(peak, Luma(bitmap.GetPixel(px, y)));
+            }
+
+            return peak;
+        }
+
+        var darkEdge = PeakEdge(dark);
+        var brightEdge = PeakEdge(bright);
+
+        Assert.True(
+            darkEdge < 60,
+            $"a black desktop must not get a bright outline (edge luma {darkEdge:0.0})");
+        Assert.True(
+            brightEdge - darkEdge > 25,
+            $"the edge must scale with the backdrop (dark {darkEdge:0.0} vs bright {brightEdge:0.0})");
+    }
+
+    [Fact]
     public void Bright_backdrops_get_a_vibrancy_scrim_behind_the_top_text_band()
     {
         var theme = Liquid;

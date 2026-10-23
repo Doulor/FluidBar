@@ -244,7 +244,16 @@ public sealed class SkiaHostPerfProbe
             ["textCacheBytes"] = stats.TextApproxBytes,
         };
 
-        _logger.Information(LogCategories.Render, "island.skia.perf", "Island performance sample.", data: data);
+        // The JSON-lines sink keeps warnings only, so a diagnostic run can force the sample to Warning
+        // (FLUIDBAR_PERF_LOG=1) without changing the level users see in the log during normal runs.
+        if (Environment.GetEnvironmentVariable("FLUIDBAR_PERF_LOG") == "1")
+        {
+            _logger.Warning(LogCategories.Render, "island.skia.perf", "Island performance sample.", data: data);
+        }
+        else
+        {
+            _logger.Information(LogCategories.Render, "island.skia.perf", "Island performance sample.", data: data);
+        }
         if (_dumpCount == 2)
         {
             LogMemoryBreakdown(memory);

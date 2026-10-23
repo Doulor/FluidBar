@@ -878,6 +878,17 @@ public sealed class IslandRenderer : IDisposable
         canvas.DrawPath(path, _fill);
         _fill.BlendMode = SKBlendMode.SrcOver;
 
+        // Haze: on a black desktop a purely tinted panel disappears. A few percent of white keeps the
+        // slab readable as glass without washing out the backdrop on photos (scales with darkness).
+        var haze = useBackdrop ? (1.0 - Math.Clamp(state.BackdropLuminance, 0, 1)) * LiquidGlassTokens.HazeMaxAlpha * opacity : 0d;
+        if (haze > 0.002)
+        {
+            _fill.Shader = null;
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(haze * 255f, 0, 255));
+            canvas.DrawPath(path, _fill);
+            _fill.Color = SKColors.White;
+        }
+
         if (scrim > 0.002)
         {
             _fill.Shader = GetScrimShader((float)state.ShellWidth, (float)state.ShellHeight);
@@ -905,7 +916,8 @@ public sealed class IslandRenderer : IDisposable
                 canvas,
                 path,
                 new SKRect(0, 0, (float)state.ShellWidth, (float)state.ShellHeight),
-                opacity);
+                opacity,
+                state.BackdropLuminance);
         }
         else if (materialLiquid)
         {

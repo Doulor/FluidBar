@@ -153,7 +153,7 @@ internal sealed class LiquidGlassPainter : IDisposable
     /// <param name="path">Shell silhouette in the current space.</param>
     /// <param name="bounds">Shell bounds in the current space.</param>
     /// <param name="opacity">Layer opacity 0..1.</param>
-    public void DrawEdgeOnly(SKCanvas canvas, SKPath path, SKRect bounds, float opacity)
+    public void DrawEdgeOnly(SKCanvas canvas, SKPath path, SKRect bounds, float opacity, double backdropLuminance = 0.5)
     {
         if (bounds.Width < 4 || bounds.Height < 4 || opacity <= 0.002f)
         {
@@ -163,24 +163,34 @@ internal sealed class LiquidGlassPainter : IDisposable
         var set = EdgeSetRef(bounds);
         var layer = (byte)Math.Clamp(opacity * 255f, 0, 255);
 
+        // On a black desktop a fixed 28 % white outline reads as a drawn ring ("not glass"). The edge
+        // therefore scales with the backdrop: a faint shape line plus a top-only sheen on dark content,
+        // the full prototype edge only when there is something bright to separate from.
+        var lum = (float)Math.Clamp(backdropLuminance, 0, 1);
+        var keyAlpha = 0.04f + (0.24f * lum);
+        var sheenAlpha = 0.18f + (0.37f * lum);
+
         canvas.Save();
         canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
 
-        // Prototype "edge highlight 0.40": a 1 DIP key line at 0.28 alpha plus a softer specular arc.
         _stroke.StrokeWidth = 1f;
         _stroke.Shader = null;
-        _stroke.Color = SKColors.White.WithAlpha((byte)(0.28f * layer));
+        _stroke.Color = SKColors.White.WithAlpha((byte)(keyAlpha * layer));
         canvas.DrawPath(path, _stroke);
 
-        _stroke.StrokeWidth = 1.6f;
+        // Specular arc: the shader is bright at the top edge and fades by ~14 DIP, so this is a sheen
+        // rather than a ring even though the stroke follows the whole silhouette.
+        _stroke.StrokeWidth = 1.4f;
         _stroke.Shader = set.Specular;
-        _stroke.Color = SKColors.White.WithAlpha((byte)(0.55f * layer));
+        _stroke.Color = SKColors.White.WithAlpha((byte)(sheenAlpha * layer));
         canvas.DrawPath(path, _stroke);
 
         _stroke.Shader = set.Caustic;
+        _stroke.Color = SKColors.White.WithAlpha((byte)(sheenAlpha * 0.55f * layer));
         canvas.DrawPath(path, _stroke);
 
         _stroke.Shader = set.FringeCool;
+        _stroke.Color = SKColors.White.WithAlpha((byte)(sheenAlpha * 0.5f * layer));
         canvas.DrawPath(path, _stroke);
 
         _stroke.Shader = null;

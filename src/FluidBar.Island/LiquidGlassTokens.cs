@@ -34,6 +34,9 @@ public static class LiquidGlassTokens
     /// <summary>Peak scrim alpha (top edge) on a fully bright backdrop.</summary>
     public const double ScrimMaxAlpha = 0.30;
 
+    /// <summary>White haze added on dark desktops so the slab still reads as glass (0.05 on pure black).</summary>
+    public const double HazeMaxAlpha = 0.05;
+
     /// <summary>Height of the scrim gradient as a fraction of the shell height.</summary>
     public const double ScrimHeightFactor = 0.55;
 
