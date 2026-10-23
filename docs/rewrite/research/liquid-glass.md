@@ -295,3 +295,19 @@
 测试：`Split_capsules_render_the_backdrop_like_the_shell`、`Stacked_ghost_layers_render_the_backdrop_like_the_shell`
 （亮背景 vs 无背景，采样点亮度差 > 40 / > 30）。次生紧凑岛（secondary compact）复用了 `DrawShellBody`，
 自动继承同一材质。
+
+## 11. 智能让位（Smart Yield）· 第一块：核心状态机
+
+按用户提供的《FluidBar 智能让位系统设计方案》开工。先把与平台无关的核心做成纯逻辑，便于测试与后续接入：
+
+- `src/FluidBar.Core/Interaction/YieldEngine.cs`：
+  - `YieldState`（Interactive / Candidate / Yielding / Cooldown）、`YieldSensitivity`（保守 / 平衡 / 积极）。
+  - 打分信号与设计文档 §5.2 对齐：轨迹指向壳体 +25、快速掠过 +20、前台最大化 +15（全屏 +30）、
+    停留交互控件 −20、在壳体内停留 −35、刚点过岛 −60、拖动 −100；裁剪到 [−100, 100]。
+  - 滞回：进入 Candidate / Yielding 的阈值高于退出阈值；`MinYieldMs` 最短保持、`CooldownMs` 冷却、
+    `CandidateTimeoutMs` 候选超时、`MaxYieldMs` 兜底回 Interactive；`ForceInteractive` 供手动恢复。
+  - 不吞点击：引擎只输出"是否该穿透"，切换由调用方在鼠标按下前完成（设计文档 §2.4）。
+- 测试 `tests/FluidBar.Core.Tests/YieldEngineTests.cs`（11 例）：空闲不触发、快速接近触发、缓慢移动不触发、
+  壳体内停留抑制、拖动永不触发、刚交互抑制、最短保持、冷却期不重复触发、手动恢复、历史有界、灵敏度差异。
+- 过程中修掉两个真 bug：`long.MinValue` 哨兵相减溢出（导致"刚交互"恒为真，永远不会让位）、
+  以及停留时间用了"距上一帧"（恒为 0）而不是"进入壳体以来的时长"。

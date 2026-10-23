@@ -2,6 +2,14 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 智能让位（阶段一）：核心状态机 YieldEngine
+
+- 新增 `FluidBar.Core/Interaction/YieldEngine.cs`：四状态（Interactive/Candidate/Yielding/Cooldown）、
+  规则打分（轨迹指向/快速掠过/前台最大化或全屏/停留/刚交互/拖动）、滞回 + 最短保持 + 冷却 + 手动恢复。
+- 11 个单元测试覆盖状态机与评分（`YieldEngineTests`）。
+- 修复两个逻辑 bug：`long.MinValue` 哨兵相减溢出（"刚交互"恒真 → 永不让位）、停留时间按"距上一帧"计算（恒 0）。
+- 全量 2665 测试绿。
+
 ## 2026-10-23 — 液态玻璃覆盖所有岛面（分裂 / 堆叠 / 未来插件岛）
 
 - 新增共享入口 `IslandRenderer.TryPaintBackdropSurface`：任何岛面给轮廓就能得到"模糊桌面 + 自适应染色 +
