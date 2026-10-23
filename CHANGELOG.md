@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 液态玻璃：亮背景 vibrancy scrim
+
+- 新增 `ScrimAlpha`/`GetScrimShader`：背景亮度 > 0.45 时在壳体顶部 55% 高度叠一层主题背景色渐变
+  （峰值 0.30α，随亮度线性增长），白底上白字可读性提升，照片类背景不受影响（阈值为 0）。
+- 测试 `Bright_backdrops_get_a_vibrancy_scrim_behind_the_top_text_band`（纯白背景 0.98 vs 0.0 亮度对比）。
+- 全量 2639 测试绿；冒烟 77 帧退出码 0。
+
 ## 2026-10-23 — 液态玻璃定稿 B 版（折射玻璃）+ 窗口级背景模糊（WGC）
 
 - **定稿**：用户选定原型 B（`blur 10px / tint rgba(8,10,14,.30) / saturate 160% / edgeHighlight .40 / refraction 1.00×`）。

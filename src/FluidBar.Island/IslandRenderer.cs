@@ -859,6 +859,10 @@ public sealed class IslandRenderer : IDisposable
             DrawBackdrop(canvas, state, path, state.Backdrop!, opacity);
         }
 
+        // Vibrancy scrim: a top-weighted wash that only appears on bright desktops, so white labels keep
+        // their contrast without turning the material into a dark slab on photos.
+        var scrim = useBackdrop ? ScrimAlpha(state.BackdropLuminance) * opacity : 0d;
+
         // While split capsules are visible they share the primary's exact material. Using Src for
         // both interiors means the capsule and the pill have byte-identical background colour/alpha
         // (the two shadows have different shapes and would otherwise bleed through differently).
@@ -873,6 +877,15 @@ public sealed class IslandRenderer : IDisposable
                 : Alpha(_theme.Background, fillOpacity * opacity);
         canvas.DrawPath(path, _fill);
         _fill.BlendMode = SKBlendMode.SrcOver;
+
+        if (scrim > 0.002)
+        {
+            _fill.Shader = GetScrimShader((float)state.ShellWidth, (float)state.ShellHeight);
+            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(scrim * 255f, 0, 255));
+            canvas.DrawPath(path, _fill);
+            _fill.Shader = null;
+            _fill.Color = SKColors.White;
+        }
 
         if (materialGlass)
         {
@@ -920,6 +933,36 @@ public sealed class IslandRenderer : IDisposable
         // Prototype2 declares `.island { border: 0 }`: the shell has no rim/outline at all. The old
         // LineStrong hairline is gone so the silhouette is pure fill + shadow (see ShellOutlineTests,
         // which still guards against an accent-tinted rim ever coming back).
+    }
+
+    /// <summary>Scrim alpha for a backdrop luminance (0 below the threshold, up to 0.30 on white).</summary>
+    private static double ScrimAlpha(double luminance)
+    {
+        var span = 1.0 - LiquidGlassTokens.ScrimLuminanceThreshold;
+        return Math.Clamp((luminance - LiquidGlassTokens.ScrimLuminanceThreshold) / span, 0, 1)
+            * LiquidGlassTokens.ScrimMaxAlpha;
+    }
+
+    /// <summary>Top-weighted scrim gradient (background colour to transparent at 55 % height), cached.</summary>
+    private SKShader GetScrimShader(float width, float height)
+    {
+        var key = ((int)Math.Round(width * 2), (int)Math.Round(height * 2));
+        if (_scrimShader is not null && _scrimKey == key)
+        {
+            return _scrimShader;
+        }
+
+        _scrimShader?.Dispose();
+        var top = new SKPoint(0, 0);
+        var bottom = new SKPoint(0, (float)(height * LiquidGlassTokens.ScrimHeightFactor));
+        _scrimShader = SKShader.CreateLinearGradient(
+            top,
+            bottom,
+            [_theme.Background.WithAlpha(255), _theme.Background.WithAlpha(0)],
+            null,
+            SKShaderTileMode.Clamp);
+        _scrimKey = key;
+        return _scrimShader;
     }
 
     /// <summary>
@@ -1002,6 +1045,8 @@ public sealed class IslandRenderer : IDisposable
         return _lensBand;
     }
 
+    private SKShader? _scrimShader;
+    private (int Width, int Height) _scrimKey;
     private SKPath? _lensBand;
     private (double Width, double Height, double Band) _lensKey;
     private readonly SKPaint _strokePaint = new() { IsAntialias = true };
@@ -1289,6 +1334,8 @@ public sealed class IslandRenderer : IDisposable
         _glassShader = null;
         _lensBand?.Dispose();
         _lensBand = null;
+        _scrimShader?.Dispose();
+        _scrimShader = null;
         _strokePaint.Dispose();
         _liquidGlass.Dispose();
         _fill.Dispose();

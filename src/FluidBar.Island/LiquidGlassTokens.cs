@@ -26,6 +26,18 @@ public static class LiquidGlassTokens
     public const double BackdropTintMaxFactor = 1.40;
 
     /// <summary>
+    /// Vibrancy scrim: extra background wash behind the top text band when the backdrop is bright.
+    /// Starts above <see cref="ScrimLuminanceThreshold"/> and reaches <see cref="ScrimMaxAlpha"/> on white.
+    /// </summary>
+    public const double ScrimLuminanceThreshold = 0.45;
+
+    /// <summary>Peak scrim alpha (top edge) on a fully bright backdrop.</summary>
+    public const double ScrimMaxAlpha = 0.30;
+
+    /// <summary>Height of the scrim gradient as a fraction of the shell height.</summary>
+    public const double ScrimHeightFactor = 0.55;
+
+    /// <summary>
     /// Lens magnification of the backdrop inside the rim band (1.0 = no refraction). The band re-draws
     /// the blurred desktop scaled about the shell centre, so the rim pulls in content from just outside
     /// the silhouette — the cheap Skia equivalent of the prototype's SDF displacement.

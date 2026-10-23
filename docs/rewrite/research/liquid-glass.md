@@ -207,5 +207,12 @@
   （模糊后的合成桌面），展开态 `#b19d9a`。
 - 全量测试：见本轮 STATUS（`Backdrop_mode…` 与 `Refraction_band…` 两个用例覆盖背景图与折射带）。
 
-**新增依赖**：`Vortice.Direct3D11`（Platform 项目）。**遗留**：`draw` 的文本在极亮壁纸上对比度仍偏低，
-可选做法是给文字加 1 DIP 阴影或提高 `BackdropTintMaxFactor`。
+**新增依赖**：`Vortice.Direct3D11`（Platform 项目）。
+
+### 10.4 亮背景可读性：vibrancy scrim
+
+纯白背景上 30% 染色 + 白字仍只有 ~2.7:1。按 iOS 的 vibrancy 思路加了"顶部压暗"：
+`BackdropLuminance > 0.45` 时，在壳体顶部 55% 高度画一层从主题背景色（α=0.30×强度）到透明的渐变，
+强度随背景亮度线性增长。照片类中等亮度背景完全不受影响（阈值为 0），白底时顶部被压暗、白字可读。
+测试 `Bright_backdrops_get_a_vibrancy_scrim_behind_the_top_text_band` 用纯白背景对比 0.98 / 0.0 两种亮度，
+断言顶部相对底部的亮度差至少降低 10。

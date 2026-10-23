@@ -148,6 +148,41 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Bright_backdrops_get_a_vibrancy_scrim_behind_the_top_text_band()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var white = new SKBitmap(info);
+        using (var canvas = new SKCanvas(white))
+        {
+            canvas.Clear(SKColors.White);
+        }
+
+        using var image = SKImage.FromBitmap(white);
+        using var bright = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.98 }, IslandTestFixtures.Scale);
+        using var dark = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.0 }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var x = (int)Math.Round((shell.Left + (shell.Width / 2)) * IslandTestFixtures.Scale);
+        var topY = (int)Math.Round((shell.Top + 40) * IslandTestFixtures.Scale);
+        var bottomY = (int)Math.Round((shell.Bottom - 30) * IslandTestFixtures.Scale);
+
+        var brightDelta = Luma(bright.GetPixel(x, topY)) - Luma(bright.GetPixel(x, bottomY));
+        var darkDelta = Luma(dark.GetPixel(x, topY)) - Luma(dark.GetPixel(x, bottomY));
+
+        Assert.True(
+            brightDelta < darkDelta - 10,
+            $"a bright backdrop must darken the top band (bright {brightDelta:0.0} vs dark {darkDelta:0.0})");
+    }
+
+    [Fact]
     public void Refraction_band_refracts_the_backdrop_near_the_rim()
     {
         var theme = Liquid;
