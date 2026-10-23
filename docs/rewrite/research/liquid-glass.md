@@ -765,3 +765,21 @@ blend = 0.25 / 0.5 / 0.75 时壳体中心 alpha 必须 > 240（修前 224 / 191�
 
 回归测试补 `The_split_satellite_ball_uses_the_same_stacked_glyph`：2 个 agent 的小球必须比 1 个多 25% 环像素。
 把 `state.AgentLiveCount` 强制成 1 后失败（已实测：one=286, two=286）。
+
+### 15.25 环颜色按"工具"而不是"槽位"（2026-10-24 用户反馈）
+
+用户："我三个会话都是在 deepseek harness 里面的，为什么颜色不同？"
+
+原因：之前第二环写死色相 +42°、中心点 −46°，**与工具无关**，所以同一个工具的会话也被涂成三种颜色。
+
+修正规则（对齐原始需求"同一个软件就是一样的颜色"）：
+
+- 新增 `FluidBar.App/State/AgentToolPalette`：`AgentKind` → 品牌色（DeepSeek #4D6BFE、Claude #D97757、
+  Codex #10A37F …，未知工具回退主题强调色）。
+- 数量与颜色一起进渲染态：`IslandRenderState.AgentRingColors` / `CompactModel.AgentRingColors`
+  （按显示顺序取前三个活跃会话的工具色）。
+- `AgentRingStack.Draw` 改为接收逐槽颜色（`ColorAt` 兜底），**不再做色相偏移**：
+  三个 harness 会话 → 三个环/点全是 DeepSeek 蓝；混合工具时才会出现不同颜色。
+
+测试：`AgentToolPaletteTests`（同工具同色、异工具异色、未知回退强调色）与
+`Ring_colours_come_from_the_slot_tool_colour`。

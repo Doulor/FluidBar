@@ -919,6 +919,7 @@ public sealed class IslandRenderer : IDisposable
                         _splitDot,
                         alpha,
                         _theme.Accent,
+                        state.AgentRingColors,
                         state.ReducedMotion,
                         AgentMotion.RingBaseAlpha);
                 }

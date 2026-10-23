@@ -407,6 +407,7 @@ internal sealed class CompactRenderer : IDisposable
             _centreDot,
             _opacity,
             _theme.Accent,
+            model.AgentRingColors,
             _reduced,
             AgentMotion.RingBaseAlpha);
 

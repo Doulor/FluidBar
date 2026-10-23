@@ -10,6 +10,13 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 环颜色改为按工具品牌色（同工具同色）
+
+- 之前第二环/中心点用固定色相偏移，与工具无关 → 三个 harness 会话也显示三种颜色。
+- 新增 `AgentToolPalette`（AgentKind → 品牌色，未知回退强调色）；`AgentRingStack.Draw` 改为逐槽颜色。
+- 新增 `AgentToolPaletteTests` 与 `Ring_colours_come_from_the_slot_tool_colour`。
+- 全量 2675 测试绿。
+
 ## 2026-10-24 — 堆叠环形图标推广到分裂小岛
 
 - 抽出共享实现 `AgentRingStack.Draw`，紧凑胶囊与分裂小岛共用同一套环语言、配色与合并动效。

@@ -108,6 +108,7 @@ public static class SkiaIslandStateBuilder
             // Multi-agent glyph: how many sessions are still running/waiting (the capsule shows one row
             // but the icon stacks up to three rings, user spec 2026-10-24).
             AgentLiveCount = kind == ActivityKind.Agent ? CountLiveAgents(content) : 1,
+            AgentRingColors = kind == ActivityKind.Agent ? LiveAgentColors(content) : [],
         });
     }
 
@@ -348,6 +349,26 @@ public static class SkiaIslandStateBuilder
         return models;
     }
 
+    /// <summary>Ring colours of the live sessions in display order (max three).</summary>
+    private static uint[] LiveAgentColors(IslandContent content)
+    {
+        var colors = new System.Collections.Generic.List<uint>(3);
+        foreach (var item in content.Agents)
+        {
+            if (colors.Count >= 3)
+            {
+                break;
+            }
+
+            if (item.Tone is StatusTone.Info or StatusTone.Warning)
+            {
+                colors.Add(AgentToolPalette.ColorFor(item.Kind));
+            }
+        }
+
+        return colors.Count == 0 ? [] : colors.ToArray();
+    }
+
     /// <summary>Running/waiting agent sessions (capped at the glyph's three slots).</summary>
     private static int CountLiveAgents(IslandContent content)
     {
@@ -377,6 +398,7 @@ public static class SkiaIslandStateBuilder
                 StatusText = item.StatusText,
                 DurationText = item.TimeText,
                 Tone = MapTone(item.Tone),
+                AccentArgb = AgentToolPalette.ColorFor(item.Kind),
             };
         }
 

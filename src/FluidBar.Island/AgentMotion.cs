@@ -147,7 +147,8 @@ public static class AgentRingStack
     /// <param name="secondRingBlend">0..1 merge progress of the second ring.</param>
     /// <param name="centreDotBlend">0..1 merge progress of the centre dot.</param>
     /// <param name="alpha">Layer opacity 0..1.</param>
-    /// <param name="accent">Base accent colour.</param>
+    /// <param name="accent">Base accent colour (fallback when a slot has no tool colour).</param>
+    /// <param name="colors">Per-slot tool colours (0xAARRGGBB, 0 = accent); same tool ⇒ same colour.</param>
     /// <param name="reducedMotion">Freezes the rotations when true.</param>
     /// <param name="baseRingAlpha">Alpha of the faint base circle (0 disables it).</param>
     public static void Draw(
@@ -164,10 +165,14 @@ public static class AgentRingStack
         float centreDotBlend,
         float alpha,
         SKColor accent,
+        uint[] colors,
         bool reducedMotion,
         float baseRingAlpha = 0.18f)
     {
         var agents = Clamp(liveAgents);
+        var first = ColorAt(colors, 0, accent);
+        var second = ColorAt(colors, 1, first);
+        var third = ColorAt(colors, 2, second);
 
         stroke.Style = SKPaintStyle.Stroke;
         stroke.StrokeCap = SKStrokeCap.Butt;
@@ -176,12 +181,12 @@ public static class AgentRingStack
 
         if (baseRingAlpha > 0f)
         {
-            stroke.Color = WithAlpha(accent, baseRingAlpha * alpha);
+            stroke.Color = WithAlpha(first, baseRingAlpha * alpha);
             canvas.DrawCircle(centre.X, centre.Y, radius, stroke);
         }
 
         var rotation = reducedMotion ? 0 : AgentMotion.RingRotationDegrees(animationSeconds);
-        stroke.Color = WithAlpha(accent, alpha);
+        stroke.Color = WithAlpha(first, alpha);
         canvas.DrawArc(
             new SKRect(centre.X - radius, centre.Y - radius, centre.X + radius, centre.Y + radius),
             AgentMotion.ArcStartDegrees + (float)rotation,
@@ -193,7 +198,7 @@ public static class AgentRingStack
         {
             var secondRadius = radius * (SecondRingMergeFactor
                 - ((SecondRingMergeFactor - SecondRingRadiusFactor) * secondRingBlend));
-            var secondColor = HueShift(accent, 42f);
+            var secondColor = second;
             var secondAlpha = secondRingBlend * alpha;
 
             stroke.StrokeWidth = strokeWidth * (0.6f + (0.4f * secondRingBlend));
@@ -214,7 +219,7 @@ public static class AgentRingStack
 
         if (agents >= 3 && centreDotBlend > 0.01f)
         {
-            var dotColor = HueShift(accent, -46f);
+            var dotColor = third;
             var dotRadius = DotRadiusDip * centreDotBlend;
             fill.Style = SKPaintStyle.Fill;
             glow.Color = WithAlpha(dotColor, 0.45f * centreDotBlend * alpha);
@@ -223,6 +228,15 @@ public static class AgentRingStack
             canvas.DrawCircle(centre.X, centre.Y, dotRadius, fill);
         }
     }
+
+    /// <summary>Tool colour for a slot (falls back to <paramref name="fallback"/> when unset).</summary>
+    /// <param name="colors">Per-slot ARGB colours (0 = unset).</param>
+    /// <param name="index">Slot index.</param>
+    /// <param name="fallback">Colour used when the slot has none.</param>
+    public static SKColor ColorAt(uint[] colors, int index, SKColor fallback)
+        => colors is not null && index < colors.Length && colors[index] != 0
+            ? new SKColor(colors[index])
+            : fallback;
 
     private static SKColor WithAlpha(SKColor color, float alpha)
         => color.WithAlpha((byte)Math.Clamp(alpha * 255f, 0, 255));

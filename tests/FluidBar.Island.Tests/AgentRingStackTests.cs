@@ -91,6 +91,23 @@ public sealed class AgentRingStackTests
     }
 
     [Fact]
+    public void Ring_colours_come_from_the_slot_tool_colour()
+    {
+        uint[] sameTool = [0xFF4D6BFE, 0xFF4D6BFE, 0xFF4D6BFE];
+        var first = AgentRingStack.ColorAt(sameTool, 0, SKColors.White);
+        var second = AgentRingStack.ColorAt(sameTool, 1, first);
+        var third = AgentRingStack.ColorAt(sameTool, 2, second);
+
+        Assert.Equal(first, second);
+        Assert.Equal(second, third);
+
+        uint[] mixedTools = [0xFF4D6BFE, 0xFFD97757, 0xFF4D6BFE];
+        Assert.NotEqual(
+            AgentRingStack.ColorAt(mixedTools, 1, first),
+            AgentRingStack.ColorAt(mixedTools, 0, first));
+    }
+
+    [Fact]
     public void More_than_three_agents_are_clamped()
     {
         Assert.Equal(3, AgentRingStack.Clamp(9));
