@@ -10,6 +10,17 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 环数实时化 + 三处圆环样式统一
+
+- 环数是"打开的会话数"，但之前只在重启后才对：DSH 空闲会话根本没发过事件（启动即存在者被静默收养）。
+- `DshSessionProvider`：空闲会话按文件写入时间发一次 `waiting`（时间用 mtime，不会被误判成最新），
+  超过 10 分钟没有写入则发 `completed`（"已关闭"）——环随之增减，实时生效。
+- `AgentItemData.IsLive` 回归实时语义：Running/Waiting 才算，完成即掉环。
+- 圆环统一：展开页的 agent 行也改用 `AgentRingStack.Draw`（行内单环、颜色取该行的工具色），
+  与紧凑胶囊、分裂小岛共用同一实现；新增 `PageRenderer._glow`。
+- 测试同步更新：`Poll_AdoptsExistingIdleSessionsAsOneQuietRow`、`AgentLivenessTests`。
+- 全量 2679 测试绿。
+
 ## 2026-10-24 — 环数改为"打开的会话数"（修"只看到一个环"）
 
 - 原因：环数只统计 Running/Waiting，而已空闲但开着的 Harness 会话被算作已完成 → 只剩 1 个环。

@@ -27,10 +27,14 @@ public sealed class DshSessionProvider : IAgentStatusProvider
 {
     private const string DefaultTitle = "DeepSeek Harness";
 
+    /// <summary>Quiet time after which a session row is closed (the ring drops) even if no event arrived.</summary>
+    private static readonly TimeSpan CloseQuietAfter = TimeSpan.FromMinutes(10);
+
     private readonly DshSessionOptions _options;
     private readonly Dictionary<string, SessionState> _states = new(StringComparer.Ordinal);
     private HashSet<string>? _knownSessions;
     private DateTimeOffset? _lastActivity;
+    private readonly HashSet<string> _seenThisPoll = new(StringComparer.Ordinal);
 
     public DshSessionProvider(DshSessionOptions options)
     {
@@ -62,6 +66,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         }
 
         var events = new List<AgentProviderEvent>();
+        _seenThisPoll.Clear();
         try
         {
             var cutoff = now - _options.ActiveWindow;
@@ -90,6 +95,30 @@ public sealed class DshSessionProvider : IAgentStatusProvider
                 }
             }
 
+            // A session that stopped being written closes right away: the row flips to completed, so the
+            // ring drops in the same poll instead of lingering (user report 2026-10-24).
+            foreach (var pair in _states.ToArray())
+            {
+                var quiet = now - pair.Value.LastSeen;
+                if (_seenThisPoll.Contains(pair.Key) && quiet < CloseQuietAfter)
+                {
+                    continue;
+                }
+
+                if (pair.Value.IdleReported || pair.Value.WasRunning)
+                {
+                    events.Add(new AgentProviderEvent(pair.Key, "completed", TitleFor(pair.Value.Project), "已关闭",
+                        now, pair.Value.StartedAt)
+                    {
+                        SessionTitle = pair.Value.SessionTitle,
+                        Project = pair.Value.Project,
+                    });
+                }
+
+                _states.Remove(pair.Key);
+                _knownSessions?.Remove(pair.Key);
+            }
+
             PruneStates(cutoff);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -116,6 +145,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         }
 
         var sessionId = Path.GetFileNameWithoutExtension(file.Name);
+        _seenThisPoll.Add(sessionId);
         var project = LeafName(ReadString(rows, "workingDirectory"));
         var sessionTitle = ReadSessionTitle(rows);
         var openStep = ReadOpenStep(rows);
@@ -141,6 +171,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
 
         if (stepOpen)
         {
+            state.IdleReported = false;
             state.WasRunning = true;
             state.IdleScans = 0;
             state.LastTurn = Math.Max(state.LastTurn, lastTurn);
@@ -166,6 +197,7 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         {
             state.WasRunning = false;
             state.AdoptedTurn = lastTurn;
+            state.IdleReported = true;
             events.Add(new AgentProviderEvent(sessionId, "completed", TitleFor(state.Project), "已完成", now,
                 state.StartedAt)
             {
@@ -190,6 +222,22 @@ public sealed class DshSessionProvider : IAgentStatusProvider
         else if (!state.WasRunning)
         {
             state.AdoptedTurn = Math.Max(state.AdoptedTurn, lastTurn);
+
+            // An open session that is simply quiet (the user's other Harness tabs) must still be a row,
+            // otherwise the island counts one agent instead of three (user report 2026-10-24). Reported
+            // once per quiet period so polling never floods the history.
+            if (lastTurn > 0)
+            {
+                state.IdleReported = true;
+                events.Add(new AgentProviderEvent(sessionId, "waiting", TitleFor(state.Project), "空闲",
+                    new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero),
+                    state.StartedAt)
+                {
+                    SessionTitle = state.SessionTitle,
+                    Project = state.Project,
+                    Action = "空闲",
+                });
+            }
         }
     }
 
@@ -400,6 +448,9 @@ public sealed class DshSessionProvider : IAgentStatusProvider
 
     private sealed class SessionState
     {
+        /// <summary>Idle row already published for this quiet period (avoids one event per poll).</summary>
+        public bool IdleReported { get; set; }
+
         public DateTimeOffset? StartedAt { get; set; }
 
         public int LastTurn { get; set; }

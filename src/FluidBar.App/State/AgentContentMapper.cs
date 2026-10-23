@@ -67,8 +67,11 @@ public static class AgentContentMapper
                 // name → status description. Brand names are deliberately not part of this chain.
                 PrimaryText = FirstNonEmpty(entry.Action, entry.SessionTitle, statusText),
                 StatusText = statusText,
-                IsLive = entry.Kind != AgentEventKind.Failed
-                         && now - entry.Timestamp <= LiveWindow,
+                // Real time: running/waiting sessions are live, completed/failed are not. Quiet-but-open
+                // sessions are re-published as "waiting" by their provider, so the ring count tracks the
+                // truth within one poll instead of waiting for a timeout.
+                IsLive = entry.Kind is AgentEventKind.Running or AgentEventKind.WaitingForInput
+                         or AgentEventKind.Other,
                 Tone = entry.Kind switch
                 {
                     AgentEventKind.Completed => StatusTone.Success,

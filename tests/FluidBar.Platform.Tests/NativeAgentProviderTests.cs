@@ -125,10 +125,16 @@ public sealed class DshNativeProviderTests : IDisposable
     }
 
     [Fact]
-    public void Poll_AdoptsExistingIdleSessionsSilently()
+    public void Poll_AdoptsExistingIdleSessionsAsOneQuietRow()
     {
+        // Adopted sessions used to be invisible; an open-but-quiet Harness tab must still be a row so the
+        // island can count it (user report 2026-10-24). One event per quiet period, never one per poll.
         WriteSession("session-e", false, 4, 9, 4);
-        Assert.Empty(CreateProvider().Poll(Now));
+        var events = CreateProvider().Poll(Now);
+
+        var row = Assert.Single(events);
+        Assert.Equal("waiting", row.Event);
+        Assert.Equal("空闲", row.Message);
     }
 
     [Fact]

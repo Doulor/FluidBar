@@ -50,6 +50,7 @@ internal sealed partial class PageRenderer : IDisposable
     private readonly NumberTextCache _numbers;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
+    private readonly SKPaint _glow = new() { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f) };
     private readonly SKPaint _icon = new() { IsAntialias = true };
 
     private static readonly string[] PageNumbers = ["01", "02", "03", "04", "05", "06"];

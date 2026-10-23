@@ -598,17 +598,26 @@ internal sealed partial class PageRenderer
 
         if (item.Tone is CompactStatus.Info or CompactStatus.Warning)
         {
-            // prototype2 .agent-state .spinner-ring: an 11×11 border ring (1.5px) whose top+right
-            // seams spin 900ms linear, exactly like the compact capsule ring.
+            // Shared stacked-glyph implementation: one session per row, coloured by its tool, so the
+            // expanded list, the compact pill and the split satellite never disagree (2026-10-24).
             const float spinnerRadius = (11f - AgentMotion.RingStrokeWidth) / 2f;
-            // Track ring (the 25 % base border) then the arc, both through the shared primitive.
-            _stroke.Style = SKPaintStyle.Stroke;
-            _stroke.StrokeCap = AgentSpinner.Cap;
-            _stroke.StrokeWidth = AgentSpinner.StrokeForRadius(spinnerRadius);
-            _stroke.Color = Alpha(_theme.Accent, AgentMotion.SpinnerBaseAlpha * _opacity);
-            canvas.DrawCircle(stateCenter.X, stateCenter.Y, spinnerRadius, _stroke);
-            var rotation = _reduced ? 0 : AgentSpinner.RotationDegrees(_agentAnimationSeconds);
-            AgentSpinner.Draw(canvas, _stroke, stateCenter, spinnerRadius, rotation, Alpha(tone, _opacity));
+            AgentRingStack.Draw(
+                canvas,
+                _stroke,
+                _fill,
+                _glow,
+                stateCenter,
+                spinnerRadius,
+                AgentSpinner.StrokeForRadius(spinnerRadius),
+                1,
+                _agentAnimationSeconds,
+                0,
+                0,
+                _opacity,
+                _theme.Accent,
+                item.AccentArgb != 0 ? [item.AccentArgb] : [],
+                _reduced,
+                AgentMotion.SpinnerBaseAlpha);
         }
         else if (item.Tone == CompactStatus.Success)
         {

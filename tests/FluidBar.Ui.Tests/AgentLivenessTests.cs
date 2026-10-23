@@ -16,18 +16,20 @@ public sealed class AgentLivenessTests
     [Fact]
     public void Open_sessions_that_went_quiet_still_count_as_live()
     {
+        // A quiet-but-open tab is published as "waiting" by its provider, so it counts; a finished turn is
+        // completed and stops counting immediately (real-time, no timeout).
         var snapshot = new AgentEventSnapshot(ImmutableArray.Create(
             Entry("s1", AgentEventKind.Running, Now.AddSeconds(-5)),
-            Entry("s2", AgentEventKind.Completed, Now.AddMinutes(-1)),
-            Entry("s3", AgentEventKind.Completed, Now.AddMinutes(-3))));
+            Entry("s2", AgentEventKind.WaitingForInput, Now.AddSeconds(-30)),
+            Entry("s3", AgentEventKind.Completed, Now.AddMinutes(-1))));
 
         var rows = AgentContentMapper.Map(snapshot, Now);
         Assert.Equal(3, rows.Length);
-        Assert.All(rows, row => Assert.True(row.IsLive));
+        Assert.Equal(2, rows.Count(row => row.IsLive));
     }
 
     [Fact]
-    public void Sessions_outside_the_liveness_window_are_not_live()
+    public void Completed_sessions_are_not_live()
     {
         var snapshot = new AgentEventSnapshot(ImmutableArray.Create(
             Entry("old", AgentEventKind.Completed, Now.AddHours(-2)),
