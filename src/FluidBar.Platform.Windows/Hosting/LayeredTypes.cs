@@ -469,6 +469,13 @@ public sealed class LayeredHostOptions
     /// <summary>Upload dirty rectangles below this pixel area as part of the merged box only.</summary>
     public long MinDirtyAreaPixels { get; init; }
 
+    /// <summary>
+    /// Uploads the whole surface on every commit. Per-pixel-alpha layered windows can briefly compose the
+    /// untouched part of a partial update as transparent (the island "flashed" for a fraction of a second);
+    /// the island host opts in.
+    /// </summary>
+    public bool FullFrameCommits { get; init; }
+
     /// <summary>Re-assert <c>HWND_TOPMOST</c> on the policy-gated cadence.</summary>
     public bool ReassertTopmost { get; init; } = true;
 

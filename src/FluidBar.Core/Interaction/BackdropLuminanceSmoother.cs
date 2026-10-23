@@ -15,7 +15,7 @@ public sealed class BackdropLuminanceSmoother
     /// <param name="initial">Starting luminance (0..1).</param>
     /// <param name="timeConstantMs">Time constant: ~63 % of the distance is covered in this many ms.</param>
     /// <param name="settleEpsilon">Distance at which the value counts as settled.</param>
-    public BackdropLuminanceSmoother(double initial = 0.5, double timeConstantMs = 160, double settleEpsilon = 0.004)
+    public BackdropLuminanceSmoother(double initial = 0.5, double timeConstantMs = 80, double settleEpsilon = 0.004)
     {
         _value = Math.Clamp(initial, 0, 1);
         Target = _value;

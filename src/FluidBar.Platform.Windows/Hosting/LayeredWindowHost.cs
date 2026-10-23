@@ -630,7 +630,7 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         _frameOpen = false;
         var surface = _surface!;
-        var useDirty = !fullFrame && !_needsFullFrame && dirtyRects.Length > 0;
+        var useDirty = !fullFrame && !_needsFullFrame && dirtyRects.Length > 0 && !_options.FullFrameCommits;
 
         var started = Stopwatch.GetTimestamp();
         var uploaded = 0;

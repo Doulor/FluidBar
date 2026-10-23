@@ -18,10 +18,10 @@ namespace FluidBar.App.Hosting.Skia;
 internal sealed class IslandBackdropProvider : IDisposable
 {
     /// <summary>Minimum time between two captures of the same rectangle (ms).</summary>
-    public const int RefreshMs = 400;
+    public const int RefreshMs = 120;
 
     /// <summary>Hard floor between two captures, even while the window is being dragged (ms).</summary>
-    public const int MinCaptureIntervalMs = 120;
+    public const int MinCaptureIntervalMs = 60;
 
     /// <summary>Downsample factor of the blur bake.</summary>
     private const int Downsample = 6;
@@ -68,7 +68,8 @@ internal sealed class IslandBackdropProvider : IDisposable
         (int X, int Y, int Width, int Height) screenRect,
         (int X, int Y, int Width, int Height)[]? islandMasks = null,
         bool allowComposedCapture = true,
-        bool force = false)
+        bool force = false,
+        (int X, int Y, int Width, int Height)? luminanceRect = null)
     {
         lock (_gate)
         {
@@ -89,7 +90,7 @@ internal sealed class IslandBackdropProvider : IDisposable
                 }
             }
 
-            ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force);
+            ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force, luminanceRect);
             return Latest();
         }
     }
@@ -146,7 +147,8 @@ internal sealed class IslandBackdropProvider : IDisposable
         (int X, int Y, int Width, int Height) screenRect,
         (int X, int Y, int Width, int Height)[]? islandMasks,
         bool allowComposedCapture,
-        bool force)
+        bool force,
+        (int X, int Y, int Width, int Height)? luminanceRect)
     {
         if (_pending is { IsCompleted: false })
         {
@@ -163,13 +165,14 @@ internal sealed class IslandBackdropProvider : IDisposable
         }
 
         _lastCaptureTicks = now;
-        _pending = Task.Run(() => CaptureAndBake(screenRect, islandMasks, allowComposedCapture));
+        _pending = Task.Run(() => CaptureAndBake(screenRect, islandMasks, allowComposedCapture, luminanceRect));
     }
 
     private void CaptureAndBake(
         (int X, int Y, int Width, int Height) screenRect,
         (int X, int Y, int Width, int Height)[]? islandMasks,
-        bool allowComposedCapture)
+        bool allowComposedCapture,
+        (int X, int Y, int Width, int Height)? luminanceRect)
     {
         var frame = ScreenBackdropCapture.TryCapture(
             screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height, allowComposedCapture);
@@ -191,7 +194,7 @@ internal sealed class IslandBackdropProvider : IDisposable
             }
         }
 
-        var baked = Bake(captured, out var luminance);
+        var baked = Bake(captured, out var luminance, luminanceRect);
         if (baked is null)
         {
             lock (_gate)
@@ -300,20 +303,42 @@ internal sealed class IslandBackdropProvider : IDisposable
         }
     }
 
-    private static SKImage? Bake(in BackdropFrame frame, out double luminance)
+    private static SKImage? Bake(
+        in BackdropFrame frame,
+        out double luminance,
+        (int X, int Y, int Width, int Height)? luminanceRect = null)
     {
         var width = Math.Max(1, frame.Width / Downsample);
         var height = Math.Max(1, frame.Height / Downsample);
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
 
-        // Mean luminance of the capture (sRGB-weighted, sampled every 4th pixel): the tint adapts to it.
+        // Mean luminance of the capture (sRGB-weighted, sampled every 4th pixel). When the caller passes
+        // the island footprint, only those pixels count: a bright window merely *near* the island must not
+        // recolour the glass (reported 2026-10-23).
         double sum = 0;
         var count = 0;
         var pixels = frame.Pixels;
-        for (var i = 0; i < pixels.Length; i += 16)
+        var x0 = 0;
+        var y0 = 0;
+        var x1 = frame.Width;
+        var y1 = frame.Height;
+        if (luminanceRect is { } window)
         {
-            sum += (0.2126 * pixels[i + 2]) + (0.7152 * pixels[i + 1]) + (0.0722 * pixels[i]);
-            count++;
+            x0 = Math.Clamp(window.X, 0, frame.Width);
+            y0 = Math.Clamp(window.Y, 0, frame.Height);
+            x1 = Math.Clamp(window.X + window.Width, x0, frame.Width);
+            y1 = Math.Clamp(window.Y + window.Height, y0, frame.Height);
+        }
+
+        for (var y = y0; y < y1; y++)
+        {
+            var row = y * frame.Stride;
+            for (var x = x0; x < x1; x++)
+            {
+                var i = row + (x * 4);
+                sum += (0.2126 * pixels[i + 2]) + (0.7152 * pixels[i + 1]) + (0.0722 * pixels[i]);
+                count++;
+            }
         }
 
         luminance = count == 0 ? 0.5 : Math.Clamp(sum / (count * 255.0), 0, 1);

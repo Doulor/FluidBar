@@ -162,7 +162,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private bool _blinkLastBackdrop;
 
     /// <summary>Cross-fade duration between two captures, in ms.</summary>
-    private const double BackdropCrossfadeMs = 160;
+    private const double BackdropCrossfadeMs = 110;
 
     private const int FollowMousePollMs = 250;
 
@@ -870,6 +870,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 Pacing = LayeredPacingMode.TargetFrameRate,
                 TargetFramesPerSecond = _controller.PowerProfile.FrameRate,
                 MergeDirtyRects = true,
+
+                // Every frame uploads the whole surface: partial uploads on a per-pixel-alpha layered
+                // window can compose the untouched region as transparent ("island flashes").
+                FullFrameCommits = true,
                 WindowTitle = "FluidBar Island",
             },
             _interop,
@@ -2173,7 +2177,17 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 }
             }
 
-            var backdrop = _backdrop.Get(rect, masks.ToArray(), allowComposedCapture: true);
+            var luminanceWindow = (
+                X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
+                Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
+                Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
+                Height: (int)Math.Round((state.ShellHeight + 12) * dpi));
+            var backdrop = _backdrop.Get(
+                rect,
+                masks.ToArray(),
+                allowComposedCapture: true,
+                force: false,
+                luminanceRect: luminanceWindow);
 
             // Sticky: a frame without a fresh capture (first frames, cache eviction, failed grab) must keep
             // the previous image instead of falling back to the flat translucent fill — that fallback made
