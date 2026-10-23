@@ -74,10 +74,10 @@ public sealed class SettingsWindow : Window, ILocalizable
     private bool _geometryAnimating;
 
     /// <summary>Duration of the Layer Bloom window expansion.</summary>
-    internal static TimeSpan EntranceDuration { get; } = TimeSpan.FromMilliseconds(760);
+    internal static TimeSpan EntranceDuration { get; } = TimeSpan.FromMilliseconds(560);
 
     /// <summary>Duration of the Layer Bloom return-to-island collapse.</summary>
-    internal static TimeSpan ExitDuration { get; } = TimeSpan.FromMilliseconds(520);
+    internal static TimeSpan ExitDuration { get; } = TimeSpan.FromMilliseconds(420);
 
     /// <summary>Creates the settings window.</summary>
     public SettingsWindow(
@@ -176,7 +176,14 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         if (_shell.Child is Control content)
         {
-            content.Opacity = 0;
+            // Keep the panel content on its final 900×620 layout while the window itself grows.
+            // The shell clips the overflow, so the window reveals more of the real panel instead of
+            // showing an empty coloured plate until the geometry animation finishes.
+            content.Width = SettingsMetrics.WindowWidth;
+            content.Height = SettingsMetrics.WindowHeight;
+            content.HorizontalAlignment = HorizontalAlignment.Left;
+            content.VerticalAlignment = VerticalAlignment.Top;
+            content.Opacity = 0.55;
             content.IsHitTestVisible = false;
         }
     }
@@ -415,7 +422,8 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         content.IsVisible = true;
         content.IsHitTestVisible = true;
-        FadeContent(content, 0, 1, TimeSpan.FromMilliseconds(220));
+        FadeContent(content, content.Opacity > 0.01 ? content.Opacity : 0.55, 1,
+            TimeSpan.FromMilliseconds(180));
     }
 
     private void FadeContent(Control content, double from, double to, TimeSpan duration, Action? completed = null)
@@ -478,15 +486,15 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
 
         var from = CurrentPixelRect(_entranceScale, source);
-        if (content is { Opacity: > 0.01 })
+        if (content is not null)
         {
-            FadeContent(content, content.Opacity, 0, TimeSpan.FromMilliseconds(120),
-                () => StartExitGeometry(from, source, content));
+            // Fade only to a visible veil; the shrink itself is the dominant exit motion. Waiting for
+            // opacity 0 first made the panel look empty for most of the collapse.
+            FadeContent(content, content.Opacity > 0.01 ? content.Opacity : 0.55, 0.15,
+                TimeSpan.FromMilliseconds(180));
         }
-        else
-        {
-            StartExitGeometry(from, source, content);
-        }
+
+        StartExitGeometry(from, source, content);
     }
 
     private void StartExitGeometry(PixelRect from, LayeredRect source, Control? content)
