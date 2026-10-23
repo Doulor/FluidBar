@@ -156,6 +156,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private SKImage? _backdropPrevious;
     private long _backdropBlendStartMs;
 
+    private long _flashLoggedMs;
+
     /// <summary>Opt-in per-frame trace for the "island blinks" investigation (FLUIDBAR_BLINK_LOG=1).</summary>
     private readonly bool _blinkLog = Environment.GetEnvironmentVariable("FLUIDBAR_BLINK_LOG") == "1";
     private double _blinkLastOpacity = -1;
@@ -2041,6 +2043,70 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private static string RenderClockMark()
         => DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// Always-on flash detector: if the finished frame is transparent where the island must be visible,
+    /// write one diagnostic line (rate limited) with everything that could explain it.
+    /// </summary>
+    private void DetectTransparentFrame(WindowEntry entry, SKSurface surface, in LayeredFrame frame, in IslandRenderState state)
+    {
+        if (!state.IsVisible || state.Opacity < 0.4)
+        {
+            return;
+        }
+
+        var now = NowMs();
+        if (now - _flashLoggedMs < 250)
+        {
+            return;
+        }
+
+        var scale = frame.Scale;
+        var x = (int)Math.Round((state.ShellOrigin.X + (state.ShellWidth / 2)) * scale);
+        var y = (int)Math.Round((state.ShellOrigin.Y + (state.ShellHeight / 2)) * scale);
+        if (x <= 0 || y <= 0 || x >= frame.WidthPx || y >= frame.HeightPx)
+        {
+            return;
+        }
+
+        var offset = (y * frame.Stride) + (x * 4) + 3;
+        var committed = frame.Pixels[offset];
+        if (committed >= 16)
+        {
+            return;
+        }
+
+        _flashLoggedMs = now;
+        var sourceAlpha = -1;
+        using (var pixmap = surface.PeekPixels())
+        {
+            var span = pixmap.GetPixelSpan();
+            if (offset < span.Length)
+            {
+                sourceAlpha = span[offset];
+            }
+        }
+
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-flash.log"),
+                RenderClockMark()
+                + " committedAlpha=" + committed
+                + " surfaceAlpha=" + sourceAlpha
+                + " backdrop=" + (state.Backdrop is not null)
+                + " blend=" + state.BackdropBlend.ToString("0.00")
+                + " lum=" + state.BackdropLuminance.ToString("0.00")
+                + " yield=" + state.YieldProgress.ToString("0.00")
+                + " opacity=" + state.Opacity.ToString("0.00")
+                + " material=" + state.Theme.Material
+                + "\n");
+        }
+        catch
+        {
+            // diagnostics only
+        }
+    }
+
     /// <summary>Copies the finished off-screen surface into the layered DIB (one memcpy per frame).</summary>
     private static void CopySurfaceToFrame(SKSurface surface, in LayeredFrame frame)
     {
@@ -2089,10 +2155,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 return;
             }
 
-            // The luminance ramp needs frames; the clock is stopped while the island idles. Must run on
-            // the UI thread: the frame clock and controller are not thread-safe.
+            // Only wake the clock. The capture frame must NOT trigger an extra UpdateLayeredWindow right
+            // as the WGC frame lands: that out-of-band commit lined up 1:1 with the "island flashes"
+            // report (2026-10-23). The regular frame loop applies the new backdrop.
             EnsureFrameLoop();
-            PaintBackdropFrame();
         });
     }
 
@@ -2297,6 +2363,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 surface.Canvas.Flush();
                 CopySurfaceToFrame(surface, frame);
                 entry.SurfaceNeedsFull = false;
+                DetectTransparentFrame(entry, surface, frame, renderState);
                 var result = entry.Host.CommitFrame();
                 RecordCommit(entry, result, dirty: false);
             }

@@ -548,3 +548,19 @@
 3. 离屏表面刚重建时置 `SurfaceNeedsFull`，保证第一帧是整帧绘制（否则只有局部内容）。
 4. 顺手修了一个真 bug：`OnBackdropUpdated` 之前在**抓屏线程**上调 `EnsureFrameLoop()`（帧时钟/控制器非线程安全），
    现在整段都在 UI 线程的 `_dispatcher.Post` 里。
+
+### 15.13 抓屏时刻的"带外提交"（2026-10-23）
+
+原子帧没解决，且**频率一直跟着抓屏间隔走**（120 ms）。那么每次抓屏时发生的动作只剩一件：
+`OnBackdropUpdated` 里的 **`PaintBackdropFrame()`** —— 在 WGC 帧刚到达的那一刻插一次
+`UpdateLayeredWindow`。这一帧与 WGC 的合成时机重叠，被怀疑就是屏幕上一闪的透明。
+
+处置：
+
+1. **删掉带外提交**：抓屏回调只 `EnsureFrameLoop()` 唤醒帧时钟，由常规帧循环应用新背景。
+2. **渲染器兜底**：`DrawBackdrop` 里若 `PreviousBackdrop` 为空，强制 `blend = 1` ——
+   否则 blend=0 会让"当前图 × 0 + 上一张 × 1"在上一张缺失时退化成一层纯 tint（透明帧）。
+3. **常驻闪光探针**：`DetectTransparentFrame` 每帧检查提交后的岛中心像素，若 alpha < 16 就写一行
+   `%TEMP%\fluidbar-flash.log`（含 backdrop/blend/lum/yield/opacity/material 与离屏表面同点 alpha）。
+
+本机 20 秒无命中（说明本机不触发），需要用户机器上复现时提供该日志。

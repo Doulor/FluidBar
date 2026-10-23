@@ -1207,6 +1207,13 @@ public sealed class IslandRenderer : IDisposable
     private void DrawBackdrop(SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity)
     {
         var blend = (float)Math.Clamp(state.BackdropBlend, 0, 1);
+        if (state.PreviousBackdrop is null)
+        {
+            // No previous capture to fade from: the current one must be drawn at full strength, otherwise
+            // a blend weight of 0 would leave the interior as a bare tint (a "transparent" frame).
+            blend = 1f;
+        }
+
         if (state.PreviousBackdrop is { } previous && blend < 0.999f)
         {
             DrawBackdropCore(canvas, state, path, previous, opacity * (1f - blend), lensBand: false);
