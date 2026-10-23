@@ -39,6 +39,23 @@ internal sealed class TransientStripRenderer : IDisposable
 
     private MiniRailFrame _frame;
 
+    /// <summary>
+    /// Liquid-glass painter supplied by <see cref="IslandRenderer"/>: paints the material's backdrop
+    /// treatment into the given pill silhouette and returns true when it handled the fill. The rail is a
+    /// first-class island surface, so it must follow whichever material is active instead of a fixed fill.
+    /// </summary>
+    public Func<SKCanvas, IslandRenderState, SKPath, SKRect, float, bool>? GlassPainter { get; set; }
+
+    private readonly SKPath _glassPath = new();
+    private IslandRenderState _state;
+    private bool _hasState;
+
+    /// <summary>
+    /// Rail ink: follows the material palette so the mini islands stay readable when the liquid glass
+    /// turns porcelain over a bright desktop (white icon on white glass would vanish).
+    /// </summary>
+    private SKColor Ink => _hasState ? _state.Theme.Foreground : SKColors.White;
+
     // Satellite hover: one progress drives the hover alpha and the 6 % grow, so entering and leaving
     // are monotonic instead of a one-frame colour swap (the old path jumped straight to HoverGlass).
     private readonly CssTransition _hoverFade = new(0);
@@ -143,6 +160,8 @@ internal sealed class TransientStripRenderer : IDisposable
         }
 
         _text.SetScale(state.FontScale);
+        _state = state;
+        _hasState = true;
         Update(state, shell);
 
         canvas.Save();
@@ -356,7 +375,7 @@ internal sealed class TransientStripRenderer : IDisposable
         // `.mini-content` colour rgba(255,255,255,.56) with the 0.9 icon opacity and the 150 ms
         // content pulse (0.35 → 1) the prototype plays when the icon changes.
         var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(pulse));
-        IconSet.Draw(canvas, IconFor(page), icon, Alpha(SKColors.White, 0.504f * content), _icon);
+        IconSet.Draw(canvas, IconFor(page), icon, Alpha(Ink, 0.504f * content), _icon);
     }
 
     private void DrawCurrent(SKCanvas canvas, float alpha)
@@ -374,7 +393,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(_frame.PulseCurrent));
 
         var icon = new SKRect(left, rect.MidY - (iconSize / 2f), left + iconSize, rect.MidY + (iconSize / 2f));
-        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(SKColors.White, 0.576f * content), _icon);
+        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(Ink, 0.576f * content), _icon);
 
         var labelRect = new SKRect(
             left + iconSize + gap,
@@ -385,7 +404,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var progress = Math.Clamp(_frame.LabelProgress, 0, 1);
         if (progress >= 0.999f || string.Equals(_labelFrom, _label, StringComparison.Ordinal))
         {
-            _text.DrawLayout(canvas, layout, labelRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content);
+            _text.DrawLayout(canvas, layout, labelRect, Alpha(Ink, 0.8f * content), TextAlign.Left, content);
             return;
         }
 
@@ -409,6 +428,18 @@ internal sealed class TransientStripRenderer : IDisposable
     private void DrawGlass(SKCanvas canvas, SKRect rect, float alpha, SKColor? fill = null)
     {
         var radius = Math.Min(rect.Width, rect.Height) / 2f;
+
+        // Hover/press tints are state overlays, not the material: they stay as flat washes on top.
+        if (fill is null && _hasState && GlassPainter is { } paint)
+        {
+            _glassPath.Reset();
+            _glassPath.AddRoundRect(rect, radius, radius);
+            if (paint(canvas, _state, _glassPath, rect, alpha))
+            {
+                return;
+            }
+        }
+
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(fill ?? Glass, alpha);
         canvas.DrawRoundRect(rect, radius, radius, _fill);

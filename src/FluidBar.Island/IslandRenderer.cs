@@ -107,7 +107,12 @@ public sealed class IslandRenderer : IDisposable
         _compact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
         _secondaryCompact = new CompactRenderer(_text, _accents, _art, _artwork, _numbers);
         _pages = new PageRenderer(_text, _accents, _art, _artwork, _numbers);
-        _strip = new TransientStripRenderer(_text);
+        _strip = new TransientStripRenderer(_text)
+        {
+            // The preview rail is an island surface like any other: it paints with the active material.
+            GlassPainter = (canvas, state, path, bounds, alpha) =>
+                TryPaintBackdropSurface(canvas, state, path, bounds, alpha, 0f, 0f),
+        };
     }
 
     /// <summary>Default theme supplied to the constructor.</summary>

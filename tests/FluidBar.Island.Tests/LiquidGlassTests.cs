@@ -14,6 +14,8 @@ public sealed class LiquidGlassTests
 {
     private static IslandTheme Liquid => IslandTheme.Dark.WithMaterial(IslandMaterial.LiquidGlass);
 
+    private static IslandTheme Obsidian => IslandTheme.Dark.WithMaterial(IslandMaterial.Obsidian);
+
     private static IslandRenderState CompactState(IslandTheme theme)
         => IslandTestFixtures.MediaCompact() with { Theme = theme };
 
@@ -362,6 +364,73 @@ public sealed class LiquidGlassTests
         Assert.True(
             rimMid > rimDark + 2 && rimMid < rimLight - 2,
             $"the rim must dissolve with the interior ({rimDark:0} .. {rimMid:0} .. {rimLight:0})");
+    }
+
+    [Fact]
+    public void Preview_rail_mini_islands_use_the_liquid_glass_material()
+    {
+        var state = IslandTestFixtures.Expanded(0) with
+        {
+            Archipelago = new ArchipelagoState { Visible = true, Opacity = 1 },
+        };
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var white = new SKBitmap(info);
+        using (var canvas = new SKCanvas(white))
+        {
+            canvas.Clear(new SKColor(0xF2, 0xF2, 0xF2));
+        }
+
+        using var image = SKImage.FromBitmap(white);
+
+        SKBitmap Render(IslandMaterial material)
+        {
+            using var renderer = new IslandRenderer(material == IslandMaterial.LiquidGlass ? Liquid : Obsidian);
+            return renderer.RenderToBitmap(
+                state with
+                {
+                    Theme = (material == IslandMaterial.LiquidGlass ? Liquid : Obsidian),
+                    Backdrop = image,
+                    BackdropLuminance = 1.0,
+                },
+                IslandTestFixtures.Scale);
+        }
+
+        using var glassFrame = Render(IslandMaterial.LiquidGlass);
+        using var flatFrame = Render(IslandMaterial.Obsidian);
+
+        using var rendererForLayout = new IslandRenderer(Liquid);
+        var strip = rendererForLayout.MeasureStrip(state with { Theme = Liquid });
+        Assert.False(strip.Current.IsEmpty, "the rail must be laid out for the expanded panel");
+
+        // The rail is drawn BELOW the panel, so a material difference there can only come from the rail
+        // itself. Counting the changed pixels keeps the assertion independent of exact colours.
+        var changed = 0;
+        for (var py = (int)Math.Round(strip.Strip.Top * IslandTestFixtures.Scale);
+             py < (int)Math.Round(strip.Strip.Bottom * IslandTestFixtures.Scale);
+             py++)
+        {
+            for (var px = (int)Math.Round(strip.Strip.Left * IslandTestFixtures.Scale);
+                 px < (int)Math.Round(strip.Strip.Right * IslandTestFixtures.Scale);
+                 px++)
+            {
+                if (px < 0 || py < 0 || px >= glassFrame.Width || py >= glassFrame.Height)
+                {
+                    continue;
+                }
+
+                var a = glassFrame.GetPixel(px, py);
+                var b = flatFrame.GetPixel(px, py);
+                if (a != b)
+                {
+                    changed++;
+                }
+            }
+        }
+
+        Assert.True(changed > 200, $"the preview rail must follow the material (changed pixels {changed})");
     }
 
     [Fact]

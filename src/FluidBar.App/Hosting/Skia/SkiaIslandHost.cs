@@ -2264,6 +2264,17 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 }
             }
 
+            // The preview rail (mini islands) is drawn below the shell and now paints with the same glass
+            // material, so it must be smeared out of the capture just like the shell and the capsules.
+            if (state.IsExpanded)
+            {
+                masks.Add((
+                    (int)Math.Round((state.ShellOrigin.X - 24) * dpi),
+                    (int)Math.Round((state.ShellOrigin.Y + state.ShellHeight) * dpi),
+                    (int)Math.Round((state.ShellWidth + 48) * dpi),
+                    (int)Math.Round(56 * dpi)));
+            }
+
             var luminanceWindow = (
                 X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
                 Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
