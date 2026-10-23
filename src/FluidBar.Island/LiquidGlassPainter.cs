@@ -48,6 +48,8 @@ internal sealed class LiquidGlassPainter : IDisposable
     private int _scratchWidth;
     private int _scratchHeight;
     private SKShader? _pointerGlow;
+    private ShaderSet? _edgeSet;
+    private (int Width, int Height) _edgeKey;
     private bool _disposed;
 
     /// <summary>Number of baked overlays currently retained (diagnostics).</summary>
@@ -143,6 +145,47 @@ internal sealed class LiquidGlassPainter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Edge-only finish used when a blurred desktop capture carries the body: a 1 DIP key line, the
+    /// specular top edge, the caustic bounce and a cool fringe — no veil, no rim bands, no sheen.
+    /// </summary>
+    /// <param name="canvas">Target canvas already translated to the shell origin.</param>
+    /// <param name="path">Shell silhouette in the current space.</param>
+    /// <param name="bounds">Shell bounds in the current space.</param>
+    /// <param name="opacity">Layer opacity 0..1.</param>
+    public void DrawEdgeOnly(SKCanvas canvas, SKPath path, SKRect bounds, float opacity)
+    {
+        if (bounds.Width < 4 || bounds.Height < 4 || opacity <= 0.002f)
+        {
+            return;
+        }
+
+        var set = EdgeSetRef(bounds);
+        var layer = (byte)Math.Clamp(opacity * 255f, 0, 255);
+
+        canvas.Save();
+        canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+
+        _stroke.StrokeWidth = 1f;
+        _stroke.Shader = null;
+        _stroke.Color = SKColors.White.WithAlpha((byte)(0.09f * layer));
+        canvas.DrawPath(path, _stroke);
+
+        _stroke.StrokeWidth = 1.6f;
+        _stroke.Shader = set.Specular;
+        _stroke.Color = SKColors.White.WithAlpha(layer);
+        canvas.DrawPath(path, _stroke);
+
+        _stroke.Shader = set.Caustic;
+        canvas.DrawPath(path, _stroke);
+
+        _stroke.Shader = set.FringeCool;
+        canvas.DrawPath(path, _stroke);
+
+        _stroke.Shader = null;
+        canvas.Restore();
+    }
+
     /// <summary>Paints the liquid-glass rim on a small round surface (split islet / secondary pill).</summary>
     /// <param name="canvas">Target canvas in absolute host-local DIP.</param>
     /// <param name="center">Circle centre.</param>
@@ -194,6 +237,21 @@ internal sealed class LiquidGlassPainter : IDisposable
         _paint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(opacity * 255f, 0, 255));
         canvas.DrawRect(bounds, _paint);
         _paint.Shader = null;
+    }
+
+    /// <summary>Shared shader set for the edge-only finish (rebuilt only when the shell size changes).</summary>
+    private ShaderSet EdgeSetRef(SKRect bounds)
+    {
+        var key = ((int)Math.Round(bounds.Width * 4), (int)Math.Round(bounds.Height * 4));
+        if (_edgeSet is not null && _edgeKey == key)
+        {
+            return _edgeSet;
+        }
+
+        _edgeSet?.Dispose();
+        _edgeKey = key;
+        _edgeSet = new ShaderSet(bounds.Width, bounds.Height);
+        return _edgeSet;
     }
 
     private Overlay? GetOverlay(SKPath path, SKRect bounds, float dpi, int shapeKey, bool morphing)
@@ -341,6 +399,8 @@ internal sealed class LiquidGlassPainter : IDisposable
         _scratchBitmap = null;
         _pointerGlow?.Dispose();
         _pointerGlow = null;
+        _edgeSet?.Dispose();
+        _edgeSet = null;
         _scratch.Dispose();
         _paint.Dispose();
         _stroke.Dispose();

@@ -109,6 +109,12 @@ public sealed partial class LayeredWindowHost : IDisposable
     /// <summary>The host HWND, or <see cref="IntPtr.Zero"/> before <see cref="Create"/> / after dispose.</summary>
     public IntPtr Handle => _hwnd;
 
+    /// <summary>
+    /// Whether the window is excluded from screen captures (<c>WDA_EXCLUDEFROMCAPTURE</c>). Required by
+    /// the backdrop-blur material: the capture must see the desktop, not the island.
+    /// </summary>
+    public bool ExcludeFromCapture { get; private set; }
+
     /// <summary>True after a successful <see cref="Create"/>.</summary>
     public bool IsCreated => _created;
 
@@ -234,6 +240,10 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         _hwnd = hwnd;
         NativeMethods.User32.SetWindowLongPtr(hwnd, NativeMethods.GWLP_USERDATA, GCHandle.ToIntPtr(_selfHandle));
+
+        // The liquid-glass material blurs the real desktop behind the island, which requires the
+        // window to be invisible to screen captures (otherwise BitBlt returns the island itself).
+        ExcludeFromCapture = ScreenBackdropCapture.TryExcludeFromCapture(hwnd);
 
         // WS_EX_TOPMOST is ignored by CreateWindowExW; assert it explicitly without activating.
         SetTopmostUnconditional();

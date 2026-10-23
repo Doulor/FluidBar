@@ -16,6 +16,9 @@ public static class LiquidGlassTokens
     /// </summary>
     public const double FillOpacity = 0.68;
 
+    /// <summary>Tint alpha painted over the blurred backdrop (backdrop mode).</summary>
+    public const double BackdropTintAlpha = 0.30;
+
     /// <summary>Narrowest lensing rim band in DIP (compact pill).</summary>
     public const double RimBandMinDip = 4.5;
 

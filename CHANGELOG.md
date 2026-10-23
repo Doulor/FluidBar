@@ -2,6 +2,22 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 液态玻璃改为「真背景模糊」（抓屏 + 高斯烘焙）
+
+- **动机**：用户反馈第一版"像老式电视"——只有深色填充和一圈透镜/高光，没有背景模糊。液态玻璃的第一要素是
+  背景高斯模糊，其次才是折射/色散/高光。
+- **抓屏**：`ScreenBackdropCapture`（Platform）用 `WDA_EXCLUDEFROMCAPTURE` 让灵动岛窗口从抓屏中排除，
+  再 `BitBlt` 抓窗口矩形；`IslandBackdropProvider`（App）1/6 降采样 + `CreateBlur(2,2)` 烘焙成 `SKImage`，
+  按窗口矩形缓存 ≤2 份、节流 400 ms，移动时立即重抓。抓屏失败自动回落到原来的染色填充。
+- **渲染**：`IslandRenderState.Backdrop` → `IslandRenderer.DrawBackdrop`（壳体裁剪内绘制模糊桌面）+
+  `LiquidGlassTokens.BackdropTintAlpha = 0.30` 染色；液态玻璃叠加层改走 `LiquidGlassPainter.DrawEdgeOnly`
+  （1 px 键线 + 顶部高光 + 底部焦散 + 冷色边，去掉 veil/rim band/sheen）。
+- **限制**：GDI 抓屏在本机只返回壁纸层，不包含 DWM 合成的窗口（品红对照窗体实测）；窗口内容需要
+  `Windows.Graphics.Capture`。详见 `docs/rewrite/research/liquid-glass.md` §8–9。
+- **验证**：全量 2637 测试绿；真实 App 冒烟 118 帧退出码 0；展开态壳体横向采样有明显空间变化
+  （#09121e → #3c444e），说明壳体内部确实是背景内容而不是纯色。
+- **网页原型**：同期补齐 7 个可切换版本 + 实时微调面板（`docs/rewrite/liquid-glass-lab/`），供用户选型。
+
 ## 2026-10-23 — 新增第三种材质「液态玻璃」（Tier 2）
 
 - **材质**：`IslandMaterial.LiquidGlass`（Tier 2），设置 → 外观 → 材质 第三个选项「液态玻璃 / Liquid Glass」。

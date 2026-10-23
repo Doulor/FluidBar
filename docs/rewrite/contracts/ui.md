@@ -72,8 +72,17 @@ Materials (revised 2026-10-23): **Tier 0 Obsidian is the default**. Native pill-
 Avalonia 12 / the layered host (whole-window rectangular blur, and layered windows bypass DWM's
 compositor path). Tier 1 = self-drawn simulated glass (gradient + top highlight, fill 0.72) behind the
 `IslandMaterial.Acrylic` setting. **Tier 2 = Liquid Glass** (`IslandMaterial.LiquidGlass`, fill 0.68):
-lensing rim band, specular top edge, caustic bottom bounce, low-alpha chromatic dispersion, static sheen
-and pointer illumination, all self-drawn by `LiquidGlassPainter` and baked into a bounded image cache.
+the shell paints the **blurred desktop behind the window** (host capture, see below) under a 30 % tint,
+plus a 1 DIP key line, specular top edge, caustic bottom bounce and a cool fringe
+(`LiquidGlassPainter.DrawEdgeOnly`). When no capture is available it falls back to the tinted fill and
+the full optical overlay.
+Backdrop contract: the layered host sets `WDA_EXCLUDEFROMCAPTURE` (verified at runtime = 0x11), the App
+captures the window rect, downsamples 1/6 + bakes a Gaussian blur into an `SKImage` cached per window
+rect (≤2), throttled to 400 ms with a hard 120 ms floor (a drag stays ≤1 frame stale), re-captured when
+the window moves; capture failure is non-fatal. Captures only happen inside a rendered frame, so the
+idle island still produces zero frames.
+GDI capture returns the wallpaper layer only (DWM windows are not included) — window content would need
+`Windows.Graphics.Capture`.
 For both glass tiers the baked shadow is cut out of the shell silhouette so the fill actually shows the
 desktop. Detail + measured numbers: [../research/liquid-glass.md](../research/liquid-glass.md). The
 Obsidian fill never goes below 0.85 opacity for text-bearing states.

@@ -133,3 +133,24 @@
 - 原型实现细节：`lab.js` 里的 `refractionProfile` / `displacementMap` / `specularMap` 移植自
   `archisvaze/liquid-glass`（MIT），滤镜链参考 `rdev/liquid-glass-react`（MIT）。注意 SVG 滤镜必须用
   `DOMParser` 以 SVG 方式插入，`div.innerHTML` 会把 `feGaussianBlur` 小写化导致滤镜静默失效。
+
+## 9. 2026-10-23 落地：App 内的真背景模糊（壁纸级）
+
+第一版液态玻璃只有深色填充 + 描边，没有背景模糊（用户："跟老式 TV 一样"）。本轮把"抓屏 → 模糊 → 贴壳"
+真正接进了 Skia 渲染：
+
+- `FluidBar.Platform.Windows/Hosting/ScreenBackdropCapture.cs`：`WDA_EXCLUDEFROMCAPTURE` + `CreateDIBSection` +
+  `BitBlt`，按窗口物理像素矩形抓取（失败返回 null，渲染回落到染色填充）。
+- `FluidBar.App/Hosting/Skia/IslandBackdropProvider.cs`：1/6 降采样 + `SKImageFilter.CreateBlur(2,2)` 烘焙，
+  按窗口矩形缓存 ≤2 份，节流 400 ms，硬下限 120 ms（拖动时最多落后一帧）；移动窗口（矩形变化）时重抓；
+  只在真正渲染的帧里抓屏，空闲仍是 0 帧。
+- `IslandRenderState.Backdrop` + `IslandRenderer.DrawBackdrop`：在壳体路径内绘制模糊桌面，再叠
+  `BackdropTintAlpha = 0.30` 的染色；`LiquidGlassPainter.DrawEdgeOnly` 只画 1 px 键线 + 顶部高光 + 底部焦散 +
+  冷色边缘（没有 veil、没有 rim band、没有 sheen）——即"去掉老式电视的厚边"。
+- 交叉淡入期间（`Plus` 混合）不画背景图，避免两份叠加。
+- 实测：全量测试 2637 绿；真实 App 冒烟 118 帧、退出码 0；展开态壳体横向采样
+  #09121e → #2d353f → #27303b → #3c444e（同一帧内有明显空间变化，说明确实是背景内容而不是纯色填充）。
+
+**已知限制**：GDI 抓屏只拿得到壁纸层（见上），所以岛后面如果是窗口/视频，模糊里不会包含它们。
+下一步若要"连窗口一起糊"，需要 `Windows.Graphics.Capture`（D3D11 + 帧池 + staging 回读），成本明显更高，
+建议等用户选定材质版本后再评估。

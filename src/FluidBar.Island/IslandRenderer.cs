@@ -851,6 +851,14 @@ public sealed class IslandRenderer : IDisposable
                 ? 0.72f
                 : (float)Math.Clamp(_theme.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
 
+        // Liquid glass blurs the real desktop behind the shell when the host provides a capture.
+        // During a material cross-fade the additive passes must not double-draw the backdrop.
+        var useBackdrop = materialLiquid && state.Backdrop is not null && blend == SKBlendMode.SrcOver;
+        if (useBackdrop)
+        {
+            DrawBackdrop(canvas, state, path, state.Backdrop!, opacity);
+        }
+
         // While split capsules are visible they share the primary's exact material. Using Src for
         // both interiors means the capsule and the pill have byte-identical background colour/alpha
         // (the two shadows have different shapes and would otherwise bleed through differently).
@@ -858,9 +866,11 @@ public sealed class IslandRenderer : IDisposable
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
         _fill.BlendMode = blend == SKBlendMode.SrcOver && splitVisible ? SKBlendMode.Src : blend;
-        _fill.Color = splitVisible
-            ? SplitFillColor(fillOpacity, opacity)
-            : Alpha(_theme.Background, fillOpacity * opacity);
+        _fill.Color = useBackdrop
+            ? Alpha(_theme.Background, (float)(LiquidGlassTokens.BackdropTintAlpha * AdaptiveTint(state.BackdropLuminance)) * opacity)
+            : splitVisible
+                ? SplitFillColor(fillOpacity, opacity)
+                : Alpha(_theme.Background, fillOpacity * opacity);
         canvas.DrawPath(path, _fill);
         _fill.BlendMode = SKBlendMode.SrcOver;
 
@@ -874,6 +884,15 @@ public sealed class IslandRenderer : IDisposable
             canvas.DrawPath(path, _glassPaint);
             _glassPaint.Shader = null;
             _glassPaint.BlendMode = SKBlendMode.SrcOver;
+        }
+        else if (materialLiquid && useBackdrop)
+        {
+            // Backdrop mode: the blurred desktop carries the body, so only the glass edge remains.
+            _liquidGlass.DrawEdgeOnly(
+                canvas,
+                path,
+                new SKRect(0, 0, (float)state.ShellWidth, (float)state.ShellHeight),
+                opacity);
         }
         else if (materialLiquid)
         {
@@ -901,6 +920,31 @@ public sealed class IslandRenderer : IDisposable
         // Prototype2 declares `.island { border: 0 }`: the shell has no rim/outline at all. The old
         // LineStrong hairline is gone so the silhouette is pure fill + shadow (see ShellOutlineTests,
         // which still guards against an accent-tinted rim ever coming back).
+    }
+
+    /// <summary>Adaptive tint multiplier: 0.6× on a dark desktop, 1.4× on a bright one (0.18–0.42 alpha).</summary>
+    private static double AdaptiveTint(double luminance)
+        => 0.6 + (0.8 * Math.Clamp(luminance, 0, 1));
+
+    /// <summary>Paints the blurred desktop capture inside the shell silhouette (liquid glass).</summary>
+    private void DrawBackdrop(SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity)
+    {
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var origin = state.ShellOrigin;
+        var destination = new SKRect(
+            -(float)origin.X,
+            -(float)origin.Y,
+            (float)(surface.Width - origin.X),
+            (float)(surface.Height - origin.Y));
+        var source = new SKRect(0, 0, backdrop.Width, backdrop.Height);
+
+        canvas.Save();
+        canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+        _glassPaint.Shader = null;
+        _glassPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(opacity * 255f, 0, 255));
+        canvas.DrawImage(backdrop, source, destination, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
+        _glassPaint.Color = SKColors.White;
+        canvas.Restore();
     }
 
     private SKShader GetGlassShader(float height)

@@ -141,6 +141,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private long _probeRenderAllocStart;
     private readonly List<WindowEntry> _windows = [];
 
+    /// <summary>Blurred desktop capture for the liquid-glass material (throttled internally).</summary>
+    private readonly IslandBackdropProvider _backdrop;
+
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
@@ -198,6 +201,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller = new SkiaIslandController(options, _dispatcher);
         _uiaSource = new SkiaIslandUiaSource(_controller, _options.Localizer, _dispatcher);
         _renderer = new IslandRenderer(IslandTheme.Dark);
+        _backdrop = new IslandBackdropProvider();
         _frameClock = options.FrameClockFactory?.Invoke() ?? new SkiaFrameClock(_time);
         _deadlineTicker = new UiThreadTicker(_time);
         if (SkiaHostPerfProbe.IsEnabled)
@@ -564,6 +568,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.FrameRequested -= EnsureFrameLoop;
         _uiaSource.Dispose();
         _controller.Dispose();
+        _backdrop.Dispose();
 
         foreach (var entry in _windows)
         {
@@ -838,6 +843,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         host.Create(monitor.ToPlatform(), layeredMode);
         host.ConfigurePacing(LayeredPacingMode.TargetFrameRate, _controller.PowerProfile.FrameRate);
+        _logger.Information(LogCategories.Render, "island.skia.capture-affinity",
+            "Liquid-glass backdrop capture needs the window excluded from screen captures.",
+            data: new Dictionary<string, object?> { ["excludedFromCapture"] = host.ExcludeFromCapture });
         host.AttachAccessibility(_uiaSource, _uiaSource);
 
         var entry = new WindowEntry(host, monitor);
@@ -1967,12 +1975,29 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
     {
+        // Liquid glass: attach a blurred capture of the desktop behind this window (throttled inside).
+        var renderState = state;
+        if (state.IsVisible && state.Theme.Material == FluidBar.Island.IslandMaterial.LiquidGlass)
+        {
+            var window = entry.Host.Placement.WindowPixel;
+            var rect = (window.X, window.Y, window.Width, window.Height);
+            var backdrop = _backdrop.Get(rect);
+            if (backdrop is not null)
+            {
+                renderState = state with
+                {
+                    Backdrop = backdrop,
+                    BackdropLuminance = _backdrop.LuminanceFor(rect),
+                };
+            }
+        }
+
         var probeAllocStart = IslandFrameProbe.Enabled ? GC.GetAllocatedBytesForCurrentThread() : 0L;
         if (IslandVerifyDump.Enabled)
         {
             // Verification runs dump the *same* render state the layered surface gets, so the PNG is
             // exactly what a visible window would show (a locked desktop cannot be captured otherwise).
-            IslandVerifyDump.Capture(_renderer, state, (float)entry.Host.SurfaceSizeDip.WidthDip is var w && w > 0
+            IslandVerifyDump.Capture(_renderer, renderState, (float)entry.Host.SurfaceSizeDip.WidthDip is var w && w > 0
                 ? Math.Max(1f, Math.Min(3f, w / 488f))
                 : 1.5f);
         }
@@ -1986,7 +2011,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             if (change.FullFrame)
             {
-                _renderer.Render(surface.Canvas, state, scale);
+                _renderer.Render(surface.Canvas, renderState, scale);
                 surface.Canvas.Flush();
                 var result = entry.Host.CommitFrame();
                 RecordCommit(entry, result, dirty: false);
@@ -2005,7 +2030,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
                 _renderer.Render(
                     surface.Canvas,
-                    state,
+                    renderState,
                     scale,
                     new SKRect((float)damage.X, (float)damage.Y, (float)damage.Right, (float)damage.Bottom));
                 surface.Canvas.Flush();

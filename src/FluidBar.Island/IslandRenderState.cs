@@ -199,6 +199,18 @@ public readonly record struct IslandRenderState
     /// <summary>Material swap progress 0..1 (1 = no swap). Only read when <see cref="PreviousTheme"/> is set.</summary>
     public double MaterialBlend { get; init; } = 1;
 
+    /// <summary>
+    /// Blurred snapshot of the desktop behind the host surface (liquid glass). When null the material
+    /// falls back to its tinted fill. The image covers the whole host surface in DIP.
+    /// </summary>
+    public SkiaSharp.SKImage? Backdrop { get; init; }
+
+    /// <summary>
+    /// Mean luminance 0..1 of <see cref="Backdrop"/>. Drives the adaptive tint: bright desktops get a
+    /// heavier tint so white labels keep their contrast, dark ones get less so the glass stays clear.
+    /// </summary>
+    public double BackdropLuminance { get; init; } = 0.5;
+
     /// <summary>Detached mini-island strip state.</summary>
     public ArchipelagoState Archipelago { get; init; }
 

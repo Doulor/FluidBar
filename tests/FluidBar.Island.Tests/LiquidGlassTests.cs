@@ -148,6 +148,60 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Backdrop_mode_paints_the_captured_desktop_instead_of_the_flat_tint()
+    {
+        var theme = Liquid;
+        var state = CompactState(theme);
+        using var renderer = new IslandRenderer(theme);
+
+        // Synthetic "desktop": a coarse checkerboard (the host hands over a blurred capture; a blocky
+        // pattern makes the sampled gradient obvious even after the tint).
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var backdropBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(backdropBitmap))
+        {
+            canvas.Clear(new SKColor(0x20, 0x40, 0x80));
+            using var light = new SKPaint { Color = new SKColor(0xF0, 0xE0, 0xC0) };
+            var cell = 60;
+            for (var by = 0; by < info.Height; by += cell)
+            {
+                for (var bx = 0; bx < info.Width; bx += cell)
+                {
+                    if (((bx / cell) + (by / cell)) % 2 == 0)
+                    {
+                        canvas.DrawRect(new SKRect(bx, by, bx + cell, by + cell), light);
+                    }
+                }
+            }
+        }
+
+        using var image = SKImage.FromBitmap(backdropBitmap);
+        using var flat = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        using var withBackdrop = renderer.RenderToBitmap(
+            state with { Backdrop = image }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var left = (int)Math.Round((shell.Left + 24) * IslandTestFixtures.Scale);
+        var right = (int)Math.Round((shell.Right - 24) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((shell.Top + (shell.Height * 0.62)) * IslandTestFixtures.Scale);
+
+        var flatLeft = Luma(flat.GetPixel(left, y));
+        var flatRight = Luma(flat.GetPixel(right, y));
+        var glassLeft = Luma(withBackdrop.GetPixel(left, y));
+        var glassRight = Luma(withBackdrop.GetPixel(right, y));
+
+        var flatDelta = Math.Abs(flatLeft - flatRight);
+        var glassDelta = Math.Abs(glassLeft - glassRight);
+        Assert.True(glassDelta > flatDelta + 8,
+            $"the backdrop must add spatial variation (flat delta {flatDelta:0.0}, glass delta {glassDelta:0.0})");
+        Assert.True(
+            Math.Abs(glassLeft - flatLeft) > 8 || Math.Abs(glassRight - flatRight) > 8,
+            $"the backdrop must change the shell pixels (flat {flatLeft:0.0}/{flatRight:0.0}, glass {glassLeft:0.0}/{glassRight:0.0})");
+    }
+
+    [Fact]
     public void Material_swap_cross_fades_between_the_two_materials()
     {
         var obsidian = IslandTheme.Dark.WithMaterial(IslandMaterial.Obsidian);
