@@ -880,7 +880,8 @@ public sealed partial class LayeredWindowHost : IDisposable
         }
 
         if (!NativeMethods.User32.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE))
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE
+                | NativeMethods.SWP_NOREDRAW))
         {
             _counters.IncrementWin32Failures();
             _logger.LogWarning(PlatformLogCategory.Platform, "layered-host.topmost-failed",
@@ -913,7 +914,11 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         if (_interop is not null)
         {
-            _interop.TryReassertTopmost(_hwnd);
+            if (_interop.TryReassertTopmost(_hwnd))
+            {
+                RepaintAfterZOrderChange();
+            }
+
             _lastTopmostTimestamp = _timeProvider.GetTimestamp();
             return;
         }
@@ -936,6 +941,22 @@ public sealed partial class LayeredWindowHost : IDisposable
         }
 
         _lastTopmostTimestamp = _timeProvider.GetTimestamp();
+        RepaintAfterZOrderChange();
+    }
+
+    /// <summary>Re-uploads the current surface after a z-order change so the window never shows empty.</summary>
+    private void RepaintAfterZOrderChange()
+    {
+        if (_surface is null || !_visible)
+        {
+            return;
+        }
+
+        var (ok, _, _) = TryUpdate(null);
+        if (!ok)
+        {
+            _needsFullFrame = true;
+        }
     }
 
     private IntPtr CursorHandle(LayeredCursorKind kind)

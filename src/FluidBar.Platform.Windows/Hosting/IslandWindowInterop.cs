@@ -167,8 +167,11 @@ public sealed class IslandWindowInterop : IDisposable
     /// <summary>Makes the window topmost without activating it (<c>SWP_NOACTIVATE</c>).</summary>
     public void SetTopmost(IntPtr hwnd)
     {
+        // SWP_NOREDRAW: a plain raise makes DWM re-composite the layered window before the next
+        // UpdateLayeredWindow, which showed up as a ~1 Hz "transparent" flash (reported 2026-10-23).
         if (!NativeMethods.User32.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE))
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE
+                | NativeMethods.SWP_NOREDRAW))
         {
             _counters.IncrementWin32Failures();
             _logger.LogWarning(PlatformLogCategory.Platform, "interop.topmost-failed",

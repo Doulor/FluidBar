@@ -501,3 +501,17 @@
 
 另外加了 `FLUIDBAR_BLINK_LOG=1` 的帧诊断（变化时才写一行到 `%TEMP%\fluidbar-frames.log`）：
 下次若仍有闪烁，可以直接看 visible/opacity/backdrop/yield/luminance 到底是哪一个在跳。
+
+### 15.10 1 Hz 闪透明 = 置顶复位的副作用（2026-10-23）
+
+用户描述："大部分时间是模糊的，每秒有一小部分时间是透明的" —— **1 Hz** 这个节奏是决定性线索：
+`IslandWindowInterop.TryReassertTopmost` 的节流就是 **≤1 Hz**（"always on top" 复位）。
+
+一次 `SetWindowPos(HWND_TOPMOST, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)` 会让 DWM 重新合成这个分层窗口，
+而我们的内容要等下一次 `UpdateLayeredWindow` 才写回去 —— 中间那一帧窗口是空的，就是"一瞬间透明"。
+
+修复：
+
+- 置顶复位加 `SWP_NOREDRAW`（系统不擦除、不重绘），并且复位成功后**立刻重新上传当前表面**
+  （`RepaintAfterZOrderChange` → `TryUpdate(null)`），保证任何一帧都不会出现空表面。
+- 与前一轮的"背景图粘性回退 + 图片保留 12 帧"一起，构成空帧的三道防线。
