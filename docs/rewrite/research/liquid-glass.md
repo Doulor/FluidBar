@@ -452,3 +452,22 @@
 - `SkiaIslandHost`：每帧推进平滑值，采到的背景图做 **160 ms 交叉淡入**（`PreviousBackdrop` + `BackdropBlend`，
   背景图按 1/6 缩放后很小，复制一份安全且便宜），期间帧循环保持运行。
 - 测试 `Backdrop_captures_cross_fade_instead_of_swapping`：黑图→白图 交叉 0.5 时亮度落在两者之间。
+
+### 15.7 玻璃跟随桌面明暗（修正上一轮的"变黑"）
+
+用户反馈："从黑色变到白色确实有渐变，但渐变完变回黑色"。根因是上一轮的方向错了：亮背景下把玻璃**染黑**
+（tint 2.6）来保证白字对比度，于是过渡结束后岛确实"变成黑的"。
+
+正确模型：**玻璃跟着桌面走** —— 白底 → 浅色"瓷玻璃" + 深色文字；黑底 → 黑曜石玻璃 + 白色文字。
+
+- `IslandRenderer.AdaptThemeForBackdrop` 改为在 `IslandTheme.Dark` 与 `IslandTheme.Light` 之间按背景亮度插值
+  （t = (lum − 0.42) / 0.33，即 0.42–0.75 之间过渡），插值的是整套调色板：Background / BackgroundRaised /
+  BackgroundInset / Line / LineStrong / Foreground / ForegroundSecondary / ForegroundTertiary / Accent / …
+- 关键：**整幕统一适配** —— 在 `DrawSceneWithMaterialBlend` 里把适配后的 theme 写回 state，因为
+  CompactRenderer / PageRenderer / IconSet 都从 state 读主题；只改壳体调色板时，文字仍是白的（这就是"白字看不清"的第二层原因）。
+- 染色/遮罩回到温和值（`BackdropTintMaxFactor` 2.60 → 1.15、`ScrimMaxAlpha` 0.62 → 0.30、高度 0.72 → 0.55）：
+  对比度现在由**墨色**保证，而不是把玻璃压黑。
+- 因为亮度本身已经过 160 ms 缓动，调色板插值也就跟着缓动 —— 亮暗切换是"渐变换色"，不是跳变也不是变黑。
+- 测试：`White_backdrops_flip_the_shell_to_light_glass_with_dark_ink`（白底：玻璃亮度 > 127 且标题带存在
+  亮度 < 0.4 的深色像素）、`Bright_backdrops_use_light_glass_and_dark_backdrops_dark_glass`、
+  `Expanded_media_panel_on_white_flips_to_light_glass`。

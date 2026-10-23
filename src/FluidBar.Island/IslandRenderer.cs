@@ -471,8 +471,9 @@ public sealed class IslandRenderer : IDisposable
     }
 
     /// <summary>
-    /// Bright desktops turn the glass into dark glass (heavy tint), which leaves the grey secondary text
-    /// too dim; lift it towards the primary ink so labels and subtitles stay readable on white pages.
+    /// Liquid glass follows the desktop: on a bright page the shell turns into light porcelain glass with
+    /// dark ink, on a dark page it stays obsidian glass with white ink. The backdrop luminance is already
+    /// eased, so the palette cross-fades with it instead of snapping (reported 2026-10-23).
     /// </summary>
     private static IslandTheme AdaptThemeForBackdrop(IslandTheme theme, in IslandRenderState state)
     {
@@ -482,16 +483,27 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var luminance = Math.Clamp(state.BackdropLuminance, 0, 1);
-        if (luminance <= 0.55)
+        var t = (float)Math.Clamp((luminance - 0.42) / 0.33, 0, 1);
+        if (t <= 0.001f)
         {
             return theme;
         }
 
-        var t = (float)Math.Clamp((luminance - 0.55) / 0.45, 0, 1);
+        var light = IslandTheme.Light;
         return theme with
         {
-            ForegroundSecondary = Mix(theme.ForegroundSecondary, new SKColor(0xD2, 0xD8, 0xE2), t),
-            ForegroundTertiary = Mix(theme.ForegroundTertiary, new SKColor(0xB6, 0xBE, 0xCA), t),
+            Background = Mix(theme.Background, light.Background, t),
+            BackgroundRaised = Mix(theme.BackgroundRaised, light.BackgroundRaised, t),
+            BackgroundInset = Mix(theme.BackgroundInset, light.BackgroundInset, t),
+            Line = Mix(theme.Line, light.Line, t),
+            LineStrong = Mix(theme.LineStrong, light.LineStrong, t),
+            Foreground = Mix(theme.Foreground, light.Foreground, t),
+            ForegroundSecondary = Mix(theme.ForegroundSecondary, light.ForegroundSecondary, t),
+            ForegroundTertiary = Mix(theme.ForegroundTertiary, light.ForegroundTertiary, t),
+            Accent = Mix(theme.Accent, light.Accent, t),
+            TrackAccent = Mix(theme.TrackAccent, light.TrackAccent, t),
+            ArtEnd = Mix(theme.ArtEnd, light.ArtEnd, t),
+            HudTrack = Mix(theme.HudTrack, light.HudTrack, t),
         };
     }
 
@@ -507,11 +519,20 @@ public sealed class IslandRenderer : IDisposable
         // Material swap (spec 3.4: 180 ms cross-fade). The shell body is painted twice with premultiplied
         // additive compositing — old material at (1-t), new at t — so the ramp is a true cross-fade while
         // costing one extra body pass instead of two full-surface SaveLayers (~7.7 ms on CPU).
-        _bodyFrom = state.PreviousTheme;
+        // Adapt the palette once, for the whole scene: the compact/page/icon renderers read the theme
+        // from the state, so adapting only the shell body left their labels white on white pages.
+        var theme = AdaptThemeForBackdrop(state.Theme ?? IslandTheme.Dark, state);
+        var adapted = state with { Theme = theme };
+        if (state.PreviousTheme is { } previousTheme)
+        {
+            adapted = adapted with { PreviousTheme = AdaptThemeForBackdrop(previousTheme, state) };
+        }
+
+        _bodyFrom = adapted.PreviousTheme;
         _bodyMix = (float)Math.Clamp(state.MaterialBlend, 0, 1);
         try
         {
-            DrawSceneCore(canvas, state, dpiScale, state.Theme ?? IslandTheme.Dark);
+            DrawSceneCore(canvas, adapted, dpiScale, theme);
         }
         finally
         {
@@ -522,7 +543,7 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawSceneCore(SKCanvas canvas, in IslandRenderState state, float dpiScale, IslandTheme theme)
     {
-        _theme = AdaptThemeForBackdrop(theme, state);
+        _theme = theme;
         var shell = IslandMetrics.ShellRect(state);
         var opacity = (float)Math.Clamp(state.Opacity, 0, 1);
         var press = (float)Math.Clamp(state.PressScale, 0.5, 1.5);

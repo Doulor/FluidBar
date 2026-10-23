@@ -244,13 +244,64 @@ public sealed class LiquidGlassTests
         Assert.True(softenedAlpha > 10, $"the soften layer must not clip the capsule away, got {softenedAlpha}");
     }
 
+
+
     [Fact]
-    public void Expanded_media_panel_on_white_keeps_the_card_readable()
+    public void White_backdrops_flip_the_shell_to_light_glass_with_dark_ink()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.MediaCompact() with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        using var panel = RenderOnWhite(renderer, state);
+        var shell = IslandMetrics.ShellRect(state);
+
+        // Empty padding inside the pill's left end = the glass surface itself.
+        var padX = (int)Math.Round((shell.Left + 6) * IslandTestFixtures.Scale);
+        var padY = (int)Math.Round(shell.MidY * IslandTestFixtures.Scale);
+        var glassLuma = Luma(panel.GetPixel(padX, padY)) / 255.0;
+
+        // Darkest ink anywhere in the title band: the labels must be dark on light glass.
+        var minInk = 1.0;
+        for (var x = shell.Left + (shell.Width * 0.28); x < shell.Right - 8; x += 1.5)
+        {
+            for (var dy = -7.0; dy <= 7.0; dy += 1.5)
+            {
+                var pixel = panel.GetPixel(
+                    (int)Math.Round(x * IslandTestFixtures.Scale),
+                    (int)Math.Round((shell.MidY + dy) * IslandTestFixtures.Scale));
+                if (pixel.Alpha < 120)
+                {
+                    continue;
+                }
+
+                minInk = Math.Min(minInk, Luma(pixel) / 255.0);
+            }
+        }
+
+        Assert.True(glassLuma > 0.5, $"white pages need light glass, got {glassLuma:0.00}");
+        Assert.True(minInk < 0.4, $"white pages need dark ink, darkest pixel was {minInk:0.00}");
+    }
+
+    [Fact]
+    public void Expanded_media_panel_on_white_flips_to_light_glass()
     {
         var theme = Liquid;
         var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
         using var renderer = new IslandRenderer(theme);
 
+        using var panel = RenderOnWhite(renderer, state);
+        var shell = IslandMetrics.ShellRect(state);
+
+        var padX = (int)Math.Round((shell.Left + 10) * IslandTestFixtures.Scale);
+        var padY = (int)Math.Round((shell.Top + (shell.Height * 0.5)) * IslandTestFixtures.Scale);
+        var glassLuma = Luma(panel.GetPixel(padX, padY)) / 255.0;
+
+        Assert.True(glassLuma > 0.45, $"the expanded panel must stay light on white, got {glassLuma:0.00}");
+    }
+
+    private SKBitmap RenderOnWhite(IslandRenderer renderer, IslandRenderState state)
+    {
         var surface = IslandMetrics.SurfaceSize(state.Mode);
         var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
             (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -261,24 +312,10 @@ public sealed class LiquidGlassTests
         }
 
         using var image = SKImage.FromBitmap(white);
-        using var panel = renderer.RenderToBitmap(
-            state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
-
-        var shell = IslandMetrics.ShellRect(state);
-        var worst = 0d;
-        foreach (var fraction in new[] { 0.15, 0.35, 0.55, 0.75, 0.92 })
-        {
-            var x = (int)Math.Round((shell.Left + 10) * IslandTestFixtures.Scale);
-            var y = (int)Math.Round((shell.Top + (shell.Height * fraction)) * IslandTestFixtures.Scale);
-            var pixel = panel.GetPixel(x, y);
-            var luma = ((0.2126 * pixel.Red) + (0.7152 * pixel.Green) + (0.0722 * pixel.Blue)) / 255.0;
-            worst = Math.Max(worst, luma);
-        }
-
-        // White labels (and the grey media subtitle) need a dark card surface: without the heavy tint the
-        // panel stayed near-white and the music card's text disappeared (reported 2026-10-23).
-        Assert.True(worst < 0.35, $"the expanded panel must darken on white backdrops, worst luma {worst:0.00}");
+        return renderer.RenderToBitmap(state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
     }
+
+
 
     [Fact]
     public void Backdrop_captures_cross_fade_instead_of_swapping()
@@ -305,6 +342,7 @@ public sealed class LiquidGlassTests
         using var dark = SKImage.FromBitmap(darkBitmap);
         using var light = SKImage.FromBitmap(lightBitmap);
 
+        // Same luminance for all three so only the image blend is measured.
         using var solidDark = renderer.RenderToBitmap(
             state with { Backdrop = dark, BackdropBlend = 1, BackdropLuminance = 0.5 }, IslandTestFixtures.Scale);
         using var solidLight = renderer.RenderToBitmap(
@@ -330,37 +368,6 @@ public sealed class LiquidGlassTests
         Assert.True(
             lumaMid > lumaDark + 3 && lumaMid < lumaLight - 3,
             $"the blended frame must sit between them ({lumaDark:0} .. {lumaMid:0} .. {lumaLight:0})");
-    }
-
-    [Fact]
-    public void White_backdrops_stay_dark_enough_for_white_labels()
-    {
-        var theme = Liquid;
-        var state = IslandTestFixtures.MediaCompact() with { Theme = theme };
-        using var renderer = new IslandRenderer(theme);
-
-        var surface = IslandMetrics.SurfaceSize(state.Mode);
-        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
-            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
-        using var white = new SKBitmap(info);
-        using (var canvas = new SKCanvas(white))
-        {
-            canvas.Clear(SKColors.White);
-        }
-
-        using var image = SKImage.FromBitmap(white);
-        using var panel = renderer.RenderToBitmap(
-            state with { Backdrop = image, BackdropLuminance = 1.0 }, IslandTestFixtures.Scale);
-
-        // The empty padding inside the pill's left end: no text or artwork there, so the sample is the
-        // material the labels sit on.
-        var shell = IslandMetrics.ShellRect(state);
-        var x = (int)Math.Round((shell.Left + 6) * IslandTestFixtures.Scale);
-        var y = (int)Math.Round(shell.MidY * IslandTestFixtures.Scale);
-        var pixel = panel.GetPixel(x, y);
-        var luma = ((0.2126 * pixel.Red) + (0.7152 * pixel.Green) + (0.0722 * pixel.Blue)) / 255.0;
-
-        Assert.True(luma < 0.45, $"white labels need a dark enough surface, got luma {luma:0.00}");
     }
 
     [Fact]
@@ -536,7 +543,7 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
-    public void Bright_backdrops_get_a_vibrancy_scrim_behind_the_top_text_band()
+    public void Bright_backdrops_use_light_glass_and_dark_backdrops_dark_glass()
     {
         var theme = Liquid;
         var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
@@ -551,23 +558,27 @@ public sealed class LiquidGlassTests
             canvas.Clear(SKColors.White);
         }
 
-        using var image = SKImage.FromBitmap(white);
+        using var black = new SKBitmap(info);
+        using (var canvas = new SKCanvas(black))
+        {
+            canvas.Clear(SKColors.Black);
+        }
+
+        using var whiteImage = SKImage.FromBitmap(white);
+        using var blackImage = SKImage.FromBitmap(black);
         using var bright = renderer.RenderToBitmap(
-            state with { Backdrop = image, BackdropLuminance = 0.98 }, IslandTestFixtures.Scale);
+            state with { Backdrop = whiteImage, BackdropLuminance = 0.98 }, IslandTestFixtures.Scale);
         using var dark = renderer.RenderToBitmap(
-            state with { Backdrop = image, BackdropLuminance = 0.0 }, IslandTestFixtures.Scale);
+            state with { Backdrop = blackImage, BackdropLuminance = 0.0 }, IslandTestFixtures.Scale);
 
         var shell = IslandMetrics.ShellRect(state);
-        var x = (int)Math.Round((shell.Left + (shell.Width / 2)) * IslandTestFixtures.Scale);
-        var topY = (int)Math.Round((shell.Top + 40) * IslandTestFixtures.Scale);
-        var bottomY = (int)Math.Round((shell.Bottom - 30) * IslandTestFixtures.Scale);
+        var x = (int)Math.Round((shell.Left + 12) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((shell.Top + (shell.Height * 0.5)) * IslandTestFixtures.Scale);
+        var brightLuma = Luma(bright.GetPixel(x, y));
+        var darkLuma = Luma(dark.GetPixel(x, y));
 
-        var brightDelta = Luma(bright.GetPixel(x, topY)) - Luma(bright.GetPixel(x, bottomY));
-        var darkDelta = Luma(dark.GetPixel(x, topY)) - Luma(dark.GetPixel(x, bottomY));
-
-        Assert.True(
-            brightDelta < darkDelta - 10,
-            $"a bright backdrop must darken the top band (bright {brightDelta:0.0} vs dark {darkDelta:0.0})");
+        Assert.True(brightLuma > 140, $"a white page must give light glass, got {brightLuma:0.0}");
+        Assert.True(brightLuma > darkLuma + 40, $"light/dark glass must differ ({brightLuma:0.0} vs {darkLuma:0.0})");
     }
 
     [Fact]
