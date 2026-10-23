@@ -1214,6 +1214,9 @@ public sealed record AgentItemModel
     /// <summary>Ring colour of this session's tool (0 = theme accent); same tool ⇒ same colour.</summary>
     public uint AccentArgb { get; init; }
 
+    /// <summary>Session still counts as open (drives the stacked ring count).</summary>
+    public bool IsLive { get; init; }
+
     /// <summary>Status tone (Info paints the running spinner and progress bar).</summary>
     public CompactStatus Tone { get; init; }
 

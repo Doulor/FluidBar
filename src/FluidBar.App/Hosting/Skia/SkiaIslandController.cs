@@ -2347,7 +2347,7 @@ public sealed class SkiaIslandController : IDisposable
         var colors = new System.Collections.Generic.List<uint>(3);
         for (var i = 0; i < items.Count && colors.Count < 3; i++)
         {
-            if (items[i].Tone is CompactStatus.Info or CompactStatus.Warning)
+            if (items[i].IsLive)
             {
                 colors.Add(items[i].AccentArgb);
             }
@@ -2363,7 +2363,7 @@ public sealed class SkiaIslandController : IDisposable
         var live = 0;
         for (var i = 0; i < items.Count; i++)
         {
-            if (items[i].Tone is CompactStatus.Info or CompactStatus.Warning)
+            if (items[i].IsLive)
             {
                 live++;
             }

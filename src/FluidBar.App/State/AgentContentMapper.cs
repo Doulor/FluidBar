@@ -14,6 +14,12 @@ public static class AgentContentMapper
     /// <summary>Rows the agent page paints (newest first).</summary>
     public const int MaxRows = 8;
 
+    /// <summary>
+    /// How long after its last event a session still counts as open. An idle Harness session keeps its tab
+    /// but emits nothing, so a strict "running" test showed one ring instead of three (user report 2026-10-24).
+    /// </summary>
+    public static readonly TimeSpan LiveWindow = TimeSpan.FromMinutes(20);
+
     /// <summary>Maps the snapshot to page rows; empty when no session exists.</summary>
     /// <param name="snapshot">Agent inbox snapshot (null before the watcher produced one).</param>
     /// <param name="now">Reference time for a running session's elapsed duration.</param>
@@ -61,6 +67,8 @@ public static class AgentContentMapper
                 // name → status description. Brand names are deliberately not part of this chain.
                 PrimaryText = FirstNonEmpty(entry.Action, entry.SessionTitle, statusText),
                 StatusText = statusText,
+                IsLive = entry.Kind != AgentEventKind.Failed
+                         && now - entry.Timestamp <= LiveWindow,
                 Tone = entry.Kind switch
                 {
                     AgentEventKind.Completed => StatusTone.Success,

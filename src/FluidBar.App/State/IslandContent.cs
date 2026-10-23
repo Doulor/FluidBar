@@ -151,6 +151,12 @@ public sealed record AgentItemData
     /// <summary>Status tone.</summary>
     public StatusTone Tone { get; init; }
 
+    /// <summary>
+    /// Session still counts as "open": running/waiting, or updated within the liveness window. The ring
+    /// glyph counts these (three open Harness sessions ⇒ three rings), while the row keeps its own status.
+    /// </summary>
+    public bool IsLive { get; init; }
+
     /// <summary>Localized elapsed/relative time.</summary>
     public string TimeText { get; init; } = string.Empty;
 

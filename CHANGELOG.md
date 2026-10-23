@@ -10,6 +10,13 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 环数改为"打开的会话数"（修"只看到一个环"）
+
+- 原因：环数只统计 Running/Waiting，而已空闲但开着的 Harness 会话被算作已完成 → 只剩 1 个环。
+- 新增 `AgentItemData.IsLive`：非 Failed 且最后事件在 20 分钟内；`CountLiveAgents`/环颜色都改用它。
+- 新增 `AgentLivenessTests`。
+- 全量 2679 测试绿。
+
 ## 2026-10-24 — 环颜色改为按工具品牌色（同工具同色）
 
 - 之前第二环/中心点用固定色相偏移，与工具无关 → 三个 harness 会话也显示三种颜色。

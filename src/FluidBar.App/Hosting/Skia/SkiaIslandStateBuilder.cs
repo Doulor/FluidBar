@@ -360,7 +360,7 @@ public static class SkiaIslandStateBuilder
                 break;
             }
 
-            if (item.Tone is StatusTone.Info or StatusTone.Warning)
+            if (item.IsLive)
             {
                 colors.Add(AgentToolPalette.ColorFor(item.Kind));
             }
@@ -375,7 +375,7 @@ public static class SkiaIslandStateBuilder
         var live = 0;
         foreach (var item in content.Agents)
         {
-            if (item.Tone is StatusTone.Info or StatusTone.Warning)
+            if (item.IsLive)
             {
                 live++;
             }
@@ -399,6 +399,7 @@ public static class SkiaIslandStateBuilder
                 DurationText = item.TimeText,
                 Tone = MapTone(item.Tone),
                 AccentArgb = AgentToolPalette.ColorFor(item.Kind),
+                IsLive = item.IsLive,
             };
         }
 

@@ -783,3 +783,25 @@ blend = 0.25 / 0.5 / 0.75 时壳体中心 alpha 必须 > 240（修前 224 / 191�
 
 测试：`AgentToolPaletteTests`（同工具同色、异工具异色、未知回退强调色）与
 `Ring_colours_come_from_the_slot_tool_colour`。
+
+### 15.26 为什么只看到一个环：环数用的是"正在执行"而不是"打开着的会话"（2026-10-24）
+
+查了用户机器上的真实数据（`~/.dsh/storages/session_projcache/sessions`，最近的会话文件）：
+
+| 会话 | 文件年龄 | openStep | pending |
+|---|---|---|---|
+| 灵动岛新增液态玻璃材质 | 2 s | **有**（turn 53 / step 16） | - |
+| Apache-2.0 许可证能否照抄 | 66 s | 无 | - |
+| 生成323个无规律整数序列 | 71 s | 无 | 有 |
+| 第12.1节在线聊天 | 129 s | 无 | 有 |
+
+只有第一个正在执行步骤；其余三个是**开着但当前没有 tool 在跑**的会话。而环数之前是
+`Tone is Info or Warning`（= 只有 Running/Waiting 算），所以只剩 1 个环。
+
+修复：环数改用**会话存活窗口**的概念 —— `AgentItemData.IsLive`：
+
+- `Kind != Failed` 且 **最后一次事件在 20 分钟内** → 算"开着"（`AgentContentMapper.LiveWindow`）。
+- `CountLiveAgents` / `LiveAgentColors` / `AgentRingColors` 全部改用 `IsLive`。
+- 行本身的状态文案不变（该显示"已完成"还是"已完成"），只是不再用它决定环数。
+
+测试：`AgentLivenessTests`（三个会话中两个已结束但都新鲜 → 3 个 live；两小时前的 → 不算；失败 → 不算）。
