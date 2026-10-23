@@ -45,7 +45,10 @@ public static class LiquidGlassTokens
     /// the blurred desktop scaled about the shell centre, so the rim pulls in content from just outside
     /// the silhouette — the cheap Skia equivalent of the prototype's SDF displacement.
     /// </summary>
-    public const double RefractionScale = 1.05;
+    // The lens band is a magnified re-blit of the blurred backdrop. At capture refresh rates it strobed the
+    // outer rim (drawn only between fades) and read as "the outer ring flickers, the inner is calm".
+    // Disabled by default; the code path stays for callers that opt in via IslandRenderState.RefractionScale.
+    public const double RefractionScale = 1.0;
 
     /// <summary>Width of the refraction band in DIP.</summary>
     public const double RefractionBandDip = 11.0;

@@ -318,6 +318,53 @@ public sealed class LiquidGlassTests
 
 
     [Fact]
+    public void The_rim_dissolves_with_the_interior_instead_of_jumping()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.Expanded(0) with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var darkBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(darkBitmap))
+        {
+            canvas.Clear(new SKColor(0x20, 0x20, 0x20));
+        }
+
+        using var lightBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(lightBitmap))
+        {
+            canvas.Clear(new SKColor(0xE0, 0xE0, 0xE0));
+        }
+
+        using var dark = SKImage.FromBitmap(darkBitmap);
+        using var light = SKImage.FromBitmap(lightBitmap);
+
+        using var solidDark = renderer.RenderToBitmap(
+            state with { Backdrop = dark, BackdropBlend = 1, BackdropLuminance = 0.5 }, IslandTestFixtures.Scale);
+        using var solidLight = renderer.RenderToBitmap(
+            state with { Backdrop = light, BackdropBlend = 1, BackdropLuminance = 0.5 }, IslandTestFixtures.Scale);
+        using var mid = renderer.RenderToBitmap(
+            state with { Backdrop = light, PreviousBackdrop = dark, BackdropBlend = 0.5, BackdropLuminance = 0.5 },
+            IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        var x = (int)Math.Round((shell.Left + 3) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((shell.Top + (shell.Height / 2)) * IslandTestFixtures.Scale);
+
+        var rimDark = Luma(solidDark.GetPixel(x, y));
+        var rimLight = Luma(solidLight.GetPixel(x, y));
+        var rimMid = Luma(mid.GetPixel(x, y));
+
+        Assert.True(rimLight > rimDark + 8, $"the rim must react to the capture ({rimDark:0} vs {rimLight:0})");
+        Assert.True(
+            rimMid > rimDark + 2 && rimMid < rimLight - 2,
+            $"the rim must dissolve with the interior ({rimDark:0} .. {rimMid:0} .. {rimLight:0})");
+    }
+
+    [Fact]
     public void Cross_fading_the_backdrop_never_makes_the_shell_transparent()
     {
         var theme = Liquid;
@@ -501,6 +548,7 @@ public sealed class LiquidGlassTests
     [Fact]
     public void Refraction_band_fades_out_instead_of_stepping_at_its_inner_edge()
     {
+        // Opt-in: see Refraction_band_refracts_the_backdrop_near_the_rim.
         var theme = Liquid;
         var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
         using var renderer = new IslandRenderer(theme);
@@ -632,6 +680,7 @@ public sealed class LiquidGlassTests
     [Fact]
     public void Refraction_band_refracts_the_backdrop_near_the_rim()
     {
+        // Opt-in: the band is disabled by default since it strobed the rim at capture rate.
         var theme = Liquid;
         var state = CompactState(theme);
         using var renderer = new IslandRenderer(theme);
