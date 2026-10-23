@@ -105,6 +105,9 @@ public static class SkiaIslandStateBuilder
             Icon = MapIcon(model.Icon),
             Status = MapTone(model.Tone),
             TimeText = notificationTime,
+            // Multi-agent glyph: how many sessions are still running/waiting (the capsule shows one row
+            // but the icon stacks up to three rings, user spec 2026-10-24).
+            AgentLiveCount = kind == ActivityKind.Agent ? CountLiveAgents(content) : 1,
         });
     }
 
@@ -343,6 +346,21 @@ public static class SkiaIslandStateBuilder
         }
 
         return models;
+    }
+
+    /// <summary>Running/waiting agent sessions (capped at the glyph's three slots).</summary>
+    private static int CountLiveAgents(IslandContent content)
+    {
+        var live = 0;
+        foreach (var item in content.Agents)
+        {
+            if (item.Tone is StatusTone.Info or StatusTone.Warning)
+            {
+                live++;
+            }
+        }
+
+        return FluidBar.Island.AgentRingStack.Clamp(live <= 0 ? 1 : live);
     }
 
     private static AgentItemModel[] BuildAgents(IReadOnlyList<AgentItemData> items)

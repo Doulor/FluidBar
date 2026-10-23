@@ -10,6 +10,15 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 多 agent 堆叠环形图标（最多 3 个）
+
+- 新增 `AgentRingStack`：1 个 = 原圆环；2 个 = 内层逆时针 1.35 s 环（色相 +42°）；
+  3 个 = 中心实心发光圆点（色相 −46°）。
+- 出现/消失有"从外环分裂 / 融回外环"的插值动效（每帧 28% 缓动）。
+- 数量来自 agent 页里 Running/Waiting 的会话数，夹到 1..3。
+- 新增 `AgentRingStackTests`（强制 count=1 时两条断言失败，已实测）。
+- 全量 2671 测试绿。
+
 ## 2026-10-23 — 预览带紧邻岛也跟随材质
 
 - 根因：DrawNeighbour 显式传了固定填充色，而材质钩子只在 fill 为 null 时生效。

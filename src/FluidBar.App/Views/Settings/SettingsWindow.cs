@@ -123,9 +123,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         WindowDecorations = WindowDecorations.None;
         Title = localizer.Get(LocKeys.Settings.Title);
         Background = Brushes.Transparent;
-        TransparencyLevelHint = _liquidGlass
-            ? [WindowTransparencyLevel.AcrylicBlur]
-            : [WindowTransparencyLevel.Transparent];
+        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         // Until the first frame is painted the platform fills the window with this fallback; Avalonia's
         // default is a light system colour, which is exactly the grey plate users see before the panel.
         TransparencyBackgroundFallback = new SolidColorBrush(_palette.Window);
@@ -139,8 +137,8 @@ public sealed class SettingsWindow : Window, ILocalizable
         _bleed = new Border { IsVisible = false };
         _shell = new Border
         {
-            CornerRadius = new CornerRadius(0),
-            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(SettingsMetrics.WindowRadius),
+            BorderThickness = new Thickness(SettingsMetrics.WindowBorder),
             ClipToBounds = true,
             Child = BuildLayout(),
         };
@@ -165,6 +163,9 @@ public sealed class SettingsWindow : Window, ILocalizable
     /// Enables the centered fade used when the app opens settings. The island is not involved:
     /// the window appears at its normal centered position and fades/scale-settles in place.
     /// </summary>
+    // Compatibility with the pre-center-fade bootstrap in the clean baseline worktree.
+    public void PrepareEntrance(LayeredRect source, double scale) => EnableCenterFade();
+
     public void EnableCenterFade()
     {
         _centerFade = true;
@@ -260,6 +261,13 @@ public sealed class SettingsWindow : Window, ILocalizable
             {
                 _ = WindowDwmPolicy.TryDisableRounding(roundingHandle, out _);
             }
+            else if (_liquidGlass && roundingHandle != IntPtr.Zero)
+            {
+                // One native backdrop layer only: DWM acrylic supplies the real desktop blur and the
+                // old full-bleed shell lets DWM own the rounded silhouette.
+                _ = WindowDwmPolicy.TryEnableAcrylicBackdrop(roundingHandle, out _);
+                _ = WindowDwmPolicy.TryEnableRounding(roundingHandle, out _);
+            }
 
         }
         else
@@ -299,7 +307,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         ApplyCornerRegion("opened");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
             Avalonia.Threading.DispatcherPriority.Loaded);
-        if (!forcedAlpha && !_liquidGlass)
+        if (!forcedAlpha)
         {
             // Acrylic is composited by DWM, so the alpha probe would misread the already-blurred
             // backdrop as an opaque surface and replace it with the square opaque fallback.
@@ -422,10 +430,8 @@ public sealed class SettingsWindow : Window, ILocalizable
         _layeredStyleAdded = false;
         _ = SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
-        // Re-assert the no-shadow policy after the layered style change; otherwise DWM re-adds its
-        // rectangular shadow/frame around the already rounded client area.
-        _ = WindowCornerRegion.TryDisableNonClientRendering(handle, out _);
-        _ = WindowCornerRegion.TryRemoveDwmBorder(handle, out _);
+        // Removing WS_EX_LAYERED resets DWM's corner preference on this stack; re-assert it.
+        _ = WindowDwmPolicy.TryEnableRounding(handle, out _);
     }
 
     private const int GwlExStyle = -20;
@@ -723,20 +729,9 @@ public sealed class SettingsWindow : Window, ILocalizable
             _bleed.IsVisible = !_liquidGlass && ChromeMode == SettingsWindowChrome.Opaque;
         }
 
-        var liquid = _settings.Current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
-        if (liquid)
-        {
-            var window = _palette.Window;
-            _shell.Background = new SolidColorBrush(Color.FromArgb(0x74, window.R, window.G, window.B));
-            _shell.BorderBrush = Brushes.Transparent;
-            _shell.BorderThickness = new Thickness(0);
-        }
-        else
-        {
-            _shell.Background = new SolidColorBrush(_palette.Window);
-            _shell.BorderBrush = _palette.LineStrongBrush;
-            _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
-        }
+        _shell.Background = new SolidColorBrush(_palette.Window);
+        _shell.BorderBrush = _palette.LineStrongBrush;
+        _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
 
         ApplyWindowSurface();
     }

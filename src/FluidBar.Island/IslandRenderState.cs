@@ -564,6 +564,9 @@ public sealed record CompactModel
     /// <summary>Status label (agent/battery/timer).</summary>
     public string? StatusText { get; init; }
 
+    /// <summary>Live agent sessions behind this agent capsule (1..3; drives the stacked ring glyph).</summary>
+    public int AgentLiveCount { get; init; } = 1;
+
     /// <summary>Elapsed/duration text (agent).</summary>
     public string? DurationText { get; init; }
 

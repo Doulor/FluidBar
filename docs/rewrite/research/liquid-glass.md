@@ -729,3 +729,24 @@ blend = 0.25 / 0.5 / 0.75 时壳体中心 alpha 必须 > 240（修前 224 / 191�
   这次只是重新把格子画出来并保持持久化。
 - 第 1/2 格仍是 Wi-Fi / 蓝牙，顺序与 `IslandQuickToggle` 枚举一致（Wifi=0, Bluetooth=1, Pomodoro=2, Theme=3）。
 - 空态细节：`HomeToggleModel` 的 label 直接承载倒计时文本（`24:30`），不需要改渲染器布局。
+
+### 15.23 多 agent 堆叠环形图标（2026-10-24）
+
+用户需求（原话要点）：只改图标；1 个 agent = 现在的圆环旋转；2 个 = 内层再叠一个不同步的圆环；
+3 个 = 不要圆环，中间变成实心圆；完成/出现要有"融入大圆弧/从中分裂"的动效；同软件同色，
+第二个换色；最多三个。
+
+实现（`FluidBar.Island/AgentMotion.cs` 新增 `AgentRingStack` + `CompactRenderer.DrawAgent`）：
+
+| agent 数 | 图形 |
+|---|---|
+| 1 | 现有：18% 底圆 + 180° 圆弧顺时针（0.9 s/圈） |
+| 2 | 内层第二个圆环，**逆时针 1.35 s/圈**（永不同步），色相 +42° |
+| ≥3 | 中心实心圆点（色相 −46°）+ 模糊光晕，外圈与内环保留 |
+
+- **融入/分裂动效**：内环半径从 0.94R（贴着外环）插值到 0.62R，透明度与线宽同步；圆点从 0 长到 2.3 DIP。
+  两个进度（`_secondRing`/`_centreDot`）每帧缓动 28%，所以出现是"从外环分裂"，消失是"融回外环"。
+- **数量来源**：`SkiaIslandStateBuilder.CountLiveAgents` 统计 agent 页里 Tone 为 Info/Warning 的会话数，
+  `AgentRingStack.Clamp` 夹到 1..3（>3 不显示新图形）。
+- 回归测试 `AgentRingStackTests`：2 个 agent 必须比 1 个多 25% 以上环像素；3 个时中心颜色必须变化 >20。
+  把 `AgentLiveCount` 强制成 1 后两条都失败（已实测），说明测试真的在测这件事。

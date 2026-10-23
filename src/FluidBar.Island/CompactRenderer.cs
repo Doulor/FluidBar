@@ -18,6 +18,7 @@ internal sealed class CompactRenderer : IDisposable
     private readonly NumberTextCache _numbers;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
+    private readonly SKPaint _glow = new() { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f) };
     private readonly SKPaint _icon = new() { IsAntialias = true };
 
     private IslandTheme _theme = IslandTheme.Dark;
@@ -356,6 +357,11 @@ internal sealed class CompactRenderer : IDisposable
 
     // ------------------------------------------------------------------ agent
 
+    // The stacked rings merge in/out instead of popping: the inner ring grows out of the outer ring's
+    // radius, the centre dot grows out of the inner ring (user spec 2026-10-24).
+    private float _secondRing;
+    private float _centreDot;
+
     private void DrawAgent(SKCanvas canvas, CompactModel model, float width, float height)
     {
         var tone = Tone(model.Status);
@@ -373,6 +379,58 @@ internal sealed class CompactRenderer : IDisposable
         _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
         _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * _opacity);
         canvas.DrawCircle(ring.MidX, ring.MidY, ringRadius, _stroke);
+
+        // --- stacked agent rings (1..3 agents, see AgentRingStack) ---
+        var agents = AgentRingStack.Clamp(model.AgentLiveCount);
+        _secondRing += ((agents >= 2 ? 1f : 0f) - _secondRing) * 0.28f;
+        _centreDot += ((agents >= 3 ? 1f : 0f) - _centreDot) * 0.28f;
+        if (agents < 2 && _secondRing < 0.01f)
+        {
+            _secondRing = 0f;
+        }
+
+        if (agents < 3 && _centreDot < 0.01f)
+        {
+            _centreDot = 0f;
+        }
+
+        var busy = model.Status is CompactStatus.Info or CompactStatus.Warning;
+        if (busy && _secondRing > 0.01f)
+        {
+            var merge = 1f - _secondRing;
+            var secondRadius = ringRadius * (AgentRingStack.SecondRingMergeFactor
+                - ((AgentRingStack.SecondRingMergeFactor - AgentRingStack.SecondRingRadiusFactor) * _secondRing));
+            var secondColor = AgentRingStack.HueShift(_theme.Accent, 42f);
+            var secondAlpha = _secondRing * _opacity;
+            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth * (0.6f + (0.4f * _secondRing));
+            _stroke.Color = Alpha(secondColor, AgentMotion.RingBaseAlpha * 0.8f * secondAlpha);
+            canvas.DrawCircle(ring.MidX, ring.MidY, secondRadius, _stroke);
+
+            var secondRotation = _reduced ? 0 : AgentRingStack.SecondRingRotationDegrees(_agentPhase);
+            _stroke.Color = Alpha(secondColor, secondAlpha);
+            canvas.DrawArc(
+                new SKRect(ring.MidX - secondRadius, ring.MidY - secondRadius,
+                    ring.MidX + secondRadius, ring.MidY + secondRadius),
+                AgentMotion.ArcStartDegrees + (float)secondRotation,
+                AgentMotion.ArcSweepDegrees,
+                false,
+                _stroke);
+
+            _ = merge;
+            _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
+        }
+
+        if (busy && _centreDot > 0.01f)
+        {
+            var dotColor = AgentRingStack.HueShift(_theme.Accent, -46f);
+            var dotRadius = AgentRingStack.DotRadiusDip * _centreDot;
+            _fill.Style = SKPaintStyle.Fill;
+            _glow.Color = Alpha(dotColor, 0.45f * _centreDot * _opacity);
+            canvas.DrawCircle(ring.MidX, ring.MidY, dotRadius * 2.1f, _glow);
+            _fill.Color = Alpha(dotColor, _centreDot * _opacity);
+            canvas.DrawCircle(ring.MidX, ring.MidY, dotRadius, _fill);
+        }
+
         if (model.Status == CompactStatus.Success)
         {
             DrawIcon(canvas, IconKind.Check, ring.Deflate(5), tone);

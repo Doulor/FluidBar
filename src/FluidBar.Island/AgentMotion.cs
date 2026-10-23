@@ -1,3 +1,5 @@
+using SkiaSharp;
+
 using FluidBar.Core.Motion;
 
 namespace FluidBar.Island;
@@ -90,5 +92,99 @@ public static class AgentMotion
         var eased = Math.Clamp(PulseEasing.Evaluate(half), 0, 1);
         var fraction = ProgressMinFraction + ((ProgressMaxFraction - ProgressMinFraction) * eased);
         return Math.Clamp(fraction, ProgressMinFraction, ProgressMaxFraction) * 100.0;
+    }
+}
+
+/// <summary>
+/// Multi-agent glyph: stacked rings inside the single agent ring (user spec 2026-10-24).
+/// <para>
+/// 1 agent = today's ring + arc. 2 = a second, counter-rotating ring at a different speed inside it.
+/// 3 = the second ring stays and the third agent is a solid glowing dot in the middle. Anything above
+/// three is not drawn. Rings come in/out with a merge: the inner ring grows out of the outer ring's
+/// radius (and shrinks back into it when the agent finishes).
+/// </para>
+/// </summary>
+public static class AgentRingStack
+{
+    /// <summary>Maximum agents the glyph ever shows.</summary>
+    public const int MaxAgents = 3;
+
+    /// <summary>Counter-rotation period of the second ring (1.35 s vs the outer 0.9 s: never in sync).</summary>
+    public const double SecondRingPeriodSeconds = 1.35;
+
+    /// <summary>Radius factor of the settled second ring (relative to the outer ring radius).</summary>
+    public const float SecondRingRadiusFactor = 0.62f;
+
+    /// <summary>Radius factor the second ring starts/ends at (just inside the outer ring).</summary>
+    public const float SecondRingMergeFactor = 0.94f;
+
+    /// <summary>Centre dot radius in DIP at 100 %.</summary>
+    public const float DotRadiusDip = 2.3f;
+
+    /// <summary>Clamps a live agent count to what the glyph can show.</summary>
+    /// <param name="liveAgents">Number of running/waiting agent sessions.</param>
+    public static int Clamp(int liveAgents) => Math.Clamp(liveAgents, 1, MaxAgents);
+
+    /// <summary>Second-ring rotation for an elapsed animation time (counter-clockwise).</summary>
+    /// <param name="seconds">Elapsed animation seconds.</param>
+    public static double SecondRingRotationDegrees(double seconds)
+        => double.IsFinite(seconds) ? -((seconds / SecondRingPeriodSeconds) * 360.0 % 360.0) : 0;
+
+    /// <summary>Rotates a colour's hue by <paramref name="degrees"/> keeping saturation/value.</summary>
+    /// <param name="color">Source colour.</param>
+    /// <param name="degrees">Hue offset in degrees.</param>
+    public static SKColor HueShift(SKColor color, float degrees)
+    {
+        var r = color.Red / 255f;
+        var g = color.Green / 255f;
+        var b = color.Blue / 255f;
+        var max = MathF.Max(r, MathF.Max(g, b));
+        var min = MathF.Min(r, MathF.Min(g, b));
+        var delta = max - min;
+
+        var hue = 0f;
+        if (delta > 0.0001f)
+        {
+            if (max == r)
+            {
+                hue = 60f * (((g - b) / delta) % 6f);
+            }
+            else if (max == g)
+            {
+                hue = 60f * (((b - r) / delta) + 2f);
+            }
+            else
+            {
+                hue = 60f * (((r - g) / delta) + 4f);
+            }
+        }
+
+        if (hue < 0)
+        {
+            hue += 360f;
+        }
+
+        var saturation = max <= 0f ? 0f : delta / max;
+        var value = max;
+        hue = (hue + degrees + 360f) % 360f;
+
+        var c = value * saturation;
+        var x = c * (1f - MathF.Abs(((hue / 60f) % 2f) - 1f));
+        var m = value - c;
+        var (rr, gg, bb) = hue switch
+        {
+            < 60f => (c, x, 0f),
+            < 120f => (x, c, 0f),
+            < 180f => (0f, c, x),
+            < 240f => (0f, x, c),
+            < 300f => (x, 0f, c),
+            _ => (c, 0f, x),
+        };
+
+        return new SKColor(
+            (byte)Math.Clamp((rr + m) * 255f, 0, 255),
+            (byte)Math.Clamp((gg + m) * 255f, 0, 255),
+            (byte)Math.Clamp((bb + m) * 255f, 0, 255),
+            color.Alpha);
     }
 }
