@@ -82,13 +82,14 @@ public static class ForegroundWindowProbe
         var hasMonitor = monitor != IntPtr.Zero && NativeMethods.User32.GetMonitorInfoW(monitor, ref info);
         var work = hasMonitor ? info.rcWork : default;
 
-        // Maximized: the window fills (almost) the whole work area. Using geometry instead of IsZoomed
-        // also catches windows that size themselves to the work area without the maximized flag.
+        // Maximized: the window covers (almost) the whole work area. Using geometry instead of IsZoomed
+        // also catches windows that size themselves to the work area without the maximized flag, and the
+        // 90 % area rule tolerates DPI rounding and thin borders.
         if (hasMonitor)
         {
-            var coversWork = rect.Left <= work.Left && rect.Top <= work.Top
-                && rect.Right >= work.Right && rect.Bottom >= work.Bottom;
-            maximized = coversWork;
+            var windowArea = (double)(rect.Right - rect.Left) * (rect.Bottom - rect.Top);
+            var workArea = (double)(work.Right - work.Left) * (work.Bottom - work.Top);
+            maximized = workArea > 0 && windowArea >= workArea * 0.9;
         }
 
         return true;
