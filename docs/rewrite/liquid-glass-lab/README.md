@@ -37,6 +37,30 @@
 | [`shots/A-frosted-blur-off.jpg`](shots/A-frosted-blur-off.jpg) | 同一版本关掉 `backdrop-filter` 的对照（"模糊" vs "只是变暗"） |
 | [`shots/B-vs-reference.jpg`](shots/B-vs-reference.jpg) | B 版本 vs 参考实现 `archisvaze/liquid-glass` |
 
+## 可读性（同一张亮壁纸实测）
+
+白色文字压在玻璃上的对比度（平均，整块玻璃面积）：
+
+| 版本 | 玻璃平均亮度 | 白字对比度 | 结论 |
+|---|---:|---:|---|
+| A 磨砂 | 0.49 | 4.2:1 | 接近 AA |
+| B 折射 | 0.48 | 4.2:1 | 接近 AA |
+| C 清透 | 0.61 | 2.8:1 | 亮背景下偏弱 |
+| D 厚镜 | 0.54 | 3.4:1 | 亮背景下偏弱 |
+| E 水色 | 0.59 | 3.0:1 | 亮背景下偏弱 |
+| F 烟灰 | 0.43 | 5.1:1 | AA |
+| G 纯玻璃 | 0.51 | 3.9:1 | 接近 AA |
+
+> 选 C/D/E 的话，移植时我会加"按背景亮度自适应加深染色"（iOS 的 adaptive tint），否则亮壁纸上白字不够清楚。
+
+## 分享参数
+
+右侧微调后的数值可以用 URL 直接分享（也是我移植时的输入）：
+
+`index.html?v=b&tune=blur:10;tint:30;sat:160;edge:55;refract:100`
+
+「复制参数」按钮会把这组数字复制到剪贴板。
+
 ## 参考实现
 
 - `rdev/liquid-glass-react`（7k★）：`feImage` 位移图 + `feDisplacementMap` + RGB 通道错位色散

@@ -352,6 +352,16 @@
   var q = new URLSearchParams(location.search);
   var qv = q.get("v");
   if (qv && VARIANTS.some(function (v) { return v.id === qv; })) { select(qv); }
+  if (q.get("tune")) {
+    q.get("tune").split(";").forEach(function (pair) {
+      var kv = pair.split(":");
+      if (kv.length === 2 && Object.prototype.hasOwnProperty.call(state.tune, kv[0])) {
+        state.tune[kv[0]] = parseInt(kv[1], 10);
+      }
+    });
+    renderTuner(variantById(state.variant), state.tune);
+    applyGlass($("#stage"), state.tune);
+  }
   if (q.get("blur") === "off") { setBlur(false); }
   if (q.get("grid") === "1") { setGrid(true); }
   if (q.get("probe") === "1") {
