@@ -83,19 +83,18 @@ public class RecordingReplayTests
     }
 
     [Fact]
-    public void Fixture_ClipboardPreemptsTransientNotification_ThenMediaFollows()
+    public void Fixture_NotificationStaysPrimary_OverClipboardAndMedia()
     {
         var recording = EventRecordingCatalog.Load("notification-burst");
         var steps = EventRecordingReplay.Replay(recording);
 
-        // Spec rank 2 < rank 9: clipboard preempts the transient notification, then media follows
-        // after the clipboard TTL; the notification is discarded (transient, not persistent).
-        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Clipboard, steps[2].View.Primary?.Kind);
-        Assert.Empty(steps[2].View.Ghosts);
-        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Clipboard, steps[3].View.Primary?.Kind);
-        Assert.Single(steps[3].View.Ghosts);
-        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Media, steps[4].View.Primary?.Kind);
-        Assert.Empty(steps[4].View.Ghosts);
+        // Notification rank 0 owns the primary slot; clipboard/media are ghosts behind it.
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Notification, steps[2].View.Primary?.Kind);
+        Assert.Single(steps[2].View.Ghosts);
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Notification, steps[3].View.Primary?.Kind);
+        Assert.Equal(2, steps[3].View.Ghosts.Length);
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Notification, steps[4].View.Primary?.Kind);
+        Assert.Single(steps[4].View.Ghosts);
         Assert.Null(steps[5].View.Primary);
     }
 
@@ -106,9 +105,9 @@ public class RecordingReplayTests
         var steps = EventRecordingReplay.Replay(recording);
 
         Assert.Equal(2, steps[2].View.Ghosts.Length);
-        Assert.NotNull(steps[4].View.Hud);
-        Assert.Equal("Hud.Volume", steps[4].View.Hud!.LabelKey?.ToString());
-        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Agent, steps[5].View.Primary?.Kind);
+        Assert.Null(steps[4].View.Hud);
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Notification, steps[4].View.Primary?.Kind);
+        Assert.Equal(FluidBar.Core.Activities.ActivityKind.Notification, steps[5].View.Primary?.Kind);
         Assert.Equal(FluidBar.Core.Activities.ActivityKind.Agent, steps[6].View.Primary?.Kind);
     }
 

@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "clipboard-agent-mix",
-  "description": "Clipboard/agent/lock-key mix with TTL expiry; clipboard preempts the transient notification, then volume/agent follow.",
+  "description": "Clipboard/agent/lock-key mix with TTL expiry; notification rank 0 owns the primary slot until its TTL expires.",
   "seed": 1103,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -118,31 +118,30 @@
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "builtin.clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Hello world",
-      "ghostCount": 2,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "builtin.home",
-      "primaryKind": "Volume",
-      "title": "Volume",
-      "ghostCount": 1,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
-      "showsWave": false,
-      "hudLabelKey": "Hud.Volume"
+      "showsWave": false
     },
     {
       "atEventIndex": 5,
       "stateKind": "Compact",
-      "page": "builtin.agent",
-      "primaryKind": "Agent",
-      "title": "Agent finished",
-      "ghostCount": 1,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
       "showsWave": false
     },

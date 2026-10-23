@@ -2292,17 +2292,21 @@ public sealed class SkiaIslandController : IDisposable
             }
         }
 
+        var notificationVisible = compactKind == ActivityKind.Notification
+            || viewModel.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Notification);
         var ghosts = settings.Stacking == StackingStrategySetting.Stacked
             ? Math.Clamp(ghostCount, 0, LayoutTokens.MaxGhosts)
             : 0;
         var splitCount = settings.Stacking == StackingStrategySetting.Split
             && State.Kind != IslandStateKind.Expanded
+            && !notificationVisible
             ? Math.Min(ghostCount, LayoutTokens.MaxGhosts)
             : 0;
 
-        // The split previews need the two side lanes: cap an over-long lyric pill so both capsules
-        // stay fully inside the fixed host surface (the lyric falls back to its ellipsis).
-        if (splitCount > 0)
+        // The split previews need the two side lanes: an over-long lyric pill is capped so both
+        // capsules stay inside the fixed host surface. Notification is excluded: its card is the
+        // primary surface and its adaptive width is already bounded by NotificationMaxWidth.
+        if (splitCount > 0 && compactKind == ActivityKind.Media)
         {
             compactSize = new VisualSize(
                 Math.Min(compactSize.Width, LayoutTokens.SplitPrimaryMaxWidth),

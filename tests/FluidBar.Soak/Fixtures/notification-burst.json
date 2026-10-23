@@ -1,7 +1,7 @@
 {
   "format": "fluidbar.event-recording.v1",
   "name": "notification-burst",
-  "description": "Notification burst: same-kind replacement, clipboard preempts a transient notification, media follows, and retracts back to idle.",
+  "description": "Notification burst: same-kind replacement, notification remains primary over clipboard/media, and retracts back to idle.",
   "seed": 1102,
   "tickExpiryBeforeEachEvent": true,
   "events": [
@@ -93,33 +93,33 @@
     {
       "atEventIndex": 2,
       "stateKind": "Compact",
-      "page": "builtin.clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Copied",
-      "ghostCount": 0,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 3,
       "stateKind": "Compact",
-      "page": "builtin.clipboard",
-      "primaryKind": "Clipboard",
-      "title": "Copied",
-      "ghostCount": 1,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 2,
       "badgeCount": 0,
       "showsWave": false
     },
     {
       "atEventIndex": 4,
       "stateKind": "Compact",
-      "page": "builtin.media",
-      "primaryKind": "Media",
-      "title": "Lo-fi beats",
-      "ghostCount": 0,
+      "page": "builtin.notifications",
+      "primaryKind": "Notification",
+      "title": "New message",
+      "ghostCount": 1,
       "badgeCount": 0,
-      "progressPercent": 0,
-      "showsWave": true
+      "progressPercent": null,
+      "showsWave": false
     },
     {
       "atEventIndex": 5,

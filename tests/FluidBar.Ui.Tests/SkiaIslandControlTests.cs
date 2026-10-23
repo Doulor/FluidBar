@@ -435,6 +435,40 @@ public sealed class SkiaIslandControlTests
     }
 
     [Fact]
+    public void Notification_width_is_not_capped_by_split_previews()
+    {
+        using var fixture = ControllerFixture.Create(
+            settings: AppSettings.Default with { Stacking = StackingStrategySetting.Split, AutoCollapseMs = 0, AutoHideMs = 0 });
+
+        fixture.Controller.PublishActivity(ActivityKind.Media, new ActivityPayload
+        {
+            Title = "Midnight City",
+            Subtitle = "M83",
+            IsActive = true,
+            ShowsAudioWave = true,
+        }, 1, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Agent, new ActivityPayload
+        {
+            Title = "Agent running",
+            IsActive = true,
+        }, 2, "test");
+        fixture.Controller.PublishActivity(ActivityKind.Notification, new ActivityPayload
+        {
+            Title = "QQ",
+            Body = new string('长', 200),
+            SourceName = "QQ",
+        }, 3, "test");
+        fixture.Settle();
+        fixture.RunToRest();
+        fixture.Settle();
+
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(ActivityKind.Notification, state.Compact?.Kind);
+        Assert.Equal(LayoutTokens.NotificationMaxWidth, state.ShellWidth, 1);
+        Assert.Empty(state.SplitIslets);
+    }
+
+    [Fact]
     public void Notification_spectrum_phase_advances_while_media_is_playing()
     {
         using var fixture = ControllerFixture.Create();
