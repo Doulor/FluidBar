@@ -430,7 +430,33 @@ public sealed class LiquidGlassTests
             }
         }
 
-        Assert.True(changed > 200, $"the preview rail must follow the material (changed pixels {changed})");
+        Assert.True(changed > 200, $"the current capsule must follow the material (changed pixels {changed})");
+
+        // The two neighbouring 26 DIP islands are separate buttons but the same surface: they used to keep
+        // their fixed fill, so only the middle capsule changed material (user report 2026-10-23).
+        Assert.False(strip.Next.IsEmpty, "page 0 must have a next neighbour");
+        var changedNext = 0;
+        for (var py = (int)Math.Round(strip.Next.Top * IslandTestFixtures.Scale);
+             py < (int)Math.Round(strip.Next.Bottom * IslandTestFixtures.Scale);
+             py++)
+        {
+            for (var px = (int)Math.Round(strip.Next.Left * IslandTestFixtures.Scale);
+                 px < (int)Math.Round(strip.Next.Right * IslandTestFixtures.Scale);
+                 px++)
+            {
+                if (px < 0 || py < 0 || px >= glassFrame.Width || py >= glassFrame.Height)
+                {
+                    continue;
+                }
+
+                if (glassFrame.GetPixel(px, py) != flatFrame.GetPixel(px, py))
+                {
+                    changedNext++;
+                }
+            }
+        }
+
+        Assert.True(changedNext > 100, $"the neighbour islands must follow the material (changed pixels {changedNext})");
     }
 
     [Fact]

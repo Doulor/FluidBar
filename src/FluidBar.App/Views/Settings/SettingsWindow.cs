@@ -5,6 +5,8 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
+using System.Diagnostics;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
@@ -62,6 +64,20 @@ public sealed class SettingsWindow : Window, ILocalizable
     private bool _firstFramePreparing;
     private string? _status;
     private SettingsPalette _palette;
+    private LayeredRect? _entranceSource;
+    private double _entranceScale = 1;
+    private DispatcherTimer? _geometryTimer;
+    private DispatcherTimer? _contentTimer;
+    private bool _entranceStarted;
+    private bool _exitStarted;
+    private bool _allowClose;
+    private bool _geometryAnimating;
+
+    /// <summary>Duration of the Layer Bloom window expansion.</summary>
+    internal static TimeSpan EntranceDuration { get; } = TimeSpan.FromMilliseconds(760);
+
+    /// <summary>Duration of the Layer Bloom return-to-island collapse.</summary>
+    internal static TimeSpan ExitDuration { get; } = TimeSpan.FromMilliseconds(520);
 
     /// <summary>Creates the settings window.</summary>
     public SettingsWindow(
@@ -136,6 +152,33 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         RebuildContent();
         _ = RefreshNavCountsAsync();
+    }
+
+    /// <summary>
+    /// Starts the settings window at the island shell rectangle and lets it grow into the normal
+    /// 900×620 window. The island itself stays visible: only the settings window moves and expands.
+    /// </summary>
+    /// <param name="source">Island shell rectangle in physical screen pixels.</param>
+    /// <param name="scale">Screen DIP scaling for the island's monitor.</param>
+    public void PrepareEntrance(LayeredRect source, double scale)
+    {
+        if (source.Width <= 0 || source.Height <= 0 || !double.IsFinite(scale) || scale <= 0)
+        {
+            return;
+        }
+
+        _entranceSource = source;
+        _entranceScale = scale;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Position = new PixelPoint(source.X, source.Y);
+        Width = Math.Max(1, source.Width / scale);
+        Height = Math.Max(1, source.Height / scale);
+
+        if (_shell.Child is Control content)
+        {
+            content.Opacity = 0;
+            content.IsHitTestVisible = false;
+        }
     }
 
     private static IMarketplaceUiService CreateDefaultMarketplace(ILocalizer localizer)
@@ -262,7 +305,220 @@ public sealed class SettingsWindow : Window, ILocalizable
             Avalonia.Threading.Dispatcher.UIThread.Post(VerifyAlphaOrFallBack,
                 Avalonia.Threading.DispatcherPriority.Background);
         }
+
+        if (_entranceSource is not null)
+        {
+            Dispatcher.UIThread.Post(StartEntranceAnimation, DispatcherPriority.Loaded);
+        }
     }
+
+    /// <summary>Starts the window expansion from the island shell rectangle.</summary>
+    private void StartEntranceAnimation()
+    {
+        if (_closed || _entranceStarted)
+        {
+            return;
+        }
+
+        if (_entranceSource is not { } source || ResolveTarget(source) is not { } target)
+        {
+            RevealContent();
+            return;
+        }
+
+        _entranceStarted = true;
+        var from = CurrentPixelRect(_entranceScale, source);
+        AnimateGeometry(from, target, _entranceScale, EntranceDuration, EaseOutCubic, RevealContent);
+    }
+
+    private PixelRect? ResolveTarget(LayeredRect source)
+    {
+        var screen = Screens.ScreenFromPoint(new PixelPoint(source.X, source.Y)) ?? Screens.Primary;
+        if (screen is null)
+        {
+            return null;
+        }
+
+        var scale = screen.Scaling > 0 && double.IsFinite(screen.Scaling) ? screen.Scaling : _entranceScale;
+        var width = Math.Max(1, (int)Math.Round(SettingsMetrics.WindowWidth * scale));
+        var height = Math.Max(1, (int)Math.Round(SettingsMetrics.WindowHeight * scale));
+        var work = screen.WorkingArea;
+        return new PixelRect(
+            work.X + Math.Max(0, (work.Width - width) / 2),
+            work.Y + Math.Max(0, (work.Height - height) / 2),
+            width,
+            height);
+    }
+
+    private PixelRect CurrentPixelRect(double scale, LayeredRect fallback)
+    {
+        var bounds = Bounds;
+        var width = (int)Math.Round(bounds.Width * scale);
+        var height = (int)Math.Round(bounds.Height * scale);
+        if (width <= 0 || height <= 0)
+        {
+            return new PixelRect(fallback.X, fallback.Y, fallback.Width, fallback.Height);
+        }
+
+        return new PixelRect(Position.X, Position.Y, width, height);
+    }
+
+    private void AnimateGeometry(PixelRect from, PixelRect to, double scale, TimeSpan duration,
+        Func<double, double> easing, Action completed)
+    {
+        _geometryTimer?.Stop();
+        _geometryAnimating = true;
+        var stopwatch = Stopwatch.StartNew();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
+        timer.Tick += (_, _) =>
+        {
+            var progress = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
+            var eased = easing(progress);
+            var rect = new PixelRect(
+                (int)Math.Round(from.X + ((to.X - from.X) * eased)),
+                (int)Math.Round(from.Y + ((to.Y - from.Y) * eased)),
+                Math.Max(1, (int)Math.Round(from.Width + ((to.Width - from.Width) * eased))),
+                Math.Max(1, (int)Math.Round(from.Height + ((to.Height - from.Height) * eased))));
+            ApplyWindowRect(rect, scale);
+            if (progress < 1)
+            {
+                return;
+            }
+
+            timer.Stop();
+            if (ReferenceEquals(_geometryTimer, timer))
+            {
+                _geometryTimer = null;
+            }
+
+            _geometryAnimating = false;
+            ApplyCornerRegion("geometry-complete");
+            completed();
+        };
+        _geometryTimer = timer;
+        timer.Start();
+    }
+
+    private void ApplyWindowRect(PixelRect rect, double scale)
+    {
+        Position = new PixelPoint(rect.X, rect.Y);
+        Width = Math.Max(1, rect.Width / scale);
+        Height = Math.Max(1, rect.Height / scale);
+    }
+
+    private void RevealContent()
+    {
+        if (_shell.Child is not Control content || _closed)
+        {
+            return;
+        }
+
+        content.IsVisible = true;
+        content.IsHitTestVisible = true;
+        FadeContent(content, 0, 1, TimeSpan.FromMilliseconds(220));
+    }
+
+    private void FadeContent(Control content, double from, double to, TimeSpan duration, Action? completed = null)
+    {
+        _contentTimer?.Stop();
+        content.Opacity = from;
+        var stopwatch = Stopwatch.StartNew();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(15) };
+        timer.Tick += (_, _) =>
+        {
+            var progress = Math.Clamp(stopwatch.Elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
+            content.Opacity = from + ((to - from) * EaseOutCubic(progress));
+            if (progress < 1)
+            {
+                return;
+            }
+
+            timer.Stop();
+            if (ReferenceEquals(_contentTimer, timer))
+            {
+                _contentTimer = null;
+            }
+
+            completed?.Invoke();
+        };
+        _contentTimer = timer;
+        timer.Start();
+    }
+
+    /// <summary>Plays the return-to-island animation before allowing the window to close.</summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (_entranceSource is not null && !_allowClose && !_exitStarted)
+        {
+            e.Cancel = true;
+            StartExitAnimation();
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    private void StartExitAnimation()
+    {
+        if (_exitStarted || _closed)
+        {
+            return;
+        }
+
+        _exitStarted = true;
+        _geometryTimer?.Stop();
+        _geometryTimer = null;
+        _geometryAnimating = false;
+
+        var source = _entranceSource!.Value;
+        var content = _shell.Child as Control;
+        if (content is not null)
+        {
+            content.IsHitTestVisible = false;
+        }
+
+        var from = CurrentPixelRect(_entranceScale, source);
+        if (content is { Opacity: > 0.01 })
+        {
+            FadeContent(content, content.Opacity, 0, TimeSpan.FromMilliseconds(120),
+                () => StartExitGeometry(from, source, content));
+        }
+        else
+        {
+            StartExitGeometry(from, source, content);
+        }
+    }
+
+    private void StartExitGeometry(PixelRect from, LayeredRect source, Control? content)
+    {
+        AnimateGeometry(from, new PixelRect(source.X, source.Y, source.Width, source.Height),
+            _entranceScale, ExitDuration, EaseInCubic, () =>
+            {
+                if (content is not null)
+                {
+                    content.IsVisible = false;
+                    content.Opacity = 0;
+                }
+
+                _allowClose = true;
+                Close();
+            });
+    }
+
+    /// <inheritdoc />
+    protected override void OnClosed(EventArgs e)
+    {
+        _closed = true;
+        _geometryTimer?.Stop();
+        _contentTimer?.Stop();
+        base.OnClosed(e);
+    }
+
+    private static double EaseOutCubic(double progress)
+        => 1 - Math.Pow(1 - progress, 3);
+
+    private static double EaseInCubic(double progress)
+        => progress * progress * progress;
 
     /// <summary>Ordered steps the first-frame preparation performed (empty until the window is shown).</summary>
     public IReadOnlyList<string> FirstFrameSteps => _firstFrameSteps;
@@ -346,7 +602,8 @@ public sealed class SettingsWindow : Window, ILocalizable
     /// <param name="reason">Why the region is being re-applied (kept in <see cref="RegionTrace"/>).</param>
     private void ApplyCornerRegion(string reason)
     {
-        if (_closed || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
+        if (_closed || _geometryAnimating
+            || TryGetPlatformHandle()?.Handle is not { } handle || handle == IntPtr.Zero)
         {
             return;
         }

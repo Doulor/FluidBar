@@ -289,6 +289,36 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Primary layered host (diagnostics/evidence), or null before start.</summary>
     public LayeredWindowHost? PrimaryWindow => _windows.Count > 0 ? _windows[0].Host : null;
 
+    /// <summary>
+    /// Current island shell rectangle in physical screen pixels, for window transitions that should
+    /// originate from the island itself. Returns false while the island is hidden or has no host yet.
+    /// </summary>
+    public bool TryGetAnchorPixelRect(out LayeredRect rect, out double scale)
+    {
+        rect = default;
+        scale = 1;
+        if (!_controller.HasRenderState || PrimaryWindow is not { } window)
+        {
+            return false;
+        }
+
+        var state = _controller.RenderState;
+        if (state.Form == ShellForm.Hidden || state.Opacity <= 0.01
+            || state.ShellWidth <= 0.5 || state.ShellHeight <= 0.5)
+        {
+            return false;
+        }
+
+        var placement = window.Placement;
+        scale = placement.Scale > 0 && double.IsFinite(placement.Scale) ? placement.Scale : 1;
+        rect = new LayeredRect(
+            placement.WindowPixel.X + (int)Math.Round(state.ShellOrigin.X * scale),
+            placement.WindowPixel.Y + (int)Math.Round(state.ShellOrigin.Y * scale),
+            (int)Math.Round(state.ShellWidth * scale),
+            (int)Math.Round(state.ShellHeight * scale));
+        return rect.Width > 0 && rect.Height > 0;
+    }
+
     /// <summary>Latest frame-timing sample for the advanced diagnostics setting (spec §9.3).</summary>
     public FrameStatsSnapshot FrameStats => _frameStats.Snapshot();
 

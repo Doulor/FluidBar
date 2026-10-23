@@ -361,8 +361,15 @@ internal sealed class TransientStripRenderer : IDisposable
             rect.MidY - (rect.Height / 2f * scale),
             rect.MidX + (rect.Width / 2f * scale),
             rect.MidY + (rect.Height / 2f * scale));
+        // The base fill follows the active material (liquid glass, simulated glass, obsidian) exactly like
+        // the current capsule; pressed/hover are state washes stacked on top, never a replacement.
+        DrawGlass(canvas, glass, alpha);
         var pressed = _frame.Pressed == slot;
-        DrawGlass(canvas, glass, alpha, pressed ? MiniRailLayout.PressedGlass : MiniRailLayout.Glass);
+        if (pressed)
+        {
+            DrawGlass(canvas, glass, alpha * 0.9f, MiniRailLayout.PressedGlass);
+        }
+
         if (hover > 0.001f)
         {
             // Same paint, colour only: the hover glass fades in with the shared progress.

@@ -1227,6 +1227,12 @@ internal sealed class AppBootstrap
             frameStats: _skiaHost,
             restartToInstall: RestartToInstall,
             pages: _pageRegistry);
+        if (_skiaHost is not null
+            && _skiaHost.TryGetAnchorPixelRect(out var anchor, out var anchorScale))
+        {
+            window.PrepareEntrance(anchor, anchorScale);
+        }
+
         window.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow = window;
         window.Show();

@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 预览带紧邻岛也跟随材质
+
+- 根因：DrawNeighbour 显式传了固定填充色，而材质钩子只在 fill 为 null 时生效。
+- 紧邻岛底色改走材质，按压/悬停变成叠加的状态色。
+- 测试补断言：紧邻岛区域液态 vs 黑曜石 >100 像素差异（改回固定色则失败）。
+- 全量 2668 测试绿。
+
 ## 2026-10-23 — 预览小岛（mini rail）支持液态玻璃
 
 - TransientStripRenderer 增加 GlassPainter 钩子，走与壳体相同的 TryPaintBackdropSurface 入口。
