@@ -311,3 +311,22 @@
   壳体内停留抑制、拖动永不触发、刚交互抑制、最短保持、冷却期不重复触发、手动恢复、历史有界、灵敏度差异。
 - 过程中修掉两个真 bug：`long.MinValue` 哨兵相减溢出（导致"刚交互"恒为真，永远不会让位）、
   以及停留时间用了"距上一帧"（恒为 0）而不是"进入壳体以来的时长"。
+
+## 12. 智能让位 · 阶段二：真正能"让位"（输入穿透）
+
+- `LayeredWindowHost.SetInputPassthrough(bool)`：置位后 `HitTest` 对所有坐标返回 `HTTRANSPARENT`，
+  窗口继续绘制但不再接收鼠标输入；`InputPassthrough` 暴露给状态机与测试。
+- `IslandMouseHook`：
+  - 新增 `PointerMovedAnywhere(x, y)`：每次 WM_MOUSEMOVE 都回调（钩子回调内只做一次委托调用，保持轻量），
+    给意图引擎提供"接近轨迹"，不需要轮询 `GetCursorPos`。
+  - 新增 `PassThrough`：让位时钩子不再吞掉岛矩形内的点击/滚轮（`Classify` 直接返回 Outside），
+    桌面拿到点击。注意这是**真正的输入路径**：分层窗口上的点击本来就由这个钩子消费。
+- `ForegroundWindowProbe`（Platform）：按需 `GetForegroundWindow` + `GetWindowRect` + 监视器工作区，
+  判断"前台窗口是否最大化/全屏并覆盖到岛的位置"；不枚举窗口列表。
+- `SmartYieldCoordinator`（App）：把钩子位置流喂给 Core 的 `YieldEngine`，把引擎输出翻译成
+  `SetInputPassthrough` + `hook.PassThrough`；上下文（前台窗口/拖动）最多每 100 ms 刷新一次。
+  隐藏时（壳不可见）自动回到 Interactive。
+- 开关：`FLUIDBAR_SMART_YIELD=1`（设置项待接）。日志事件 `island.yield.transition` / `island.yield.restore`。
+- 测试：`SmartYieldCoordinatorTests`（4 例：快速接近让位并在离开后恢复、刚点过岛不让位、拖动不让位、隐藏时恢复）。
+- 又抓到两个同源 bug：`long.MinValue` 当作"从未"哨兵时与 `nowMs` 相减溢出，导致上下文缓存永不刷新 /
+  交互抑制恒为真。统一改成可空时间戳。

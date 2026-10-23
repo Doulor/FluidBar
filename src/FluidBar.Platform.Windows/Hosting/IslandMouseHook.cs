@@ -55,6 +55,18 @@ public sealed class IslandMouseHook : IDisposable
     public event Action<float, float>? PointerMoved;
 
     /// <summary>
+    /// Every pointer move anywhere on the desktop (physical pixels). Used by the smart-yield engine to
+    /// see approach trajectories; subscribers must stay cheap because this runs inside the hook callback.
+    /// </summary>
+    public event Action<int, int>? PointerMovedAnywhere;
+
+    /// <summary>
+    /// When true the hook stops consuming clicks and wheel deltas inside the island rectangles, so the
+    /// desktop below receives them (the "yielding" state). Movement forwarding continues.
+    /// </summary>
+    public bool PassThrough { get; set; }
+
+    /// <summary>
     /// Pointer moved inside an island rectangle with the left button held. Layered windows only get a
     /// drag when they receive the press and capture the mouse; the hook consumes the press, so the
     /// host rebuilds the drag gesture from these moves.
@@ -277,6 +289,11 @@ public sealed class IslandMouseHook : IDisposable
             PointerMoved?.Invoke(x, y);
         }
 
+        if (message == WmMouseMove && PointerMovedAnywhere is { } anywhere)
+        {
+            anywhere(x, y);
+        }
+
         if (route.WheelNotches is { } notches)
         {
             Wheel?.Invoke(notches);
@@ -299,6 +316,12 @@ public sealed class IslandMouseHook : IDisposable
 
     private HookRegionKind ClassifyLocked(int x, int y)
     {
+        if (PassThrough)
+        {
+            // Yielding: the island is visible but must not take any input.
+            return HookRegionKind.Outside;
+        }
+
         lock (_gate)
         {
             return Classify(_regions, _watchRegions, x, y);

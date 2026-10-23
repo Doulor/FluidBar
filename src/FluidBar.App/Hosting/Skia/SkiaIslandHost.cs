@@ -144,6 +144,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Blurred desktop capture for the liquid-glass material (throttled internally).</summary>
     private readonly IslandBackdropProvider _backdrop;
 
+    /// <summary>Predictive yield (null unless enabled); feeds the mouse hook stream into Core.</summary>
+    private SmartYieldCoordinator? _smartYield;
+
     private const int FollowMousePollMs = 250;
 
     private PlatformMessageHost? _messageHost;
@@ -568,6 +571,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
         _backdrop.Updated -= OnBackdropUpdated;
+        if (_mouseHook is not null)
+        {
+            _mouseHook.PointerMovedAnywhere -= OnHookPointerMovedAnywhere;
+            _mouseHook.PointerPressed -= OnHookPointerPressedForYield;
+        }
+
+        _smartYield?.Dispose();
+        _smartYield = null;
         _uiaSource.Dispose();
         _controller.Dispose();
         _backdrop.Dispose();
@@ -691,6 +702,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
         _mouseHook.OutsidePressed += OnHookOutsidePressed;
+        StartSmartYield();
         // Started at the end of StartAsync, after the controller has a render state and the first
         // frame is on screen: a hook that consumes clicks before that would swallow them into a
         // controller that cannot hit-test yet (the classic "first click after launch does nothing").
@@ -1940,6 +1952,75 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // Accessibility must never break the island: a provider failure leaves the last tree.
             _logger.Warning(LogCategories.Render, "island.skia.uia-refresh-failed",
                 "Publishing the island accessibility snapshot failed.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Starts the predictive yield coordinator when enabled (FLUIDBAR_SMART_YIELD=1 until the settings
+    /// row lands). It only observes pointer movement and flips input pass-through; every decision lives
+    /// in <see cref="FluidBar.Core.Interaction.YieldEngine"/>.
+    /// </summary>
+    private void StartSmartYield()
+    {
+        if (Environment.GetEnvironmentVariable("FLUIDBAR_SMART_YIELD") != "1" || _mouseHook is null)
+        {
+            return;
+        }
+
+        _smartYield = new SmartYieldCoordinator(
+            new FluidBar.Core.Interaction.YieldOptions(),
+            ShellForYield,
+            ApplyYieldPassthrough,
+            _logger);
+        _mouseHook.PointerMovedAnywhere += OnHookPointerMovedAnywhere;
+        _mouseHook.PointerPressed += OnHookPointerPressedForYield;
+        _logger.Information(LogCategories.Render, "island.yield.enabled",
+            "Smart yield enabled (predictive input pass-through).");
+    }
+
+    private void OnHookPointerMovedAnywhere(int x, int y) => _smartYield?.PointerMoved(x, y);
+
+    private void OnHookPointerPressedForYield(float x, float y) => _smartYield?.NoteInteraction();
+
+    /// <summary>Shell rectangle in physical screen pixels plus the drag flag, or null when hidden.</summary>
+    private ((int X, int Y, int Width, int Height) Shell, bool Dragging)? ShellForYield()
+    {
+        if (_windows.Count == 0)
+        {
+            return null;
+        }
+
+        var entry = _windows[0];
+        var state = _controller.RenderState;
+        if (!state.IsVisible)
+        {
+            return null;
+        }
+
+        var surface = entry.Host.SurfaceSizeDip;
+        var scale = surface.WidthDip > 0 ? entry.Host.Placement.WindowPixel.Width / surface.WidthDip : 1.0;
+        var placement = entry.Host.Placement.WindowPixel;
+        var dragging = _hookDragActive || _controller.IsWindowDragging || _windows.Any(w => w.DragActive);
+        return (
+            (
+                placement.X + (int)Math.Round(state.ShellOrigin.X * scale),
+                placement.Y + (int)Math.Round(state.ShellOrigin.Y * scale),
+                (int)Math.Round(state.ShellWidth * scale),
+                (int)Math.Round(state.ShellHeight * scale)),
+            dragging);
+    }
+
+    /// <summary>Applies the yielding state to every window and to the mouse hook's click consumption.</summary>
+    private void ApplyYieldPassthrough(bool passThrough)
+    {
+        foreach (var entry in _windows)
+        {
+            entry.Host.SetInputPassthrough(passThrough);
+        }
+
+        if (_mouseHook is not null)
+        {
+            _mouseHook.PassThrough = passThrough;
         }
     }
 

@@ -189,7 +189,7 @@ public sealed partial class LayeredWindowHost
 
     private int HitTest(IntPtr lParam)
     {
-        if (!_visible)
+        if (!_visible || _inputPassthrough)
         {
             return NativeMethods.HTTRANSPARENT;
         }

@@ -59,6 +59,7 @@ public sealed partial class LayeredWindowHost : IDisposable
     private LayeredSurface? _surface;
     private LayeredFramePacer? _pacer;
     private IntPtr _hwnd;
+    private bool _inputPassthrough;
     private IntPtr _screenDc;
     private LayeredHostMode _mode = LayeredHostMode.Float;
     private MonitorInfo? _monitor;
@@ -108,6 +109,16 @@ public sealed partial class LayeredWindowHost : IDisposable
 
     /// <summary>The host HWND, or <see cref="IntPtr.Zero"/> before <see cref="Create"/> / after dispose.</summary>
     public IntPtr Handle => _hwnd;
+
+    /// <summary>
+    /// True while the island yields: hit-testing reports <c>HTTRANSPARENT</c> everywhere so the desktop
+    /// below receives clicks. The visual surface keeps painting.
+    /// </summary>
+    public bool InputPassthrough => _inputPassthrough;
+
+    /// <summary>Toggles input pass-through (the smart-yield "yielding" state).</summary>
+    /// <param name="enabled">True to stop consuming pointer input.</param>
+    public void SetInputPassthrough(bool enabled) => _inputPassthrough = enabled;
 
     /// <summary>
     /// Whether the window is excluded from screen captures (<c>WDA_EXCLUDEFROMCAPTURE</c>). Required by

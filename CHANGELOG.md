@@ -2,6 +2,15 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 智能让位（阶段二）：输入穿透 + 前台窗口上下文
+
+- `LayeredWindowHost.SetInputPassthrough`：让位时 HitTest 全返回 HTTRANSPARENT（画着但不吃输入）。
+- `IslandMouseHook.PointerMovedAnywhere`（每次 WM_MOUSEMOVE 回调，供轨迹判断）+ `PassThrough`（让位时不再吞点击）。
+- `ForegroundWindowProbe`：按需判断前台窗口是否最大化/全屏且覆盖岛的位置，不枚举窗口。
+- `SmartYieldCoordinator`：钩子位置流 → Core 引擎 → 输入穿透；上下文 100 ms 节流；岛隐藏时自动恢复。
+- 开关 `FLUIDBAR_SMART_YIELD=1`；4 个协调器测试；修复 `long.MinValue` 哨兵溢出的两处同源 bug。
+- 全量 2660 测试绿；带让位开关的冒烟 137 帧退出码 0。
+
 ## 2026-10-23 — 智能让位（阶段一）：核心状态机 YieldEngine
 
 - 新增 `FluidBar.Core/Interaction/YieldEngine.cs`：四状态（Interactive/Candidate/Yielding/Cooldown）、
