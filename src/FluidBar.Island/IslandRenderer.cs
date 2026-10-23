@@ -387,7 +387,10 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawScene(SKCanvas canvas, in IslandRenderState state, float dpiScale)
     {
-        var yield = (float)Math.Clamp(state.YieldProgress, 0, 1);
+        // A non-finite progress would make the layer alpha a byte-cast of NaN → 0 (invisible island).
+        var yield = double.IsFinite(state.YieldProgress)
+            ? (float)Math.Clamp(state.YieldProgress, 0, 1)
+            : 0f;
         if (yield <= 0.002f)
         {
             DrawSceneWithMaterialBlend(canvas, state, dpiScale);
@@ -396,8 +399,7 @@ public sealed class IslandRenderer : IDisposable
 
         // "Soften" yield: one scene-level layer so the effect is identical for obsidian, simulated glass
         // and liquid glass — blur + desaturation + fade applied to whatever was drawn, never per material.
-        var shell = IslandMetrics.ShellRect(state);
-        var clip = SKRect.Inflate(shell, 28f, 28f);
+        var clip = SceneClip(state);
         var blurDip = state.ShellWidth * state.ShellHeight <= YieldTokens.MaxBlurAreaDip2
             ? YieldTokens.SoftenBlurDip * yield
             : 0f;
@@ -412,11 +414,40 @@ public sealed class IslandRenderer : IDisposable
         }
 
         canvas.Save();
-        canvas.ClipRect(clip, SKClipOperation.Intersect, antialias: true);
+        if (clip is { } bounds)
+        {
+            canvas.ClipRect(bounds, SKClipOperation.Intersect, antialias: true);
+        }
+
         canvas.SaveLayer(paint);
         DrawSceneWithMaterialBlend(canvas, state, dpiScale);
         canvas.Restore();
         canvas.Restore();
+    }
+
+    /// <summary>
+    /// Bounds of everything the scene may paint: the shell, the split capsules and the stacked ghosts.
+    /// Null when the shell is degenerate (mode transition), in which case the caller must not clip at all
+    /// instead of clipping the island away.
+    /// </summary>
+    private static SKRect? SceneClip(in IslandRenderState state)
+    {
+        var shell = IslandMetrics.ShellRect(state);
+        if (shell.Width < 8 || shell.Height < 4)
+        {
+            return null;
+        }
+
+        // Split capsules and stacked ghosts live outside the shell. Rather than guessing their bounds (a
+        // too-tight clip cut the capsules off when the island softened — reported 2026-10-23), those
+        // scenes are not clipped at all; the layer then covers the damage rect, which is still cheap for
+        // the few frames a soften lasts.
+        if ((state.SplitIslets.Length > 0 && state.SplitProgress > 0.01) || state.GhostCount > 0)
+        {
+            return null;
+        }
+
+        return SKRect.Inflate(shell, 48f, 48f);
     }
 
     /// <summary>Luminance-preserving saturation matrix (alpha untouched).</summary>
@@ -935,7 +966,13 @@ public sealed class IslandRenderer : IDisposable
         var splitVisible = state.SplitIslets.Length > 0 && state.SplitProgress > 0.01;
         _fill.Style = SKPaintStyle.Fill;
         _fill.Shader = null;
-        _fill.BlendMode = blend == SKBlendMode.SrcOver && splitVisible ? SKBlendMode.Src : blend;
+
+        // Src keeps the capsule and pill interiors byte-identical, but only for *opaque* fills: in the
+        // backdrop path it would replace the blurred desktop with a 30 % tint and the shell turned see-
+        // through whenever the split capsules were on screen (reported 2026-10-23).
+        _fill.BlendMode = blend == SKBlendMode.SrcOver && splitVisible && !useBackdrop
+            ? SKBlendMode.Src
+            : blend;
         _fill.Color = useBackdrop
             ? Alpha(_theme.Background, (float)(LiquidGlassTokens.BackdropTintAlpha * AdaptiveTint(state.BackdropLuminance)) * opacity)
             : splitVisible

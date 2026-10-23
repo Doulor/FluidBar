@@ -2009,6 +2009,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             _mouseHook.PassThrough = passThrough;
         }
+
+        // The frame clock is stopped while the island idles; without this the fade would not start and the
+        // island could be left half faded (looked "pure transparent" on a dark desktop).
+        EnsureFrameLoop();
     }
 
     private void OnBackdropUpdated()

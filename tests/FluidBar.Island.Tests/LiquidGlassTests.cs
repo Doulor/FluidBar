@@ -215,6 +215,36 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Soften_does_not_clip_the_split_capsules()
+    {
+        var theme = Liquid;
+        var islets = new List<IslandSplitIslet>
+        {
+            new(ActivityKind.Agent, IconKind.Agent, "Agent", "运行中", PageRef.Agent, 0, null, true),
+        };
+        var state = IslandTestFixtures.MediaCompact() with
+        {
+            Theme = theme,
+            SplitProgress = 1,
+            SplitIsletHeight = 40,
+            SplitIslets = islets.ToArray(),
+        };
+        using var renderer = new IslandRenderer(theme);
+        using var sharp = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        using var softened = renderer.RenderToBitmap(state with { YieldProgress = 1 }, IslandTestFixtures.Scale);
+
+        var ball = IslandMetrics.SplitIsletRects(state)[0];
+        var x = (int)Math.Round((ball.Left + (ball.Width * 0.25)) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((ball.MidY + (ball.Height * 0.25)) * IslandTestFixtures.Scale);
+
+        var sharpAlpha = sharp.GetPixel(x, y).Alpha;
+        var softenedAlpha = softened.GetPixel(x, y).Alpha;
+
+        Assert.True(sharpAlpha > 60, $"the capsule must be painted while normal, got {sharpAlpha}");
+        Assert.True(softenedAlpha > 10, $"the soften layer must not clip the capsule away, got {softenedAlpha}");
+    }
+
+    [Fact]
     public void Split_capsules_render_the_backdrop_like_the_shell()
     {
         var theme = Liquid;
