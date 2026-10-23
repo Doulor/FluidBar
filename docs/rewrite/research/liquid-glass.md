@@ -530,3 +530,21 @@
 分层窗口是 per-pixel-alpha 的，**局部更新**（`prcDirty`）时未被更新的区域在某些驱动/DWM 路径下会被合成成
 透明 —— 正好对应"每秒有一小部分时间透明"。现在 `LayeredHostOptions.FullFrameCommits = true`（App 侧开启），
 每帧上传整张表面；平台层仍保留局部更新能力与对应测试。
+
+### 15.12 闪透明的真正原因：直接画进"正在显示"的 DIB（2026-10-23）
+
+决定性线索：上一轮把抓屏间隔 400 → 120 ms 后，**闪烁频率也跟着变成 2–3 倍**。频率跟着抓屏走 → 问题在
+"每次抓屏触发的那次重绘"，而不是抓屏本身。
+
+根因：我们一直把场景**直接画进分层窗口的 DIB**（`SKSurface.Create(info, frame.Bits, frame.Stride)`）。
+这个 DIB 就是 Windows 正在显示的内容 —— 只要某一帧画到一半（异常、并发重绘、只画了一部分），
+**屏幕立刻就能看到半张透明表面**。抓屏越频繁，打断重绘的机会越多，所以闪得越快。
+
+修复（原子帧）：
+
+1. `EnsureSurface` 改为**离屏 SKSurface**（自己分配像素），场景画在离屏表面上。
+2. 每帧画完后 `CopySurfaceToFrame` 一次性 memcpy 进 DIB（约 4.4 MB，<1 ms），再做 `UpdateLayeredWindow`。
+   任何绘制失败/中断都不会再出现在屏幕上。
+3. 离屏表面刚重建时置 `SurfaceNeedsFull`，保证第一帧是整帧绘制（否则只有局部内容）。
+4. 顺手修了一个真 bug：`OnBackdropUpdated` 之前在**抓屏线程**上调 `EnsureFrameLoop()`（帧时钟/控制器非线程安全），
+   现在整段都在 UI 线程的 `_dispatcher.Post` 里。

@@ -2041,6 +2041,23 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private static string RenderClockMark()
         => DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>Copies the finished off-screen surface into the layered DIB (one memcpy per frame).</summary>
+    private static void CopySurfaceToFrame(SKSurface surface, in LayeredFrame frame)
+    {
+        using var pixmap = surface.PeekPixels();
+        if (pixmap is null)
+        {
+            return;
+        }
+
+        var source = pixmap.GetPixelSpan();
+        var destination = frame.Pixels;
+        if (source.Length == destination.Length)
+        {
+            source.CopyTo(destination);
+        }
+    }
+
     private static SKBitmap? CopyImage(SKImage image)
     {
         if (image.Width <= 0 || image.Height <= 0)
@@ -2060,8 +2077,6 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private void OnBackdropUpdated()
     {
-        // The luminance ramp needs frames; the clock is stopped while the island idles.
-        EnsureFrameLoop();
         if (_disposed)
         {
             return;
@@ -2069,10 +2084,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         _dispatcher.Post(() =>
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                PaintBackdropFrame();
+                return;
             }
+
+            // The luminance ramp needs frames; the clock is stopped while the island idles. Must run on
+            // the UI thread: the frame clock and controller are not thread-safe.
+            EnsureFrameLoop();
+            PaintBackdropFrame();
         });
     }
 
@@ -2271,10 +2291,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         try
         {
-            if (change.FullFrame)
+            if (change.FullFrame || entry.SurfaceNeedsFull)
             {
                 _renderer.Render(surface.Canvas, renderState, scale);
                 surface.Canvas.Flush();
+                CopySurfaceToFrame(surface, frame);
+                entry.SurfaceNeedsFull = false;
                 var result = entry.Host.CommitFrame();
                 RecordCommit(entry, result, dirty: false);
             }
@@ -2296,6 +2318,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     scale,
                     new SKRect((float)damage.X, (float)damage.Y, (float)damage.Right, (float)damage.Bottom));
                 surface.Canvas.Flush();
+                CopySurfaceToFrame(surface, frame);
                 var pixelDamage = LayeredRect.FromDip(damage, frame.Scale);
                 var result = entry.Host.CommitFrame(pixelDamage);
                 RecordCommit(entry, result, dirty: true);
@@ -2371,9 +2394,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         entry.Surface?.Dispose();
+
+        // Draw off-screen and copy into the layered DIB only after the frame is complete. The DIB is what
+        // Windows displays, so painting into it directly meant a failed/partial draw showed up as a
+        // half-cleared (transparent) island for a frame — the "island blinks" report of 2026-10-23.
         var info = new SKImageInfo(frame.WidthPx, frame.HeightPx, SKColorType.Bgra8888, SKAlphaType.Premul);
-        entry.Surface = SKSurface.Create(info, frame.Bits, frame.Stride)
-            ?? throw new InvalidOperationException("Skia could not wrap the layered DIB surface.");
+        entry.Surface = SKSurface.Create(info)
+            ?? throw new InvalidOperationException("Skia could not create the island surface.");
+        entry.SurfaceNeedsFull = true;
         entry.SurfaceBits = frame.Bits;
         entry.SurfaceWidth = frame.WidthPx;
         entry.SurfaceHeight = frame.HeightPx;
@@ -2719,6 +2747,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         public LayeredWindowHost Host { get; }
+
+        /// <summary>True when the off-screen surface was just (re)created and still needs one full paint.</summary>
+        public bool SurfaceNeedsFull { get; set; }
 
         /// <summary>Fresh monitor snapshot for this window (work area/DPI updated on display changes).</summary>
         public CoreMonitorInfo Monitor { get; set; }
