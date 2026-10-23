@@ -19,6 +19,25 @@ public static class LiquidGlassTokens
     /// <summary>Tint alpha painted over the blurred backdrop (backdrop mode).</summary>
     public const double BackdropTintAlpha = 0.30;
 
+    /// <summary>Adaptive tint range: the selected 30 % tint scales between these bounds with backdrop luminance.</summary>
+    public const double BackdropTintMinFactor = 0.90;
+
+    /// <summary>Adaptive tint upper bound.</summary>
+    public const double BackdropTintMaxFactor = 1.40;
+
+    /// <summary>
+    /// Lens magnification of the backdrop inside the rim band (1.0 = no refraction). The band re-draws
+    /// the blurred desktop scaled about the shell centre, so the rim pulls in content from just outside
+    /// the silhouette — the cheap Skia equivalent of the prototype's SDF displacement.
+    /// </summary>
+    public const double RefractionScale = 1.05;
+
+    /// <summary>Width of the refraction band in DIP.</summary>
+    public const double RefractionBandDip = 11.0;
+
+    /// <summary>Opacity of the refracted band.</summary>
+    public const double RefractionOpacity = 0.92;
+
     /// <summary>Narrowest lensing rim band in DIP (compact pill).</summary>
     public const double RimBandMinDip = 4.5;
 

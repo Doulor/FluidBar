@@ -81,8 +81,10 @@ captures the window rect, downsamples 1/6 + bakes a Gaussian blur into an `SKIma
 rect (≤2), throttled to 400 ms with a hard 120 ms floor (a drag stays ≤1 frame stale), re-captured when
 the window moves; capture failure is non-fatal. Captures only happen inside a rendered frame, so the
 idle island still produces zero frames.
-GDI capture returns the wallpaper layer only (DWM windows are not included) — window content would need
-`Windows.Graphics.Capture`.
+Capture backend: `WgcBackdropCapture` (Windows.Graphics.Capture + Vortice.Direct3D11) reads the
+**composed** desktop (windows included); GDI `BitBlt` is the fallback for sessions where WGC is unavailable
+(it only sees the wallpaper layer). The session stops after 5 s without a request, and a finished capture
+paints one frame (`PaintBackdropFrame`) so an idle island still shows the new backdrop.
 For both glass tiers the baked shadow is cut out of the shell silhouette so the fill actually shows the
 desktop. Detail + measured numbers: [../research/liquid-glass.md](../research/liquid-glass.md). The
 Obsidian fill never goes below 0.85 opacity for text-bearing states.

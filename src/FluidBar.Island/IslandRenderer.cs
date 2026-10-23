@@ -922,9 +922,13 @@ public sealed class IslandRenderer : IDisposable
         // which still guards against an accent-tinted rim ever coming back).
     }
 
-    /// <summary>Adaptive tint multiplier: 0.6× on a dark desktop, 1.4× on a bright one (0.18–0.42 alpha).</summary>
+    /// <summary>
+    /// Adaptive tint multiplier around the selected 30 % tint (0.85×–1.15×): the prototype look stays
+    /// recognisable, but a very bright desktop still gets a slightly heavier tint for label contrast.
+    /// </summary>
     private static double AdaptiveTint(double luminance)
-        => 0.6 + (0.8 * Math.Clamp(luminance, 0, 1));
+        => LiquidGlassTokens.BackdropTintMinFactor
+            + ((LiquidGlassTokens.BackdropTintMaxFactor - LiquidGlassTokens.BackdropTintMinFactor) * Math.Clamp(luminance, 0, 1));
 
     /// <summary>Paints the blurred desktop capture inside the shell silhouette (liquid glass).</summary>
     private void DrawBackdrop(SKCanvas canvas, in IslandRenderState state, SKPath path, SKImage backdrop, float opacity)
@@ -944,8 +948,63 @@ public sealed class IslandRenderer : IDisposable
         _glassPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(opacity * 255f, 0, 255));
         canvas.DrawImage(backdrop, source, destination, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
         _glassPaint.Color = SKColors.White;
+
+        // Lens band: re-draw the same backdrop magnified about the shell centre inside a rim-width band.
+        // Near the edge the sample therefore comes from just outside the silhouette, which is what the
+        // prototype's SDF displacement map does per pixel — one extra blit instead of a per-pixel warp.
+        var bandDip = state.RefractionBandDip > 0
+            ? state.RefractionBandDip
+            : Math.Clamp(
+                state.ShellHeight * LiquidGlassTokens.RimBandHeightFactor,
+                LiquidGlassTokens.RimBandMinDip,
+                LiquidGlassTokens.RimBandMaxDip);
+        if (state.RefractionScale > 1.001 && bandDip >= 1)
+        {
+            var band = LensBand(path, bandDip);
+            var centre = new SKPoint((float)state.ShellWidth / 2f, (float)state.ShellHeight / 2f);
+            var s = (float)state.RefractionScale;
+            var scaled = new SKRect(
+                centre.X + ((destination.Left - centre.X) * s),
+                centre.Y + ((destination.Top - centre.Y) * s),
+                centre.X + ((destination.Right - centre.X) * s),
+                centre.Y + ((destination.Bottom - centre.Y) * s));
+
+            canvas.Save();
+            canvas.ClipPath(band, SKClipOperation.Intersect, antialias: true);
+            _glassPaint.Color = SKColors.White.WithAlpha(
+                (byte)Math.Clamp(opacity * LiquidGlassTokens.RefractionOpacity * 255f, 0, 255));
+            canvas.DrawImage(backdrop, source, scaled, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
+            _glassPaint.Color = SKColors.White;
+            canvas.Restore();
+        }
+
         canvas.Restore();
     }
+
+    /// <summary>
+    /// Rim band of the shell silhouette: the path stroked to twice the band width, then clipped inside
+    /// the path. Cached per shell size so an idle frame allocates nothing.
+    /// </summary>
+    private SKPath LensBand(SKPath path, double bandDip)
+    {
+        var key = (Math.Round((double)path.Bounds.Width * 2), Math.Round((double)path.Bounds.Height * 2), Math.Round(bandDip * 10));
+        if (_lensBand is not null && _lensKey == key)
+        {
+            return _lensBand;
+        }
+
+        _lensBand?.Dispose();
+        _strokePaint.Style = SKPaintStyle.Stroke;
+        _strokePaint.StrokeWidth = (float)bandDip * 2f;
+        _lensBand = _strokePaint.GetFillPath(path) ?? new SKPath();
+        _strokePaint.Style = SKPaintStyle.Fill;
+        _lensKey = key;
+        return _lensBand;
+    }
+
+    private SKPath? _lensBand;
+    private (double Width, double Height, double Band) _lensKey;
+    private readonly SKPaint _strokePaint = new() { IsAntialias = true };
 
     private SKShader GetGlassShader(float height)
     {
@@ -1228,6 +1287,9 @@ public sealed class IslandRenderer : IDisposable
         _strip.Dispose();
         _glassShader?.Dispose();
         _glassShader = null;
+        _lensBand?.Dispose();
+        _lensBand = null;
+        _strokePaint.Dispose();
         _liquidGlass.Dispose();
         _fill.Dispose();
         _stroke.Dispose();

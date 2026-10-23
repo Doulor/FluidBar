@@ -165,3 +165,47 @@
 用 `SystemParametersInfo` 换壁纸（注册表已更新为白图/草地图）后抓到的像素仍是 (14,30,52)，`CopyFromScreen`
 也不反映变化。因此"模糊里是否出现用户真实桌面内容"只能由用户在真实会话里目视确认；
 代码路径本身已确认走通（渲染帧内的壳体颜色 = 抓屏内容 × 0.7 + 染色）。
+
+## 10. 2026-10-23 定稿 B（折射玻璃）+ 窗口也能模糊（WGC）
+
+用户选定原型 **B · 折射玻璃**：`blur 10px / tint rgba(8,10,14,.30) / saturate 160% / edgeHighlight .40 / refraction 1.00×`，
+并明确要求"窗口也要能模糊"（GDI 只抓壁纸层不够）。
+
+### 10.1 参数落位（B）
+
+| 原型参数 | App 实现 |
+|---|---|
+| blur 10 px | `IslandBackdropProvider.BakeSigma = 2.5`（1/6 降采样空间，150% DPI ≈ 10 DIP） |
+| saturate 160% | `BackdropSaturation = 1.60`（保亮度矩阵） |
+| tint rgba(8,10,14,.30) | `LiquidGlassTokens.BackdropTintAlpha = 0.30` × 自适应 0.90–1.40 |
+| edgeHighlight 0.40 | `DrawEdgeOnly`：1 DIP 键线 0.28α + 镜面弧 0.55α + 底部焦散 + 冷边 |
+| refraction 1.00× | `RefractionScale = 1.05`，band 自动 = clamp(h×0.18, 4.5, 15) DIP |
+
+折射实现是"透镜带"：在壳体轮廓的 rim 带内用 `SKPaint.GetFillPath(描边宽度=2×band)` 得到带状裁剪，
+再把同一张背景图按 `RefractionScale` 绕壳体中心放大后重绘一次——边缘因此采样到轮廓外侧的内容，
+等价于原型 SDF 位移的宏观效果，但只多一次 blit。测试 `Refraction_band_refracts_the_backdrop_near_the_rim`
+用棋盘背景验证 rim 内平均亮度差 38/255。
+
+### 10.2 窗口模糊：Windows.Graphics.Capture
+
+- 新增 `FluidBar.Platform.Windows/Hosting/WgcBackdropCapture.cs`（依赖 `Vortice.Direct3D11` 3.6.2）：
+  `D3D11CreateDevice` → `CreateDirect3D11DeviceFromDXGIDevice` → `IGraphicsCaptureItemInterop.CreateForMonitor`
+  → `Direct3D11CaptureFramePool.CreateFreeThreaded(B8G8R8A8)` → `GraphicsCaptureSession`；
+  按需把帧纹理 `CopySubresourceRegion` 到同尺寸 staging 纹理再 `Map` 读回（只读岛所在的小矩形）。
+- `ScreenBackdropCapture.TryCapture` 先走 WGC，失败才回落 GDI（老系统/锁屏/远程会话）。
+- 帧池只保留"最新一帧"，桌面不变时 WGC 不产帧——正好符合"空闲 0 帧"；岛每 400 ms 取一次最新帧。
+- 会话空闲 5 s 自动停止（切回黑曜石/亚克力时不再占用 GPU）。
+- 抓屏完成后由 `IslandBackdropProvider.Updated` 事件通知宿主**补画一帧**（`PaintBackdropFrame`），
+  否则空闲中的岛要等到下次交互才显示模糊背景。
+
+### 10.3 验证
+
+- WGC 探针（`build/wgcprobe`）：`GraphicsCaptureSession.IsSupported = True`，显示器 2560×1600，
+  3 帧内取到画面；同一区域 WGC 读到 (207,180,202) 而 GDI 读到 (14,30,52)——两者看的是不同表面，
+  证实 GDI 拿不到合成桌面。
+- App 冒烟 121 帧退出码 0；紧凑态壳体在首帧后由 `#131315`（回落填充）变为 `#6c6f73` / `#93989d`
+  （模糊后的合成桌面），展开态 `#b19d9a`。
+- 全量测试：见本轮 STATUS（`Backdrop_mode…` 与 `Refraction_band…` 两个用例覆盖背景图与折射带）。
+
+**新增依赖**：`Vortice.Direct3D11`（Platform 项目）。**遗留**：`draw` 的文本在极亮壁纸上对比度仍偏低，
+可选做法是给文字加 1 DIP 阴影或提高 `BackdropTintMaxFactor`。

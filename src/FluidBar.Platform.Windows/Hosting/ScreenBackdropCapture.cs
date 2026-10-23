@@ -21,6 +21,8 @@ public readonly record struct BackdropFrame(int Width, int Height, int Stride, b
 /// </summary>
 public static class ScreenBackdropCapture
 {
+    private static readonly WgcBackdropCapture Wgc = new();
+
     /// <summary><c>WDA_EXCLUDEFROMCAPTURE</c>: the window is not included in captures at all.</summary>
     public const uint WdaExcludeFromCapture = 0x11;
 
@@ -61,6 +63,13 @@ public static class ScreenBackdropCapture
         if (width <= 0 || height <= 0 || width > 8192 || height > 4096)
         {
             return null;
+        }
+
+        // Windows.Graphics.Capture reads the *composed* desktop (windows included). GDI cannot see DWM
+        // windows, so it is only the fallback for machines/sessions where WGC is unavailable.
+        if (Wgc.TryCapture(x, y, width, height, out var composed))
+        {
+            return composed;
         }
 
         var screenDc = NativeMethods.User32.GetDC(IntPtr.Zero);

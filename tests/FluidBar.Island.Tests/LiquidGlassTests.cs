@@ -148,6 +148,60 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Refraction_band_refracts_the_backdrop_near_the_rim()
+    {
+        var theme = Liquid;
+        var state = CompactState(theme);
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var backdropBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(backdropBitmap))
+        {
+            canvas.Clear(new SKColor(0xF2, 0xE6, 0xD0));
+            using var dark = new SKPaint { Color = new SKColor(0x10, 0x20, 0x40) };
+            var cell = 40;
+            for (var by = 0; by < info.Height; by += cell)
+            {
+                for (var bx = 0; bx < info.Width; bx += cell)
+                {
+                    if (((bx / cell) + (by / cell)) % 2 == 0)
+                    {
+                        canvas.DrawRect(new SKRect(bx, by, bx + cell, by + cell), dark);
+                    }
+                }
+            }
+        }
+
+        using var image = SKImage.FromBitmap(backdropBitmap);
+        using var flat = renderer.RenderToBitmap(
+            state with { Backdrop = image, RefractionScale = 1.0 }, IslandTestFixtures.Scale);
+        using var lens = renderer.RenderToBitmap(
+            state with { Backdrop = image, RefractionScale = 1.25, RefractionBandDip = 18 }, IslandTestFixtures.Scale);
+
+        var shell = IslandMetrics.ShellRect(state);
+        double total = 0;
+        var samples = 0;
+        for (var dy = 3; dy <= 9; dy += 2)
+        {
+            for (var dx = (int)(shell.Width * 0.2); dx <= (int)(shell.Width * 0.8); dx += 7)
+            {
+                var px = (int)Math.Round((shell.Left + dx) * IslandTestFixtures.Scale);
+                var py = (int)Math.Round((shell.Top + dy) * IslandTestFixtures.Scale);
+                total += Math.Abs(Luma(lens.GetPixel(px, py)) - Luma(flat.GetPixel(px, py)));
+                samples++;
+            }
+        }
+
+        var meanDiff = total / Math.Max(1, samples);
+        Assert.True(
+            meanDiff > 1.5,
+            $"the rim band must sample different backdrop content (mean |diff| {meanDiff:0.00} over {samples} samples)");
+    }
+
+    [Fact]
     public void Backdrop_mode_paints_the_captured_desktop_instead_of_the_flat_tint()
     {
         var theme = Liquid;
@@ -182,10 +236,11 @@ public sealed class LiquidGlassTests
         using var withBackdrop = renderer.RenderToBitmap(
             state with { Backdrop = image }, IslandTestFixtures.Scale);
 
+        // Sample well inside the shell: the rim band and the key line make the outer 8 DIP non-flat.
         var shell = IslandMetrics.ShellRect(state);
-        var left = (int)Math.Round((shell.Left + 24) * IslandTestFixtures.Scale);
-        var right = (int)Math.Round((shell.Right - 24) * IslandTestFixtures.Scale);
-        var y = (int)Math.Round((shell.Top + (shell.Height * 0.62)) * IslandTestFixtures.Scale);
+        var left = (int)Math.Round((shell.Left + (shell.Width * 0.30)) * IslandTestFixtures.Scale);
+        var right = (int)Math.Round((shell.Left + (shell.Width * 0.70)) * IslandTestFixtures.Scale);
+        var y = (int)Math.Round((shell.Top + (shell.Height * 0.50)) * IslandTestFixtures.Scale);
 
         var flatLeft = Luma(flat.GetPixel(left, y));
         var flatRight = Luma(flat.GetPixel(right, y));

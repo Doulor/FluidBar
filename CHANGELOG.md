@@ -2,6 +2,20 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 液态玻璃定稿 B 版（折射玻璃）+ 窗口级背景模糊（WGC）
+
+- **定稿**：用户选定原型 B（`blur 10px / tint rgba(8,10,14,.30) / saturate 160% / edgeHighlight .40 / refraction 1.00×`）。
+  对应 `BakeSigma 2.5`（≈10 DIP）、`BackdropSaturation 1.60`、`BackdropTintAlpha 0.30`（自适应 0.90–1.40）、
+  `DrawEdgeOnly`（0.28α 键线 + 0.55α 镜面弧）、`RefractionScale 1.05` + 自动 rim 带。
+- **折射**：rim 带内把背景图绕壳体中心放大重绘（`LensBand` = 轮廓描边路径缓存），边缘采样轮廓外侧内容；
+  新增测试 `Refraction_band_refracts_the_backdrop_near_the_rim`（rim 内平均亮度差 38/255）。
+- **窗口级模糊**：新增 `WgcBackdropCapture`（Windows.Graphics.Capture + Vortice.Direct3D11），
+  抓取 **DWM 合成后的桌面**（含窗口）；WGC 不可用时回落 GDI。会话空闲 5 s 自动停止。
+- **抓屏完成补帧**：`IslandBackdropProvider.Updated` → `PaintBackdropFrame()`，空闲中的岛也会在抓屏落地后重绘一帧。
+- **依赖**：`FluidBar.Platform.Windows` 新增 `Vortice.Direct3D11` 3.6.2。
+- **验证**：WGC 探针 IsSupported=True、2560×1600、3 帧；同区域 WGC (207,180,202) vs GDI (14,30,52)；
+  App 冒烟 121 帧退出码 0；紧凑态由 `#131315` → `#93989d`（模糊桌面）。
+
 ## 2026-10-23 — 液态玻璃改为「真背景模糊」（抓屏 + 高斯烘焙）
 
 - **动机**：用户反馈第一版"像老式电视"——只有深色填充和一圈透镜/高光，没有背景模糊。液态玻璃的第一要素是

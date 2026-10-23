@@ -211,6 +211,12 @@ public readonly record struct IslandRenderState
     /// </summary>
     public double BackdropLuminance { get; init; } = 0.5;
 
+    /// <summary>Lens magnification of the backdrop inside the rim band (1.0 = no refraction).</summary>
+    public double RefractionScale { get; init; } = LiquidGlassTokens.RefractionScale;
+
+    /// <summary>Width of the refraction band in DIP (0 = scale with the shell height).</summary>
+    public double RefractionBandDip { get; init; }
+
     /// <summary>Detached mini-island strip state.</summary>
     public ArchipelagoState Archipelago { get; init; }
 

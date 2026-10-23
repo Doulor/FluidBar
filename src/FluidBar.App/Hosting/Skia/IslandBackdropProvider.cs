@@ -30,7 +30,10 @@ internal sealed class IslandBackdropProvider : IDisposable
     /// Backdrop saturation. Every reference implementation (rdev, archisvaze, Apple's .regular) lifts
     /// the saturation of the blurred backdrop — glass concentrates colour instead of greying it out.
     /// </summary>
-    private const float BackdropSaturation = 1.55f;
+    private const float BackdropSaturation = 1.60f;
+
+    /// <summary>Gaussian sigma at the 1/6 bake scale (2.5 ≈ a 10 DIP CSS blur at 150 % DPI).</summary>
+    private const float BakeSigma = 2.5f;
 
     private const int MaxEntries = 2;
 
@@ -45,6 +48,9 @@ internal sealed class IslandBackdropProvider : IDisposable
     private long _frame;
     private long _lastCaptureTicks;
     private bool _disposed;
+
+    /// <summary>Raised after a capture lands, so the host can paint one frame with the new backdrop.</summary>
+    public event Action? Updated;
 
     /// <summary>Number of successful captures (diagnostics).</summary>
     public long CaptureCount { get; private set; }
@@ -203,6 +209,16 @@ internal sealed class IslandBackdropProvider : IDisposable
 
             CaptureCount++;
         }
+
+        // Outside the lock: the host posts one frame so an idle island actually shows the new backdrop.
+        try
+        {
+            Updated?.Invoke();
+        }
+        catch (Exception)
+        {
+            // A subscriber failure must never break the capture loop.
+        }
     }
 
     /// <summary>Disposes images that no in-flight frame can still reference (UI thread, start of a frame).</summary>
@@ -249,7 +265,7 @@ internal sealed class IslandBackdropProvider : IDisposable
             {
                 // Box-downsample + a small Gaussian at the reduced resolution: sigma 2 at 1/6 scale is
                 // roughly a 12-18 px blur at device pixels, i.e. the 20-30 px CSS blur of the prototype.
-                paint.ImageFilter = SKImageFilter.CreateBlur(2.0f, 2.0f);
+                paint.ImageFilter = SKImageFilter.CreateBlur(BakeSigma, BakeSigma);
                 paint.ColorFilter = saturation;
                 paint.FilterQuality = SKFilterQuality.Medium;
                 canvas.DrawImage(source, new SKRect(0, 0, width, height), paint);

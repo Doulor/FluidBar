@@ -210,6 +210,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 () => _windows.Count, SurfaceBytes, _time);
         }
 
+        _backdrop.Updated += OnBackdropUpdated;
         _controller.SettingsRequested += () => SettingsRequested?.Invoke();
         _controller.MarketRequested += () => MarketRequested?.Invoke();
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
@@ -566,6 +567,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.PlacementRequested -= OnPlacementRequested;
         _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
+        _backdrop.Updated -= OnBackdropUpdated;
         _uiaSource.Dispose();
         _controller.Dispose();
         _backdrop.Dispose();
@@ -1934,6 +1936,49 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // Accessibility must never break the island: a provider failure leaves the last tree.
             _logger.Warning(LogCategories.Render, "island.skia.uia-refresh-failed",
                 "Publishing the island accessibility snapshot failed.", ex);
+        }
+    }
+
+    private void OnBackdropUpdated()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _dispatcher.Post(() =>
+        {
+            if (!_disposed)
+            {
+                PaintBackdropFrame();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Paints exactly one frame after a backdrop capture lands. The frame clock is stopped while the
+    /// island is idle, so without this the blurred desktop would only appear on the next interaction.
+    /// </summary>
+    private void PaintBackdropFrame()
+    {
+        if (_disposed || _rendering || _windows.Count == 0)
+        {
+            return;
+        }
+
+        _rendering = true;
+        try
+        {
+            RenderAllLocked(forceFull: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Render, "island.skia.backdrop-frame-failed",
+                "Painting the backdrop refresh frame failed.", ex);
+        }
+        finally
+        {
+            _rendering = false;
         }
     }
 

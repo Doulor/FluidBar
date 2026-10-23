@@ -166,14 +166,15 @@ internal sealed class LiquidGlassPainter : IDisposable
         canvas.Save();
         canvas.ClipPath(path, SKClipOperation.Intersect, antialias: true);
 
+        // Prototype "edge highlight 0.40": a 1 DIP key line at 0.28 alpha plus a softer specular arc.
         _stroke.StrokeWidth = 1f;
         _stroke.Shader = null;
-        _stroke.Color = SKColors.White.WithAlpha((byte)(0.09f * layer));
+        _stroke.Color = SKColors.White.WithAlpha((byte)(0.28f * layer));
         canvas.DrawPath(path, _stroke);
 
         _stroke.StrokeWidth = 1.6f;
         _stroke.Shader = set.Specular;
-        _stroke.Color = SKColors.White.WithAlpha(layer);
+        _stroke.Color = SKColors.White.WithAlpha((byte)(0.55f * layer));
         canvas.DrawPath(path, _stroke);
 
         _stroke.Shader = set.Caustic;

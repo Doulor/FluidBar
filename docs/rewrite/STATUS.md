@@ -8,6 +8,17 @@
 **灵动岛动画卡顿已修复**：60 fps 帧时钟原来被 50 ms 截止计时器每个 tick 停掉（`_lastRenderHappened` 参与停止判定），展开/悬停/波浪只能画 2–3 帧。现在帧时钟只由动画状态决定（`IslandFrameLoopPolicy`），实测展开 380 ms 走 24 帧、interval p50 15.9 ms，空闲 CPU 12.8% → 2.1%。
 
 
+## 2026-10-23 13:20 检查点（液态玻璃定稿 B + 窗口级模糊）
+
+- 用户选定 **B 折射玻璃**，并明确"窗口不能模糊必须做"。
+- 参数落位：BakeSigma 2.5 / Saturation 1.60 / Tint .30（自适应 .90–1.40）/ edgeHighlight .40 / RefractionScale 1.05 + 自动 rim 带。
+- 折射：rim 带 = 轮廓描边路径（缓存），带内把背景图放大 1.05 重绘；测试断言 rim 内亮度差 38/255。
+- 窗口模糊：`WgcBackdropCapture`（Windows.Graphics.Capture + Vortice.Direct3D11）为主路径，GDI 为回落；
+  会话空闲 5 s 自动停；抓屏落地后 `PaintBackdropFrame()` 补画一帧。
+- 验证：WGC 探针 IsSupported=True / 2560×1600 / 3 帧；同区域 WGC (207,180,202) vs GDI (14,30,52)；
+  冒烟 121 帧；紧凑态壳体 `#131315` → `#93989d`。
+- 遗留：极亮壁纸上白字对比度偏低（可选：文字 1 DIP 阴影 / 提高 tint 上限）。
+
 ## 2026-10-23 12:45 检查点（液态玻璃 = 真背景模糊）
 
 - 用户判定第一版不合格（"跟老式电视一样"）：只有深色填充 + 厚描边，没有背景模糊。
