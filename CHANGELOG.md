@@ -2,6 +2,16 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 窗口级模糊恢复（自抠图）+ 折射带羽化
+
+- **窗口级模糊 + 岛可见**：默认不再设 `WDA_EXCLUDEFROMCAPTURE`（它会让岛从抓屏/串流里消失），
+  WGC 照常抓合成桌面，抓到的帧里用左右像素水平插值把岛自身矩形涂掉（`MaskIslandArea`），
+  模糊后看不出痕迹；`FLUIDBAR_WDA=1` 保留"无自抠图"的高画质模式。
+- **折射带羽化**：rim 带从单层硬裁剪改为三层嵌套（1.0/0.68/0.40 × band，α 0.34/0.30/0.26），
+  卡片面板"边界与中间之间那条分界"消失；新增测试 `Refraction_band_fades_out_instead_of_stepping_at_its_inner_edge`。
+- 单文件发布：`build\FluidBar.exe`（58 MB，双击即用）。
+- 全量 2643 测试绿。
+
 ## 2026-10-23 — 预览材质开关 FLUIDBAR_MATERIAL
 
 - `SkiaIslandThemeMapper.OverrideMaterial`：`FLUIDBAR_MATERIAL=liquid-glass|acrylic|obsidian` 只覆盖本次进程的渲染材质，

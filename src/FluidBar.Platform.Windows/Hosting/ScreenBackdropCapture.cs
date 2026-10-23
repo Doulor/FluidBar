@@ -77,7 +77,7 @@ public static class ScreenBackdropCapture
     /// <param name="y">Virtual-screen Y in physical pixels.</param>
     /// <param name="width">Width in physical pixels.</param>
     /// <param name="height">Height in physical pixels.</param>
-    public static BackdropFrame? TryCapture(int x, int y, int width, int height)
+    public static BackdropFrame? TryCapture(int x, int y, int width, int height, bool allowComposedCapture = true)
     {
         if (width <= 0 || height <= 0 || width > 8192 || height > 4096)
         {
@@ -86,7 +86,7 @@ public static class ScreenBackdropCapture
 
         // Windows.Graphics.Capture reads the *composed* desktop (windows included). GDI cannot see DWM
         // windows, so it is only the fallback for machines/sessions where WGC is unavailable.
-        if (WgcInstance().TryCapture(x, y, width, height, out var composed))
+        if (allowComposedCapture && WgcInstance().TryCapture(x, y, width, height, out var composed))
         {
             return composed;
         }

@@ -214,6 +214,49 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Refraction_band_fades_out_instead_of_stepping_at_its_inner_edge()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.Expanded(1) with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var backdropBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(backdropBitmap))
+        {
+            canvas.Clear(new SKColor(0x30, 0x30, 0x30));
+            using var light = new SKPaint { Color = new SKColor(0xE0, 0xE0, 0xE0) };
+            canvas.DrawRect(new SKRect(0, 0, info.Width, info.Height / 2f), light);
+        }
+
+        using var image = SKImage.FromBitmap(backdropBitmap);
+        using var panel = renderer.RenderToBitmap(
+            state with { Backdrop = image, BackdropLuminance = 0.6 }, IslandTestFixtures.Scale);
+
+        // Walk inwards from the left rim across the band: no single step may exceed the threshold, which
+        // is what a hard-clipped band produces at its inner edge.
+        var shell = IslandMetrics.ShellRect(state);
+        var y = (int)Math.Round((shell.Top + (shell.Height / 2)) * IslandTestFixtures.Scale);
+        var previous = double.NaN;
+        var maxStep = 0d;
+        for (var d = 1.0; d <= 18.0; d += 1.0)
+        {
+            var px = (int)Math.Round((shell.Left + d) * IslandTestFixtures.Scale);
+            var luma = Luma(panel.GetPixel(px, y));
+            if (!double.IsNaN(previous))
+            {
+                maxStep = Math.Max(maxStep, Math.Abs(luma - previous));
+            }
+
+            previous = luma;
+        }
+
+        Assert.True(maxStep < 22, $"the rim band must fade out, max step was {maxStep:0.0}");
+    }
+
+    [Fact]
     public void Glass_edges_fade_out_on_a_black_backdrop()
     {
         var theme = Liquid;

@@ -2030,7 +2030,18 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             var window = entry.Host.Placement.WindowPixel;
             var rect = (window.X, window.Y, window.Width, window.Height);
-            var backdrop = _backdrop.Get(rect);
+
+            // The capture includes the island itself (the window is visible in screen shares), so tell the
+            // provider which pixels to smear away before blurring.
+            var surfaceDip = entry.Host.SurfaceSizeDip;
+            var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
+            const double maskMarginDip = 14.0;
+            var islandMask = (
+                X: (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
+                Y: (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
+                Width: (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
+                Height: (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi));
+            var backdrop = _backdrop.Get(rect, islandMask, allowComposedCapture: true);
             if (backdrop is not null)
             {
                 renderState = state with

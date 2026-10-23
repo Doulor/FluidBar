@@ -64,7 +64,11 @@ internal sealed class IslandBackdropProvider : IDisposable
     /// </summary>
     /// <param name="screenRect">Window rectangle in physical screen pixels.</param>
     /// <param name="force">Ignore the throttle (material switch, explicit refresh).</param>
-    public SKImage? Get((int X, int Y, int Width, int Height) screenRect, bool force = false)
+    public SKImage? Get(
+        (int X, int Y, int Width, int Height) screenRect,
+        (int X, int Y, int Width, int Height)? islandMask = null,
+        bool allowComposedCapture = true,
+        bool force = false)
     {
         lock (_gate)
         {
@@ -85,7 +89,7 @@ internal sealed class IslandBackdropProvider : IDisposable
                 }
             }
 
-            ScheduleCapture(screenRect, force);
+            ScheduleCapture(screenRect, islandMask, allowComposedCapture, force);
             return Latest();
         }
     }
@@ -138,7 +142,11 @@ internal sealed class IslandBackdropProvider : IDisposable
         }
     }
 
-    private void ScheduleCapture((int X, int Y, int Width, int Height) screenRect, bool force)
+    private void ScheduleCapture(
+        (int X, int Y, int Width, int Height) screenRect,
+        (int X, int Y, int Width, int Height)? islandMask,
+        bool allowComposedCapture,
+        bool force)
     {
         if (_pending is { IsCompleted: false })
         {
@@ -155,12 +163,16 @@ internal sealed class IslandBackdropProvider : IDisposable
         }
 
         _lastCaptureTicks = now;
-        _pending = Task.Run(() => CaptureAndBake(screenRect));
+        _pending = Task.Run(() => CaptureAndBake(screenRect, islandMask, allowComposedCapture));
     }
 
-    private void CaptureAndBake((int X, int Y, int Width, int Height) screenRect)
+    private void CaptureAndBake(
+        (int X, int Y, int Width, int Height) screenRect,
+        (int X, int Y, int Width, int Height)? islandMask,
+        bool allowComposedCapture)
     {
-        var frame = ScreenBackdropCapture.TryCapture(screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height);
+        var frame = ScreenBackdropCapture.TryCapture(
+            screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height, allowComposedCapture);
         if (frame is not { } captured)
         {
             lock (_gate)
@@ -169,6 +181,11 @@ internal sealed class IslandBackdropProvider : IDisposable
             }
 
             return;
+        }
+
+        if (islandMask is { } mask)
+        {
+            MaskIslandArea(captured, mask);
         }
 
         var baked = Bake(captured, out var luminance);
@@ -234,6 +251,49 @@ internal sealed class IslandBackdropProvider : IDisposable
         => _frames.Count == 0
             ? null
             : _frames.OrderBy(pair => pair.Value.At).Last().Value.Image;
+
+    /// <summary>
+    /// Replaces the island's own pixels in a composed capture with a horizontal edge-extend fill: the
+    /// capture is taken with the window visible (so the island stays visible in screen shares), and the
+    /// smear disappears under the 1/6 downsample + Gaussian.
+    /// </summary>
+    private static void MaskIslandArea(BackdropFrame frame, in (int X, int Y, int Width, int Height) mask)
+    {
+        var x0 = Math.Clamp(mask.X, 0, frame.Width - 1);
+        var y0 = Math.Clamp(mask.Y, 0, frame.Height - 1);
+        var x1 = Math.Clamp(mask.X + mask.Width, 0, frame.Width);
+        var y1 = Math.Clamp(mask.Y + mask.Height, 0, frame.Height);
+        if (x1 - x0 < 2 || y1 - y0 < 2)
+        {
+            return;
+        }
+
+        var stride = frame.Stride;
+        var pixels = frame.Pixels;
+        var leftX = Math.Max(0, x0 - 4);
+        var rightX = Math.Min(frame.Width - 1, x1 + 4);
+        var span = (float)Math.Max(1, x1 - x0);
+        for (var y = y0; y < y1; y++)
+        {
+            var row = y * stride;
+            var li = row + (leftX * 4);
+            var ri = row + (rightX * 4);
+            var lb = pixels[li];
+            var lg = pixels[li + 1];
+            var lr = pixels[li + 2];
+            var rb = pixels[ri];
+            var rg = pixels[ri + 1];
+            var rr = pixels[ri + 2];
+            for (var x = x0; x < x1; x++)
+            {
+                var t = (x - x0) / span;
+                var i = row + (x * 4);
+                pixels[i] = (byte)(lb + ((rb - lb) * t));
+                pixels[i + 1] = (byte)(lg + ((rg - lg) * t));
+                pixels[i + 2] = (byte)(lr + ((rr - lr) * t));
+            }
+        }
+    }
 
     private static SKImage? Bake(in BackdropFrame frame, out double luminance)
     {

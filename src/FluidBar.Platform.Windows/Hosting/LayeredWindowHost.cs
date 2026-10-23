@@ -243,7 +243,10 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         // The liquid-glass material blurs the real desktop behind the island, which requires the
         // window to be invisible to screen captures (otherwise BitBlt returns the island itself).
-        ExcludeFromCapture = ScreenBackdropCapture.TryExcludeFromCapture(hwnd);
+        // Opt-in: excluding the window from captures enables window-level backdrop blur (WGC), but the
+        // island then also disappears from screen shares/recordings. Default is visible everywhere.
+        ExcludeFromCapture = Environment.GetEnvironmentVariable("FLUIDBAR_WDA") == "1"
+            && ScreenBackdropCapture.TryExcludeFromCapture(hwnd);
 
         // WS_EX_TOPMOST is ignored by CreateWindowExW; assert it explicitly without activating.
         SetTopmostUnconditional();

@@ -1015,7 +1015,6 @@ public sealed class IslandRenderer : IDisposable
                 LiquidGlassTokens.RimBandMaxDip);
         if (state.RefractionScale > 1.001 && bandDip >= 1)
         {
-            var band = LensBand(path, bandDip);
             var centre = new SKPoint((float)state.ShellWidth / 2f, (float)state.ShellHeight / 2f);
             var s = (float)state.RefractionScale;
             var scaled = new SKRect(
@@ -1024,13 +1023,22 @@ public sealed class IslandRenderer : IDisposable
                 centre.X + ((destination.Right - centre.X) * s),
                 centre.Y + ((destination.Bottom - centre.Y) * s));
 
-            canvas.Save();
-            canvas.ClipPath(band, SKClipOperation.Intersect, antialias: true);
-            _glassPaint.Color = SKColors.White.WithAlpha(
-                (byte)Math.Clamp(opacity * LiquidGlassTokens.RefractionOpacity * 255f, 0, 255));
-            canvas.DrawImage(backdrop, source, scaled, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
+            // Three nested bands instead of one hard-clipped band: the inner edge of a single band shows
+            // as a visible seam between "refracted rim" and "flat middle", which the user reported.
+            Span<float> widths = [1.0f, 0.68f, 0.40f];
+            Span<float> alphas = [0.34f, 0.30f, 0.26f];
+            for (var i = 0; i < widths.Length; i++)
+            {
+                var band = LensBand(path, bandDip * widths[i]);
+                canvas.Save();
+                canvas.ClipPath(band, SKClipOperation.Intersect, antialias: true);
+                _glassPaint.Color = SKColors.White.WithAlpha(
+                    (byte)Math.Clamp(opacity * LiquidGlassTokens.RefractionOpacity * alphas[i] * 255f, 0, 255));
+                canvas.DrawImage(backdrop, source, scaled, new SKSamplingOptions(SKFilterMode.Linear), _glassPaint);
+                canvas.Restore();
+            }
+
             _glassPaint.Color = SKColors.White;
-            canvas.Restore();
         }
 
         canvas.Restore();
@@ -1043,24 +1051,32 @@ public sealed class IslandRenderer : IDisposable
     private SKPath LensBand(SKPath path, double bandDip)
     {
         var key = (Math.Round((double)path.Bounds.Width * 2), Math.Round((double)path.Bounds.Height * 2), Math.Round(bandDip * 10));
-        if (_lensBand is not null && _lensKey == key)
+        foreach (var entry in _lensBands)
         {
-            return _lensBand;
+            if (entry.Key == key)
+            {
+                return entry.Path;
+            }
         }
 
-        _lensBand?.Dispose();
         _strokePaint.Style = SKPaintStyle.Stroke;
         _strokePaint.StrokeWidth = (float)bandDip * 2f;
-        _lensBand = _strokePaint.GetFillPath(path) ?? new SKPath();
+        var created = _strokePaint.GetFillPath(path) ?? new SKPath();
         _strokePaint.Style = SKPaintStyle.Fill;
-        _lensKey = key;
-        return _lensBand;
+        if (_lensBands.Count >= 4)
+        {
+            // Bounded cache: three widths for one shell size; a size change evicts the oldest slot.
+            _lensBands[0].Path.Dispose();
+            _lensBands.RemoveAt(0);
+        }
+
+        _lensBands.Add((created, key));
+        return created;
     }
 
     private SKShader? _scrimShader;
     private (int Width, int Height) _scrimKey;
-    private SKPath? _lensBand;
-    private (double Width, double Height, double Band) _lensKey;
+    private readonly List<(SKPath Path, (double Width, double Height, double Band) Key)> _lensBands = new(4);
     private readonly SKPaint _strokePaint = new() { IsAntialias = true };
 
     private SKShader GetGlassShader(float height)
@@ -1344,8 +1360,12 @@ public sealed class IslandRenderer : IDisposable
         _strip.Dispose();
         _glassShader?.Dispose();
         _glassShader = null;
-        _lensBand?.Dispose();
-        _lensBand = null;
+        foreach (var entry in _lensBands)
+        {
+            entry.Path.Dispose();
+        }
+
+        _lensBands.Clear();
         _scrimShader?.Dispose();
         _scrimShader = null;
         _strokePaint.Dispose();
