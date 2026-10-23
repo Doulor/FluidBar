@@ -572,6 +572,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.Dispose();
         _backdrop.Dispose();
 
+        // Release the WGC session/D3D device: one host per process in production, but tests create and
+        // dispose hosts repeatedly and must not accumulate capture sessions.
+        FluidBar.Platform.Windows.Hosting.ScreenBackdropCapture.Shutdown();
+
         foreach (var entry in _windows)
         {
             entry.Dispose();
