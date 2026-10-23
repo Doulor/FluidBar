@@ -330,3 +330,22 @@
 - 测试：`SmartYieldCoordinatorTests`（4 例：快速接近让位并在离开后恢复、刚点过岛不让位、拖动不让位、隐藏时恢复）。
 - 又抓到两个同源 bug：`long.MinValue` 当作"从未"哨兵时与 `nowMs` 相减溢出，导致上下文缓存永不刷新 /
   交互抑制恒为真。统一改成可空时间戳。
+
+## 13. 让位动效：柔化（Soften）— 三种材质通用
+
+用户在 6 个网页原型候选里选了 **E 柔化**，并明确要求"适配的不只是玻璃外观，三种外观都要适配"。
+
+实现方式决定了它天然与材质无关：**在合成后的整幕上做一次图层处理**，而不是给每种材质各写一份。
+
+- `YieldTokens`（Island）：`SoftenBlurDip 6`、`SoftenFade 0.75`（终值 25% 不透明度）、
+  `SoftenSaturation 0.55`、`SoftenDurationMs 240`、`RestoreDurationMs 260`、`MaxBlurAreaDip2 60_000`。
+- `IslandRenderer.DrawScene`：当 `state.YieldProgress > 0` 时，`ClipRect(壳体±28 DIP)` + `SaveLayer`，
+  layer 的 paint 同时带 alpha（淡出）、`SKColorFilter`（亮度保持的去饱和矩阵）与
+  `SKImageFilter.CreateBlur`（模糊）；先把原场景画进 layer，restore 时统一作用。黑曜石 / 模拟玻璃 / 液态玻璃
+  走的都是同一条路径，因为效果作用在"画完之后的整幕"上。
+- 成本控制：模糊只在小面积壳上启用（壳体面积 ≤ 60 000 DIP²，即紧凑态/胶囊）；展开面板（440×284）只淡出+去饱和，
+  避免整面板 SaveLayer 的重绘开销。
+- 动画：`SmartYieldCoordinator.Step(now)` 用 ease-out cubic 在 240 ms（让位）/ 260 ms（恢复）内推进
+  `YieldProgress`；宿主 `OnFrame` 里每帧推进并强制整帧重绘，动画结束自动停表。
+- 测试：`YieldSoftenTests`（3 材质 × 2 项：淡到 ~25%、边缘变软）、`SmartYieldCoordinatorTests` 增加
+  progress 动画用例。

@@ -94,6 +94,12 @@ public readonly record struct IslandRenderState
     /// </summary>
     public double? ChromeOpacity { get; init; }
 
+    /// <summary>
+    /// Yield progress 0..1 (0 = interactive, 1 = fully yielded). Drives the "soften" animation that is
+    /// material-agnostic: the composited scene blurs, desaturates and fades.
+    /// </summary>
+    public double YieldProgress { get; init; }
+
     /// <summary>Resolved compact layer opacity (legacy fallback: visible unless fully expanded).</summary>
     public double ResolvedCompactLayerOpacity => Math.Clamp(
         CompactLayerOpacity ?? (Form == ShellForm.Expanded ? 0 : 1), 0, 1);

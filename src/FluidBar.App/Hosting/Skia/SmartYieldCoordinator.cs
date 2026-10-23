@@ -20,6 +20,10 @@ internal sealed class SmartYieldCoordinator : IDisposable
     private readonly Func<(int X, int Y, int Width, int Height), bool, YieldContext> _contextFactory;
 
     private YieldState _lastState = YieldState.Interactive;
+    private double _progress;
+    private bool _animating;
+    private long _animStartMs;
+    private double _animFrom;
     private long? _contextStampMs;
     private YieldContext _cachedContext;
     private bool _disposed;
@@ -52,6 +56,51 @@ internal sealed class SmartYieldCoordinator : IDisposable
 
     /// <summary>Current intent score (diagnostics).</summary>
     public double Score => _engine.Score;
+
+    /// <summary>Soften-animation progress (0 = interactive, 1 = fully yielded).</summary>
+    public double Progress => _progress;
+
+    /// <summary>
+    /// Advances the soften animation towards the engine's target and reports whether another frame is
+    /// needed. Materials are irrelevant here: the renderer applies the effect to the whole scene.
+    /// </summary>
+    /// <param name="nowMs">Monotonic clock in milliseconds.</param>
+    public bool Step(long nowMs)
+    {
+        if (_disposed)
+        {
+            return false;
+        }
+
+        var target = _engine.ShouldPassThrough ? 1d : 0d;
+        if (Math.Abs(_progress - target) < 0.001)
+        {
+            _animating = false;
+            _progress = target;
+            return false;
+        }
+
+        if (!_animating)
+        {
+            _animating = true;
+            _animStartMs = nowMs;
+            _animFrom = _progress;
+        }
+
+        var duration = target > _progress
+            ? FluidBar.Island.YieldTokens.SoftenDurationMs
+            : FluidBar.Island.YieldTokens.RestoreDurationMs;
+        var t = Math.Clamp((nowMs - _animStartMs) / duration, 0, 1);
+        var eased = 1 - Math.Pow(1 - t, 3);
+        _progress = _animFrom + ((target - _animFrom) * eased);
+        if (t >= 1)
+        {
+            _progress = target;
+            _animating = false;
+        }
+
+        return true;
+    }
 
     /// <summary>Feeds one pointer position in physical screen pixels.</summary>
     /// <param name="x">Pointer X.</param>
@@ -103,6 +152,7 @@ internal sealed class SmartYieldCoordinator : IDisposable
         }
 
         _engine.ForceInteractive(_clock());
+        _animating = false;
         if (_lastState != YieldState.Interactive)
         {
             _lastState = YieldState.Interactive;
@@ -115,6 +165,7 @@ internal sealed class SmartYieldCoordinator : IDisposable
     private void Apply(in YieldTransition transition)
     {
         _lastState = transition.Current;
+        _animating = false;
         _applyPassthrough(transition.ShouldPassThrough);
         _logger.Information(LogCategories.Render, "island.yield.transition",
             "Smart yield state changed.",

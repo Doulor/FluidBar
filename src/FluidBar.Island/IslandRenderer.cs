@@ -387,6 +387,60 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawScene(SKCanvas canvas, in IslandRenderState state, float dpiScale)
     {
+        var yield = (float)Math.Clamp(state.YieldProgress, 0, 1);
+        if (yield <= 0.002f)
+        {
+            DrawSceneWithMaterialBlend(canvas, state, dpiScale);
+            return;
+        }
+
+        // "Soften" yield: one scene-level layer so the effect is identical for obsidian, simulated glass
+        // and liquid glass — blur + desaturation + fade applied to whatever was drawn, never per material.
+        var shell = IslandMetrics.ShellRect(state);
+        var clip = SKRect.Inflate(shell, 28f, 28f);
+        var blurDip = state.ShellWidth * state.ShellHeight <= YieldTokens.MaxBlurAreaDip2
+            ? YieldTokens.SoftenBlurDip * yield
+            : 0f;
+        using var paint = new SKPaint { IsAntialias = true };
+        paint.Color = SKColors.White.WithAlpha(
+            (byte)Math.Clamp((1 - (YieldTokens.SoftenFade * yield)) * 255f, 0, 255));
+        paint.ColorFilter = Desaturate(1f - (float)(YieldTokens.SoftenSaturation * yield));
+        if (blurDip > 0.25f)
+        {
+            paint.ImageFilter = SKImageFilter.CreateBlur(
+                (float)(blurDip * dpiScale), (float)(blurDip * dpiScale), SKShaderTileMode.Clamp);
+        }
+
+        canvas.Save();
+        canvas.ClipRect(clip, SKClipOperation.Intersect, antialias: true);
+        canvas.SaveLayer(paint);
+        DrawSceneWithMaterialBlend(canvas, state, dpiScale);
+        canvas.Restore();
+        canvas.Restore();
+    }
+
+    /// <summary>Luminance-preserving saturation matrix (alpha untouched).</summary>
+    /// <param name="space">Colour space for the filter.</param>
+    /// <param name="saturation">0 = greyscale, 1 = unchanged.</param>
+    private static SKColorFilter Desaturate(float saturation)
+    {
+        const float lr = 0.2126f;
+        const float lg = 0.7152f;
+        const float lb = 0.0722f;
+        var s = Math.Clamp(saturation, 0f, 1f);
+        var inverse = 1f - s;
+        var matrix = new float[]
+        {
+            lr * inverse + s, lg * inverse, lb * inverse, 0, 0,
+            lr * inverse, lg * inverse + s, lb * inverse, 0, 0,
+            lr * inverse, lg * inverse, lb * inverse + s, 0, 0,
+            0, 0, 0, 1, 0,
+        };
+        return SKColorFilter.CreateColorMatrix(matrix);
+    }
+
+    private void DrawSceneWithMaterialBlend(SKCanvas canvas, in IslandRenderState state, float dpiScale)
+    {
         // Material swap (spec 3.4: 180 ms cross-fade). The shell body is painted twice with premultiplied
         // additive compositing — old material at (1-t), new at t — so the ramp is a true cross-fade while
         // costing one extra body pass instead of two full-surface SaveLayers (~7.7 ms on CPU).

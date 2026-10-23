@@ -1417,9 +1417,15 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             _controller.PumpTimers();
             _controller.Advance(delta);
+            // Soften yield animation: keep painting while the island fades back (all materials).
+            var yieldAnimating = _smartYield is not null && _smartYield.Step(NowMs());
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
-            var painted = RenderAllLocked(forceFull: false);
+            var painted = RenderAllLocked(forceFull: yieldAnimating);
+            if (yieldAnimating)
+            {
+                EnsureFrameLoop();
+            }
             var profile = _controller.PowerProfile;
             var stopThreshold = _controller.HasSpinningSplitRing
                 ? profile.EmptyFrameStopThreshold
@@ -2107,6 +2113,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     {
         // Liquid glass: attach a blurred capture of the desktop behind this window (throttled inside).
         var renderState = state;
+
         if (state.IsVisible && state.Theme.Material == FluidBar.Island.IslandMaterial.LiquidGlass)
         {
             var window = entry.Host.Placement.WindowPixel;
@@ -2131,6 +2138,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     BackdropLuminance = _backdrop.LuminanceFor(rect),
                 };
             }
+        }
+
+        // Soften yield applies to the composited scene, so every material gets the same treatment.
+        if (_smartYield is not null)
+        {
+            renderState = renderState with { YieldProgress = _smartYield.Progress };
         }
 
         var probeAllocStart = IslandFrameProbe.Enabled ? GC.GetAllocatedBytesForCurrentThread() : 0L;

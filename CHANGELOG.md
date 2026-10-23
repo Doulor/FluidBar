@@ -2,6 +2,15 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 让位动效「柔化」：三种材质统一（场景级）
+
+- `YieldTokens`：模糊 6 DIP / 淡到 25% / 饱和度 0.55 / 240 ms 让位、260 ms 恢复。
+- `IslandRenderer.DrawScene`：`YieldProgress > 0` 时用一次 `SaveLayer`（alpha + 去饱和矩阵 + blur）包住整幕，
+  黑曜石 / 模拟玻璃 / 液态玻璃走同一路径——效果作用在合成后的画面上，不按材质分支。
+- 成本控制：壳体面积 > 60 000 DIP²（展开面板）只淡出+去饱和，不做模糊。
+- `SmartYieldCoordinator.Step` 推进 progress（ease-out cubic），宿主每帧重绘并在动画结束后停表。
+- 测试 `YieldSoftenTests`（3 材质 × 淡出/边缘变软）+ 协调器 progress 用例；全量 2667 测试绿。
+
 ## 2026-10-23 — 智能让位（阶段二）：输入穿透 + 前台窗口上下文
 
 - `LayeredWindowHost.SetInputPassthrough`：让位时 HitTest 全返回 HTTRANSPARENT（画着但不吃输入）。

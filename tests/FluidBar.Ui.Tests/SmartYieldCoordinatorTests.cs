@@ -79,6 +79,31 @@ public sealed class SmartYieldCoordinatorTests
     }
 
     [Fact]
+    public void Soften_animation_moves_the_progress_and_settles()
+    {
+        var applied = new List<bool>();
+        long now = 1000;
+        using var coordinator = Create(applied, () => now);
+
+        Approach(coordinator, () => now, ms => now += ms);
+        Assert.Contains(true, applied);
+        Assert.Equal(0d, coordinator.Progress, 3);
+
+        // The engine is yielding; stepping the animation must ease the progress towards 1.
+        Assert.True(coordinator.Step(now));
+        Assert.True(coordinator.Step(now + 120) && coordinator.Progress > 0.2 && coordinator.Progress < 1);
+        coordinator.Step(now + 400);
+        Assert.Equal(1d, coordinator.Progress, 3);
+        Assert.False(coordinator.Step(now + 500));
+
+        // Restoring the input animates back to 1 → 0.
+        coordinator.Restore();
+        Assert.True(coordinator.Step(now + 520));
+        coordinator.Step(now + 1200);
+        Assert.Equal(0d, coordinator.Progress, 3);
+    }
+
+    [Fact]
     public void Hidden_island_restores_input()
     {
         var applied = new List<bool>();
