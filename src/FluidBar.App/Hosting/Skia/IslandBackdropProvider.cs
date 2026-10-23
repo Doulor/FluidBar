@@ -25,6 +25,12 @@ internal sealed class IslandBackdropProvider : IDisposable
     /// <summary>Downsample factor of the blur bake.</summary>
     private const int Downsample = 6;
 
+    /// <summary>
+    /// Backdrop saturation. Every reference implementation (rdev, archisvaze, Apple's .regular) lifts
+    /// the saturation of the blurred backdrop — glass concentrates colour instead of greying it out.
+    /// </summary>
+    private const float BackdropSaturation = 1.55f;
+
     private const int MaxEntries = 2;
 
     private readonly Dictionary<(int X, int Y, int Width, int Height), (SKImage Image, double Luminance, long At)> _frames = new(MaxEntries);
@@ -156,10 +162,12 @@ internal sealed class IslandBackdropProvider : IDisposable
             using var small = new SKBitmap(info);
             using (var canvas = new SKCanvas(small))
             using (var paint = new SKPaint { IsAntialias = false })
+            using (var saturation = SKColorFilter.CreateColorMatrix(SaturationMatrix(BackdropSaturation)))
             {
                 // Box-downsample + a small Gaussian at the reduced resolution: sigma 2 at 1/6 scale is
                 // roughly a 12-18 px blur at device pixels, i.e. the 20-30 px CSS blur of the prototype.
                 paint.ImageFilter = SKImageFilter.CreateBlur(2.0f, 2.0f);
+                paint.ColorFilter = saturation;
                 paint.FilterQuality = SKFilterQuality.Medium;
                 canvas.DrawImage(source, new SKRect(0, 0, width, height), paint);
                 canvas.Flush();
@@ -171,6 +179,22 @@ internal sealed class IslandBackdropProvider : IDisposable
         {
             return null;
         }
+    }
+
+    /// <summary>Standard luminance-preserving saturation matrix (Skia row-major 4x5).</summary>
+    private static float[] SaturationMatrix(float s)
+    {
+        var inv = 1f - s;
+        var r = 0.213f * inv;
+        var g = 0.715f * inv;
+        var b = 0.072f * inv;
+        return
+        [
+            r + s, g, b, 0, 0,
+            r, g + s, b, 0, 0,
+            r, g, b + s, 0, 0,
+            0, 0, 0, 1, 0,
+        ];
     }
 
     /// <inheritdoc />
