@@ -250,3 +250,12 @@
 
 纯黑时左右边缘与中心完全一致（14 = 无白圈），只有下边缘 33（焦散）略亮；白背景才出现 146 的边缘提亮。
 预览图：`docs/rewrite/liquid-glass-lab/shots/app-compact-black.jpg` / `app-compact-white.jpg` / `app-expanded-black.jpg`。
+
+### 10.7 预览开关：`FLUIDBAR_MATERIAL`
+
+调试/预览时不用改配置：`FLUIDBAR_MATERIAL=liquid-glass`（也接受 `acrylic` / `obsidian`）会覆盖**本次进程**渲染用的材质，
+不写入配置。实现：`SkiaIslandThemeMapper.OverrideMaterial`；测试
+`Material_env_override_forces_the_rendered_material_without_touching_settings`。
+
+> 踩坑记录：手写一个只有 `{"appearance":{"material":"liquid-glass"}}` 的配置目录会被 schema 校验判为无效 →
+> 回落到默认（黑曜石），看起来就像"液态玻璃没生效"。预览请用这个环境变量，别手写配置。

@@ -51,7 +51,7 @@ public static class SkiaIslandThemeMapper
         // Safe mode forces the Tier 0 opaque material (spec §8.4).
         if (!settings.Advanced.SafeMode)
         {
-            theme = settings.Material switch
+            theme = OverrideMaterial(settings.Material) switch
             {
                 AppMaterial.Acrylic => theme.WithMaterial(IslandThemeMaterial.SimulatedGlass),
                 AppMaterial.LiquidGlass => theme.WithMaterial(IslandThemeMaterial.LiquidGlass),
@@ -66,6 +66,28 @@ public static class SkiaIslandThemeMapper
 
         var fill = Math.Clamp(settings.FillOpacity, LayoutTokens.MinFillOpacity, 1.0);
         return theme with { FillOpacity = fill };
+    }
+
+    /// <summary>
+    /// Optional <c>FLUIDBAR_MATERIAL</c> override (obsidian / acrylic / liquid-glass) for previews and QA:
+    /// it changes the rendered material for this process only and is never persisted.
+    /// </summary>
+    /// <param name="material">The configured material.</param>
+    public static AppMaterial OverrideMaterial(AppMaterial material)
+    {
+        var token = Environment.GetEnvironmentVariable("FLUIDBAR_MATERIAL");
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return material;
+        }
+
+        return token.Trim().ToLowerInvariant() switch
+        {
+            "obsidian" => AppMaterial.Obsidian,
+            "acrylic" => AppMaterial.Acrylic,
+            "liquid-glass" or "liquidglass" or "liquid" or "glass" => AppMaterial.LiquidGlass,
+            _ => material,
+        };
     }
 
     /// <summary>Resolves the reduced-motion flag the renderer consumes (settings tri-state + Windows).</summary>

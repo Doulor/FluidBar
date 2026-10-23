@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 预览材质开关 FLUIDBAR_MATERIAL
+
+- `SkiaIslandThemeMapper.OverrideMaterial`：`FLUIDBAR_MATERIAL=liquid-glass|acrylic|obsidian` 只覆盖本次进程的渲染材质，
+  不写入配置；用于预览/QA，避免手写残缺配置被 schema 判为无效后回落默认（黑曜石）。
+- 测试 `Material_env_override_forces_the_rendered_material_without_touching_settings`。
+- 预览启动器改为"你的真实配置 + 本次强制液态玻璃"。
+
 ## 2026-10-23 — 边缘实测 + 黑/白背景预览图
 
 - 新增受 `FLUIDBAR_PREVIEW_DIR` 控制的 preview 测试：渲染 black/photo/white 三种背景的紧凑与展开态，

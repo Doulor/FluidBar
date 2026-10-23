@@ -24,6 +24,27 @@ namespace FluidBar.Ui.Tests;
 public sealed class SkiaIslandHostMappingTests
 {
     [Fact]
+    public void Material_env_override_forces_the_rendered_material_without_touching_settings()
+    {
+        var previous = Environment.GetEnvironmentVariable("FLUIDBAR_MATERIAL");
+        try
+        {
+            Environment.SetEnvironmentVariable("FLUIDBAR_MATERIAL", "liquid-glass");
+            Assert.Equal(AppMaterial.LiquidGlass, SkiaIslandThemeMapper.OverrideMaterial(AppMaterial.Obsidian));
+
+            Environment.SetEnvironmentVariable("FLUIDBAR_MATERIAL", "nonsense");
+            Assert.Equal(AppMaterial.Obsidian, SkiaIslandThemeMapper.OverrideMaterial(AppMaterial.Obsidian));
+
+            Environment.SetEnvironmentVariable("FLUIDBAR_MATERIAL", null);
+            Assert.Equal(AppMaterial.Acrylic, SkiaIslandThemeMapper.OverrideMaterial(AppMaterial.Acrylic));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FLUIDBAR_MATERIAL", previous);
+        }
+    }
+
+    [Fact]
     public void Start_RevealsIdleCompact_AtTheCoreSizeToken()
     {
         using var fixture = ControllerFixture.Create();
