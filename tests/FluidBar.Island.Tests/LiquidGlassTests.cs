@@ -318,6 +318,54 @@ public sealed class LiquidGlassTests
 
 
     [Fact]
+    public void Cross_fading_the_backdrop_never_makes_the_shell_transparent()
+    {
+        var theme = Liquid;
+        var state = IslandTestFixtures.MediaCompact() with { Theme = theme };
+        using var renderer = new IslandRenderer(theme);
+
+        var surface = IslandMetrics.SurfaceSize(state.Mode);
+        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
+            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var darkBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(darkBitmap))
+        {
+            canvas.Clear(new SKColor(0x20, 0x20, 0x20));
+        }
+
+        using var lightBitmap = new SKBitmap(info);
+        using (var canvas = new SKCanvas(lightBitmap))
+        {
+            canvas.Clear(new SKColor(0xE0, 0xE0, 0xE0));
+        }
+
+        using var dark = SKImage.FromBitmap(darkBitmap);
+        using var light = SKImage.FromBitmap(lightBitmap);
+
+        foreach (var blend in new[] { 0.25, 0.5, 0.75 })
+        {
+            using var frame = renderer.RenderToBitmap(
+                state with
+                {
+                    Backdrop = light,
+                    PreviousBackdrop = dark,
+                    BackdropBlend = blend,
+                    BackdropLuminance = 0.5,
+                },
+                IslandTestFixtures.Scale);
+
+            var shell = IslandMetrics.ShellRect(state);
+            var x = (int)Math.Round((shell.Left + 6) * IslandTestFixtures.Scale);
+            var y = (int)Math.Round(shell.MidY * IslandTestFixtures.Scale);
+            var alpha = frame.GetPixel(x, y).Alpha;
+
+            // Drawing the old and new capture each at partial alpha leaves a hole: the composite alpha
+            // drops below 255 and the desktop shows through sharp — the "island flashes" report.
+            Assert.True(alpha > 240, $"blend {blend:0.00} left the shell at alpha {alpha}");
+        }
+    }
+
+    [Fact]
     public void Backdrop_captures_cross_fade_instead_of_swapping()
     {
         var theme = Liquid;

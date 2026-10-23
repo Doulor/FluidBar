@@ -1216,10 +1216,15 @@ public sealed class IslandRenderer : IDisposable
 
         if (state.PreviousBackdrop is { } previous && blend < 0.999f)
         {
-            DrawBackdropCore(canvas, state, path, previous, opacity * (1f - blend), lensBand: false);
+            // Dissolve on top of a FULL-opacity base. Fading both images in/out (old at 1-t, new at t)
+            // leaves the composite alpha at 1-(1-t)·(1-t)... in practice ~88 % at t = 0.5, so the desktop
+            // showed through sharp once per capture — the "island flashes transparent" report.
+            DrawBackdropCore(canvas, state, path, previous, opacity, lensBand: false);
+            DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: true);
+            return;
         }
 
-        DrawBackdropCore(canvas, state, path, backdrop, opacity * blend, lensBand: true);
+        DrawBackdropCore(canvas, state, path, backdrop, opacity, lensBand: true);
     }
 
     private void DrawBackdropCore(
