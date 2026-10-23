@@ -116,9 +116,51 @@ public sealed partial class LayeredWindowHost : IDisposable
     /// </summary>
     public bool InputPassthrough => _inputPassthrough;
 
-    /// <summary>Toggles input pass-through (the smart-yield "yielding" state).</summary>
+    /// <summary>
+    /// Toggles input pass-through (the manual "softened" state). Besides the <c>HTTRANSPARENT</c> hit-test
+    /// answer, the window gains <c>WS_EX_TRANSPARENT</c>: <c>HTTRANSPARENT</c> alone only forwards to
+    /// windows of the *same thread*, so clicks over another application's window were still swallowed —
+    /// the "穿透不了" bug reported on 2026-10-23.
+    /// </summary>
     /// <param name="enabled">True to stop consuming pointer input.</param>
-    public void SetInputPassthrough(bool enabled) => _inputPassthrough = enabled;
+    public void SetInputPassthrough(bool enabled)
+    {
+        if (_inputPassthrough == enabled)
+        {
+            return;
+        }
+
+        _inputPassthrough = enabled;
+        if (_hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            var style = NativeMethods.User32.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            var next = enabled
+                ? style | NativeMethods.WS_EX_TRANSPARENT
+                : style & ~NativeMethods.WS_EX_TRANSPARENT;
+            if (next != style)
+            {
+                NativeMethods.User32.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(next));
+                NativeMethods.User32.SetWindowPos(
+                    _hwnd,
+                    IntPtr.Zero,
+                    0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE
+                    | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(FluidBar.Platform.Windows.Diagnostics.PlatformLogCategory.Platform,
+                "island.hit-test.passthrough-failed",
+                "Could not toggle WS_EX_TRANSPARENT; the island keeps its HTTRANSPARENT policy.",
+                data: new Dictionary<string, object?> { ["exception"] = ex.Message });
+        }
+    }
 
     /// <summary>
     /// Whether the window is excluded from screen captures (<c>WDA_EXCLUDEFROMCAPTURE</c>). Required by

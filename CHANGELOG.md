@@ -2,6 +2,15 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-23 — 删除预测式让位（只留右键手动）+ 修复穿透
+
+- **删除**：`YieldEngine` 四状态机/打分/前景窗口上下文、`ForegroundWindowProbe`、全局指针流、12 个引擎测试。
+  新增 `ManualYieldController`（仅"是否柔化 + 3 秒安全计时"）与 `SoftYieldCoordinator`。
+- **穿透修复**：只返回 `HTTRANSPARENT` 只对同线程窗口有效，跨进程点击仍被吞；`SetInputPassthrough` 现在同时
+  增删 `WS_EX_TRANSPARENT`。实测 `WindowFromPoint`：柔化前命中 FluidBar 窗口，柔化后命中下层 Chrome 窗口。
+- 右键仍可在柔化状态下取回控制（该点击始终被岛消费，不会漏给下层）。
+- 全量 2655 测试绿。
+
 ## 2026-10-23 — 让位控制定稿：右键手动 + 3 秒自动恢复 + 进程降权
 
 - 右键（岛矩形内始终被消费）切换柔化/恢复；不再需要托盘菜单。

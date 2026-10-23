@@ -17,7 +17,7 @@ TestResults/
 
 # Local agent / tooling state
 .superpowers/
-.claude/worktrees/
+.claude/
 
 # Prototype review artifacts (screenshots are regenerated on demand)
 docs/rewrite/prototype/_shots/
@@ -30,3 +30,6 @@ artifacts-sync/
 example.txt
 
 third_party/
+
+# Tool artefact: ImageMagick expands %SystemDrive% literally
+%SystemDrive%/

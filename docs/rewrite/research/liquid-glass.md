@@ -373,3 +373,34 @@
   另一次右键序列 44 → 25 → 44 → 27（再次柔化），进程优先级 `BelowNormal`。
 - 测试：引擎新增「tick 不算活动」「手动柔化保持到计时结束」；协调器新增「右键柔化/恢复」「淡出结束后宿主
   仍需 tick」。
+
+## 15. 定稿：删除预测式让位，只保留右键手动 + 穿透修复
+
+用户决定：「把这个智能让位直接删掉，纯手动右键触发」，并反馈「穿透不了」。
+
+### 15.1 删除
+
+- 删除 `YieldEngine`（四状态机 / 打分 / Candidate / Cooldown / 前景窗口上下文）、`ForegroundWindowProbe`、
+  `PointerMovedAnywhere` 全局指针流、以及对应的 12 个引擎测试。
+- 新增 `ManualYieldController`（Core，纯逻辑）：`Soften/Restore/Tick`，只有"是否柔化 + 3 秒安全计时"，
+  没有任何预测。
+- `SoftYieldCoordinator`（App）负责淡入淡出动画与输入穿透开关；`SmartYieldCoordinator` 已删除。
+
+### 15.2 穿透 bug 的根因（实测）
+
+用 `WindowFromPoint` 对比柔化前后的命中窗口：
+
+| 状态 | 命中窗口 | exStyle |
+|---|---|---|
+| 正常 | `FluidBar.LayeredIslandHost`(pid 自身) | 0x8080088 |
+| 柔化（修复前） | 仍是 `FluidBar.LayeredIslandHost` | 0x8080088（没有 0x20） |
+| 柔化（修复后） | `Chrome_WidgetWin_1`(下方应用) | — |
+
+根因：只返回 `HTTRANSPARENT` 不够——它只把消息转给**同一线程**的窗口，跨进程应用收不到点击。
+修复：`LayeredWindowHost.SetInputPassthrough` 同时增删 `WS_EX_TRANSPARENT`（`GWL_EXSTYLE`），
+保留 `HTTRANSPARENT` 作为第二道保险。
+
+### 15.3 行为
+
+右键（岛矩形内始终被消费）→ 柔化；再右键 → 恢复；3 秒无操作自动恢复（`ManualYieldController.Tick`）。
+`FLUIDBAR_SOFT_YIELD=0`（或旧的 `FLUIDBAR_SMART_YIELD=0`）可整体关闭。

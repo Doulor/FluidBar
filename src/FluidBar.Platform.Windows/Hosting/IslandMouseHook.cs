@@ -62,12 +62,6 @@ public sealed class IslandMouseHook : IDisposable
     public event Action<float, float>? PointerMoved;
 
     /// <summary>
-    /// Every pointer move anywhere on the desktop (physical pixels). Used by the smart-yield engine to
-    /// see approach trajectories; subscribers must stay cheap because this runs inside the hook callback.
-    /// </summary>
-    public event Action<int, int>? PointerMovedAnywhere;
-
-    /// <summary>
     /// When true the hook stops consuming clicks and wheel deltas inside the island rectangles, so the
     /// desktop below receives them (the "yielding" state). Movement forwarding continues.
     /// </summary>
@@ -301,11 +295,6 @@ public sealed class IslandMouseHook : IDisposable
         if (route.Moved)
         {
             PointerMoved?.Invoke(x, y);
-        }
-
-        if (message == WmMouseMove && PointerMovedAnywhere is { } anywhere)
-        {
-            anywhere(x, y);
         }
 
         if (route.WheelNotches is { } notches)

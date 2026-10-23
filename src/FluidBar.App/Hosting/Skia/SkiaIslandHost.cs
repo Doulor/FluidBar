@@ -144,8 +144,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     /// <summary>Blurred desktop capture for the liquid-glass material (throttled internally).</summary>
     private readonly IslandBackdropProvider _backdrop;
 
-    /// <summary>Predictive yield (null unless enabled); feeds the mouse hook stream into Core.</summary>
-    private SmartYieldCoordinator? _smartYield;
+    /// <summary>Manual soften (right-click); null only when the feature is disabled.</summary>
+    private SoftYieldCoordinator? _softYield;
 
     private const int FollowMousePollMs = 250;
 
@@ -573,13 +573,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _backdrop.Updated -= OnBackdropUpdated;
         if (_mouseHook is not null)
         {
-            _mouseHook.PointerMovedAnywhere -= OnHookPointerMovedAnywhere;
-            _mouseHook.PointerPressed -= OnHookPointerPressedForYield;
             _mouseHook.RightPressed -= OnHookRightPressed;
         }
 
-        _smartYield?.Dispose();
-        _smartYield = null;
+        _softYield?.Dispose();
+        _softYield = null;
         _uiaSource.Dispose();
         _controller.Dispose();
         _backdrop.Dispose();
@@ -703,7 +701,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHook.PointerLeft += OnHookPointerLeft;
         _mouseHook.Wheel += OnHookWheel;
         _mouseHook.OutsidePressed += OnHookOutsidePressed;
-        StartSmartYield();
+        StartSoftYield();
         // Started at the end of StartAsync, after the controller has a render state and the first
         // frame is on screen: a hook that consumes clicks before that would swallow them into a
         // controller that cannot hit-test yet (the classic "first click after launch does nothing").
@@ -1361,7 +1359,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         // A softened island still needs ticks: the 3 s restore timer and the fade live outside the
         // controller's animation flags.
-        var yieldActive = _smartYield?.IsActive == true;
+        var yieldActive = _softYield?.IsActive == true;
         if (!IslandFrameLoopPolicy.ShouldRun(
                 _controller.IsAnimating || yieldActive,
                 _controller.IsAgentAnimating,
@@ -1425,8 +1423,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             _controller.PumpTimers();
             _controller.Advance(delta);
-            // Soften yield animation: keep painting while the island fades back (all materials).
-            var yieldAnimating = _smartYield is not null && _smartYield.Step(NowMs());
+            // Soften animation: keep painting while the island fades back and while the safety timer runs.
+            var yieldAnimating = _softYield is not null && _softYield.Step(NowMs());
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
             var painted = RenderAllLocked(forceFull: yieldAnimating);
@@ -1970,64 +1968,34 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     }
 
     /// <summary>
-    /// Starts the predictive yield coordinator. On by default; FLUIDBAR_SMART_YIELD=0 turns the whole
-    /// mechanism (including the right-click soften/restore gesture) off. It only observes pointer
-    /// movement and flips input pass-through; every decision lives in
-    /// <see cref="FluidBar.Core.Interaction.YieldEngine"/>.
+    /// Starts the manual soften coordinator (right-click to soften / restore). On by default;
+    /// FLUIDBAR_SOFT_YIELD=0 (or the legacy FLUIDBAR_SMART_YIELD=0) disables it entirely.
     /// </summary>
-    private void StartSmartYield()
+    private void StartSoftYield()
     {
-        var setting = Environment.GetEnvironmentVariable("FLUIDBAR_SMART_YIELD");
-        if (string.Equals(setting, "0", StringComparison.Ordinal) || _mouseHook is null)
+        if (_mouseHook is null || IsSoftYieldDisabled())
         {
             return;
         }
 
-        _smartYield = new SmartYieldCoordinator(
-            new FluidBar.Core.Interaction.YieldOptions(),
-            ShellForYield,
+        _softYield = new SoftYieldCoordinator(
+            restoreAfterMs: 3000,
             ApplyYieldPassthrough,
             _logger);
-        _mouseHook.PointerMovedAnywhere += OnHookPointerMovedAnywhere;
-        _mouseHook.PointerPressed += OnHookPointerPressedForYield;
         _mouseHook.RightPressed += OnHookRightPressed;
         _logger.Information(LogCategories.Render, "island.yield.enabled",
-            "Smart yield enabled (predictive input pass-through).");
+            "Manual soften enabled (right-click to soften / restore, 3 s auto-restore).");
     }
 
-    private void OnHookPointerMovedAnywhere(int x, int y) => _smartYield?.PointerMoved(x, y);
-
-    private void OnHookPointerPressedForYield(float x, float y) => _smartYield?.NoteInteraction();
-
-    private void OnHookRightPressed(float x, float y) => _smartYield?.Toggle();
-
-    /// <summary>Shell rectangle in physical screen pixels plus the drag flag, or null when hidden.</summary>
-    private ((int X, int Y, int Width, int Height) Shell, bool Dragging)? ShellForYield()
+    private static bool IsSoftYieldDisabled()
     {
-        if (_windows.Count == 0)
-        {
-            return null;
-        }
+        static bool IsOff(string name)
+            => string.Equals(Environment.GetEnvironmentVariable(name), "0", StringComparison.Ordinal);
 
-        var entry = _windows[0];
-        var state = _controller.RenderState;
-        if (!state.IsVisible)
-        {
-            return null;
-        }
-
-        var surface = entry.Host.SurfaceSizeDip;
-        var scale = surface.WidthDip > 0 ? entry.Host.Placement.WindowPixel.Width / surface.WidthDip : 1.0;
-        var placement = entry.Host.Placement.WindowPixel;
-        var dragging = _hookDragActive || _controller.IsWindowDragging || _windows.Any(w => w.DragActive);
-        return (
-            (
-                placement.X + (int)Math.Round(state.ShellOrigin.X * scale),
-                placement.Y + (int)Math.Round(state.ShellOrigin.Y * scale),
-                (int)Math.Round(state.ShellWidth * scale),
-                (int)Math.Round(state.ShellHeight * scale)),
-            dragging);
+        return IsOff("FLUIDBAR_SOFT_YIELD") || IsOff("FLUIDBAR_SMART_YIELD");
     }
+
+    private void OnHookRightPressed(float x, float y) => _softYield?.Toggle();
 
     /// <summary>Applies the yielding state to every window and to the mouse hook's click consumption.</summary>
     private void ApplyYieldPassthrough(bool passThrough)
@@ -2153,10 +2121,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
         }
 
-        // Soften yield applies to the composited scene, so every material gets the same treatment.
-        if (_smartYield is not null)
+        // Soften applies to the composited scene, so every material gets the same treatment.
+        if (_softYield is not null)
         {
-            renderState = renderState with { YieldProgress = _smartYield.Progress };
+            renderState = renderState with { YieldProgress = _softYield.Progress };
         }
 
         var probeAllocStart = IslandFrameProbe.Enabled ? GC.GetAllocatedBytesForCurrentThread() : 0L;
