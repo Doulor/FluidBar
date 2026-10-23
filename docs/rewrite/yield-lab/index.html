@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>FluidBar · 让位动效候选</title>
+<link rel="stylesheet" href="yield.css">
+</head>
+<body data-variant="a">
+  <header class="bar">
+    <div class="brand">
+      <span class="logo"></span>
+      <div>
+        <strong>让位动效候选</strong>
+        <span class="sub">鼠标甩向岛 → 岛怎么"退开" · 6 个预设</span>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="让位预设"></nav>
+    <button class="ghost" id="playBtn" type="button">让位 / 恢复 (Space)</button>
+    <button class="ghost" id="loopBtn" type="button">自动循环</button>
+    <button class="ghost" id="gridBtn" type="button">全览 (G)</button>
+  </header>
+
+  <main id="single">
+    <section class="stage" id="stage" data-variant="a">
+      <img class="wallpaper" src="../liquid-glass-lab/assets/wallpaper.jpg" alt="">
+      <div class="fake-window">
+        <div class="fw-titlebar"><i></i><i></i><i></i><span>Quarterly review — 窗口最大化（下面是它）</span></div>
+        <div class="fw-body">
+          <h3>Maximized window</h3>
+          <p>把岛压在窗口上方：让位后点击应该落到这个窗口上。看动效时注意"岛还在不在视野里"。</p>
+          <div class="fw-chart"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+      </div>
+      <div class="pointer" id="pointer"></div>
+      <div class="island-wrap">
+        <div class="glass" id="island">
+          <div class="art"></div>
+          <div class="copy">
+            <b>Midnight City</b>
+            <span>M83 · Hurry Up, We're Dreaming</span>
+          </div>
+          <div class="wave"><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="hud" id="hud">Interactive</div>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-head">
+        <span class="kicker" id="vKicker">A</span>
+        <h2 id="vName">淡出</h2>
+      </div>
+      <p id="vDesc"></p>
+      <dl id="vMeta"></dl>
+      <div class="hintbox">
+        <b>看什么</b>
+        <ul>
+          <li>让位后还"看得见"吗？会不会觉得丢了个东西</li>
+          <li>恢复时会不会闪一下 / 抢视线</li>
+          <li>鼠标快速经过时，这个动效会不会太"吵"</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <section id="grid" aria-label="全部预设"></section>
+  <script src="yield.js"></script>
+</body>
+</html>
