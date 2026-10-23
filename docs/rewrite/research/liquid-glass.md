@@ -564,3 +564,25 @@
    `%TEMP%\fluidbar-flash.log`（含 backdrop/blend/lum/yield/opacity/material 与离屏表面同点 alpha）。
 
 本机 20 秒无命中（说明本机不触发），需要用户机器上复现时提供该日志。
+
+### 15.14 诊断结果与双缓冲 DIB（2026-10-23）
+
+用户要求"自己查日志"。实际检查：
+
+- `%TEMP%\fluidbar-flash.log` **不存在** —— 但发现探针只挂在**整帧提交**分支上，而动画期间多数帧走的是局部提交分支，
+  所以它从来没被调用过（这是我的疏漏，已修复：局部分支也会检测）。
+- 用 WGC 连续采样岛区域（`build/flickerprobe`，160–200 帧 @≈14 fps）：亮度序列稳定在 34.1–34.9，
+  **没有任何一帧跌落**。也就是说**我们提交给系统的内容始终是完整的**。
+
+结论：闪不是"内容错了"，而是**呈现**问题 —— 而 `LayeredSurface` 的注释本身就写着：
+"draws directly into the memory the compositor uploads"（直接画进合成器要上传的那块内存）。
+即使我们保证"画完再提交"，**绘制过程本身**就发生在那块内存里：60 fps 更新时，合成器随时可能读到
+一半新一半旧（或已清空)的表面 → 屏幕上一闪。
+
+修复：分层窗口改**双缓冲 DIB**（ping-pong）——
+
+- `LayeredWindowHost` 持有两块 `LayeredSurface`，`BeginFrame`/绘制总是落在**背缓冲**；
+  `CommitCore` 用背缓冲的 HDC 调 `UpdateLayeredWindow`，成功后才翻转。
+- 因为局部更新在背缓冲里会读到两帧前的内容，App 侧改为**每帧整帧重绘**（`SurfaceNeedsFull`），
+  渲染成本 ~1 ms，可接受。
+- 顺带把集成测试对齐仓库里新出现的通知优先级策略（commit `a352e7a`，通知恢复最高优先级）。

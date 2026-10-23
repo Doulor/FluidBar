@@ -2389,6 +2389,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 var pixelDamage = LayeredRect.FromDip(damage, frame.Scale);
                 var result = entry.Host.CommitFrame(pixelDamage);
                 RecordCommit(entry, result, dirty: true);
+
+                // The host ping-pongs its DIBs, so the next frame must repaint the whole surface instead of
+                // starting from a stale back buffer.
+                entry.SurfaceNeedsFull = true;
             }
         }
         catch

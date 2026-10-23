@@ -71,7 +71,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     /// <summary>Host surface width for both modes (DIP).</summary>
     public const double Width = 488;
 
-    /// <summary>Float surface width (1263 DIP): room for the 1215 DIP notification cap.</summary>
+    /// <summary>Float surface width (1263 DIP): host envelope; notification card itself is capped at 810 DIP.</summary>
     public const double FloatWidth = 1263;
 
     /// <summary>Float surface height (DIP): 24 bleed + 284 panel + 8 gap + 32 strip + 36 bleed.</summary>

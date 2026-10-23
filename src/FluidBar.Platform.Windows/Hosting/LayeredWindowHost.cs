@@ -57,6 +57,12 @@ public sealed partial class LayeredWindowHost : IDisposable
     private readonly GCHandle _selfHandle;
 
     private LayeredSurface? _surface;
+
+    // Ping-pong DIBs: the compositor reads the surface that was last handed to UpdateLayeredWindow, so
+    // drawing the next frame into the *other* buffer keeps a half-written frame off the screen (the
+    // "island flashes transparent" report, 2026-10-23).
+    private LayeredSurface? _backSurface;
+    private bool _drawToBack;
     private LayeredFramePacer? _pacer;
     private IntPtr _hwnd;
     private bool _inputPassthrough;
@@ -305,6 +311,8 @@ public sealed partial class LayeredWindowHost : IDisposable
         SetTopmostUnconditional();
 
         _surface = LayeredSurface.Create(sizePx.Width, sizePx.Height);
+        _backSurface = LayeredSurface.Create(sizePx.Width, sizePx.Height);
+        _drawToBack = false;
         _screenDc = NativeMethods.User32.GetDC(IntPtr.Zero);
         _pacer = new LayeredFramePacer(_options.Pacing, _options.TargetFramesPerSecond);
         _created = true;
@@ -573,7 +581,7 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         _frameOpen = true;
         _frameIndex++;
-        return new LayeredFrame(_surface!, _scale, _frameIndex);
+        return new LayeredFrame(DrawSurface, _scale, _frameIndex);
     }
 
     /// <summary>Uploads the whole surface (<c>UpdateLayeredWindow</c>, one call).</summary>
@@ -629,7 +637,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         }
 
         _frameOpen = false;
-        var surface = _surface!;
+        var surface = DrawSurface;
         var useDirty = !fullFrame && !_needsFullFrame && dirtyRects.Length > 0 && !_options.FullFrameCommits;
 
         var started = Stopwatch.GetTimestamp();
@@ -710,6 +718,7 @@ public sealed partial class LayeredWindowHost : IDisposable
         if (ok)
         {
             _needsFullFrame = false;
+            _drawToBack = !_drawToBack;
             ReassertTopmostIfDue();
             if (_options.LogFrames)
             {
@@ -737,7 +746,7 @@ public sealed partial class LayeredWindowHost : IDisposable
 
     private unsafe (bool Ok, int Error, bool UsedFallback) TryUpdate(LayeredRect? dirty)
     {
-        var surface = _surface!;
+        var surface = DrawSurface;
         var blend = new NativeMethods.BLENDFUNCTION
         {
             BlendOp = NativeMethods.AC_SRC_OVER,
@@ -859,11 +868,26 @@ public sealed partial class LayeredWindowHost : IDisposable
         if (_surface is null)
         {
             _surface = LayeredSurface.Create(sizePx.Width, sizePx.Height);
-            return;
+        }
+        else
+        {
+            _surface.Recreate(sizePx.Width, sizePx.Height);
         }
 
-        _surface.Recreate(sizePx.Width, sizePx.Height);
+        if (_backSurface is null)
+        {
+            _backSurface = LayeredSurface.Create(sizePx.Width, sizePx.Height);
+        }
+        else
+        {
+            _backSurface.Recreate(sizePx.Width, sizePx.Height);
+        }
+
+        _drawToBack = false;
     }
+
+    /// <summary>Surface the next frame is drawn into (never the one the compositor is showing).</summary>
+    private LayeredSurface DrawSurface => _drawToBack ? _backSurface! : _surface!;
 
     private void SetTopmostUnconditional()
     {
@@ -1057,6 +1081,8 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         _surface?.Dispose();
         _surface = null;
+        _backSurface?.Dispose();
+        _backSurface = null;
         _pacer?.Dispose();
         _pacer = null;
         _created = false;

@@ -2261,7 +2261,7 @@ public sealed class SkiaIslandController : IDisposable
         var compactSize = LayoutTokens.CompactSizeFor(compactKind, mode, settings.FontScale);
 
         // The notification card only grows when its text actually needs the room; short messages keep
-        // the 360 DIP token. The cap is 1215 DIP (the third requested +50%).
+        // the 360 DIP token. The cap is 810 DIP after the requested -1/3.
         if (compactKind == ActivityKind.Notification && _compact.Model is { } notificationModel)
         {
             var measured = MeasureNotificationWidth(notificationModel, settings.FontScale);

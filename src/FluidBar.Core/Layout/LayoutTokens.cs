@@ -50,8 +50,8 @@ public static class LayoutTokens
     /// <summary>Fixed per-monitor host surface width (488 DIP) for every mode.</summary>
     public const double HostSurfaceWidth = ExpandedWidth + (2 * WindowPadding);
 
-    /// <summary>Float/flush host surface width (1263 DIP): room for the 1215 DIP notification cap.</summary>
-    public const double HostSurfaceFloatWidth = NotificationMaxWidth + (2 * WindowPadding);
+    /// <summary>Float/flush host surface width (1263 DIP): keeps the established host envelope; the card itself is capped at 810 DIP.</summary>
+    public const double HostSurfaceFloatWidth = 1263;
 
     /// <summary>
     /// Fixed float/flush host surface height (488x384 DIP): shell envelope 332 + the detached
@@ -337,8 +337,8 @@ public static class LayoutTokens
     /// <summary>Minimum notification-card width (short, unclipped messages stay here).</summary>
     public const double NotificationMinWidth = 360;
 
-    /// <summary>Maximum notification-card width after the requested +50% cap (810 → 1215).</summary>
-    public const double NotificationMaxWidth = 1215;
+    /// <summary>Maximum notification-card width after the requested -1/3 from 1215 (810 DIP).</summary>
+    public const double NotificationMaxWidth = 810;
 
     /// <summary>Squarer notification-card radius measured from the reference screenshot (~43 px at 2×).</summary>
     public const double NotificationCornerRadius = 21;

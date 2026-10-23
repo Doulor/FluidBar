@@ -47,17 +47,19 @@ public class SdkToCorePipelineTests
     }
 
     [Fact]
-    public void Clipboard_preempts_transient_notification()
+    public void Notification_outranks_clipboard_on_the_primary_slot()
     {
+        // Policy 2026-10-23 (commit a352e7a): notifications own the primary island, so a clipboard event
+        // arriving afterwards becomes a ghost instead of pre-empting the notification.
         using var pipeline = new CorePipelineHarness();
         pipeline.Publish(SdkEvents.Notification());
         Assert.Equal(ActivityKind.Notification, pipeline.View.Primary!.Kind);
 
         pipeline.Publish(SdkEvents.Clipboard());
 
-        Assert.Equal(ActivityKind.Clipboard, pipeline.View.Primary!.Kind);
-        Assert.Equal(1, pipeline.SchedulerState.ActivityCount);
-        Assert.Empty(pipeline.View.Ghosts);
+        Assert.Equal(ActivityKind.Notification, pipeline.View.Primary!.Kind);
+        Assert.Equal(2, pipeline.SchedulerState.ActivityCount);
+        Assert.Contains(pipeline.View.Ghosts, ghost => ghost.Kind == ActivityKind.Clipboard);
     }
 
     [Fact]
@@ -222,7 +224,7 @@ public class SdkToCorePipelineTests
         pipeline.Advance(TimeSpan.FromSeconds(6));
         observed.Add(pipeline.View.Primary?.Kind.ToString() ?? "idle");
 
-        Assert.Equal(["Media", "Notification", "Clipboard", "Media"], observed);
+        Assert.Equal(["Media", "Notification", "Notification", "Media"], observed);
         Assert.True(pipeline.Updates.Count >= 4);
     }
 }
