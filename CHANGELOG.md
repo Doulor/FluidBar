@@ -10,6 +10,12 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 空闲标签页窗口收紧到 10 分钟
+
+- 投影缓存里仍有昨天的会话文件，30 分钟窗口会把它们当成"开着的标签页"→ 又出现多环。
+- `AgentContentMapper.LiveWindow` 30 → **10 分钟**；`DshSessionProvider.OpenTabWindow` 同样 10 分钟。
+- 全量 2680 测试绿。
+
 ## 2026-10-24 — 只有一个会话却显示三个环
 
 - 两个原因：① 我调试时留在 `agent-events\inbox` 的 `flicker-test-0001.json`（status=running）每次启动都会

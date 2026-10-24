@@ -30,6 +30,9 @@ public sealed class DshSessionProvider : IAgentStatusProvider
     /// <summary>Quiet time after which a session row is closed (the ring drops) even if no event arrived.</summary>
     private static readonly TimeSpan CloseQuietAfter = TimeSpan.FromMinutes(10);
 
+    /// <summary>How recently a session file must have been written to count as an open tab.</summary>
+    private static readonly TimeSpan OpenTabWindow = TimeSpan.FromMinutes(10);
+
     private readonly DshSessionOptions _options;
     private readonly Dictionary<string, SessionState> _states = new(StringComparer.Ordinal);
     private HashSet<string>? _knownSessions;
@@ -226,7 +229,9 @@ public sealed class DshSessionProvider : IAgentStatusProvider
             // An open session that is simply quiet (the user's other Harness tabs) must still be a row,
             // otherwise the island counts one agent instead of three (user report 2026-10-24). Reported
             // once per quiet period so polling never floods the history.
-            if (lastTurn > 0)
+            // Only recently written sessions are "open tabs": older ones are history (user report: one
+            // session but three rings while the projection cache still held yesterday's files).
+            if (lastTurn > 0 && now - file.LastWriteTimeUtc <= OpenTabWindow)
             {
                 state.IdleReported = true;
                 events.Add(new AgentProviderEvent(sessionId, "waiting", TitleFor(state.Project), "空闲",

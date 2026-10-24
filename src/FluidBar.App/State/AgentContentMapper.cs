@@ -18,7 +18,7 @@ public static class AgentContentMapper
     /// How long an idle-but-open session still counts as live. Harness only rewrites a session file when
     /// something happens, so a quiet tab's row ages with the file.
     /// </summary>
-    public static readonly TimeSpan LiveWindow = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan LiveWindow = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Running rows are refreshed by heartbeats. If one goes quiet this long the agent is gone (crashed,
