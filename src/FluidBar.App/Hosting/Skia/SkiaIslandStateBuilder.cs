@@ -105,10 +105,6 @@ public static class SkiaIslandStateBuilder
             Icon = MapIcon(model.Icon),
             Status = MapTone(model.Tone),
             TimeText = notificationTime,
-            // Multi-agent glyph: how many sessions are still running/waiting (the capsule shows one row
-            // but the icon stacks up to three rings, user spec 2026-10-24).
-            AgentLiveCount = kind == ActivityKind.Agent ? CountLiveAgents(content) : 1,
-            AgentRingColors = kind == ActivityKind.Agent ? LiveAgentColors(content) : [],
         });
     }
 
@@ -349,43 +345,6 @@ public static class SkiaIslandStateBuilder
         return models;
     }
 
-    /// <summary>Ring colours of the live sessions in display order (max three).</summary>
-    private static uint[] LiveAgentColors(IslandContent content)
-    {
-        var colors = new System.Collections.Generic.List<uint>(3);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in content.Agents)
-        {
-            if (colors.Count >= 3)
-            {
-                break;
-            }
-
-            if (item.IsLive && seen.Add((item.Project ?? string.Empty) + "|" + (item.SessionTitle ?? item.Name)))
-            {
-                colors.Add(AgentToolPalette.ColorFor(item.Kind));
-            }
-        }
-
-        return colors.Count == 0 ? [] : colors.ToArray();
-    }
-
-    /// <summary>Running/waiting agent sessions (capped at the glyph's three slots).</summary>
-    private static int CountLiveAgents(IslandContent content)
-    {
-        var live = 0;
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in content.Agents)
-        {
-            if (item.IsLive && seen.Add((item.Project ?? string.Empty) + "|" + (item.SessionTitle ?? item.Name)))
-            {
-                live++;
-            }
-        }
-
-        return FluidBar.Island.AgentRingStack.Clamp(live <= 0 ? 1 : live);
-    }
-
     private static AgentItemModel[] BuildAgents(IReadOnlyList<AgentItemData> items)
     {
         var models = new AgentItemModel[items.Count];
@@ -397,12 +356,9 @@ public static class SkiaIslandStateBuilder
                 Tool = item.Name,
                 Project = item.Project,
                 Task = string.IsNullOrWhiteSpace(item.PrimaryText) ? item.Detail : item.PrimaryText,
-                SessionTitle = item.SessionTitle,
                 StatusText = item.StatusText,
                 DurationText = item.TimeText,
                 Tone = MapTone(item.Tone),
-                AccentArgb = AgentToolPalette.ColorFor(item.Kind),
-                IsLive = item.IsLive,
             };
         }
 

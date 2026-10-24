@@ -2337,43 +2337,6 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Applies the split policy's presentation order to the visible stack.</summary>
-    /// <summary>
-    /// Ring colours of the live agent sessions (max three). Sessions from the same tool share a colour, so
-    /// three DeepSeek Harness sessions all paint the same accent (user report 2026-10-24).
-    /// </summary>
-    private uint[] AgentRingColors()
-    {
-        var items = _pages.Agent.Items;
-        var colors = new System.Collections.Generic.List<uint>(3);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = 0; i < items.Count && colors.Count < 3; i++)
-        {
-            if (items[i].IsLive && seen.Add((items[i].Project ?? string.Empty) + "|" + (items[i].SessionTitle ?? items[i].Tool ?? string.Empty)))
-            {
-                colors.Add(items[i].AccentArgb);
-            }
-        }
-
-        return colors.Count == 0 ? [] : colors.ToArray();
-    }
-
-    /// <summary>Running/waiting agent sessions (capped at the glyph's three slots).</summary>
-    private int CountLiveAgents()
-    {
-        var items = _pages.Agent.Items;
-        var live = 0;
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = 0; i < items.Count; i++)
-        {
-            if (items[i].IsLive && seen.Add((items[i].Project ?? string.Empty) + "|" + (items[i].SessionTitle ?? items[i].Tool ?? string.Empty)))
-            {
-                live++;
-            }
-        }
-
-        return FluidBar.Island.AgentRingStack.Clamp(live <= 0 ? 1 : live);
-    }
-
     private void ReorderSplitVisible(int wheelSteps = 0)
     {
         if (_schedulerState.Visible.Length < 2 && wheelSteps == 0)
@@ -3689,8 +3652,6 @@ private void HandlePageControl(in IslandHitTarget hit)
             ReducedMotion = _motion.ReducedMotion,
             MotionPhase = _motionPhase,
             AgentAnimationSeconds = _agentAnimationSeconds,
-            AgentLiveCount = CountLiveAgents(),
-            AgentRingColors = AgentRingColors(),
             // A focused rail glass paints its own prototype accent outline in the strip renderer, so
             // the generic page-control ring stays off for those slots.
             FocusRing = _railFocus == MiniRailSlot.None ? _accessibilityFocus : null,

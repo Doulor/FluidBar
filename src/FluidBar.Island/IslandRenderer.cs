@@ -68,11 +68,6 @@ public sealed class IslandRenderer : IDisposable
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _icon = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
-    private readonly SKPaint _glow = new() { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f) };
-
-    // Merge progress of the stacked agent glyph on split satellites (0..1 per ring).
-    private float _splitRing2;
-    private float _splitDot;
     private readonly SKPaint _clear = new() { IsAntialias = false, BlendMode = SKBlendMode.Src };
     private readonly SKPaint _glassPaint = new() { IsAntialias = true };
     // Material cross-fade context (spec 3.4): when set, the shell body is painted twice with Plus.
@@ -898,30 +893,21 @@ public sealed class IslandRenderer : IDisposable
             {
                 if (islet.Status == CompactStatus.Info)
                 {
-                    // Same stacked glyph as the compact pill (shared implementation), so a satellite
-                    // ball and the primary pill never disagree about how many agents are running.
-                    var agents = AgentRingStack.Clamp(state.AgentLiveCount);
+                    // Same ring language as the primary compact pill: a faint full circle plus the
+                    // 180° rotating arc with the compact stroke ratio (the old thick arc read as a
+                    // blobby halo on a 40 DIP ball — user report 2026-10-21).
+                    var rotation = state.AgentRingFrozenDegrees
+                        ?? AgentSpinner.RotationDegrees(state.AgentAnimationSeconds);
                     var centreRadius = radius * IslandMetrics.SplitRingRadiusFactor;
                     var centre = new SKPoint(rect.MidX, rect.MidY);
-                    _splitRing2 += ((agents >= 2 ? 1f : 0f) - _splitRing2) * 0.28f;
-                    _splitDot += ((agents >= 3 ? 1f : 0f) - _splitDot) * 0.28f;
-                    AgentRingStack.Draw(
-                        canvas,
-                        _stroke,
-                        _fill,
-                        _glow,
-                        centre,
-                        centreRadius,
-                        IslandMetrics.SplitRingStrokeDip,
-                        agents,
-                        state.AgentAnimationSeconds,
-                        _splitRing2,
-                        _splitDot,
-                        alpha,
-                        _theme.Accent,
-                        state.AgentRingColors,
-                        state.ReducedMotion,
-                        AgentMotion.RingBaseAlpha);
+                    _stroke.Style = SKPaintStyle.Stroke;
+                    _stroke.StrokeCap = SKStrokeCap.Butt;
+                    _stroke.StrokeWidth = IslandMetrics.SplitRingStrokeDip;
+                    _stroke.Shader = null;
+                    _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * alpha);
+                    canvas.DrawCircle(centre.X, centre.Y, centreRadius, _stroke);
+                    AgentSpinner.Draw(canvas, _stroke, centre, centreRadius, rotation,
+                        Alpha(_theme.Accent, alpha), IslandMetrics.SplitRingStrokeDip);
                 }
                 else
                 {

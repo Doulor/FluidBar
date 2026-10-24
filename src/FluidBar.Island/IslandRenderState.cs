@@ -239,15 +239,6 @@ public readonly record struct IslandRenderState
     /// <summary>Width of the refraction band in DIP (0 = scale with the shell height).</summary>
     public double RefractionBandDip { get; init; }
 
-    /// <summary>Live agent sessions (1..3): drives the stacked ring glyph everywhere it is painted.</summary>
-    public int AgentLiveCount { get; init; } = 1;
-
-    /// <summary>
-    /// Ring colours of the live agent sessions, in display order (0xAARRGGBB, 0 = theme accent). Sessions
-    /// from the same tool carry the same colour; the rings differ only when the tools differ.
-    /// </summary>
-    public uint[] AgentRingColors { get; init; } = [];
-
     /// <summary>Detached mini-island strip state.</summary>
     public ArchipelagoState Archipelago { get; init; }
 
@@ -572,12 +563,6 @@ public sealed record CompactModel
 
     /// <summary>Status label (agent/battery/timer).</summary>
     public string? StatusText { get; init; }
-
-    /// <summary>Live agent sessions behind this agent capsule (1..3; drives the stacked ring glyph).</summary>
-    public int AgentLiveCount { get; init; } = 1;
-
-    /// <summary>Ring colours per live session (0xAARRGGBB, 0 = accent); same tool ⇒ same colour.</summary>
-    public uint[] AgentRingColors { get; init; } = [];
 
     /// <summary>Elapsed/duration text (agent).</summary>
     public string? DurationText { get; init; }
@@ -1205,20 +1190,11 @@ public sealed record AgentItemModel
     /// <summary>Task description.</summary>
     public string? Task { get; init; }
 
-    /// <summary>Session title (dedupe key: several session ids can belong to one conversation).</summary>
-    public string? SessionTitle { get; init; }
-
     /// <summary>Localized status label ("Running").</summary>
     public string? StatusText { get; init; }
 
     /// <summary>Elapsed/duration label ("02:14").</summary>
     public string? DurationText { get; init; }
-
-    /// <summary>Ring colour of this session's tool (0 = theme accent); same tool ⇒ same colour.</summary>
-    public uint AccentArgb { get; init; }
-
-    /// <summary>Session still counts as open (drives the stacked ring count).</summary>
-    public bool IsLive { get; init; }
 
     /// <summary>Status tone (Info paints the running spinner and progress bar).</summary>
     public CompactStatus Tone { get; init; }

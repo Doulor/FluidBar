@@ -18,7 +18,6 @@ internal sealed class CompactRenderer : IDisposable
     private readonly NumberTextCache _numbers;
     private readonly SKPaint _fill = new() { IsAntialias = true };
     private readonly SKPaint _stroke = new() { IsAntialias = true };
-    private readonly SKPaint _glow = new() { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 3f) };
     private readonly SKPaint _icon = new() { IsAntialias = true };
 
     private IslandTheme _theme = IslandTheme.Dark;
@@ -357,11 +356,6 @@ internal sealed class CompactRenderer : IDisposable
 
     // ------------------------------------------------------------------ agent
 
-    // The stacked rings merge in/out instead of popping: the inner ring grows out of the outer ring's
-    // radius, the centre dot grows out of the inner ring (user spec 2026-10-24).
-    private float _secondRing;
-    private float _centreDot;
-
     private void DrawAgent(SKCanvas canvas, CompactModel model, float width, float height)
     {
         var tone = Tone(model.Status);
@@ -377,41 +371,8 @@ internal sealed class CompactRenderer : IDisposable
         _stroke.Style = SKPaintStyle.Stroke;
         _stroke.StrokeCap = SKStrokeCap.Butt;
         _stroke.StrokeWidth = AgentMotion.RingStrokeWidth;
-        // Stacked agent glyph (1..3 live sessions). Shared with the split satellite so both hosts
-        // paint the identical ring language.
-        var agents = AgentRingStack.Clamp(model.AgentLiveCount);
-        var busy = model.Status is CompactStatus.Info or CompactStatus.Warning;
-        _secondRing += (((busy && agents >= 2) ? 1f : 0f) - _secondRing) * 0.28f;
-        _centreDot += (((busy && agents >= 3) ? 1f : 0f) - _centreDot) * 0.28f;
-        if (_secondRing < 0.01f)
-        {
-            _secondRing = 0f;
-        }
-
-        if (_centreDot < 0.01f)
-        {
-            _centreDot = 0f;
-        }
-
-        AgentRingStack.Draw(
-            canvas,
-            _stroke,
-            _fill,
-            _glow,
-            new SKPoint(ring.MidX, ring.MidY),
-            ringRadius,
-            AgentMotion.RingStrokeWidth,
-            agents,
-            _agentPhase,
-            _secondRing,
-            _centreDot,
-            _opacity,
-            _theme.Accent,
-            model.AgentRingColors,
-            _reduced,
-            AgentMotion.RingBaseAlpha);
-
-
+        _stroke.Color = Alpha(_theme.Accent, AgentMotion.RingBaseAlpha * _opacity);
+        canvas.DrawCircle(ring.MidX, ring.MidY, ringRadius, _stroke);
         if (model.Status == CompactStatus.Success)
         {
             DrawIcon(canvas, IconKind.Check, ring.Deflate(5), tone);

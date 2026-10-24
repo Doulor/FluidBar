@@ -10,6 +10,14 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 移除多 agent 堆叠环形图标，恢复单环
+
+- 用户决定：多 agent 的环数难以和数据源对齐（一个对话在 DSH 里有多条 session 记录），整体回退。
+- 回退：`AgentRingStack`、`AgentToolPalette`、`AgentLiveCount`/`AgentRingColors`、`IsLive` 存活窗口、
+  DSH 的"空闲会话"与"关闭检测"全部删除；紧凑胶囊 / 分裂小岛 / 展开页恢复为单一圆环实现。
+- 删除 3 个相关测试文件，恢复 `Poll_AdoptsExistingIdleSessionsSilently`。
+- 全量 2669 测试绿。
+
 ## 2026-10-24 — 一个会话却有三个环：同一条对话有多个 session 记录
 
 - 实查投影缓存：`3a2e4fd1` / `65c586b7` / `f57ae7f1` 三条记录**标题相同**（灵动岛新增液态玻璃材质），
