@@ -37,7 +37,12 @@ internal sealed class IslandBackdropProvider : IDisposable
 
     private const int MaxEntries = 2;
 
-    /// <summary>Frames a replaced image is kept alive before it is disposed (a draw may still use it).</summary>
+    /// <summary>
+    /// Frames a replaced image is kept alive before it is disposed: in-flight draws in the current frame
+    /// may still reference it. This is a *safety margin*, not an ownership guarantee — callers must copy
+    /// a frame they intend to draw later (see <c>SkiaIslandHost.CopyImage</c>). Counting it as ownership
+    /// is what freed a host-held backdrop and crashed the process on 2026-10-24.
+    /// </summary>
     private const int RetireFrames = 12;
 
     private readonly object _gate = new();
@@ -51,6 +56,12 @@ internal sealed class IslandBackdropProvider : IDisposable
 
     /// <summary>Raised after a capture lands, so the host can paint one frame with the new backdrop.</summary>
     public event Action? Updated;
+
+    /// <summary>
+    /// Test seam: replaces the real screen grab so frame ownership and retirement can be exercised
+    /// without a capturable desktop (headless CI). Null in production.
+    /// </summary>
+    internal Func<(int X, int Y, int Width, int Height), BackdropFrame?>? CaptureOverride { get; set; }
 
     /// <summary>Number of successful captures (diagnostics).</summary>
     public long CaptureCount { get; private set; }
@@ -78,20 +89,25 @@ internal sealed class IslandBackdropProvider : IDisposable
 
             if (_disposed || screenRect.Width <= 0 || screenRect.Height <= 0)
             {
-                return Latest();
+                return null;
             }
 
-            if (!force && _frames.TryGetValue(screenRect, out var cached))
+            if (_frames.TryGetValue(screenRect, out var cached))
             {
                 var ageMs = (Stopwatch.GetTimestamp() - cached.At) * 1000.0 / Stopwatch.Frequency;
-                if (ageMs < RefreshMs)
+                if (force || ageMs >= RefreshMs)
                 {
-                    return cached.Image;
+                    ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force, luminanceRect);
                 }
+
+                // Only this rectangle's own capture may be returned. Returning the newest frame overall
+                // painted one monitor's desktop into the other island and handed callers a frame they had
+                // no claim on; the host keeps its last adopted copy while a new capture bakes.
+                return cached.Image;
             }
 
             ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force, luminanceRect);
-            return Latest();
+            return null;
         }
     }
 
@@ -174,8 +190,10 @@ internal sealed class IslandBackdropProvider : IDisposable
         bool allowComposedCapture,
         (int X, int Y, int Width, int Height)? luminanceRect)
     {
-        var frame = ScreenBackdropCapture.TryCapture(
-            screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height, allowComposedCapture);
+        var frame = CaptureOverride is { } capture
+            ? capture(screenRect)
+            : ScreenBackdropCapture.TryCapture(
+                screenRect.X, screenRect.Y, screenRect.Width, screenRect.Height, allowComposedCapture);
         if (frame is not { } captured)
         {
             lock (_gate)
@@ -252,11 +270,6 @@ internal sealed class IslandBackdropProvider : IDisposable
             _retired.Dequeue().Image.Dispose();
         }
     }
-
-    private SKImage? Latest()
-        => _frames.Count == 0
-            ? null
-            : _frames.OrderBy(pair => pair.Value.At).Last().Value.Image;
 
     /// <summary>
     /// Replaces the island's own pixels in a composed capture with a horizontal edge-extend fill: the

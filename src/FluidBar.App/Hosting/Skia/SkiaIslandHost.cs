@@ -160,9 +160,19 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private bool _backdropDirty;
     private double _lastRawLuminance = -1;
     private (int X, int Y, int Width, int Height) _lastBackdropRect;
+
+    /// <summary>
+    /// Host-owned copy of the newest desktop capture. The host renders this, never the provider's own
+    /// frame: the provider retires and disposes its cache entries on a capture counter, so rendering a
+    /// borrow freed the image underneath the renderer (0xC0000005 in sk_image_get_width, 2026-10-24).
+    /// </summary>
     private SKImage? _backdropCurrent;
-    private SKBitmap? _backdropPreviousBitmap;
+
+    /// <summary>Host-owned copy of the capture being cross-faded out.</summary>
     private SKImage? _backdropPrevious;
+
+    /// <summary>Identity of the provider frame <see cref="_backdropCurrent"/> was copied from.</summary>
+    private SKImage? _backdropSource;
     private long _backdropBlendStartMs;
     private bool _awaitingFirstGlass;
 
@@ -465,6 +475,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         {
             RenderAllLocked(forceFull);
         }
+        catch (Exception ex)
+        {
+            // One bad frame must not take the process down. This runs inside an Avalonia dispatcher
+            // callback reached from WndProc, so an escaping exception terminates the app — that is how a
+            // malformed notification string (2026-10-22) and a freed backdrop image (2026-10-24) killed
+            // the island. Log it and let the next frame retry.
+            _logger.Error(LogCategories.Render, "island.skia.render-failed", "Skia island render failed.", ex);
+        }
         finally
         {
             _rendering = false;
@@ -611,7 +629,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _softYield?.Dispose();
         _softYield = null;
         _backdropPrevious?.Dispose();
-        _backdropPreviousBitmap?.Dispose();
+        _backdropPrevious = null;
+        _backdropCurrent?.Dispose();
+        _backdropCurrent = null;
+        _backdropSource = null;
         _uiaSource.Dispose();
         _controller.Dispose();
         _backdrop.Dispose();
@@ -2137,21 +2158,32 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
     }
 
-    private static SKBitmap? CopyImage(SKImage image)
+    /// <summary>
+    /// Copies a provider frame into an image the host owns outright.
+    /// <para>
+    /// The host must never render a borrow of <see cref="IslandBackdropProvider"/>'s cache. The provider
+    /// retires and disposes its frames on a capture counter, so a borrowed handle kept in
+    /// <see cref="_backdropCurrent"/> was freed underneath the renderer and produced the 0xC0000005
+    /// (<c>sk_image_get_width</c>) crashes of 2026-10-24: an idle island let that counter run past the
+    /// retire window, then the first interaction copied the freed image. Owning the pixels ends the class.
+    /// </para>
+    /// </summary>
+    internal static SKImage? CopyImage(SKImage image)
     {
         if (image.Width <= 0 || image.Height <= 0)
         {
             return null;
         }
 
-        var bitmap = new SKBitmap(new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
-        if (!image.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0))
+        var info = new SKImageInfo(image.Width, image.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var staging = new SKBitmap(info);
+        if (!image.ReadPixels(info, staging.GetPixels(), staging.RowBytes, 0, 0))
         {
-            bitmap.Dispose();
             return null;
         }
 
-        return bitmap;
+        // FromPixelCopy copies the pixels, so disposing the staging bitmap cannot invalidate the result.
+        return SKImage.FromPixelCopy(info, staging.GetPixels(), staging.RowBytes);
     }
 
     /// <summary>
@@ -2367,28 +2399,30 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 force: false,
                 luminanceRect: luminanceWindow);
 
-            // Sticky: a frame without a fresh capture (first frames, cache eviction, failed grab) must keep
-            // the previous image instead of falling back to the flat translucent fill — that fallback made
-            // the island flash "transparent" for a frame (reported 2026-10-23).
-            backdrop ??= _backdropCurrent;
-            if (backdrop is not null)
-            {
-                var now = NowMs();
-                var delta = _luminanceStampMs == 0 ? 16 : now - _luminanceStampMs;
-                _luminanceStampMs = now;
+            var now = NowMs();
+            var delta = _luminanceStampMs == 0 ? 16 : now - _luminanceStampMs;
+            _luminanceStampMs = now;
 
-                // Cross-fade the previous capture: the baked image is small (1/6 scale), so keeping a copy
-                // is cheap and the provider is free to dispose its own frames.
-                if (!ReferenceEquals(backdrop, _backdropCurrent))
+            // Adopt the provider's frame as a host-owned copy before anything draws with it (see CopyImage):
+            // the provider is free to dispose its own frames, the cross-fade below only ever touches images
+            // this host owns. Sticky: a frame without a fresh capture (first frames, cache eviction, failed
+            // grab) keeps the last adopted image instead of falling back to the flat translucent fill, which
+            // made the island flash "transparent" for a frame (reported 2026-10-23).
+            if (backdrop is not null && !ReferenceEquals(backdrop, _backdropSource))
+            {
+                _backdropSource = backdrop;
+                var adopted = CopyImage(backdrop);
+                if (adopted is not null)
                 {
                     _backdropPrevious?.Dispose();
-                    _backdropPreviousBitmap?.Dispose();
-                    _backdropPreviousBitmap = _backdropCurrent is null ? null : CopyImage(_backdropCurrent);
-                    _backdropPrevious = _backdropPreviousBitmap is null ? null : SKImage.FromBitmap(_backdropPreviousBitmap);
-                    _backdropCurrent = backdrop;
+                    _backdropPrevious = _backdropCurrent;
+                    _backdropCurrent = adopted;
                     _backdropBlendStartMs = now;
                 }
+            }
 
+            if (_backdropCurrent is not null)
+            {
                 var blend = _backdropPrevious is null
                     ? 1d
                     : Math.Clamp((now - _backdropBlendStartMs) / BackdropCrossfadeMs, 0, 1);
@@ -2399,9 +2433,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     _backdropDirty = false;
                     _lastRawLuminance = _backdrop.LuminanceFor(rect);
                 }
+
                 renderState = state with
                 {
-                    Backdrop = backdrop,
+                    Backdrop = _backdropCurrent,
                     PreviousBackdrop = blend < 1 ? _backdropPrevious : null,
                     BackdropBlend = blend,
                     BackdropLuminance = smoothed,
