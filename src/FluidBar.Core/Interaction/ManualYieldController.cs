@@ -3,7 +3,7 @@ namespace FluidBar.Core.Interaction;
 /// <summary>
 /// Manual "soften" control for the island (design change 2026-10-23): there is no predictive engine any
 /// more — a right-click softens the island, another right-click restores it, and a safety timer brings it
-/// back after <see cref="RestoreAfterMs"/> so it can never be left invisible by accident.
+/// back after <c>restoreAfterMs</c> so it can never be left invisible by accident.
 /// </summary>
 public sealed class ManualYieldController
 {
