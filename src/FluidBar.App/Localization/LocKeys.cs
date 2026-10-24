@@ -1237,6 +1237,8 @@ public static partial class LocKeys
                 public const string Downloading = "Settings.About.Update.Downloading";
                 /// <summary><c>Settings.About.Update.Ready</c></summary>
                 public const string Ready = "Settings.About.Update.Ready";
+                /// <summary><c>Settings.About.Update.ReadyUnsigned</c></summary>
+                public const string ReadyUnsigned = "Settings.About.Update.ReadyUnsigned";
                 /// <summary><c>Settings.About.Update.RestartRequired</c></summary>
                 public const string RestartRequired = "Settings.About.Update.RestartRequired";
                 /// <summary><c>Settings.About.Update.Failed</c></summary>
@@ -1259,6 +1261,8 @@ public static partial class LocKeys
                 public const string Off = "Settings.About.Update.Off";
                 /// <summary><c>Settings.About.Update.Retry</c></summary>
                 public const string Retry = "Settings.About.Update.Retry";
+                /// <summary><c>Settings.About.Update.OpenReleasePage</c></summary>
+                public const string OpenReleasePage = "Settings.About.Update.OpenReleasePage";
             }
         }
         /// <summary>Keys in the 'Market' area.</summary>

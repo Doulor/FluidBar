@@ -1,6 +1,85 @@
+## 2026-10-24
+
+- 官网首页升级为液态玻璃静态单页：新增可操作灵动岛、媒体控制、形态与材质预览、插件介绍及预览版下载入口；保留图标选型页。
+
 # Changelog
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
+
+## 2026-10-24 — 预览版免证书自动更新：签名从"必需"降为"预览期可选"
+
+- 背景：应用内自动安装要求 SHA-256 + Authenticode 双通过，而项目没有代码签名证书 —— 这对"单文件便携 exe"
+  不是 Windows 的要求，是更新器自己的策略。用户暂时不打算买/申请证书（证书需本人身份+付款+私钥，无法代办）。
+- 新增 `UpdateVerificationStatus.VerifiedByHashOnly`：hash 对上但没签名时如实报告"仅校验了完整性"，
+  不再冒充 `Verified`。`UpdateDownloadResult.CanInstall` / `UpdateService.CanInstall` 接受该状态。
+- `CompositeUpdateVerifier` 增加 `requireSignature`（默认 true）：为 false 时放行**未签名**，
+  但 `Invalid`/`UntrustedRoot`/`CheckFailed` 依然拒绝（未签名是政策选择，签名损坏是攻击）。
+- `UpdateServiceOptions.RequireSignature`（默认 true）。`AppUpdateCoordinator` 按构建形态决定：
+  informational version 带 semver 预发布标签（如 `3.0.0-preview.1+sha`）→ 预览版，放开；
+  稳定版保持强制签名。`FLUIDBAR_UPDATE_REQUIRE_SIGNATURE=0/1` 可覆盖（验收用）。
+- About 页在状态行如实显示"已下载（已校验 SHA-256，未签名预览版）"（新增 i18n key
+  `Settings.About.Update.ReadyUnsigned`，en/zh）。
+- 新增 `docs/rewrite/signing-application.md`：证书申请材料清单 + 申请表填写模板（SignPath Foundation /
+  Certum OSS / Azure Trusted Signing 对比），拿到证书后 CI 怎么接。
+- 测试：hash-only 状态、默认拒绝未签名、放开后仍拒绝损坏签名、无 hash 且无签名 → 不可装、
+  预览版识别（theory 5 例）；全量 2690 绿（除 Island 既有 flake）。
+
+## 2026-10-24 — 更新检查：能看见预览版 release，空 feed 不再报"检查失败"
+
+- 现状复盘：更新链路（检查→下载→校验→显式安装）早就完整，41 个测试；但线上只有两个 `1.0.0-dev` 预发布，
+  且 `ReleaseManifestParser` 在 stable 渠道会把所有 prerelease 直接跳过 → `SelectRelease` 返回 null →
+  `UpdateCheckClient` 报 `Failed("No usable release found")`。于是默认设置下点「检查更新」看到的是**失败**。
+- `ReleaseManifestParser.SelectRelease` 增加**预发布兜底**（`allowPrereleaseFallback`，默认 true）：
+  stable 渠道没有 stable 版本时退回最新的 prerelease；有 stable 版本时 stable 永远优先。渠道过滤从
+  `TryParseRelease` 移到调用处（两个候选各取最新）。
+- `UpdateCheckClient`：feed 里没有可用 release 是"没有可装的版本"，不再算失败（HTTP 与 `file://` 两条路径），
+  状态置 `UpToDate`。
+- About 页新增「打开发布页」按钮（有可用 release 时出现，`Available` 与校验失败两种状态都有）：
+  未签名的预览包在应用内永远不会被自动执行，但用户仍能一条路走到发布页手动下载。
+- 顺带把 About 页里 4 处 fire-and-forget 的更新动作（`CheckNowAsync`/`DownloadCurrentAsync`）改成观察式投递，
+  和歌词那轮同样的坑（迟到异常不该靠 finalizer 兜底）。
+- 新增 5 个测试：stable 渠道在没有 stable 时退回预览版、有 stable 时优先 stable、可关闭兜底、
+  空 feed → `UpToDate`、只有预览版的 feed 在 stable 渠道报 `UpdateAvailable`。
+- 全量 2680 测试绿。
+- 提醒：真正的"应用内自动安装"仍需 Authenticode 签名（`CompositeUpdateVerifier` 会拒绝未签名包），
+  见 `docs/rewrite/release.md` §4。
+
+## 2026-10-24 — 收拾两个遗留隐患：歌词未观察异常 + 启动失败无声
+
+- 歌词请求的 `SSL connection could not be established` 一直往 `crash.log` 写 `source=task` 未观察异常：
+  `LyricsService` 用 `WaitAsync(providerTimeout)` 做超时，超时后 provider 的任务被**遗弃**；它稍后失败
+  （TLS 握手被断是常态）时没人观察，finalization 阶段升级成 `TaskScheduler.UnobservedTaskException`。
+  现在 provider 任务一创建就挂 `ObserveLateFault` 观察器，fire-and-forget 的 `RunRequestAsync` 改为
+  `RunRequestSafelyAsync`（异常记 `lyrics.request-failed`，不再靠 finalizer 兜底）。
+- 启动失败可能完全没有磁盘痕迹：JSON-lines 日志是缓冲的、进程一死就丢，且 `Program` 里
+  `_ = bootstrap.StartAsync()` 是 fire-and-forget。现在 `AppBootstrap` 的 `app.start-failed` 额外同步写
+  `crash.log`，`Program` 改成 `StartBootstrapAsync`（失败必定落盘）。
+- 生产路径本来就不会回退到演示数据（`Data = _platformActions ?? _emptyData`，10-19 已修），这次只补证据链。
+- 新增 2 个测试：超时后被遗弃的 provider 失败不再升级为未观察异常（去掉观察器该测试即失败，已实测）；
+  超时后的遗留失败不会把同一首歌的 single-flight 卡死。
+- 全量 2675 测试绿。
+
+## 2026-10-24 — 修复「突然卡死然后崩溃」：液态玻璃背景图野指针（0xC0000005）
+
+- 现象：岛闲置几秒后，随便一碰（悬停 / 点击 / 数据刷新）整个进程消失。Windows 事件日志
+  `Application Error` → `0xc0000005`（模块 coreclr.dll）、`.NET Runtime 1026` 的栈三次一致：
+  `sk_image_get_width → SKImage.get_Width → SkiaIslandHost.CopyImage → RenderEntry`（今天 11:45 / 12:35 / 12:37）。
+- 根因（所有权越界）：`IslandBackdropProvider` 按「Get 调用次数」退休并 Dispose 自己缓存的帧
+  （`RetireFrames=12`），而 `SkiaIslandHost._backdropCurrent` 直接持有这张**借来的** SKImage 跨帧渲染。
+  11:32 新增的空闲调色 watch（600ms）在帧时钟停摆时也会调 `Get`，于是静止约 7 秒就能烧完这 12 次配额；
+  下一次真实渲染 `CopyImage(_backdropCurrent)` 读到已释放的 native 对象 → 访问违例 → 进程终止。
+  （10-23 的 `RetireFrames 2 → 12` 只是在推迟这个野指针，没修所有权。）
+- 修复：
+  - 宿主每采纳一帧立刻 `CopyImage` 成**自己拥有的** SKImage（`FromPixelCopy`）；`_backdropCurrent` /
+    `_backdropPrevious` 只在宿主内部轮转，`_backdropSource` 记录来源做同一性比较。provider 何时释放都伤不到渲染。
+  - `IslandBackdropProvider.Get` 只返回**本矩形**的帧（旧代码返回"全局最新帧"，多显示器会把另一块屏的桌面画进来）。
+  - `SkiaIslandHost.RenderNow` 补 `catch`（原来只有 `try/finally`）：单帧异常只记日志，不再穿过 Avalonia
+    dispatcher / WndProc 打死进程（10-22 的 emoji 半代理对崩溃走的也是这条路径）。
+  - 新增测试接缝 `IslandBackdropProvider.CaptureOverride`（无桌面也能驱动抓屏）。
+- 新增 `tests/FluidBar.Ui.Tests/IslandBackdropOwnershipTests.cs`：宿主副本在 provider 释放后仍可读、
+  provider 绝不返回别的矩形的帧、退休窗口内旧帧确实被释放（即崩溃的前置条件）。
+- 验证：Ui 539/539 绿；`dotnet test FluidBar.sln -m:1` 除 1 个既有 flake 外全绿
+  （`LiquidGlassTests.Liquid_glass_settled_frames_stay_in_budget_and_allocate_nothing` 在**未改动**的基线上同样失败）。
 
 ## 2026-10-24 — 官方网站（发布会式开场 + 产品信息页）
 

@@ -12,8 +12,17 @@ namespace FluidBar.Platform.Windows.Update;
 /// </summary>
 public static class ReleaseManifestParser
 {
-    /// <summary>Selects the newest release for the channel and its installer asset.</summary>
-    public static UpdateRelease? SelectRelease(string json, UpdateChannel channel, string installerAssetPattern)
+    /// <summary>
+    /// Selects the newest release for the channel and its installer asset.
+    /// <para>
+    /// When the stable channel has no stable release at all, the newest prerelease is returned instead
+    /// (<paramref name="allowPrereleaseFallback"/>). A preview product publishes prereleases only, and
+    /// treating that feed as "no usable release" made every shipped build report a check *failure* —
+    /// a self-inflicted bug report on the About page. A stable release, when one exists, always wins.
+    /// </para>
+    /// </summary>
+    public static UpdateRelease? SelectRelease(string json, UpdateChannel channel, string installerAssetPattern,
+        bool allowPrereleaseFallback = true)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -29,22 +38,40 @@ public static class ReleaseManifestParser
             }
 
             var pattern = new Regex(installerAssetPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            UpdateRelease? best = null;
+            UpdateRelease? bestStable = null;
+            UpdateRelease? bestPrerelease = null;
             foreach (var element in document.RootElement.EnumerateArray())
             {
-                var release = TryParseRelease(element, channel, pattern);
+                var release = TryParseRelease(element, pattern);
                 if (release is null)
                 {
                     continue;
                 }
 
-                if (best is null || release.Version.IsNewerThan(best.Version))
+                // Channel filtering happens in the caller: the two candidates let the stable channel fall
+                // back to a prerelease feed instead of reporting "nothing usable".
+                if (release.IsPrerelease)
                 {
-                    best = release;
+                    if (bestPrerelease is null || release.Version.IsNewerThan(bestPrerelease.Version))
+                    {
+                        bestPrerelease = release;
+                    }
+                }
+                else if (bestStable is null || release.Version.IsNewerThan(bestStable.Version))
+                {
+                    bestStable = release;
                 }
             }
 
-            return best;
+            if (channel == UpdateChannel.Stable)
+            {
+                return bestStable ?? (allowPrereleaseFallback ? bestPrerelease : null);
+            }
+
+            // The prerelease channel accepts both kinds; the newest wins regardless of stability.
+            return bestPrerelease is null || (bestStable is not null && bestStable.Version.IsNewerThan(bestPrerelease.Version))
+                ? bestStable
+                : bestPrerelease;
         }
         catch (JsonException)
         {
@@ -52,7 +79,7 @@ public static class ReleaseManifestParser
         }
     }
 
-    private static UpdateRelease? TryParseRelease(JsonElement element, UpdateChannel channel, Regex installerPattern)
+    private static UpdateRelease? TryParseRelease(JsonElement element, Regex installerPattern)
     {
         if (element.ValueKind != JsonValueKind.Object)
         {
@@ -61,10 +88,6 @@ public static class ReleaseManifestParser
 
         var isPrerelease = element.TryGetProperty("prerelease", out var prereleaseElement)
                            && prereleaseElement.ValueKind == JsonValueKind.True;
-        if (channel == UpdateChannel.Stable && isPrerelease)
-        {
-            return null;
-        }
 
         if (element.TryGetProperty("draft", out var draftElement) && draftElement.ValueKind == JsonValueKind.True)
         {

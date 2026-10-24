@@ -31,6 +31,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
     private string? _lastETag;
     private string? _downloadedFilePath;
     private string? _downloadedInstallerTag;
+    private UpdateVerificationStatus _downloadedVerification = UpdateVerificationStatus.NotVerified;
     private UpdateStatusSnapshot? _currentSnapshot;
     private int _disposed;
 
@@ -149,7 +150,11 @@ public sealed class UpdateCheckClient : IAsyncDisposable
                 _options.InstallerAssetPattern);
             if (release is null)
             {
-                return Fail("No usable release found in the update feed.", _lastETag);
+                // An empty feed is not an error. Reporting one made a preview-only feed (or a moment
+                // before the first release) look like a broken updater on the About page.
+                Publish(new UpdateStatusSnapshot(UpdateState.UpToDate, _currentVersion, null, null,
+                    UpdateVerificationStatus.NotVerified, _timeProvider.GetUtcNow(), null));
+                return new UpdateCheckResult(UpdateCheckStatus.UpToDate, null, _lastETag);
             }
 
             var now2 = _timeProvider.GetUtcNow();
@@ -220,7 +225,10 @@ public sealed class UpdateCheckClient : IAsyncDisposable
                 _options.InstallerAssetPattern);
             if (release is null)
             {
-                return Fail("No usable release found in the update feed.", null);
+                // Same rule as the HTTP feed: an empty manifest is "nothing to install yet".
+                Publish(new UpdateStatusSnapshot(UpdateState.UpToDate, _currentVersion, null, null,
+                    UpdateVerificationStatus.NotVerified, _timeProvider.GetUtcNow(), null));
+                return new UpdateCheckResult(UpdateCheckStatus.UpToDate, null, null);
             }
 
             var now = _timeProvider.GetUtcNow();
@@ -281,7 +289,8 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
         if (IsCachedInstallerValid(release) && _downloadedFilePath is not null)
         {
-            return new UpdateDownloadResult(true, _downloadedFilePath, UpdateVerificationStatus.Verified,
+            // Report how the cached file was actually verified, not a blanket "Verified".
+            return new UpdateDownloadResult(true, _downloadedFilePath, _downloadedVerification,
                 release.InstallerSha256Hex);
         }
 
@@ -335,7 +344,9 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
             var verification = await _verifier.VerifyAsync(temporaryFilePath, release, cancellationToken)
                 .ConfigureAwait(false);
-            if (verification != UpdateVerificationStatus.Verified)
+            var integrityVerified = verification
+                is UpdateVerificationStatus.Verified or UpdateVerificationStatus.VerifiedByHashOnly;
+            if (!integrityVerified)
             {
                 _counters.IncrementUpdateCheckFailures();
                 _logger.LogWarning(PlatformLogCategory.Update, "update.verification-failed",
@@ -358,9 +369,10 @@ public sealed class UpdateCheckClient : IAsyncDisposable
             temporaryFilePath = null;
             _downloadedFilePath = finalPath;
             _downloadedInstallerTag = release.Tag;
+            _downloadedVerification = verification;
 
             Publish(new UpdateStatusSnapshot(UpdateState.ReadyToInstall, _currentVersion, release, finalPath,
-                UpdateVerificationStatus.Verified, Current.LastCheckedAtUtc, null));
+                verification, Current.LastCheckedAtUtc, null));
             _logger.LogInfo(PlatformLogCategory.Update, "update.ready",
                 "Verified installer downloaded and ready for the explicit install action.",
                 new Dictionary<string, object?>
@@ -369,8 +381,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
                     ["bytes"] = received,
                 });
 
-            return new UpdateDownloadResult(true, finalPath, UpdateVerificationStatus.Verified,
-                release.InstallerSha256Hex);
+            return new UpdateDownloadResult(true, finalPath, verification, release.InstallerSha256Hex);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -409,6 +420,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
 
         _downloadedFilePath = null;
         _downloadedInstallerTag = null;
+        _downloadedVerification = UpdateVerificationStatus.NotVerified;
         Publish(new UpdateStatusSnapshot(UpdateState.Idle, _currentVersion, null, null,
             UpdateVerificationStatus.NotVerified, Current.LastCheckedAtUtc, null));
     }

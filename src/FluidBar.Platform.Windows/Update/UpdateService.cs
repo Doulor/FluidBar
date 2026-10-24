@@ -52,6 +52,13 @@ public sealed class UpdateServiceOptions
     /// </summary>
     public bool AllowUnsignedInstaller { get; init; }
 
+    /// <summary>
+    /// Whether Authenticode is mandatory. Preview builds set this to false so an unsigned installer that
+    /// matches the feed's SHA-256 can still be installed in-app (the UI says "unsigned"); stable releases
+    /// keep the default and refuse to execute anything without a trusted signature.
+    /// </summary>
+    public bool RequireSignature { get; init; } = true;
+
     /// <summary>User-Agent sent with feed/download requests.</summary>
     public string UserAgent { get; init; } = "FluidBar-UpdateCheck";
 }
@@ -205,6 +212,11 @@ public sealed class UpdateService : IAsyncDisposable
             _logger.LogWarning(PlatformLogCategory.Update, "update.unsigned-dev-mode",
                 "Update service is running with the development SHA-256-only verifier; Authenticode is NOT enforced. Never ship this configuration.");
         }
+        else if (!options.RequireSignature)
+        {
+            _logger.LogWarning(PlatformLogCategory.Update, "update.unsigned-preview-mode",
+                "Update service accepts unsigned installers that match the feed SHA-256 (preview policy). Stable releases must enforce signatures.");
+        }
 
         _httpClient = UpdateCheckClient.CreateHttpClient(new UpdateClientOptions
         {
@@ -221,7 +233,7 @@ public sealed class UpdateService : IAsyncDisposable
             DownloadDirectory = options.DownloadDirectory,
             InstallerAssetPattern = options.InstallerAssetPattern,
         }, options.CurrentVersion,
-            verifier ?? CreateDefaultVerifier(options.AllowUnsignedInstaller, logger),
+            verifier ?? CreateDefaultVerifier(options, logger),
             logger, _counters, _timeProvider);
 
         _mode = ParseMode(options.AutoUpdate);
@@ -267,7 +279,8 @@ public sealed class UpdateService : IAsyncDisposable
             // The client publishes ready-to-install before the download method returns; accept its
             // verified path so an observer that just saw the state is not told "not installable".
             return snapshot.State == UpdateState.ReadyToInstall
-                   && snapshot.Verification == UpdateVerificationStatus.Verified
+                   && snapshot.Verification is UpdateVerificationStatus.Verified
+                       or UpdateVerificationStatus.VerifiedByHashOnly
                    && snapshot.DownloadedFilePath is { Length: > 0 } path
                    && File.Exists(path);
         }
@@ -568,10 +581,11 @@ public sealed class UpdateService : IAsyncDisposable
         _ => AutoUpdateMode.Notify,
     };
 
-    private static IUpdatePackageVerifier CreateDefaultVerifier(bool allowUnsigned, IPlatformLogger logger)
-        => allowUnsigned
+    private static IUpdatePackageVerifier CreateDefaultVerifier(UpdateServiceOptions options, IPlatformLogger logger)
+        => options.AllowUnsignedInstaller
             ? new Sha256UpdateVerifier()
-            : new CompositeUpdateVerifier(new WinVerifyTrustSignatureVerifier(logger), logger);
+            : new CompositeUpdateVerifier(new WinVerifyTrustSignatureVerifier(logger), logger,
+                requireSignature: options.RequireSignature);
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

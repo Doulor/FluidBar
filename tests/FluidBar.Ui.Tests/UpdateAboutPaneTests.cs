@@ -254,4 +254,18 @@ public sealed class UpdateAboutPaneTests
             });
         });
     }
+
+    [Theory]
+    [InlineData("2.0.0+c849337860fbbcbf6b2abd2e5b832a623967d1f2", false)]
+    [InlineData("3.0.0-preview.1+abcdef", true)]
+    [InlineData("2.0.1", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void PreviewBuildsAreDetectedFromTheInformationalVersion(string? informationalVersion, bool expected)
+    {
+        // Preview builds ship unsigned, so they relax the Authenticode requirement down to SHA-256; a stable
+        // build must keep it. The label lives in the semver prerelease part of the informational version.
+        Assert.Equal(expected, AppUpdateCoordinator.IsPreviewBuild(informationalVersion));
+    }
+
 }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Platform.Windows.CoreIntegration;
 using FluidBar.Platform.Windows.Diagnostics;
@@ -66,6 +67,9 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
     /// <summary>Environment variable overriding the installer asset pattern.</summary>
     public const string AssetPatternEnvironmentVariable = "FLUIDBAR_UPDATE_ASSET_PATTERN";
 
+    /// <summary>Environment variable forcing the Authenticode requirement on (<c>1</c>) or off (<c>0</c>).</summary>
+    public const string RequireSignatureEnvironmentVariable = "FLUIDBAR_UPDATE_REQUIRE_SIGNATURE";
+
     /// <summary>Default production feed (GitHub Releases API, stable/beta channels).</summary>
     public static Uri DefaultFeedUrl { get; } = new("https://api.github.com/repos/Doulor/FluidBar/releases");
 
@@ -95,6 +99,16 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
             Environment.GetEnvironmentVariable(UnsignedEnvironmentVariable), "1", StringComparison.Ordinal);
         var assetPattern = Environment.GetEnvironmentVariable(AssetPatternEnvironmentVariable);
 
+        // A preview build (semver with a prerelease label) ships unsigned, so an installer that matches the
+        // feed SHA-256 is accepted with a "unsigned" label instead of being discarded. Stable builds keep
+        // the Authenticode requirement. The environment override exists for acceptance runs.
+        var requireSignature = !IsPreviewBuild(InformationalVersion());
+        var signatureOverride = Environment.GetEnvironmentVariable(RequireSignatureEnvironmentVariable);
+        if (signatureOverride is "1" or "0")
+        {
+            requireSignature = signatureOverride == "1";
+        }
+
         CurrentVersion = typeof(AppUpdateCoordinator).Assembly.GetName().Version ?? new Version(1, 0, 0, 0);
         _service = new UpdateService(
             new UpdateServiceOptions
@@ -109,6 +123,7 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
                 AutoUpdate = settings.Current.AutoUpdate,
                 Channel = ResolveChannel(settings.Current.Plugins.Channel),
                 AllowUnsignedInstaller = allowUnsigned,
+                RequireSignature = requireSignature,
             },
             new AppLoggerPlatformAdapter(_logger),
             new PlatformCounters(),
@@ -128,6 +143,8 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
                 ["channel"] = settings.Current.Plugins.Channel,
                 ["currentVersion"] = CurrentVersion.ToString(),
                 ["allowUnsigned"] = allowUnsigned,
+                ["requireSignature"] = requireSignature,
+                ["informationalVersion"] = InformationalVersion(),
             });
     }
 
@@ -244,6 +261,30 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
         }
 
         _service.ApplyPolicy(current.AutoUpdate, current.Plugins.Channel);
+    }
+
+    /// <summary>Assembly informational version (carries the semver prerelease label in CI builds).</summary>
+    internal static string InformationalVersion()
+        => typeof(AppUpdateCoordinator).Assembly
+               .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion
+           ?? string.Empty;
+
+    /// <summary>True when the version carries a semver prerelease label (<c>3.0.0-preview.1+sha</c>).</summary>
+    internal static bool IsPreviewBuild(string? informationalVersion)
+    {
+        if (string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            return false;
+        }
+
+        var value = informationalVersion.Trim();
+        var build = value.IndexOf('+');
+        if (build >= 0)
+        {
+            value = value[..build];
+        }
+
+        return value.Contains('-');
     }
 
     private static UpdateChannel ResolveChannel(string? channel)

@@ -1532,11 +1532,34 @@ public static class SettingsSectionBuilder
             Margin = new Thickness(0, 16, 0, 0),
         };
         var busy = updateService?.IsBusy == true;
+
+        // Fire-and-forget update actions: a late failure must stay observed (an escaping exception here
+        // would only surface as a TaskScheduler.UnobservedTaskException breadcrumb at finalization).
+        static void RunUpdateAction(Task task)
+            => _ = task.ContinueWith(static faulted => _ = faulted.Exception, CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+        // An unsigned (or otherwise unverifiable) installer is never executed in-app, but the release page
+        // is still a legitimate way to get the build: offer it whenever a release is known.
+        void AddReleasePageChip()
+        {
+            if (updateService?.Current.AvailableRelease?.ReleasePageUrl is not { } page)
+            {
+                return;
+            }
+
+            actions.Children.Add(SettingsControls.Button(
+                ctx.Localizer.Get(LocKeys.Settings.About.Update.OpenReleasePage), palette,
+                SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.External,
+                () => ctx.OpenPath(page.ToString())));
+        }
+
         var checkChip = SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.CheckForUpdates), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Refresh, () =>
             {
                 if (!busy && updateService is not null)
                 {
-                    _ = updateService.CheckNowAsync();
+                    RunUpdateAction(updateService.CheckNowAsync());
                 }
             });
         if (busy)
@@ -1550,7 +1573,8 @@ public static class SettingsSectionBuilder
             switch (updateService.Current.State)
             {
                 case UpdateState.Available:
-                    actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Download), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Download, () => _ = updateService.DownloadCurrentAsync()));
+                    actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Download), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Download, () => RunUpdateAction(updateService.DownloadCurrentAsync())));
+                    AddReleasePageChip();
                     break;
                 case UpdateState.ReadyToInstall:
                     actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Install), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Refresh, () => ctx.RestartToInstall?.Invoke()));
@@ -1562,15 +1586,18 @@ public static class SettingsSectionBuilder
                         && snapshot.FailureKind is UpdateFailureKind.Download or UpdateFailureKind.Verification;
                     if (retryableDownload)
                     {
-                        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Download), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Download, () => _ = updateService.DownloadCurrentAsync()));
+                        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Download), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Download, () => RunUpdateAction(updateService.DownloadCurrentAsync())));
                     }
+
+                    // Unsigned/unverifiable downloads end here; the manual path must still exist.
+                    AddReleasePageChip();
 
                     // A failed check/download never traps the user: they can re-run the check.
                     var retryChip = SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Update.Retry), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Refresh, () =>
                         {
                             if (!busy)
                             {
-                                _ = updateService.CheckNowAsync();
+                                RunUpdateAction(updateService.CheckNowAsync());
                             }
                         });
                     if (busy)
@@ -1730,7 +1757,10 @@ public static class SettingsSectionBuilder
             UpdateState.Available => (localizer.Format(LocKeys.Settings.About.Update.Available,
                 ("version", version), ("size", size)), Accents.Warning),
             UpdateState.Downloading => DescribeDownloading(service, localizer, version),
-            UpdateState.ReadyToInstall => (localizer.Format(LocKeys.Settings.About.Update.Ready,
+            UpdateState.ReadyToInstall => (localizer.Format(
+                snapshot.Verification == UpdateVerificationStatus.VerifiedByHashOnly
+                    ? LocKeys.Settings.About.Update.ReadyUnsigned
+                    : LocKeys.Settings.About.Update.Ready,
                 ("version", version)), Accents.Success),
             UpdateState.RestartRequired => (localizer.Get(LocKeys.Settings.About.Update.RestartRequired),
                 Accents.Success),

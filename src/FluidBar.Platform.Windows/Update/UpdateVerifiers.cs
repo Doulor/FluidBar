@@ -50,8 +50,9 @@ public sealed class Sha256UpdateVerifier : IUpdatePackageVerifier
         }
 
         var actual = await ComputeFileSha256Async(filePath, cancellationToken).ConfigureAwait(false);
+        // Hash-only: honest about what was proven (integrity against the feed, no publisher identity).
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)
-            ? UpdateVerificationStatus.Verified
+            ? UpdateVerificationStatus.VerifiedByHashOnly
             : UpdateVerificationStatus.Sha256Mismatch;
     }
 }
@@ -65,13 +66,24 @@ public sealed class CompositeUpdateVerifier : IUpdatePackageVerifier
     private readonly Sha256UpdateVerifier _hashVerifier;
     private readonly IBinarySignatureVerifier _signatureVerifier;
     private readonly IPlatformLogger _logger;
+    private readonly bool _requireSignature;
 
+    /// <param name="signatureVerifier">Authenticode checker.</param>
+    /// <param name="logger">Structured logger.</param>
+    /// <param name="hashVerifier">SHA-256 checker (injectable for tests).</param>
+    /// <param name="requireSignature">
+    /// When false, an <em>unsigned</em> binary with a matching SHA-256 is accepted as
+    /// <see cref="UpdateVerificationStatus.VerifiedByHashOnly"/>. Invalid or untrusted signatures are
+    /// still rejected: an unsigned preview is a policy choice, a broken signature is an attack. Preview
+    /// builds turn this off; stable releases keep it on.
+    /// </param>
     public CompositeUpdateVerifier(IBinarySignatureVerifier signatureVerifier, IPlatformLogger logger,
-        Sha256UpdateVerifier? hashVerifier = null)
+        Sha256UpdateVerifier? hashVerifier = null, bool requireSignature = true)
     {
         _signatureVerifier = signatureVerifier ?? throw new ArgumentNullException(nameof(signatureVerifier));
         _logger = logger ?? NullPlatformLogger.Instance;
         _hashVerifier = hashVerifier ?? new Sha256UpdateVerifier();
+        _requireSignature = requireSignature;
     }
 
     public async Task<UpdateVerificationStatus> VerifyAsync(string filePath, UpdateRelease release,
@@ -89,7 +101,11 @@ public sealed class CompositeUpdateVerifier : IUpdatePackageVerifier
             AuthenticodeStatus.Verified => hashStatus == UpdateVerificationStatus.NotVerified
                 ? UpdateVerificationStatus.Verified // signature covers integrity when no feed hash exists
                 : UpdateVerificationStatus.Verified,
-            AuthenticodeStatus.NoSignature => UpdateVerificationStatus.SignatureUnsigned,
+            AuthenticodeStatus.NoSignature => _requireSignature
+                ? UpdateVerificationStatus.SignatureUnsigned
+                : hashStatus == UpdateVerificationStatus.VerifiedByHashOnly
+                    ? UpdateVerificationStatus.VerifiedByHashOnly
+                    : UpdateVerificationStatus.NotVerified,
             AuthenticodeStatus.UntrustedRoot => UpdateVerificationStatus.SignatureUntrusted,
             AuthenticodeStatus.Invalid => UpdateVerificationStatus.SignatureInvalid,
             _ => UpdateVerificationStatus.SignatureCheckFailed,

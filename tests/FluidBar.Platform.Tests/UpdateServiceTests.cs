@@ -119,7 +119,8 @@ public sealed class UpdateServiceTests
 
         var download = await service.DownloadCurrentAsync();
         Assert.True(download.Success, download.FailureReason);
-        Assert.Equal(UpdateVerificationStatus.Verified, download.Verification);
+        // The local feed path uses the SHA-256-only verifier, which reports hash-only verification.
+        Assert.Equal(UpdateVerificationStatus.VerifiedByHashOnly, download.Verification);
         Assert.True(File.Exists(download.FilePath));
         Assert.Equal(feed.Sha256, download.Sha256Hex);
         await WaitUntilAsync(() => service.Current.State == UpdateState.ReadyToInstall,

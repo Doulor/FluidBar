@@ -28,7 +28,10 @@ public enum UpdateCheckStatus
     Failed,
 }
 
-/// <summary>Result of installer verification. Only <see cref="Verified"/> may expose an install action.</summary>
+/// <summary>
+/// Result of installer verification. <see cref="Verified"/> and <see cref="VerifiedByHashOnly"/> may
+/// expose an install action; everything else discards the download.
+/// </summary>
 public enum UpdateVerificationStatus
 {
     NotVerified,
@@ -37,6 +40,14 @@ public enum UpdateVerificationStatus
     SignatureInvalid,
     SignatureUntrusted,
     SignatureCheckFailed,
+
+    /// <summary>
+    /// The SHA-256 matches the feed but the binary carries no Authenticode signature. Allowed while the
+    /// product ships unsigned previews (see <see cref="UpdateServiceOptions.RequireSignature"/>); the UI
+    /// must say so instead of claiming a verified signature.
+    /// </summary>
+    VerifiedByHashOnly,
+
     Verified,
 }
 
@@ -124,8 +135,9 @@ public sealed record UpdateDownloadResult(
     string? Sha256Hex,
     string? FailureReason = null)
 {
-    /// <summary>Install action may be exposed only for a verified file.</summary>
-    public bool CanInstall => Success && Verification == UpdateVerificationStatus.Verified && FilePath is not null;
+    /// <summary>Install action may be exposed only for a file whose integrity was verified.</summary>
+    public bool CanInstall => Success && FilePath is not null
+        && Verification is UpdateVerificationStatus.Verified or UpdateVerificationStatus.VerifiedByHashOnly;
 }
 
 /// <summary>Snapshot consumed by the settings About page and the Core activity mapping.</summary>

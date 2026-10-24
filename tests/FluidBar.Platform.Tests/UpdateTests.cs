@@ -184,6 +184,89 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public void ManifestParser_StableChannelFallsBackToPrereleaseWhenNothingStableExists()
+    {
+        // A preview product publishes prereleases only. Treating that as "no usable release" made every
+        // shipped build report a check *failure* on the About page (2026-10-24 review).
+        const string json = """
+        [
+          { "tag_name": "v3.0.0-preview-2026-10-24", "prerelease": true,
+            "html_url": "https://example.test/releases/v3",
+            "assets": [ { "name": "FluidBar.exe", "browser_download_url": "https://example.test/v3.exe",
+                          "size": 100,
+                          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" } ] },
+          { "tag_name": "v1.0.0-dev1.0", "prerelease": true,
+            "assets": [ { "name": "FluidBar-dev1.0-win-x64.zip",
+                          "browser_download_url": "https://example.test/dev.zip", "size": 50 } ] }
+        ]
+        """;
+
+        var release = ReleaseManifestParser.SelectRelease(json, UpdateChannel.Stable, @"FluidBar.*.exe$");
+
+        Assert.NotNull(release);
+        Assert.True(release!.IsPrerelease);
+        Assert.Equal("3.0.0", release.Version.ToString().Split('-')[0]);
+        Assert.True(release.CanOfferInstaller);
+        Assert.Equal("https://example.test/releases/v3", release.ReleasePageUrl!.ToString());
+    }
+
+    [Fact]
+    public void ManifestParser_StableChannelPrefersStableOverANewerPrerelease()
+    {
+        var release = ReleaseManifestParser.SelectRelease(Manifest, UpdateChannel.Stable, @"FluidBar.*.exe$",
+            allowPrereleaseFallback: true);
+
+        Assert.NotNull(release);
+        Assert.False(release!.IsPrerelease);
+        Assert.Equal("2.0.0", release.Version.ToString());
+    }
+
+    [Fact]
+    public void ManifestParser_StableChannelCanRefuseThePrereleaseFallback()
+    {
+        const string json = """
+        [ { "tag_name": "v3.0.0-preview", "prerelease": true,
+            "assets": [ { "name": "FluidBar.exe", "browser_download_url": "https://example.test/v3.exe" } ] } ]
+        """;
+
+        Assert.Null(ReleaseManifestParser.SelectRelease(json, UpdateChannel.Stable, @"FluidBar.*.exe$",
+            allowPrereleaseFallback: false));
+    }
+
+    [Fact]
+    public async Task CheckAsync_EmptyFeedIsUpToDateNotAFailure()
+    {
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("[]"));
+        var client = CreateClient(handler);
+
+        var result = await client.CheckAsync(new UpdateCheckRequest(new Version(2, 0, 0)));
+
+        Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
+        Assert.Null(result.Latest);
+        Assert.Equal(UpdateState.UpToDate, client.Current.State);
+    }
+
+    [Fact]
+    public async Task CheckAsync_PrereleaseOnlyFeedOnTheStableChannelReportsTheUpdate()
+    {
+        const string json = """
+        [ { "tag_name": "v3-preview-2026-10-24", "prerelease": true,
+            "html_url": "https://example.test/releases/v3",
+            "assets": [ { "name": "FluidBar.exe", "browser_download_url": "https://example.test/v3.exe",
+                          "size": 100,
+                          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" } ] } ]
+        """;
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json(json));
+        var client = CreateClient(handler);
+
+        var result = await client.CheckAsync(new UpdateCheckRequest(new Version(2, 0, 0)));
+
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+        Assert.Equal("3.0.0-preview-2026-10-24", result.Latest!.Version.ToString());
+        Assert.Equal(UpdateState.Available, client.Current.State);
+    }
+
+    [Fact]
     public void ManifestParser_PrereleaseChannelPicksNewest()
     {
         var release = ReleaseManifestParser.SelectRelease(Manifest, UpdateChannel.Prerelease, @"FluidBar.*\.exe$");
@@ -343,7 +426,8 @@ public sealed class UpdateTests
             var hash = await Sha256UpdateVerifier.ComputeFileSha256Async(path, CancellationToken.None);
             var verifier = new Sha256UpdateVerifier();
             var matching = BuildRelease(hash, 3);
-            Assert.Equal(UpdateVerificationStatus.Verified,
+            // Hash-only verification is reported as such: it proves integrity against the feed, not identity.
+            Assert.Equal(UpdateVerificationStatus.VerifiedByHashOnly,
                 await verifier.VerifyAsync(path, matching, CancellationToken.None));
 
             var mismatch = BuildRelease(new string('a', 64), 3);
@@ -377,6 +461,76 @@ public sealed class UpdateTests
             var verifier = new CompositeUpdateVerifier(new FakeSignatureVerifier { Status = signature },
                 new CapturingLogger());
             Assert.Equal(expected, await verifier.VerifyAsync(path, release, CancellationToken.None));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task CompositeVerifier_AcceptsUnsignedWhenTheSignatureIsNotRequired()
+    {
+        // Preview policy: an unsigned binary that matches the feed hash is installable, but is reported as
+        // VerifiedByHashOnly so the About pane can say "unsigned preview" instead of a false "verified".
+        var path = await WriteTempAsync(new byte[] { 4, 5, 6 });
+        try
+        {
+            var hash = await Sha256UpdateVerifier.ComputeFileSha256Async(path, CancellationToken.None);
+            var release = BuildRelease(hash, 3);
+            var verifier = new CompositeUpdateVerifier(
+                new FakeSignatureVerifier { Status = AuthenticodeStatus.NoSignature },
+                new CapturingLogger(), requireSignature: false);
+
+            Assert.Equal(UpdateVerificationStatus.VerifiedByHashOnly,
+                await verifier.VerifyAsync(path, release, CancellationToken.None));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(AuthenticodeStatus.Invalid, UpdateVerificationStatus.SignatureInvalid)]
+    [InlineData(AuthenticodeStatus.UntrustedRoot, UpdateVerificationStatus.SignatureUntrusted)]
+    [InlineData(AuthenticodeStatus.CheckFailed, UpdateVerificationStatus.SignatureCheckFailed)]
+    public async Task CompositeVerifier_StillRejectsBrokenSignaturesWhenTheSignatureIsNotRequired(
+        AuthenticodeStatus signature, UpdateVerificationStatus expected)
+    {
+        // Relaxing "unsigned is fine" must never relax "tampered is fine": an unsigned preview is a policy
+        // choice, a broken signature is an attack.
+        var path = await WriteTempAsync(new byte[] { 7, 8, 9 });
+        try
+        {
+            var hash = await Sha256UpdateVerifier.ComputeFileSha256Async(path, CancellationToken.None);
+            var release = BuildRelease(hash, 3);
+            var verifier = new CompositeUpdateVerifier(
+                new FakeSignatureVerifier { Status = signature }, new CapturingLogger(),
+                requireSignature: false);
+
+            Assert.Equal(expected, await verifier.VerifyAsync(path, release, CancellationToken.None));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task CompositeVerifier_UnsignedWithoutAFeedHashStaysUnverified()
+    {
+        // Nothing was proven: no signature and no hash must never unlock the install action.
+        var path = await WriteTempAsync(new byte[] { 10, 11, 12 });
+        try
+        {
+            var release = BuildRelease(null, 3);
+            var verifier = new CompositeUpdateVerifier(
+                new FakeSignatureVerifier { Status = AuthenticodeStatus.NoSignature },
+                new CapturingLogger(), requireSignature: false);
+
+            Assert.Equal(UpdateVerificationStatus.NotVerified,
+                await verifier.VerifyAsync(path, release, CancellationToken.None));
         }
         finally
         {
