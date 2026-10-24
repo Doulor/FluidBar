@@ -353,11 +353,16 @@ public sealed class SettingsSlider : Control
 /// </summary>
 public sealed class AccentSwatch : ToggleButton
 {
-    /// <summary>Creates the swatch (24 px circle + 4 px ring gutter).</summary>
+    /// <summary>
+    /// Creates the swatch (24 px colour disc, plus a gutter wide enough for the selected ring *and* the dashed
+    /// focus ring). The gutter used to be exactly the ring inset, so a 2 px selected ring centred on that radius
+    /// put its outer edge 1 px outside the control and every ring was clipped on all four sides — and the clipped
+    /// dashed focus ring is what looked like "noise dots" (user report 2026-10-24).
+    /// </summary>
     public AccentSwatch()
     {
-        Width = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
-        Height = SettingsMetrics.SwatchSize + (2 * SettingsMetrics.SwatchRingInset);
+        Width = SettingsMetrics.SwatchSize + (2 * (SettingsMetrics.SwatchRingInset + 2));
+        Height = SettingsMetrics.SwatchSize + (2 * (SettingsMetrics.SwatchRingInset + 2));
         Cursor = new Cursor(StandardCursorType.Hand);
         Focusable = true;
         Background = Brushes.Transparent;
@@ -386,6 +391,24 @@ public sealed class AccentSwatch : ToggleButton
     /// <summary>Raised when the user activates the swatch.</summary>
     public event Action? Clicked;
 
+    /// <summary>Radii of the three rings plus the control's half extent, all in DIP from the control centre.</summary>
+    /// <param name="width">Control width.</param>
+    /// <param name="height">Control height.</param>
+    internal static SwatchRingGeometry RingGeometry(double width, double height)
+    {
+        var half = Math.Min(width, height) / 2;
+        var disc = Math.Min(SettingsMetrics.SwatchSize / 2, Math.Max(1, half - 2));
+        return new SwatchRingGeometry(
+            Half: half,
+            Disc: disc,
+            Selected: Math.Min(disc + SettingsMetrics.SwatchRingInset, half - 2.5),
+            SelectedPen: 2,
+            Hover: Math.Min(disc + (SettingsMetrics.SwatchRingInset / 2), half - 3),
+            HoverPen: 1,
+            Focus: Math.Max(disc + 1, half - 1),
+            FocusPen: 1);
+    }
+
     /// <summary>Activates the swatch (same path as a click or Space/Enter).</summary>
     public void Activate() => Clicked?.Invoke();
 
@@ -401,30 +424,29 @@ public sealed class AccentSwatch : ToggleButton
     {
         var bounds = new Rect(0, 0, Bounds.Width, Bounds.Height);
         var center = new Point(bounds.Width / 2, bounds.Height / 2);
-        var radius = SettingsMetrics.SwatchSize / 2;
+        var rings = RingGeometry(bounds.Width, bounds.Height);
+        var radius = rings.Disc;
+
         var selected = IsActive;
         var hover = IsPointerOver;
         var focused = IsFocused || IsKeyboardFocusWithin;
 
-        // Selected: a 2 px foreground ring with a 2 px gap from the colour disc (the prototype's
-        // inset: -4px ring, thickened so it reads at a glance at 150 % DPI).
+        // Everything is placed from the control's own half extent, so no ring can reach the clip edge:
+        // selected ring outer edge <= half - 1.5, focus ring outer edge <= half - 0.5.
         if (selected)
         {
-            var ringRadius = radius + SettingsMetrics.SwatchRingInset;
-            context.DrawEllipse(null, new Pen(Ring, 2), center, ringRadius, ringRadius);
+            context.DrawEllipse(null, new Pen(Ring, rings.SelectedPen), center, rings.Selected, rings.Selected);
         }
         else if (hover)
         {
-            var ringRadius = radius + (SettingsMetrics.SwatchRingInset / 2);
-            context.DrawEllipse(null, new Pen(HoverRing, 1), center, ringRadius, ringRadius);
+            context.DrawEllipse(null, new Pen(HoverRing, rings.HoverPen), center, rings.Hover, rings.Hover);
         }
 
         // Keyboard focus: dashed outer ring, independent of the selected state.
         if (focused)
         {
-            var focusRadius = radius + SettingsMetrics.SwatchRingInset + 2;
-            var pen = new Pen(Ring, 1, new DashStyle([2, 2], 0));
-            context.DrawEllipse(null, pen, center, focusRadius, focusRadius);
+            var pen = new Pen(Ring, rings.FocusPen, new DashStyle([3, 3], 0));
+            context.DrawEllipse(null, pen, center, rings.Focus, rings.Focus);
         }
 
         context.DrawEllipse(
@@ -443,6 +465,32 @@ public sealed class AccentSwatch : ToggleButton
             context.DrawLine(pen, new Point(center.X - 1.2, center.Y + 3.8), new Point(center.X + 4.8, center.Y - 3.6));
         }
     }
+}
+
+/// <summary>Radii (DIP from the centre) of the accent swatch rings, plus the control's half extent.</summary>
+/// <param name="Half">Half of the control extent (the clip boundary).</param>
+/// <param name="Disc">Colour disc radius.</param>
+/// <param name="Selected">Selected ring radius.</param>
+/// <param name="SelectedPen">Selected ring pen thickness.</param>
+/// <param name="Hover">Hover ring radius.</param>
+/// <param name="HoverPen">Hover ring pen thickness.</param>
+/// <param name="Focus">Focus ring radius.</param>
+/// <param name="FocusPen">Focus ring pen thickness.</param>
+internal readonly record struct SwatchRingGeometry(
+    double Half,
+    double Disc,
+    double Selected,
+    double SelectedPen,
+    double Hover,
+    double HoverPen,
+    double Focus,
+    double FocusPen)
+{
+    /// <summary>Outer edge of the selected ring.</summary>
+    public double SelectedOuter => Selected + (SelectedPen / 2);
+
+    /// <summary>Outer edge of the focus ring.</summary>
+    public double FocusOuter => Focus + (FocusPen / 2);
 }
 
 /// <summary>Prototype-faithful text/row widgets shared by the settings sections.</summary>

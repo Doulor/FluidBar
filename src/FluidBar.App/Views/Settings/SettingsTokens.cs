@@ -312,7 +312,13 @@ internal static class SettingsMetrics
 /// </summary>
 public sealed class SettingsPalette
 {
-    private SettingsPalette(AppTheme theme)
+    /// <param name="theme">Light or dark surface family.</param>
+    /// <param name="onGlass">
+    /// True when the panel is drawn over the blurred desktop. Glass lifts the effective background, so the
+    /// dark theme needs brighter secondary/tertiary text or the small grey labels wash out ("灰色的小字看不清");
+    /// the opaque surface keeps the original tokens.
+    /// </param>
+    private SettingsPalette(AppTheme theme, bool onGlass = false)
     {
         IsLight = theme == AppTheme.Light;
         if (IsLight)
@@ -325,8 +331,10 @@ public sealed class SettingsPalette
             Line = Color.FromArgb(23, 17, 24, 39);
             LineStrong = Color.FromArgb(31, 17, 24, 39);
             Foreground = Color.Parse("#151A21");
-            Secondary = Color.Parse("#59626F");
-            Tertiary = Color.Parse(TextTokens.TertiaryLight);
+            // Over glass the panel is light (and can end up brighter than the opaque surface), so the light
+            // theme's greys must be darker than the opaque tokens or they vanish (user report: "灰色字看不清").
+            Secondary = onGlass ? Color.Parse("#333B47") : Color.Parse("#59626F");
+            Tertiary = onGlass ? Color.Parse("#4E5764") : Color.Parse(TextTokens.TertiaryLight);
             Active = Color.Parse("#1B2028");
             ActiveForeground = Colors.White;
         }
@@ -340,8 +348,8 @@ public sealed class SettingsPalette
             Line = Color.FromArgb(23, 255, 255, 255);
             LineStrong = Color.FromArgb(31, 255, 255, 255);
             Foreground = Color.Parse("#F4F4F6");
-            Secondary = Color.Parse("#9B9BA5");
-            Tertiary = Color.Parse(TextTokens.TertiaryDark);
+            Secondary = onGlass ? Color.Parse("#CBCBD6") : Color.Parse("#9B9BA5");
+            Tertiary = onGlass ? Color.Parse("#A8A8B6") : Color.Parse(TextTokens.TertiaryDark);
             Active = Color.Parse("#F5F5F7");
             ActiveForeground = Color.Parse("#0B0B0D");
         }
@@ -402,7 +410,9 @@ public sealed class SettingsPalette
     }
 
     /// <summary>Resolves the palette for a settings theme.</summary>
-    public static SettingsPalette For(AppTheme theme) => new(theme);
+    /// <param name="theme">Light or dark surface family.</param>
+    /// <param name="onGlass">True when the panel is glass (brighter dark-theme secondary/tertiary text).</param>
+    public static SettingsPalette For(AppTheme theme, bool onGlass = false) => new(theme, onGlass);
 
     /// <summary>Adapts a legacy <see cref="AppSurfaceColors"/> snapshot (tests / design-time callers).</summary>
     public static SettingsPalette FromSurfaces(AppSurfaceColors surfaces)

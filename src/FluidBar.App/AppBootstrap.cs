@@ -110,6 +110,18 @@ internal sealed class AppBootstrap
                 _ = SmokeAsync();
             }
 
+            // Acceptance/screenshot runs: open the settings window right after startup so the chrome
+            // (acrylic backdrop, rounding, alpha) can be inspected on a real HWND.
+            if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_OPEN_SETTINGS"), "1",
+                    StringComparison.Ordinal))
+            {
+                var section = Enum.TryParse<SettingsWindowSection>(
+                    Environment.GetEnvironmentVariable("FLUIDBAR_OPEN_SETTINGS_SECTION"), true, out var parsed)
+                    ? parsed
+                    : SettingsWindowSection.Appearance;
+                Dispatcher.UIThread.Post(() => ShowSettingsWindow(section), DispatcherPriority.Background);
+            }
+
             if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_AUDIT"), "1", StringComparison.Ordinal))
             {
                 _ = AuditAsync();

@@ -16,6 +16,8 @@ using FluidBar.App.Settings;
 using FluidBar.App.Views.Market;
 using FluidBar.Island;
 using FluidBar.Platform.Windows.Hosting;
+using System.IO;
+using SkiaSharp;
 
 namespace FluidBar.App.Views.Settings;
 
@@ -69,7 +71,44 @@ public sealed class SettingsWindow : Window, ILocalizable
     private bool _firstFramePreparing;
     private string? _status;
     private SettingsPalette _palette;
-    private readonly bool _liquidGlass;
+    private bool _liquidGlass;
+
+    /// <summary>True when DWM accepted the acrylic system backdrop for this window (fallback only).</summary>
+    private bool _acrylicEnabled;
+
+    /// <summary>Blurred-desktop pipeline for the liquid-glass panel (its own, never the island's).</summary>
+    private SettingsGlassBackdrop? _backdrop;
+
+    private WriteableBitmap? _glassTarget;
+    private ImageBrush? _glassBrush;
+    private bool _glassBrushNeedsApply;
+    private (int X, int Y, int Width, int Height) _backdropRect;
+    private (int X, int Y, int Width, int Height) _appliedRect;
+    private bool _accentFallbackTried;
+
+    /// <summary>Diagnostics: last physical-rect probe result (true when Win32 answered).</summary>
+    private bool _physicalRectOk;
+
+    /// <summary>Diagnostics: last raw Win32 client rect and origin.</summary>
+    private string _physicalRectProbe = "none";
+
+    /// <summary>Diagnostics: mean colour and checksum of the last composed backdrop.</summary>
+    private string _glassFrameDiagnostics = "none";
+
+    /// <summary>
+    /// The theme the uploaded pixels were baked for. The tint lives inside the bitmap, so a frame composed for the
+    /// other theme is the *other material*, not a stale value: it must be recomposed, never painted.
+    /// </summary>
+    private bool? _composedForLight;
+
+    /// <summary>Re-entrancy guard: applying the fill may recompose, which uploads and re-applies the fill.</summary>
+    private bool _composing;
+
+    /// <summary>True while the window is being dragged: captures use the cheap GDI path.</summary>
+    private bool _dragging;
+
+    /// <summary>Fires once the window has been still long enough to take a correct (composed) capture.</summary>
+    private DispatcherTimer? _settleTimer;
     private bool _centerFade;
     private bool _exitStarted;
     private bool _allowClose;
@@ -112,8 +151,8 @@ public sealed class SettingsWindow : Window, ILocalizable
             }
         });
         _section = section;
-        _palette = SettingsPalette.For(ResolvePaletteTheme(settings.Current.Theme));
         _liquidGlass = settings.Current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
+        _palette = SettingsPalette.For(ResolvePaletteTheme(settings.Current.Theme), _liquidGlass);
 
         // .settings-window { width: min(900px, 100vw - 48px); height: min(620px, 100vh - 48px) }
         Width = SettingsMetrics.WindowWidth;
@@ -142,6 +181,11 @@ public sealed class SettingsWindow : Window, ILocalizable
             ClipToBounds = true,
             Child = BuildLayout(),
         };
+
+        // The glass backdrop is a 1/6 bake stretched back up to the panel size. With the default bitmap
+        // interpolation that upscale reads as grain/blockiness across the whole panel ("很多噪点"), so ask for the
+        // high-quality resample explicitly.
+        RenderOptions.SetBitmapInterpolationMode(_shell, BitmapInterpolationMode.HighQuality);
         ApplyChrome();
         var root = new Grid();
         root.Children.Add(_bleed);
@@ -149,6 +193,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         Content = root;
 
         _settings.Changed += OnSettingsChanged;
+        Activated += (_, _) => ReassertAcrylicBackdrop();
         _localizer.Changed += OnLocalizerChanged;
         if (_updates is not null)
         {
@@ -168,6 +213,15 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     public void EnableCenterFade()
     {
+        // Acceptance/screenshot runs open the window without the entrance animation: the fade starts at
+        // opacity 0, so a capture taken before it settles sees nothing at all.
+        if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_SETTINGS_NO_FADE"), "1",
+                StringComparison.Ordinal))
+        {
+            Opacity = 1;
+            return;
+        }
+
         _centerFade = true;
         Opacity = 0;
         _fadeScale = new ScaleTransform(0.985, 0.985);
@@ -265,7 +319,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             {
                 // One native backdrop layer only: DWM acrylic supplies the real desktop blur and the
                 // old full-bleed shell lets DWM own the rounded silhouette.
-                _ = WindowDwmPolicy.TryEnableAcrylicBackdrop(roundingHandle, out _);
+                _acrylicEnabled = false; // the material is drawn; DWMWA_SYSTEMBACKDROP_TYPE paints nothing here
                 _ = WindowDwmPolicy.TryEnableRounding(roundingHandle, out _);
             }
 
@@ -302,12 +356,28 @@ public sealed class SettingsWindow : Window, ILocalizable
         // window surface shows square wedges outside the rounded content as soon as alpha is
         // unavailable. Applied once per size/DPI change, never per frame. The first application happens
         // synchronously here so it lands on the earliest possible frame the platform lets us touch.
+        ApplyPanelFill();
+        RefreshGlassBackdrop(force: true);
+        MaybeWriteSnapshot();
+        PositionChanged += PositionChangedGlassHook;
+        Closed += (_, _) =>
+        {
+            PositionChanged -= PositionChangedGlassHook;
+            if (_settleTimer is not null)
+            {
+                _settleTimer.Stop();
+                _settleTimer.Tick -= OnSettleTick;
+                _settleTimer = null;
+            }
+
+            DisposeGlassBackdrop();
+        };
         LayoutUpdated += (_, _) => ApplyCornerRegion("layout");
         SizeChanged += (_, _) => ApplyCornerRegion("size-changed");
         ApplyCornerRegion("opened");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyCornerRegion("opened-post"),
             Avalonia.Threading.DispatcherPriority.Loaded);
-        if (!forcedAlpha)
+        if (!forcedAlpha && !_liquidGlass)
         {
             // Acrylic is composited by DWM, so the alpha probe would misread the already-blurred
             // backdrop as an opaque surface and replace it with the square opaque fallback.
@@ -432,9 +502,34 @@ public sealed class SettingsWindow : Window, ILocalizable
             SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
         // Removing WS_EX_LAYERED resets DWM's corner preference on this stack; re-assert it.
         _ = WindowDwmPolicy.TryEnableRounding(handle, out _);
+        ApplyPanelFill();
     }
 
     private const int GwlExStyle = -20;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hWnd, out NativeRect rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref NativePoint point);
     private const long WsExLayered = 0x00080000;
     private const uint LwaAlpha = 0x00000002;
 
@@ -721,6 +816,24 @@ public sealed class SettingsWindow : Window, ILocalizable
 
     private void ApplyChrome()
     {
+        // The material can change while the window is open (Appearance page). Reading it once in the
+        // constructor left the chrome decision on a stale value, so switching to liquid glass in a live
+        // window kept the opaque square panel (no glass) until the window was reopened.
+        _liquidGlass = _settings.Current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
+        if (!_liquidGlass)
+        {
+            DisposeGlassBackdrop();
+        }
+
+        ApplyChromeCore();
+        if (_liquidGlass && IsLoaded)
+        {
+            RefreshGlassBackdrop(force: true);
+        }
+    }
+
+    private void ApplyChromeCore()
+    {
         if (_bleed is not null)
         {
             // The layer must be the exact panel colour: it is only there to cover the platform surface
@@ -729,7 +842,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             _bleed.IsVisible = !_liquidGlass && ChromeMode == SettingsWindowChrome.Opaque;
         }
 
-        _shell.Background = new SolidColorBrush(_palette.Window);
+        ApplyPanelFill();
         _shell.BorderBrush = _palette.LineStrongBrush;
         _shell.BorderThickness = new Thickness(SettingsMetrics.WindowBorder);
 
@@ -1308,7 +1421,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         var themeChanged = ResolvePaletteTheme(previous.Theme) != ResolvePaletteTheme(current.Theme);
         if (themeChanged)
         {
-            _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme));
+            _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme), _liquidGlass);
             ApplyChrome();
             RebuildTitleBarBrushes();
             RebuildNav();
@@ -1318,6 +1431,9 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         if (previous.Material != current.Material)
         {
+            // The palette is glass-aware (brighter dark-theme text over the blurred desktop).
+            _liquidGlass = current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
+            _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme), _liquidGlass);
             ApplyChrome();
             RebuildTitleBarBrushes();
             return;
@@ -1346,6 +1462,513 @@ public sealed class SettingsWindow : Window, ILocalizable
             _kicker.Foreground = _palette.TertiaryBrush;
         }
     }
+    /// <summary>Tint alpha over a DWM backdrop (fallback path, no self-drawn blur).</summary>
+    private const double PanelGlassTopAlpha = 0.52;
+
+    /// <summary>Tint alpha over a DWM backdrop, bottom edge.</summary>
+    private const double PanelGlassBottomAlpha = 0.66;
+
+    /// <summary>Tint alpha over the self-drawn blurred desktop, top edge. Lower = clearer glass.</summary>
+    private const double PanelGlassOverImageTopAlpha = 0.34;
+
+    /// <summary>Tint alpha over the self-drawn blurred desktop, bottom edge.</summary>
+    private const double PanelGlassOverImageBottomAlpha = 0.48;
+
+    /// <summary>Tint alpha over the blurred desktop in the dark theme, top edge (denser than the light theme).</summary>
+    private const double PanelGlassDarkTopAlpha = 0.62;
+
+    /// <summary>Tint alpha over the blurred desktop in the dark theme, bottom edge.</summary>
+    private const double PanelGlassDarkBottomAlpha = 0.76;
+
+    // Light glass has to stay *light*: a bright desktop needs only a touch more tint, while a dark desktop has to
+    // be pushed back up or the panel turns mid-grey and every grey label disappears into it.
+    /// <summary>Light theme: extra tint on a bright backdrop.</summary>
+    private const double PanelGlassLightScrimMaxAlpha = 0.10;
+
+    /// <summary>Light theme: backdrop luminance above which the tint densifies.</summary>
+    private const double PanelGlassLightScrimThreshold = 0.70;
+
+    /// <summary>Light theme: extra tint on a dark backdrop (keeps the panel white instead of grey).</summary>
+    private const double PanelGlassLightLiftMaxAlpha = 0.45;
+
+    /// <summary>Light theme: backdrop luminance below which the lift starts.</summary>
+    private const double PanelGlassLightLiftThreshold = 0.55;
+
+    // Dark glass is the mirror image: dense tint, denser on a bright backdrop, no lift.
+    /// <summary>Dark theme: extra tint on a bright backdrop.</summary>
+    private const double PanelGlassDarkScrimMaxAlpha = 0.30;
+
+    /// <summary>Dark theme: backdrop luminance above which the tint densifies.</summary>
+    private const double PanelGlassDarkScrimThreshold = 0.42;
+
+    /// <summary>Dark theme: no lift (a dark panel must never be lightened).</summary>
+    private const double PanelGlassDarkLiftMaxAlpha = 0.0;
+
+    /// <summary>Dark theme: lift threshold (unused while the lift is zero).</summary>
+    private const double PanelGlassDarkLiftThreshold = 0.55;
+
+    /// <summary>
+    /// One theme's glass material: tint density plus its contrast scrim.
+    /// <para>
+    /// The two themes are separate materials, not one material with two numbers. Sharing any of these four values
+    /// leaves exactly one theme looking right (user report 2026-10-24: "深色和浅色只有一个会好看，绝对是你没把
+    /// 他们两个分开"), and because the tint is baked into the backdrop bitmap, a frame composed for one theme must
+    /// never be painted while the other is active.
+    /// </para>
+    /// </summary>
+    /// <param name="TopAlpha">Tint alpha at the top edge (0..1).</param>
+    /// <param name="BottomAlpha">Tint alpha at the bottom edge (0..1).</param>
+    /// <param name="ScrimThreshold">Backdrop luminance above which the scrim densifies the tint.</param>
+    /// <param name="ScrimMaxAlpha">Extra tint at full backdrop brightness.</param>
+    internal readonly record struct GlassMaterial(
+        double TopAlpha,
+        double BottomAlpha,
+        double ScrimThreshold,
+        double ScrimMaxAlpha,
+        double LiftThreshold,
+        double LiftMaxAlpha);
+
+    /// <summary>Material for a theme (the light values are exactly the ones that were signed off).</summary>
+    /// <param name="isLight">True for the light theme.</param>
+    internal static GlassMaterial GlassMaterialFor(bool isLight) => isLight
+        ? new GlassMaterial(PanelGlassOverImageTopAlpha, PanelGlassOverImageBottomAlpha,
+            PanelGlassLightScrimThreshold, PanelGlassLightScrimMaxAlpha,
+            PanelGlassLightLiftThreshold, PanelGlassLightLiftMaxAlpha)
+        : new GlassMaterial(PanelGlassDarkTopAlpha, PanelGlassDarkBottomAlpha,
+            PanelGlassDarkScrimThreshold, PanelGlassDarkScrimMaxAlpha,
+            PanelGlassDarkLiftThreshold, PanelGlassDarkLiftMaxAlpha);
+
+    /// <summary>
+    /// Paints the panel behind the content. Liquid glass uses the blurred desktop as the material (baked with
+    /// its tint, see <see cref="OnGlassFrameReady"/>); until the first frame lands, a DWM backdrop plus a
+    /// denser tint; every other material stays opaque so text contrast never depends on the wallpaper.
+    /// </summary>
+    private void ApplyPanelFill()
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        var window = _palette.Window;
+        var translucent = _liquidGlass && ChromeMode == SettingsWindowChrome.Transparent;
+
+        if (!translucent)
+        {
+            _shell.Background = new SolidColorBrush(Color.FromArgb(255, window.R, window.G, window.B));
+            _shell.BorderBrush = _palette.LineStrongBrush;
+            return;
+        }
+
+        if (!_composing && _glassBrush is not null && _composedForLight != _palette.IsLight)
+        {
+            // Pixels from the other theme: recompose before painting them, otherwise the theme just switched to
+            // inherits the other theme's tint and only one of the two ever looks right.
+            _ = ComposeGlass();
+            if (_composedForLight != _palette.IsLight)
+            {
+                _glassBrush = null;
+            }
+        }
+
+        if (_glassBrush is not null)
+        {
+            _shell.Background = _glassBrush;
+        }
+        else
+        {
+            // Only reachable when the desktop refused a capture: a flat tint is honest and, unlike the old
+            // acrylic-accent attempt, deterministic — that overlay applied or not depending on timing, which
+            // changed how dark the panel looked between launches.
+            _shell.Background = TintGradient(window, PanelGlassTopAlpha, PanelGlassBottomAlpha);
+        }
+
+        // A lit rim reads as thickness: glass needs an edge highlight, otherwise the panel is a flat sheet.
+        _shell.BorderBrush = new LinearGradientBrush
+        {
+            StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+            EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+            GradientStops =
+            {
+                new Avalonia.Media.GradientStop(Color.FromArgb(64, 255, 255, 255), 0),
+                new Avalonia.Media.GradientStop(Color.FromArgb(18, 255, 255, 255), 0.55),
+                new Avalonia.Media.GradientStop(Color.FromArgb(38, 255, 255, 255), 1),
+            },
+        };
+        _shell.BorderThickness = new Thickness(1);
+    }
+
+    /// <summary>Vertical tint gradient used for the glass slab.</summary>
+    private static LinearGradientBrush TintGradient(Color window, double topAlpha, double bottomAlpha)
+        => new()
+        {
+            StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+            EndPoint = new Avalonia.RelativePoint(0, 1, Avalonia.RelativeUnit.Relative),
+            GradientStops =
+            {
+                new Avalonia.Media.GradientStop(
+                    Color.FromArgb((byte)Math.Round(255 * topAlpha), window.R, window.G, window.B), 0),
+                new Avalonia.Media.GradientStop(
+                    Color.FromArgb((byte)Math.Round(255 * bottomAlpha), window.R, window.G, window.B), 1),
+            },
+        };
+
+    /// <summary>
+    /// Captures the desktop behind this window and paints it as the panel material: capture → 1/6 downsample →
+    /// gaussian blur → saturation lift → tint bake, the island's own glass recipe. It has to be drawn — a
+    /// borderless Win32 window never gets a real DWM backdrop (<c>DWMWA_SYSTEMBACKDROP_TYPE</c> returns S_OK
+    /// while DWM paints nothing), which is why the panel used to be a flat slab.
+    /// </summary>
+    /// <param name="force">Capture immediately instead of waiting for the drag throttle.</param>
+    private void RefreshGlassBackdrop(bool force)
+    {
+        if (!_liquidGlass || ChromeMode != SettingsWindowChrome.Transparent || _closed)
+        {
+            return;
+        }
+
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (_backdrop is null)
+        {
+            // The capture has to return what is *behind* the window, never the window itself.
+            _ = ScreenBackdropCapture.TryExcludeFromCapture(handle);
+            _backdrop = new SettingsGlassBackdrop();
+            _backdrop.RegionReady += OnGlassRegionReady;
+        }
+
+        var origin = Position; // physical pixels, unlike Bounds (DIP)
+        var scale = RenderScaling <= 0 ? 1.0 : RenderScaling;
+        _backdropRect = (origin.X, origin.Y,
+            (int)Math.Round(Bounds.Width * scale), (int)Math.Round(Bounds.Height * scale));
+
+        UpdateBackdropRect();
+
+        if (!_backdrop.HasRegion)
+        {
+            // First material: capture synchronously (GDI, ~2 ms) so the first visible frame is already glass.
+            // An async first capture leaves a flat tint on screen for as long as the capture takes, which made
+            // one launch look right and the next look wrong.
+            _backdrop.TryCaptureNow(_backdropRect, allowComposedCapture: false);
+        }
+
+        _ = _backdrop.RequestRegion(_backdropRect, allowComposedCapture: !_dragging, force);
+        ComposeGlass();
+    }
+
+    /// <summary>
+    /// Recomputes the physical window rectangle used for the capture and for the offset sampling.
+    /// <para>
+    /// Taken from Win32 rather than from Avalonia: on this machine <c>Bounds</c> (900×620) times
+    /// <c>RenderScaling</c> (1.5) and <c>Position</c> (605,335) described a 1350×930 window at (605,335) for a
+    /// real 900×620 window at (403,223). The backdrop was therefore captured from the wrong place at the wrong
+    /// zoom, so the material looked right in one launch and wrong in the next depending on what happened to sit
+    /// under that rectangle (user report 2026-10-24: "第一次窗口的样子非常好看，第二次就不好看了").
+    /// </para>
+    /// </summary>
+    private void UpdateBackdropRect()
+    {
+        if (TryGetPhysicalWindowRect(out var physical))
+        {
+            _backdropRect = physical;
+            return;
+        }
+
+        var origin = Position;
+        var scale = RenderScaling <= 0 ? 1.0 : RenderScaling;
+        _backdropRect = (origin.X, origin.Y,
+            (int)Math.Round(Bounds.Width * scale), (int)Math.Round(Bounds.Height * scale));
+    }
+
+    /// <summary>Client rectangle of this window in physical screen pixels (Win32 truth, no DIP conversion).</summary>
+    /// <param name="rect">Physical bounds when the handle is available.</param>
+    /// <returns>False when the window has no platform handle yet.</returns>
+    private bool TryGetPhysicalWindowRect(out (int X, int Y, int Width, int Height) rect)
+    {
+        rect = default;
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var clientOrigin = default(NativePoint);
+        if (!GetClientRect(handle, out var client))
+        {
+            _physicalRectProbe = "GetClientRect failed err=" + Marshal.GetLastWin32Error();
+            return false;
+        }
+
+        if (!ClientToScreen(handle, ref clientOrigin))
+        {
+            _physicalRectProbe = "ClientToScreen failed err=" + Marshal.GetLastWin32Error();
+            return false;
+        }
+
+        var width = client.Right - client.Left;
+        var height = client.Bottom - client.Top;
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        rect = (clientOrigin.X, clientOrigin.Y, width, height);
+        _physicalRectOk = true;
+        _physicalRectProbe = "client=" + width + "x" + height + " origin=" + clientOrigin.X + ","
+            + clientOrigin.Y + " native=" + client.Left + "," + client.Top + "," + client.Right + ","
+            + client.Bottom;
+        return true;
+    }
+
+    /// <summary>
+    /// Samples the cached region for the current window position and uploads it. No screen read: this is the
+    /// zero-latency path, so a move is drawn in the same frame as the pointer.
+    /// </summary>
+    /// <returns>False when the window has moved outside the cached region.</returns>
+    private bool ComposeGlass()
+    {
+        if (_backdrop is not { } backdrop)
+        {
+            return false;
+        }
+
+        _composing = true;
+        try
+        {
+            return ComposeGlassFrame(backdrop);
+        }
+        finally
+        {
+            _composing = false;
+        }
+    }
+
+    private bool ComposeGlassFrame(SettingsGlassBackdrop backdrop)
+    {
+        var window = _palette.Window;
+        var material = GlassMaterialFor(_palette.IsLight);
+        var started = Stopwatch.GetTimestamp();
+        if (!backdrop.TryCompose(_backdropRect, new SKColor(window.R, window.G, window.B),
+                material.TopAlpha, material.BottomAlpha, material.ScrimThreshold,
+                material.ScrimMaxAlpha, material.LiftThreshold, material.LiftMaxAlpha, out var frame))
+        {
+            _glassBrushNeedsApply = true; // the next frame may be a different size after a region change
+            return false;
+        }
+
+        UploadGlassFrame(frame);
+
+        long checksum = 0;
+        double sumR = 0, sumG = 0, sumB = 0;
+        var sampled = 0;
+        for (var i = 0; i + 3 < frame.Pixels.Length; i += 28)
+        {
+            checksum += frame.Pixels[i] + (frame.Pixels[i + 1] * 3L) + (frame.Pixels[i + 2] * 7L);
+            sumB += frame.Pixels[i];
+            sumG += frame.Pixels[i + 1];
+            sumR += frame.Pixels[i + 2];
+            sampled++;
+        }
+
+        _glassFrameDiagnostics = sampled == 0
+            ? "none"
+            : "mean=" + (sumR / sampled).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "/"
+              + (sumG / sampled).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "/"
+              + (sumB / sampled).ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+              + " sum=" + checksum;
+
+        if (string.Equals(Environment.GetEnvironmentVariable("FLUIDBAR_GLASS_TRACE"), "1", StringComparison.Ordinal))
+        {
+            try
+            {
+                var ms = (Stopwatch.GetTimestamp() - started) * 1000.0 / Stopwatch.Frequency;
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fluidbar-compose.log"),
+                    "compose=" + ms.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)
+                    + "ms " + frame.Width + "x" + frame.Height + "\n");
+            }
+            catch
+            {
+                // diagnostics only
+            }
+        }
+
+        return true;
+    }
+
+    private void OnGlassRegionReady()
+        => Dispatcher.UIThread.Post(() => ComposeGlass(), DispatcherPriority.Render);
+
+    private void UploadGlassFrame(GlassFrame frame)
+    {
+        if (_closed)
+        {
+            return;
+        }
+
+        if (_glassTarget is null
+            || _glassTarget.PixelSize.Width != frame.Width
+            || _glassTarget.PixelSize.Height != frame.Height)
+        {
+            _glassTarget?.Dispose();
+            _glassTarget = new WriteableBitmap(new PixelSize(frame.Width, frame.Height), new Vector(96, 96),
+                PixelFormat.Bgra8888, AlphaFormat.Premul);
+            _glassBrush = new ImageBrush(_glassTarget) { Stretch = Stretch.Fill };
+            _glassBrushNeedsApply = true;
+        }
+
+        using (var locked = _glassTarget.Lock())
+        {
+            var destination = locked.Address;
+            var destinationRowBytes = locked.RowBytes;
+            var rowBytes = Math.Min(destinationRowBytes, frame.RowBytes);
+            for (var y = 0; y < frame.Height; y++)
+            {
+                Marshal.Copy(frame.Pixels, y * frame.RowBytes, IntPtr.Add(destination, y * destinationRowBytes),
+                    rowBytes);
+            }
+        }
+
+        // Stamp before the brush is applied: ApplyPanelFill repaints at once and has to know these pixels match
+        // the active theme.
+        _composedForLight = _palette.IsLight;
+
+        if (_glassBrushNeedsApply)
+        {
+            _glassBrushNeedsApply = false;
+            ApplyPanelFill();
+        }
+        else
+        {
+            // Same bitmap, new pixels: no brush churn and no layout pass, just one repaint. This is what keeps
+            // a drag at frame rate — the previous version re-encoded the backdrop to PNG and rebuilt the brush
+            // on every position event.
+            _shell.InvalidateVisual();
+        }
+    }
+
+    private void PositionChangedGlassHook(object? sender, PixelPointEventArgs e)
+    {
+        _dragging = true;
+        UpdateBackdropRect();
+        if (!ComposeGlass())
+        {
+            // Out of the cached region: ask for a new one (async) and keep the last frame meanwhile.
+            _ = _backdrop?.RequestRegion(_backdropRect, allowComposedCapture: false);
+        }
+
+
+        // Restart the settle countdown on every move; a stopped window gets one accurate (composed) capture.
+        if (_settleTimer is null)
+        {
+            _settleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(160) };
+            _settleTimer.Tick += OnSettleTick;
+        }
+
+        _settleTimer.Stop();
+        _settleTimer.Start();
+    }
+
+    private void OnSettleTick(object? sender, EventArgs e)
+    {
+        _settleTimer?.Stop();
+        _dragging = false;
+        RefreshGlassBackdrop(force: true);
+    }
+
+    private void DisposeGlassBackdrop()
+    {
+        if (_backdrop is not null)
+        {
+            _backdrop.RegionReady -= OnGlassRegionReady;
+            _backdrop.Dispose();
+            _backdrop = null;
+        }
+
+        _glassBrush = null;
+        _glassTarget?.Dispose();
+        _glassTarget = null;
+        _appliedRect = default;
+    }
+
+    /// <summary>
+    /// Cheap idempotent re-assert of the fallback DWM backdrop. DWM drops the system backdrop after some
+    /// style/focus transitions (layered toggle, window re-show, theme change); the drawn material does not care,
+    /// so this only matters while no capture has landed yet.
+    /// </summary>
+    private void ReassertAcrylicBackdrop()
+    {
+        if (!_liquidGlass || ChromeMode != SettingsWindowChrome.Transparent || _glassBrush is not null)
+        {
+            return;
+        }
+
+        var handle = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = WindowDwmPolicy.TryEnableAcrylicBackdrop(handle, out _);
+        _ = WindowDwmPolicy.TryEnableRounding(handle, out _);
+    }
+
+    /// <summary>
+    /// Writes a PNG of the composed window (visual tree → RenderTargetBitmap) so the liquid-glass material can
+    /// be inspected without a screenshot of the desktop: the render includes the drawn blurred backdrop.
+    /// </summary>
+    private void MaybeWriteSnapshot()
+    {
+        var path = Environment.GetEnvironmentVariable("FLUIDBAR_SETTINGS_SNAPSHOT");
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        DispatcherTimer.RunOnce(() =>
+        {
+            try
+            {
+                var size = new PixelSize(
+                    Math.Max(1, (int)Math.Round(Bounds.Width)),
+                    Math.Max(1, (int)Math.Round(Bounds.Height)));
+                using var target = new RenderTargetBitmap(size, new Vector(96, 96));
+                target.Render(this);
+                target.Save(path + ".png");
+
+                System.IO.File.AppendAllText(path + ".log",
+                    DateTime.Now.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture)
+                    + " snapshot drawn=" + (_glassBrush is not null)
+                    + " captures=" + (_backdrop?.CaptureCount ?? 0)
+                    + " failures=" + (_backdrop?.CaptureFailures ?? 0)
+                    + " captureMs=" + (_backdrop?.LastCaptureMs ?? 0).ToString("0.0",
+                        System.Globalization.CultureInfo.InvariantCulture)
+                    + " bakeMs=" + (_backdrop?.LastBakeMs ?? 0).ToString("0.0",
+                        System.Globalization.CultureInfo.InvariantCulture)
+                    + " rect=" + _backdropRect
+                    + " bounds=" + Bounds.Width.ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+                    + "x" + Bounds.Height.ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+                    + " scaling=" + RenderScaling.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                    + " position=" + Position.X + "," + Position.Y
+                    + " physicalOk=" + _physicalRectOk
+                    + " probe=" + _physicalRectProbe
+                    + " frame=" + _glassFrameDiagnostics
+                    + " materialFor="
+                    + (_composedForLight is null ? "none" : (_composedForLight.Value ? "light" : "dark"))
+                    + " theme=" + (_palette.IsLight ? "light" : "dark")
+                    + " size=" + size.Width + "x" + size.Height + "\n");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("[fluidbar settings] snapshot failed: " + ex.Message);
+            }
+        }, TimeSpan.FromMilliseconds(1500));
+    }
+
 }
 
 /// <summary>Which chrome path the settings window uses for its rounded shape.</summary>

@@ -416,6 +416,13 @@ public static class SettingsSectionBuilder
             swatchNote.IsVisible = artwork;
         }
 
+        // Accent changes can also arrive from elsewhere (import, another pane); follow the settings while this
+        // page is alive and unhook when it is replaced, so nothing leaks across rebuilds.
+        ctx.Settings.Changed += OnAccentChanged;
+        swatches.DetachedFromVisualTree += (_, _) => ctx.Settings.Changed -= OnAccentChanged;
+
+        void OnAccentChanged(AppSettings previous, AppSettings current) => SyncSwatches();
+
         SyncSwatches();
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Title),
@@ -497,7 +504,14 @@ public static class SettingsSectionBuilder
                 ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkHint),
                     settings.AccentMode == "artwork",
-                    value => ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" })),
+                    value =>
+                    {
+                        ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" });
+                        // Custom and artwork accents are mutually exclusive: switching to artwork has to drop the
+                        // swatch ring right away, instead of leaving a stale selection until the page is rebuilt
+                        // (user report 2026-10-24: the ring only cleared after visiting another page and back).
+                        SyncSwatches();
+                    }),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
                     value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),

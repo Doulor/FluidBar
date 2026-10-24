@@ -924,6 +924,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             data: new Dictionary<string, object?> { ["excludedFromCapture"] = host.ExcludeFromCapture });
         host.AttachAccessibility(_uiaSource, _uiaSource);
 
+        // Second launch of the exe: SingleInstanceGuard.TryAcquire() fails and it posts ActivateMessage to
+        // this window class. Nothing subscribed to the resulting event, so the documented "nudge the running
+        // instance to open its settings window" silently did nothing (dead seam, 2026-10-24).
+        host.ActivateRequested += () =>
+        {
+            _logger.Information(LogCategories.Lifecycle, "app.activate-requested",
+                "A second launch asked the running instance to open the settings window.");
+            SettingsRequested?.Invoke();
+        };
+
         var entry = new WindowEntry(host, monitor);
         host.PointerMoved += pointer =>
         {
