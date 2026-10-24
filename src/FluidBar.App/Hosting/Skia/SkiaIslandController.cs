@@ -2345,9 +2345,10 @@ public sealed class SkiaIslandController : IDisposable
     {
         var items = _pages.Agent.Items;
         var colors = new System.Collections.Generic.List<uint>(3);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < items.Count && colors.Count < 3; i++)
         {
-            if (items[i].IsLive)
+            if (items[i].IsLive && seen.Add((items[i].Project ?? string.Empty) + "|" + (items[i].SessionTitle ?? items[i].Tool ?? string.Empty)))
             {
                 colors.Add(items[i].AccentArgb);
             }
@@ -2361,9 +2362,10 @@ public sealed class SkiaIslandController : IDisposable
     {
         var items = _pages.Agent.Items;
         var live = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < items.Count; i++)
         {
-            if (items[i].IsLive)
+            if (items[i].IsLive && seen.Add((items[i].Project ?? string.Empty) + "|" + (items[i].SessionTitle ?? items[i].Tool ?? string.Empty)))
             {
                 live++;
             }

@@ -1205,6 +1205,9 @@ public sealed record AgentItemModel
     /// <summary>Task description.</summary>
     public string? Task { get; init; }
 
+    /// <summary>Session title (dedupe key: several session ids can belong to one conversation).</summary>
+    public string? SessionTitle { get; init; }
+
     /// <summary>Localized status label ("Running").</summary>
     public string? StatusText { get; init; }
 

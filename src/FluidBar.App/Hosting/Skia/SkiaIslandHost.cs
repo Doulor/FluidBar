@@ -145,7 +145,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     // to keep a stale palette until the next activity recoloured it (regression 2026-10-24). This timer
     // re-samples the desktop a couple of times a second and wakes the frame clock only when the mean
     // luminance really moved.
-    private Avalonia.Threading.DispatcherTimer? _paletteWatch;
+    private readonly UiThreadTicker _paletteTicker;
 
     /// <summary>Blurred desktop capture for the liquid-glass material (throttled internally).</summary>
     private readonly IslandBackdropProvider _backdrop;
@@ -243,12 +243,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _backdrop.Updated += OnBackdropUpdated;
-        _paletteWatch = new Avalonia.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(600),
-        };
-        _paletteWatch.Tick += (_, _) => PollBackdropForPaletteChange();
-        _paletteWatch.Start();
+        _paletteTicker = new UiThreadTicker(_time);
+        _paletteTicker.Start(TimeSpan.FromMilliseconds(600), PollBackdropForPaletteChange);
         _controller.SettingsRequested += () => SettingsRequested?.Invoke();
         _controller.MarketRequested += () => MarketRequested?.Invoke();
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
@@ -606,11 +602,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
         _backdrop.Updated -= OnBackdropUpdated;
-        if (_paletteWatch is not null)
-        {
-            _paletteWatch.Stop();
-            _paletteWatch = null;
-        }
+        _paletteTicker.Dispose();
         if (_mouseHook is not null)
         {
             _mouseHook.RightPressed -= OnHookRightPressed;

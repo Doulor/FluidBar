@@ -353,6 +353,7 @@ public static class SkiaIslandStateBuilder
     private static uint[] LiveAgentColors(IslandContent content)
     {
         var colors = new System.Collections.Generic.List<uint>(3);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in content.Agents)
         {
             if (colors.Count >= 3)
@@ -360,7 +361,7 @@ public static class SkiaIslandStateBuilder
                 break;
             }
 
-            if (item.IsLive)
+            if (item.IsLive && seen.Add((item.Project ?? string.Empty) + "|" + (item.SessionTitle ?? item.Name)))
             {
                 colors.Add(AgentToolPalette.ColorFor(item.Kind));
             }
@@ -373,9 +374,10 @@ public static class SkiaIslandStateBuilder
     private static int CountLiveAgents(IslandContent content)
     {
         var live = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in content.Agents)
         {
-            if (item.IsLive)
+            if (item.IsLive && seen.Add((item.Project ?? string.Empty) + "|" + (item.SessionTitle ?? item.Name)))
             {
                 live++;
             }
@@ -395,6 +397,7 @@ public static class SkiaIslandStateBuilder
                 Tool = item.Name,
                 Project = item.Project,
                 Task = string.IsNullOrWhiteSpace(item.PrimaryText) ? item.Detail : item.PrimaryText,
+                SessionTitle = item.SessionTitle,
                 StatusText = item.StatusText,
                 DurationText = item.TimeText,
                 Tone = MapTone(item.Tone),

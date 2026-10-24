@@ -231,7 +231,8 @@ public sealed class DshSessionProvider : IAgentStatusProvider
             // once per quiet period so polling never floods the history.
             // Only recently written sessions are "open tabs": older ones are history (user report: one
             // session but three rings while the projection cache still held yesterday's files).
-            if (lastTurn > 0 && now - file.LastWriteTimeUtc <= OpenTabWindow)
+            if (lastTurn > 0 && now - file.LastWriteTimeUtc <= OpenTabWindow
+                && now - ReadLastPromptAt(rows, file) <= OpenTabWindow)
             {
                 state.IdleReported = true;
                 events.Add(new AgentProviderEvent(sessionId, "waiting", TitleFor(state.Project), "空闲",
@@ -261,6 +262,21 @@ public sealed class DshSessionProvider : IAgentStatusProvider
                 _knownSessions?.Remove(pair.Key);
             }
         }
+    }
+
+    /// <summary>Time of the session's last user prompt (the harness' session-list field).</summary>
+    private static DateTimeOffset ReadLastPromptAt(JsonElement rows, FileInfo file)
+    {
+        if (rows.TryGetProperty("sessionListMetadata", out var meta)
+            && meta.TryGetProperty("val", out var value)
+            && value.TryGetProperty("lastPromptAt", out var stamp)
+            && stamp.TryGetInt64(out var ms)
+            && ms > 0)
+        {
+            return DateTimeOffset.FromUnixTimeMilliseconds(ms);
+        }
+
+        return file.LastWriteTimeUtc;
     }
 
     private static string TitleFor(string project)
