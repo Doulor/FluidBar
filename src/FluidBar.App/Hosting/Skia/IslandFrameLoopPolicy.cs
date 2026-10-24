@@ -24,7 +24,13 @@ public static class IslandFrameLoopPolicy
     /// <param name="animating">Any shell/pager/strip/content animation is in flight.</param>
     /// <param name="agentAnimating">The agent spinner needs continuous frames.</param>
     /// <param name="keepIdleFrames">The power table keeps frames alive (painted satellite ring).</param>
+    /// <param name="backdropChanged">
+    /// A desktop capture changed the backdrop luminance while the island was idle: liquid glass has to
+    /// repaint so the material follows the desktop (regression 2026-10-24: an idle island only recoloured
+    /// after the next activity).
+    /// </param>
     /// <returns>True when the frame clock must run.</returns>
-    public static bool ShouldRun(bool animating, bool agentAnimating, bool keepIdleFrames)
-        => animating || agentAnimating || keepIdleFrames;
+    public static bool ShouldRun(bool animating, bool agentAnimating, bool keepIdleFrames,
+        bool backdropChanged = false)
+        => animating || agentAnimating || keepIdleFrames || backdropChanged;
 }

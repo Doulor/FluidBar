@@ -41,6 +41,20 @@ public sealed class AgentLivenessTests
     }
 
     [Fact]
+    public void A_stale_running_row_stops_counting()
+    {
+        // Heartbeat-backed rows must expire: a crashed/closed agent (or a leftover hook event) used to keep
+        // its ring forever (user report: one session, three rings).
+        var snapshot = new AgentEventSnapshot(ImmutableArray.Create(
+            Entry("stale", AgentEventKind.Running, Now.AddHours(-8)),
+            Entry("live", AgentEventKind.Running, Now.AddSeconds(-5))));
+
+        var rows = AgentContentMapper.Map(snapshot, Now);
+        Assert.Equal(2, rows.Length);
+        Assert.Equal(1, rows.Count(row => row.IsLive));
+    }
+
+    [Fact]
     public void Failed_sessions_never_count_as_live()
     {
         var snapshot = new AgentEventSnapshot(ImmutableArray.Create(

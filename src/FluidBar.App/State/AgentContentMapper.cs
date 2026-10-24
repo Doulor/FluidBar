@@ -15,10 +15,16 @@ public static class AgentContentMapper
     public const int MaxRows = 8;
 
     /// <summary>
-    /// How long after its last event a session still counts as open. An idle Harness session keeps its tab
-    /// but emits nothing, so a strict "running" test showed one ring instead of three (user report 2026-10-24).
+    /// How long an idle-but-open session still counts as live. Harness only rewrites a session file when
+    /// something happens, so a quiet tab's row ages with the file.
     /// </summary>
-    public static readonly TimeSpan LiveWindow = TimeSpan.FromMinutes(20);
+    public static readonly TimeSpan LiveWindow = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// Running rows are refreshed by heartbeats. If one goes quiet this long the agent is gone (crashed,
+    /// closed, or a stale hook event) and its ring must drop (user report 2026-10-24: one session, three rings).
+    /// </summary>
+    public static readonly TimeSpan RunningWindow = TimeSpan.FromMinutes(2);
 
     /// <summary>Maps the snapshot to page rows; empty when no session exists.</summary>
     /// <param name="snapshot">Agent inbox snapshot (null before the watcher produced one).</param>
@@ -70,8 +76,16 @@ public static class AgentContentMapper
                 // Real time: running/waiting sessions are live, completed/failed are not. Quiet-but-open
                 // sessions are re-published as "waiting" by their provider, so the ring count tracks the
                 // truth within one poll instead of waiting for a timeout.
-                IsLive = entry.Kind is AgentEventKind.Running or AgentEventKind.WaitingForInput
-                         or AgentEventKind.Other,
+                // Running/waiting counts as live only while it stays fresh: a hook that stops sending
+                // heartbeats (crashed agent, stale test event) must not keep a ring forever (user report
+                // 2026-10-24: one session but three rings).
+                IsLive = entry.Kind switch
+                {
+                    AgentEventKind.Running or AgentEventKind.Other =>
+                        now - entry.Timestamp <= RunningWindow,
+                    AgentEventKind.WaitingForInput => now - entry.Timestamp <= LiveWindow,
+                    _ => false,
+                },
                 Tone = entry.Kind switch
                 {
                     AgentEventKind.Completed => StatusTone.Success,

@@ -10,6 +10,15 @@
 - 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
 
 
+## 2026-10-24 — 只有一个会话却显示三个环
+
+- 两个原因：① 我调试时留在 `agent-events\inbox` 的 `flicker-test-0001.json`（status=running）每次启动都会
+  生成一个永不结束的 agent 行；② 心跳型的 running 行没有过期机制，崩溃/关掉的 agent 会一直占一个环。
+- 处置：删掉那条遗留事件；`AgentItemData.IsLive` 区分两种窗口 ——
+  running/其它 **2 分钟**（靠心跳刷新），waiting（空闲但开着的标签页）**30 分钟**。
+- 新增 `A_stale_running_row_stops_counting`。
+- 全量 2680 测试绿。
+
 ## 2026-10-24 — 环数实时化 + 三处圆环样式统一
 
 - 环数是"打开的会话数"，但之前只在重启后才对：DSH 空闲会话根本没发过事件（启动即存在者被静默收养）。

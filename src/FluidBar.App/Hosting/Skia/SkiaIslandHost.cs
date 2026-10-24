@@ -141,6 +141,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private long _probeRenderAllocStart;
     private readonly List<WindowEntry> _windows = [];
 
+    // Idle palette watch: while the island sits still nothing requests a capture, so the liquid glass used
+    // to keep a stale palette until the next activity recoloured it (regression 2026-10-24). This timer
+    // re-samples the desktop a couple of times a second and wakes the frame clock only when the mean
+    // luminance really moved.
+    private Avalonia.Threading.DispatcherTimer? _paletteWatch;
+
     /// <summary>Blurred desktop capture for the liquid-glass material (throttled internally).</summary>
     private readonly IslandBackdropProvider _backdrop;
 
@@ -151,6 +157,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private readonly FluidBar.Core.Interaction.BackdropLuminanceSmoother _luminanceSmoother = new();
     private long _luminanceStampMs;
     private bool _luminanceAnimating;
+    private bool _backdropDirty;
+    private double _lastRawLuminance = -1;
+    private (int X, int Y, int Width, int Height) _lastBackdropRect;
     private SKImage? _backdropCurrent;
     private SKBitmap? _backdropPreviousBitmap;
     private SKImage? _backdropPrevious;
@@ -234,6 +243,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _backdrop.Updated += OnBackdropUpdated;
+        _paletteWatch = new Avalonia.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(600),
+        };
+        _paletteWatch.Tick += (_, _) => PollBackdropForPaletteChange();
+        _paletteWatch.Start();
         _controller.SettingsRequested += () => SettingsRequested?.Invoke();
         _controller.MarketRequested += () => MarketRequested?.Invoke();
         _controller.MediaCommandRequested += command => MediaCommandRequested?.Invoke(command);
@@ -591,6 +606,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _controller.PlacementPersistRequested -= OnPlacementPersistRequested;
         _controller.FrameRequested -= EnsureFrameLoop;
         _backdrop.Updated -= OnBackdropUpdated;
+        if (_paletteWatch is not null)
+        {
+            _paletteWatch.Stop();
+            _paletteWatch = null;
+        }
         if (_mouseHook is not null)
         {
             _mouseHook.RightPressed -= OnHookRightPressed;
@@ -1387,7 +1407,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // controller's animation flags.
         var yieldActive = _softYield?.IsActive == true;
         if (!IslandFrameLoopPolicy.ShouldRun(
-                _controller.IsAnimating || yieldActive || _awaitingFirstGlass,
+                _controller.IsAnimating || yieldActive || _awaitingFirstGlass || _backdropDirty,
                 _controller.IsAgentAnimating,
                 keepIdleFrames))
         {
@@ -2142,6 +2162,52 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         return bitmap;
     }
 
+    /// <summary>
+    /// Samples the desktop while the island is idle so liquid glass follows a dark → light (or light → dark)
+    /// wallpaper change within a few hundred milliseconds instead of waiting for the next activity.
+    /// </summary>
+    private void PollBackdropForPaletteChange()
+    {
+        if (_disposed || !_started || _windows.Count == 0 || !_controller.HasRenderState)
+        {
+            return;
+        }
+
+        var state = _controller.RenderState;
+        if (!state.IsVisible || state.Theme.Material != FluidBar.Island.IslandMaterial.LiquidGlass)
+        {
+            return;
+        }
+
+        // Frames already running: RenderEntry captures on its own cadence.
+        if (_frameClock?.IsRunning == true)
+        {
+            return;
+        }
+
+        var entry = _windows[0];
+        var window = entry.Host.Placement.WindowPixel;
+        if (window.Width <= 0 || window.Height <= 0)
+        {
+            return;
+        }
+
+        var rect = (window.X, window.Y, window.Width, window.Height);
+        var surfaceDip = entry.Host.SurfaceSizeDip;
+        var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
+        var luminanceWindow = (
+            X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
+            Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
+            Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
+            Height: (int)Math.Round((state.ShellHeight + 12) * dpi));
+
+        // force:true re-captures even though the cached frame may still be inside its refresh window; the
+        // screenshot itself is throttled inside the provider.
+        var masks = BuildIslandMasks(state, dpi);
+        _ = _backdrop.Get(rect, masks.ToArray(), allowComposedCapture: true, force: false,
+            luminanceRect: luminanceWindow);
+    }
+
     private void OnBackdropUpdated()
     {
         if (_disposed)
@@ -2159,6 +2225,16 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // Only wake the clock. The capture frame must NOT trigger an extra UpdateLayeredWindow right
             // as the WGC frame lands: that out-of-band commit lined up 1:1 with the "island flashes"
             // report (2026-10-23). The regular frame loop applies the new backdrop.
+            if (_backdrop is not null && _lastBackdropRect.Width > 0)
+            {
+                var raw = _backdrop.LuminanceFor(_lastBackdropRect);
+                if (_lastRawLuminance < 0 || Math.Abs(raw - _lastRawLuminance) > 0.02)
+                {
+                    _lastRawLuminance = raw;
+                    _backdropDirty = true;
+                }
+            }
+
             EnsureFrameLoop();
         });
     }
@@ -2226,6 +2302,51 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         return true;
     }
 
+    /// <summary>
+    /// Pixels of the capture that belong to the island itself and must be smeared away: the shell (with an
+    /// 18 DIP margin), every split capsule and the preview rail below the panel. Shared by the render path
+    /// and the idle palette watch so a background-only capture never bakes the island into its own glass.
+    /// </summary>
+    private static List<(int X, int Y, int Width, int Height)> BuildIslandMasks(in IslandRenderState state, double dpi)
+    {
+        const double maskMarginDip = 18.0;
+        var masks = new List<(int X, int Y, int Width, int Height)>
+        {
+            (
+                (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
+                (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
+                (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
+                (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi)),
+        };
+
+        // Split capsules live outside the shell: mask them too, otherwise the rotating agent ring is
+        // captured into the glass and the main pill blinks with it.
+        if (state.SplitIslets.Length > 0 && state.SplitProgress > 0.01)
+        {
+            foreach (var islet in FluidBar.Island.IslandMetrics.SplitIsletRects(state))
+            {
+                masks.Add((
+                    (int)Math.Round((islet.Left - 8) * dpi),
+                    (int)Math.Round((islet.Top - 8) * dpi),
+                    (int)Math.Round((islet.Width + 16) * dpi),
+                    (int)Math.Round((islet.Height + 16) * dpi)));
+            }
+        }
+
+        // The preview rail (mini islands) is drawn below the shell and now paints with the same glass
+        // material, so it must be smeared out of the capture just like the shell and the capsules.
+        if (state.IsExpanded)
+        {
+            masks.Add((
+                (int)Math.Round((state.ShellOrigin.X - 24) * dpi),
+                (int)Math.Round((state.ShellOrigin.Y + state.ShellHeight) * dpi),
+                (int)Math.Round((state.ShellWidth + 48) * dpi),
+                (int)Math.Round(56 * dpi)));
+        }
+
+        return masks;
+    }
+
     private double RenderEntry(WindowEntry entry, in IslandRenderState state, SkiaIslandRenderChange change)
     {
         // Liquid glass: attach a blurred capture of the desktop behind this window (throttled inside).
@@ -2240,46 +2361,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // provider which pixels to smear away before blurring.
             var surfaceDip = entry.Host.SurfaceSizeDip;
             var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
-            const double maskMarginDip = 18.0;
-            var masks = new List<(int X, int Y, int Width, int Height)>
-            {
-                (
-                    (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
-                    (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
-                    (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
-                    (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi)),
-            };
-
-            // Split capsules live outside the shell: mask them too, otherwise the rotating agent ring is
-            // captured into the glass and the main pill blinks with it.
-            if (state.SplitIslets.Length > 0 && state.SplitProgress > 0.01)
-            {
-                foreach (var islet in FluidBar.Island.IslandMetrics.SplitIsletRects(state))
-                {
-                    masks.Add((
-                        (int)Math.Round((islet.Left - 8) * dpi),
-                        (int)Math.Round((islet.Top - 8) * dpi),
-                        (int)Math.Round((islet.Width + 16) * dpi),
-                        (int)Math.Round((islet.Height + 16) * dpi)));
-                }
-            }
-
-            // The preview rail (mini islands) is drawn below the shell and now paints with the same glass
-            // material, so it must be smeared out of the capture just like the shell and the capsules.
-            if (state.IsExpanded)
-            {
-                masks.Add((
-                    (int)Math.Round((state.ShellOrigin.X - 24) * dpi),
-                    (int)Math.Round((state.ShellOrigin.Y + state.ShellHeight) * dpi),
-                    (int)Math.Round((state.ShellWidth + 48) * dpi),
-                    (int)Math.Round(56 * dpi)));
-            }
-
+            var masks = BuildIslandMasks(state, dpi);
             var luminanceWindow = (
                 X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
                 Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
                 Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
                 Height: (int)Math.Round((state.ShellHeight + 12) * dpi));
+            _lastBackdropRect = rect;
             var backdrop = _backdrop.Get(
                 rect,
                 masks.ToArray(),
@@ -2314,6 +2402,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                     : Math.Clamp((now - _backdropBlendStartMs) / BackdropCrossfadeMs, 0, 1);
                 var smoothed = _luminanceSmoother.Step(_backdrop.LuminanceFor(rect), delta);
                 _luminanceAnimating = !_luminanceSmoother.IsSettled || blend < 1;
+                if (!_luminanceAnimating)
+                {
+                    _backdropDirty = false;
+                    _lastRawLuminance = _backdrop.LuminanceFor(rect);
+                }
                 renderState = state with
                 {
                     Backdrop = backdrop,

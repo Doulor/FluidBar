@@ -21,6 +21,18 @@ public sealed class IslandFrameLoopPolicyTests
         => Assert.Equal(expected, IslandFrameLoopPolicy.ShouldRun(animating, agentAnimating, keepIdleFrames));
 
     /// <summary>
+    /// Regression (2026-10-24): an idle island stopped the clock, so a dark → light desktop change never
+    /// repainted the liquid glass until some activity happened. A backdrop luminance change must request
+    /// frames on its own.
+    /// </summary>
+    [Fact]
+    public void ShouldRun_WhenOnlyTheBackdropChanged()
+    {
+        Assert.True(IslandFrameLoopPolicy.ShouldRun(false, false, false, backdropChanged: true));
+        Assert.False(IslandFrameLoopPolicy.ShouldRun(false, false, false, backdropChanged: false));
+    }
+
+    /// <summary>
     /// Regression (2026-10-21): the host used to stop the frame clock when the last render attempt was
     /// empty. The deadline ticker renders without advancing motion, so the expand animation froze after
     /// two frames. The animation state must survive a deadline pump and keep asking for frames.
