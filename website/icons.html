@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>FluidBar · 图标选型</title>
+<style>
+:root{
+  --bg:#f3f2ee;--panel:#fbfaf7;--ink:#17191d;--muted:#767a82;--line:#dcded9;
+  --soft:#e9e9e4;--accent:#176b78;--accent-soft:#d9e8e7;--tile:#e8e9e5;
+  --shadow:0 18px 60px rgba(20,25,28,.08);
+}
+*{box-sizing:border-box}
+html{background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+body{margin:0;min-height:100vh;background:
+  radial-gradient(circle at 87% 9%,rgba(54,146,161,.07),transparent 28rem),
+  linear-gradient(120deg,transparent 70%,rgba(255,255,255,.5));color:var(--ink)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:3px solid #42a6b4;outline-offset:3px}
+.top{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 42px;gap:20px}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.brand-mark{width:34px;height:34px;border-radius:11px;background:#15181c;position:relative;box-shadow:inset 0 0 0 1px #ffffff12}
+.brand-mark:before{content:"";position:absolute;left:7px;right:7px;top:13px;height:8px;border-radius:8px;background:linear-gradient(90deg,#eef8f6,#5fc5d1)}
+.brand-mark:after{content:"";position:absolute;width:4px;height:4px;border-radius:50%;right:9px;top:15px;background:#fff}
+.brand strong{font-size:14px;letter-spacing:.13em}
+.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:.18em;margin-top:3px}
+.top-note{color:var(--muted);font-size:12px;white-space:nowrap}
+.wrap{max-width:1480px;margin:0 auto;padding:42px 42px 54px}
+.intro{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:34px}
+.kicker{font-size:11px;letter-spacing:.2em;color:var(--accent);font-weight:700;margin-bottom:13px}
+h1{font-family:Georgia,"Times New Roman","Songti SC",serif;font-size:clamp(34px,4vw,55px);font-weight:400;letter-spacing:-.045em;margin:0 0 14px;line-height:1.05}
+.intro p{margin:0;color:var(--muted);line-height:1.8;font-size:14px;max-width:570px}
+.counter{font-family:Georgia,serif;font-size:54px;line-height:1;color:#b4b9b7;white-space:nowrap}
+.counter span{display:block;font:11px Inter,"Segoe UI",sans-serif;letter-spacing:.13em;color:var(--muted);margin-top:8px;text-align:right}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:13px 0;margin-bottom:22px}
+.filters{display:flex;gap:5px;flex-wrap:wrap}
+.filter{border:0;background:transparent;padding:8px 13px;border-radius:8px;font-size:12px;color:var(--muted)}
+.filter:hover{background:var(--soft);color:var(--ink)}
+.filter.active{background:var(--ink);color:#fff}
+.tools{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--muted)}
+.switch{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+.switch input{accent-color:var(--accent);width:15px;height:15px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 348px;gap:26px;align-items:start}
+.gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:16px;overflow:hidden;padding:0;text-align:left;position:relative;transition:transform .18s,border-color .18s,box-shadow .18s;min-width:0}
+.card:hover{transform:translateY(-3px);border-color:#a4b5b5;box-shadow:0 10px 30px #20303310}
+.card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card.selected:after{content:"";position:absolute;right:12px;top:12px;width:20px;height:20px;border-radius:50%;background:var(--accent) url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"%3E%3Cpath d="m5 10 3 3 7-7" fill="none" stroke="white" stroke-width="1.8"/%3E%3C/svg%3E') center/16px no-repeat}
+.stage{aspect-ratio:1/1;display:grid;place-items:center;background:var(--tile);position:relative;overflow:hidden}
+.stage:before{content:"";position:absolute;inset:0;background:linear-gradient(145deg,#ffffff24,transparent 55%);pointer-events:none}
+.stage svg{width:72%;height:72%;filter:drop-shadow(0 10px 14px #0b17151c);transition:transform .2s}
+.card:hover .stage svg{transform:scale(1.035)}
+.card-info{padding:13px 14px 14px;border-top:1px solid var(--line)}
+.card-name{font-size:13px;font-weight:650;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.card-name small{font-size:10px;font-weight:500;color:#a0a5a8;font-variant-numeric:tabular-nums}
+.card-tag{font-size:10px;color:var(--muted);margin-top:5px;letter-spacing:.02em}
+.card.hidden{display:none}
+.inspector{position:sticky;top:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel);overflow:hidden;box-shadow:var(--shadow)}
+.inspector-head{padding:20px 22px 17px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:10px;color:var(--accent);letter-spacing:.17em;font-weight:700;margin-bottom:8px}
+.inspector h2{font-size:22px;font-weight:600;margin:0 0 6px;letter-spacing:-.03em}
+.inspector-sub{font-size:12px;line-height:1.7;color:var(--muted);margin:0;min-height:40px}
+.hero{height:278px;background:var(--tile);display:grid;place-items:center;position:relative}
+.hero:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#152a2c13 .7px,transparent .7px);background-size:16px 16px;mask-image:linear-gradient(to bottom,transparent,black)}
+.hero svg{width:214px;height:214px;filter:drop-shadow(0 18px 24px #07161826);z-index:1}
+.preview-label{padding:15px 22px 5px;font-size:11px;font-weight:600;letter-spacing:.04em}
+.sizes{display:flex;align-items:flex-end;justify-content:space-around;padding:15px 20px 20px;gap:9px;border-bottom:1px solid var(--line)}
+.size{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);font-size:9px;font-variant-numeric:tabular-nums}
+.size svg{background:var(--tile);border-radius:22%;box-shadow:0 2px 5px #15222214}
+.s16{width:16px;height:16px}.s24{width:24px;height:24px}.s32{width:32px;height:32px}.s48{width:48px;height:48px}.s64{width:64px;height:64px}
+.spec{padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px;border-bottom:1px solid var(--line)}
+.spec dt{font-size:10px;color:var(--muted);margin-bottom:4px}.spec dd{margin:0;font-size:12px}
+.actions{padding:17px 22px 20px;display:grid;gap:9px}
+.primary,.secondary,.quiet{border-radius:9px;padding:11px 14px;font-size:12px;font-weight:600;border:1px solid transparent}
+.primary{background:var(--ink);color:#fff}.primary:hover{background:#2a3438}
+.secondary{background:transparent;border-color:var(--line)}.secondary:hover{background:var(--soft)}
+.button-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.quiet{background:transparent;color:var(--muted);font-weight:500;padding:7px}.quiet:hover{color:var(--ink);background:var(--soft)}
+.footer{margin-top:28px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:11px;display:flex;justify-content:space-between;gap:16px;line-height:1.7}
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,16px);background:#171c20;color:#f4f6f4;border-radius:10px;padding:12px 18px;font-size:12px;box-shadow:0 10px 35px #0004;opacity:0;pointer-events:none;transition:.2s;z-index:10}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+body.dark{--bg:#111417;--panel:#181c20;--ink:#eef0ed;--muted:#939b9f;--line:#30363a;--soft:#242b2f;--accent:#73cad1;--accent-soft:#1d3539;--tile:#22282c;--shadow:0 18px 60px #0004}
+body.dark .card-name small{color:#657178}
+@media(max-width:1180px){.gallery{grid-template-columns:repeat(3,minmax(0,1fr))}.layout{grid-template-columns:minmax(0,1fr) 310px}.top{padding:0 28px}.wrap{padding:34px 28px}}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.inspector{position:relative;top:0;display:grid;grid-template-columns:1fr 1fr}.inspector-head,.hero{grid-column:1}.preview-label,.sizes,.spec,.actions{grid-column:2}.hero{height:auto;min-height:280px;grid-row:1/4}.sizes{align-self:start}.gallery{grid-template-columns:repeat(4,minmax(0,1fr))}.inspector-head{padding-bottom:12px}}
+@media(max-width:700px){.top{height:66px;padding:0 18px}.top-note{display:none}.wrap{padding:28px 18px 36px}.intro{margin-bottom:24px}.counter{display:none}.intro p{font-size:13px}.toolbar{align-items:flex-start;flex-direction:column}.gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card-info{padding:11px}.card-tag{font-size:9px}.inspector{display:block}.hero{height:260px;min-height:0}.footer{flex-direction:column}.brand strong{font-size:12px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"></span><div><strong>FLUIDBAR</strong><small>ICON STUDIES / 2026</small></div></div>
+  <div class="top-note">8 个方向 · 纯矢量 · 无外部素材</div>
+</header>
+<main class="wrap">
+  <section class="intro">
+    <div><div class="kicker">A SMALL MARK FOR A FLUID DESKTOP</div><h1>选一个形状，<br>成为 FluidBar。</h1><p>从“原生胶囊岛”到“液态字母”，每个方向都保留了流动、悬浮与一点光。点击卡片查看细节，缩小到 16px 再决定。</p></div>
+    <div class="counter">08<span>ICON DIRECTIONS</span></div>
+  </section>
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="图标方向筛选">
+      <button class="filter active" data-filter="all" type="button">全部</button>
+      <button class="filter" data-filter="island" type="button">岛屿形态</button>
+      <button class="filter" data-filter="fluid" type="button">液态抽象</button>
+      <button class="filter" data-filter="letter" type="button">字母图形</button>
+    </div>
+    <div class="tools"><label class="switch"><input id="dark" type="checkbox">深色底预览</label><span>点击即选</span></div>
+  </div>
+  <div class="layout">
+    <section class="gallery" id="gallery" aria-label="候选图标"></section>
+    <aside class="inspector" aria-label="选中图标详情">
+      <div class="inspector-head"><div class="eyebrow" id="selectedNo">DIRECTION 01</div><h2 id="selectedName">原生岛</h2><p class="inspector-sub" id="selectedDesc"></p></div>
+      <div class="hero" id="hero"></div>
+      <div class="preview-label">小尺寸辨识测试</div>
+      <div class="sizes" id="sizes"></div>
+      <dl class="spec"><div><dt>构成</dt><dd id="selectedForm"></dd></div><div><dt>建议场景</dt><dd id="selectedUse"></dd></div></dl>
+      <div class="actions">
+        <button class="primary" id="choose" type="button">选用这个方向</button>
+        <div class="button-row"><button class="secondary" id="downloadSvg" type="button">下载 SVG</button><button class="secondary" id="downloadPng" type="button">下载 PNG · 512</button></div>
+        <button class="quiet" id="copySvg" type="button">复制 SVG 源码</button>
+      </div>
+    </aside>
+  </div>
+  <footer class="footer"><span>图标均为原创矢量绘制，可继续调整颜色、圆角和负形。SVG 为 512 × 512 viewBox。</span><span id="saved">尚未选定</span></footer>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+'use strict';
+function defs(id){
+  return '<defs>'+
+    '<linearGradient id="'+id+'-a" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#82e8e4"/><stop offset=".48" stop-color="#34b8d0"/><stop offset="1" stop-color="#536bdb"/></linearGradient>'+
+    '<linearGradient id="'+id+'-b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff" stop-opacity=".92"/><stop offset="1" stop-color="#ffffff" stop-opacity=".08"/></linearGradient>'+
+    '<linearGradient id="'+id+'-c" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#a18cff"/><stop offset="1" stop-color="#65e1d5"/></linearGradient>'+
+    '<radialGradient id="'+id+'-g"><stop stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>'+
+    '<filter id="'+id+'-blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>'+
+    '<filter id="'+id+'-shadow" x="-30%" y="-40%" width="160%" height="190%"><feDropShadow dx="0" dy="14" stdDeviation="15" flood-color="#001c24" flood-opacity=".28"/></filter>'+
+  '</defs>';
+}
+function base(id,bg,rx){
+  return '<rect width="512" height="512" rx="'+(rx||112)+'" fill="'+(bg||'#12171c')+'"/>'+
+    '<path d="M0 112C0 50 50 0 112 0h288c62 0 112 50 112 112v34C370 70 152 58 0 196Z" fill="#fff" opacity=".035"/>';
+}
+function wrap(id,name,body,bg,rx){
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="'+id+'-title '+id+'-desc"><title id="'+id+'-title">FluidBar · '+name+'</title><desc id="'+id+'-desc">FluidBar 品牌图标候选方向：'+name+'</desc>'+defs(id)+base(id,bg,rx)+body+'</svg>';
+}
+function island(id){
+  var b='<ellipse cx="256" cy="337" rx="139" ry="26" fill="#42c7d3" opacity=".17" filter="url(#'+id+'-blur)"/>';
+  b+='<rect x="91" y="177" width="330" height="158" rx="79" fill="#ffffff" opacity=".055" stroke="url(#'+id+'-b)" stroke-width="2"/>';
+  b+='<path d="M104 257c62-38 99-19 145-41 52-25 85-38 159 8v32c0 35-28 63-63 63H167c-35 0-63-28-63-63Z" fill="url(#'+id+'-a)" opacity=".88"/>';
+  b+='<path d="M116 226c45-26 90-23 128-34 45-13 85-17 131 2" fill="none" stroke="#fff" stroke-opacity=".54" stroke-width="4" stroke-linecap="round"/>';
+  b+='<rect x="112" y="197" width="288" height="116" rx="58" fill="none" stroke="#d8fbf5" stroke-opacity=".26"/>';
+  b+='<circle cx="348" cy="256" r="16" fill="#e9ffff"/><circle cx="348" cy="256" r="29" fill="url(#'+id+'-g)" opacity=".18"/>';
+  b+='<path d="M150 256h115" stroke="#fff" stroke-opacity=".75" stroke-width="7" stroke-linecap="round"/>';
+  return wrap(id,'原生岛',b,'#12181d',112);
+}
+function drop(id){
+  var b='<circle cx="342" cy="167" r="75" fill="#53d4dd" opacity=".19" filter="url(#'+id+'-blur)"/>';
+  b+='<path d="M256 91c18 53 101 117 101 197 0 62-45 108-101 108s-101-46-101-108c0-80 83-144 101-197Z" fill="url(#'+id+'-a)"/>';
+  b+='<path d="M256 119c22 51 76 104 86 157" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="7" stroke-linecap="round"/>';
+  b+='<path d="M188 247c23-20 45-17 68-27 22-9 45-11 68 5v48c0 35-28 63-63 63s-63-28-63-63c0-9-3-18-10-26Z" fill="#10202a" opacity=".28"/>';
+  b+='<rect x="190" y="239" width="132" height="65" rx="32.5" fill="#101820" fill-opacity=".72" stroke="#fff" stroke-opacity=".48" stroke-width="2"/>';
+  b+='<path d="M218 271h45" stroke="#e9ffff" stroke-width="6" stroke-linecap="round"/><circle cx="283" cy="271" r="6" fill="#82e8e4"/>';
+  return wrap(id,'液滴',b,'#101b25',112);
+}
+function ribbon(id){
+  var b='<path d="M99 184c63-66 133-69 198-30 62 37 87 31 116 2" fill="none" stroke="#48cbd4" stroke-opacity=".18" stroke-width="54" stroke-linecap="round" filter="url(#'+id+'-blur)"/>';
+  b+='<path d="M100 173c59-49 108-48 158-19 50 28 100 28 153-17" fill="none" stroke="url(#'+id+'-a)" stroke-width="44" stroke-linecap="round"/>';
+  b+='<path d="M101 268c61-47 112-45 162-17 50 27 98 25 148-15" fill="none" stroke="url(#'+id+'-c)" stroke-width="44" stroke-linecap="round"/>';
+  b+='<path d="M101 361c57-39 107-38 153-14 50 27 98 26 157-14" fill="none" stroke="#e9f6f2" stroke-opacity=".84" stroke-width="30" stroke-linecap="round"/>';
+  b+='<path d="M111 160c45-26 82-25 119-8" fill="none" stroke="#fff" stroke-opacity=".62" stroke-width="4" stroke-linecap="round"/>';
+  return wrap(id,'流线',b,'#141821',112);
+}
+function monogram(id){
+  var b='<path d="M148 394V119c0-12 10-22 22-22h210v63H226v66h121v63H226v105Z" fill="#edf7f4"/>';
+  b+='<path d="M226 226h121v63H226Z" fill="url(#'+id+'-a)"/>';
+  b+='<path d="M226 226c39-18 69-16 121 5v28c-49-19-81-18-121 1Z" fill="#8ce7df" opacity=".65"/>';
+  b+='<rect x="148" y="355" width="78" height="39" rx="19.5" fill="url(#'+id+'-a)"/>';
+  b+='<circle cx="382" cy="353" r="28" fill="url(#'+id+'-c)"/><circle cx="382" cy="353" r="10" fill="#eafffb"/>';
+  b+='<path d="M169 132v184" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>';
+  return wrap(id,'F 潮',b,'#111a1d',96);
+}
+function ripple(id){
+  var b='<rect x="62" y="149" width="388" height="214" rx="107" fill="none" stroke="url(#'+id+'-a)" stroke-opacity=".19" stroke-width="17"/>';
+  b+='<rect x="99" y="177" width="314" height="158" rx="79" fill="none" stroke="url(#'+id+'-a)" stroke-opacity=".42" stroke-width="17"/>';
+  b+='<rect x="137" y="204" width="238" height="104" rx="52" fill="url(#'+id+'-a)"/>';
+  b+='<path d="M153 251c43-19 72-10 103-23 34-15 62-14 102 8v20c0 22-18 40-40 40H193c-22 0-40-18-40-40Z" fill="#d7fcf4" opacity=".24"/>';
+  b+='<path d="M156 223h141" stroke="#eafffb" stroke-opacity=".65" stroke-width="4" stroke-linecap="round"/>';
+  b+='<circle cx="321" cy="256" r="12" fill="#f3fffc"/>';
+  return wrap(id,'回声',b,'#131a20',112);
+}
+function archipelago(id){
+  var b='<path d="M102 322c58 84 239 83 305-23" fill="none" stroke="#5bd1d6" stroke-opacity=".22" stroke-width="2" stroke-dasharray="5 11"/>';
+  b+='<circle cx="367" cy="151" r="48" fill="url(#'+id+'-c)" opacity=".85"/><circle cx="367" cy="151" r="31" fill="#fff" opacity=".09"/>';
+  b+='<circle cx="122" cy="335" r="29" fill="#4cc9d8" opacity=".65"/>';
+  b+='<rect x="102" y="189" width="286" height="137" rx="68.5" fill="url(#'+id+'-a)" filter="url(#'+id+'-shadow)"/>';
+  b+='<rect x="113" y="200" width="264" height="115" rx="57.5" fill="#152028" fill-opacity=".38" stroke="#fff" stroke-opacity=".32"/>';
+  b+='<path d="M139 250h117" stroke="#f2fffb" stroke-width="8" stroke-linecap="round"/><circle cx="305" cy="257" r="15" fill="#effffc"/>';
+  b+='<circle cx="405" cy="344" r="13" fill="#c8fbf2" opacity=".8"/>';
+  return wrap(id,'群岛',b,'#111921',112);
+}
+function prism(id){
+  var b='<circle cx="184" cy="199" r="82" fill="#5de0d2" opacity=".3" filter="url(#'+id+'-blur)"/><circle cx="332" cy="293" r="88" fill="#716be8" opacity=".25" filter="url(#'+id+'-blur)"/>';
+  b+='<path d="m256 88 154 168-154 168L102 256Z" fill="#fff" fill-opacity=".08" stroke="#fff" stroke-opacity=".4" stroke-width="2"/>';
+  b+='<path d="m256 132 116 124-116 124-116-124Z" fill="url(#'+id+'-b)" fill-opacity=".16" stroke="#d9ffff" stroke-opacity=".35"/>';
+  b+='<path d="m140 256 116-124v248Z" fill="url(#'+id+'-a)" opacity=".42"/>';
+  b+='<rect x="177" y="222" width="158" height="70" rx="35" fill="#111b24" fill-opacity=".58" stroke="#fff" stroke-opacity=".52"/>';
+  b+='<path d="M207 257h57" stroke="#f2fffb" stroke-width="6" stroke-linecap="round"/><circle cx="290" cy="257" r="7" fill="#8ae7df"/>';
+  return wrap(id,'棱镜',b,'#15202a',112);
+}
+function waveform(id){
+  var b='<rect x="91" y="162" width="330" height="188" rx="94" fill="url(#'+id+'-a)"/>';
+  b+='<rect x="104" y="175" width="304" height="162" rx="81" fill="#13222b" fill-opacity=".48" stroke="#fff" stroke-opacity=".25"/>';
+  var heights=[42,82,118,72,140,96,58,108,68];
+  for(var i=0;i<heights.length;i++){
+    var x=143+i*28;
+    b+='<rect x="'+x+'" y="'+(256-heights[i]/2)+'" width="11" height="'+heights[i]+'" rx="5.5" fill="#effffc" opacity="'+(i===4?'1':'.76')+'"/>';
+  }
+  b+='<path d="M126 202c54-24 94-11 134-21 44-11 77-7 113 10" fill="none" stroke="#fff" stroke-opacity=".32" stroke-width="4" stroke-linecap="round"/>';
+  return wrap(id,'声场',b,'#121a20',112);
+}
+var icons=[
+ {id:'island',name:'原生岛',en:'Native Island',cat:'island',tag:'胶囊 / 品牌延续',desc:'最直接的一版：保留灵动岛的轮廓，把液态水面和状态光点放进玻璃胶囊。辨识度最高，也最像 FluidBar 自己。',form:'玻璃胶囊 + 液面',use:'应用图标 / 官网',svg:island},
+ {id:'drop',name:'液滴',en:'Fluid Drop',cat:'fluid',tag:'液滴 / 负形',desc:'把“流体”说得更直接。外层是一颗向下的液滴，内部用负形留住岛屿，动静之间保留产品的功能暗示。',form:'液滴 + 胶囊负形',use:'品牌主标 / 启动页',svg:drop},
+ {id:'ribbon',name:'流线',en:'Flowline',cat:'fluid',tag:'流动 / 三条轨道',desc:'三条不同速度的流线，像桌面信息在岛中穿行。更抽象、更轻快，适合强调 Fluid 而不是 Island。',form:'三层渐变流线',use:'网站 / 宣传物料',svg:ribbon},
+ {id:'monogram',name:'F 潮',en:'F in Motion',cat:'letter',tag:'字母 F / 切口',desc:'硬朗的 F 是骨架，中横被一道流体切开。文字识别最明确，在小尺寸下也不容易和其他图形混淆。',form:'字母 F + 液态中横',use:'任务栏 / 小型 favicon',svg:monogram},
+ {id:'ripple',name:'回声',en:'Ripple',cat:'island',tag:'同心 / 扩散',desc:'三层胶囊轮廓从中心扩散，像通知到达时的一次轻轻回声。形态与灵动岛一致，但更有节奏感。',form:'同心胶囊 + 光点',use:'通知产品 / 官网',svg:ripple},
+ {id:'archipelago',name:'群岛',en:'Archipelago',cat:'island',tag:'主岛 / 卫星',desc:'主岛与两颗小卫星构成一个轻盈的星系。直接呼应多岛堆叠、分裂胶囊和页面群岛的产品结构。',form:'主岛 + 双卫星',use:'多岛功能 / 插件市场',svg:archipelago},
+ {id:'prism',name:'棱镜',en:'Glass Prism',cat:'fluid',tag:'玻璃 / 折射',desc:'一块被折射的玻璃包住胶囊，光线被拆成冷暖两面。材质感最强，适合强调液态玻璃这一版本特性。',form:'折射棱面 + 胶囊',use:'液态玻璃主题 / 宣传图',svg:prism},
+ {id:'waveform',name:'声场',en:'Waveform',cat:'letter',tag:'声波 / 胶囊',desc:'把音频波形封进一颗大胶囊。更偏媒体与桌面陪伴的气质，和业务功能关联最强，也足够简洁。',form:'胶囊 + 九段声波',use:'媒体功能 / 应用图标',svg:waveform}
+];
+var selected=localStorage.getItem('fluidbar-icon-choice')||'island';
+if(!icons.some(function(x){return x.id===selected})){selected='island'}
+var gallery=document.getElementById('gallery');
+function renderGallery(filter){
+  gallery.innerHTML='';
+  icons.forEach(function(icon,index){
+    if(filter&&filter!=='all'&&icon.cat!==filter)return;
+    var button=document.createElement('button');
+    button.type='button';button.className='card'+(icon.id===selected?' selected':'');
+    button.dataset.id=icon.id;button.setAttribute('aria-label','选择'+icon.name+'图标');
+    button.setAttribute('aria-pressed',icon.id===selected?'true':'false');
+    button.innerHTML='<div class="stage">'+icon.svg(icon.id)+'</div><div class="card-info"><div class="card-name">'+icon.name+'<small>0'+(index+1)+'</small></div><div class="card-tag">'+icon.tag+'</div></div>';
+    button.addEventListener('click',function(){selectIcon(icon.id)});
+    gallery.appendChild(button);
+  });
+}
+function selectIcon(id){
+  selected=id;
+  var icon=icons.find(function(x){return x.id===id});
+  var index=icons.indexOf(icon);
+  document.getElementById('selectedNo').textContent='DIRECTION 0'+(index+1)+' / '+icon.en.toUpperCase();
+  document.getElementById('selectedName').textContent=icon.name;
+  document.getElementById('selectedDesc').textContent=icon.desc;
+  document.getElementById('selectedForm').textContent=icon.form;
+  document.getElementById('selectedUse').textContent=icon.use;
+  document.getElementById('hero').innerHTML=icon.svg(id);
+  var sizes=document.getElementById('sizes');sizes.innerHTML='';
+  [16,24,32,48,64].forEach(function(size){
+    var item=document.createElement('div');item.className='size';
+    item.innerHTML='<div class="s'+size+'">'+icon.svg(id)+'</div><span>'+size+'</span>';sizes.appendChild(item);
+  });
+  gallery.querySelectorAll('.card').forEach(function(card){
+    var active=card.dataset.id===id;card.classList.toggle('selected',active);card.setAttribute('aria-pressed',active?'true':'false');
+  });
+  document.querySelector('link[rel="icon"]')||createFavicon(icon.svg(id));
+}
+function createFavicon(svg){
+  var link=document.createElement('link');link.rel='icon';link.type='image/svg+xml';link.href='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);document.head.appendChild(link);
+}
+function toast(message){
+  var node=document.getElementById('toast');node.textContent=message;node.classList.add('show');
+  clearTimeout(window.toastTimer);window.toastTimer=setTimeout(function(){node.classList.remove('show')},2200);
+}
+function download(blob,name){
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url)},1000);
+}
+document.querySelectorAll('.filter').forEach(function(button){
+  button.addEventListener('click',function(){
+    document.querySelectorAll('.filter').forEach(function(x){x.classList.remove('active')});button.classList.add('active');renderGallery(button.dataset.filter);
+  });
+});
+document.getElementById('dark').addEventListener('change',function(event){document.body.classList.toggle('dark',event.target.checked)});
+document.getElementById('choose').addEventListener('click',function(){
+  var icon=icons.find(function(x){return x.id===selected});localStorage.setItem('fluidbar-icon-choice',selected);
+  document.getElementById('saved').textContent='已选定：'+icon.name+'（保存在本机）';toast('已选定「'+icon.name+'」，可以下载 SVG 或 PNG');
+});
+document.getElementById('downloadSvg').addEventListener('click',function(){
+  var icon=icons.find(function(x){return x.id===selected});download(new Blob([icon.svg(selected)],{type:'image/svg+xml;charset=utf-8'}),'fluidbar-'+selected+'.svg');toast('SVG 已开始下载');
+});
+document.getElementById('copySvg').addEventListener('click',async function(){
+  var icon=icons.find(function(x){return x.id===selected});var text=icon.svg(selected);
+  try{await navigator.clipboard.writeText(text);toast('SVG 源码已复制')}catch(e){
+    var area=document.createElement('textarea');area.value=text;document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast('SVG 源码已复制');
+  }
+});
+document.getElementById('downloadPng').addEventListener('click',function(){
+  var icon=icons.find(function(x){return x.id===selected});
+  var source=new Blob([icon.svg(selected)],{type:'image/svg+xml;charset=utf-8'});var url=URL.createObjectURL(source);var image=new Image();
+  image.onload=function(){
+    var canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;var context=canvas.getContext('2d');context.drawImage(image,0,0,512,512);URL.revokeObjectURL(url);
+    canvas.toBlob(function(blob){if(blob){download(blob,'fluidbar-'+selected+'-512.png');toast('512px PNG 已开始下载')}},'image/png');
+  };
+  image.onerror=function(){URL.revokeObjectURL(url);toast('PNG 生成失败，请下载 SVG')};image.src=url;
+});
+var saved=localStorage.getItem('fluidbar-icon-choice');
+if(saved){var found=icons.find(function(x){return x.id===saved});if(found){document.getElementById('saved').textContent='上次选定：'+found.name}}
+renderGallery('all');selectIcon(selected);
+</script>
+</body>
+</html>
