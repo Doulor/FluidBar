@@ -2357,6 +2357,22 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             }
         }
 
+        // The secondary notification pill is a full island surface below the primary shell. If it is not
+        // smeared out of the capture its own dark glass becomes part of the backdrop sample, so the pill
+        // (and the palette it drives) never notices a bright desktop behind it (reported 2026-10-24).
+        if (state.SecondaryCompact is not null)
+        {
+            var secondary = FluidBar.Island.IslandMetrics.SecondaryShellRect(state);
+            if (secondary.Width > 0 && secondary.Height > 0)
+            {
+                masks.Add((
+                    (int)Math.Round((secondary.Left - 10) * dpi),
+                    (int)Math.Round((secondary.Top - 10) * dpi),
+                    (int)Math.Round((secondary.Width + 20) * dpi),
+                    (int)Math.Round((secondary.Height + 20) * dpi)));
+            }
+        }
+
         // The preview rail (mini islands) is drawn below the shell and now paints with the same glass
         // material, so it must be smeared out of the capture just like the shell and the capsules.
         if (state.IsExpanded)
@@ -2386,11 +2402,23 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             var surfaceDip = entry.Host.SurfaceSizeDip;
             var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
             var masks = BuildIslandMasks(state, dpi);
+            // Measure the luminance over everything the island paints: with a notification pill under the
+            // shell the sample must include it, otherwise the palette only tracks the top pill's strip.
+            var lumaHeight = state.ShellHeight;
+            if (state.SecondaryCompact is not null)
+            {
+                var secondaryRect = FluidBar.Island.IslandMetrics.SecondaryShellRect(state);
+                if (secondaryRect.Bottom > state.ShellOrigin.Y + state.ShellHeight)
+                {
+                    lumaHeight = secondaryRect.Bottom - state.ShellOrigin.Y;
+                }
+            }
+
             var luminanceWindow = (
                 X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
                 Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
                 Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
-                Height: (int)Math.Round((state.ShellHeight + 12) * dpi));
+                Height: (int)Math.Round((lumaHeight + 12) * dpi));
             _lastBackdropRect = rect;
             var backdrop = _backdrop.Get(
                 rect,
