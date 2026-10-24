@@ -68,7 +68,10 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
             {
                 request = new PendingRequest(query);
                 _pending[query.TrackKey] = request;
-                _ = RunRequestAsync(request);
+                // Fire-and-forget by design (the caller awaits request.Task), but never unobserved:
+                // an escaping exception here used to surface only as a TaskScheduler.UnobservedTaskException
+                // breadcrumb at finalization.
+                _ = RunRequestSafelyAsync(request);
             }
         }
 
@@ -106,7 +109,13 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
 
                 try
                 {
-                    document = await provider.FetchAsync(request.Query, request.Token)
+                    // WaitAsync abandons the provider task when the timeout or a cancel wins. Abandoned
+                    // tasks are not awaited, so a late fault (a broken TLS handshake is the common one)
+                    // had nobody to observe it and escalated to TaskScheduler.UnobservedTaskException —
+                    // that is the steady "SSL connection could not be established" noise in crash.log.
+                    var fetch = provider.FetchAsync(request.Query, request.Token);
+                    ObserveLateFault(fetch);
+                    document = await fetch
                         .WaitAsync(_providerTimeout, request.Token)
                         .ConfigureAwait(false);
                     if (document is { IsEmpty: false } && InstrumentalDetector.IsPlaceholder(document))
@@ -159,6 +168,38 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
             request.Complete(document);
         }
     }
+
+    /// <summary>
+    /// Runs one single-flight request and keeps any escaping exception observed: the pipeline is started
+    /// with a discarded task handle, so a throw here would otherwise only appear at finalization.
+    /// </summary>
+    private async Task RunRequestSafelyAsync(PendingRequest request)
+    {
+        try
+        {
+            await RunRequestAsync(request).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // RunRequestAsync already logs per-provider failures and always completes the request in its
+            // finally block; this is the "should not happen" net.
+            _counters.IncrementLyricsFetchFailures();
+            _logger.LogWarning(PlatformLogCategory.Media, "lyrics.request-failed",
+                "The lyrics request pipeline failed.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Marks a fault of a task the caller may abandon (timeout, cancellation) as observed, so an expected
+    /// network failure never escalates to <see cref="TaskScheduler.UnobservedTaskException"/> at
+    /// finalization time.
+    /// </summary>
+    private static void ObserveLateFault(Task task)
+        => _ = task.ContinueWith(
+            static faulted => _ = faulted.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     public async ValueTask DisposeAsync()
     {

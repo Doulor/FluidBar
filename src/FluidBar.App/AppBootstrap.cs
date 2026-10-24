@@ -128,6 +128,9 @@ internal sealed class AppBootstrap
         catch (Exception ex)
         {
             _logger.Critical(LogCategories.Lifecycle, "app.start-failed", "FluidBar failed to start.", ex);
+            // The JSON-lines sink is buffered and dies with the process, so a failed start could leave no
+            // trace on disk at all (2026-10-24 crash investigation). CrashLog writes synchronously.
+            CrashLog.Write("startup", ex, isTerminating: false);
             Shutdown();
         }
     }

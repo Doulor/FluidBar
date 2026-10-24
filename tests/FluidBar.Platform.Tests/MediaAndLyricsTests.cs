@@ -575,6 +575,93 @@ public sealed class LyricsServiceTests
         Assert.Null(await pending);
         Assert.True(await cancelled.Task);
     }
+
+    [Fact]
+    public async Task Provider_failure_after_the_timeout_is_observed_not_escalated()
+    {
+        // Regression (2026-10-24): the per-provider WaitAsync timeout abandons the provider task, so a
+        // late SSL/HTTP failure had no observer and escalated to TaskScheduler.UnobservedTaskException at
+        // finalization — the steady "The SSL connection could not be established" entries in crash.log.
+        var markers = new List<string>();
+        EventHandler<UnobservedTaskExceptionEventArgs> handler = (_, e) =>
+        {
+            foreach (var inner in e.Exception.Flatten().InnerExceptions)
+            {
+                if (inner.Message.StartsWith("late-lyrics-fault", StringComparison.Ordinal))
+                {
+                    markers.Add(inner.Message);
+                }
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += handler;
+        try
+        {
+            await StartTimedOutRequestAsync();
+            for (var round = 0; round < 3; round++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                await Task.Delay(50);
+            }
+
+            // Escalation only happens once the abandoned task is collected, so this asserts the absence
+            // of the symptom rather than a specific collection: a reintroduced leak shows up here.
+            Assert.Empty(markers);
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= handler;
+        }
+    }
+
+    [Fact]
+    public async Task A_provider_that_fails_after_the_timeout_does_not_poison_the_next_request()
+    {
+        var gate = new TaskCompletionSource<LyricsDocument?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var provider = new FakeProvider("slow", (_, _) =>
+        {
+            calls++;
+            return calls == 1 ? gate.Task : Task.FromResult<LyricsDocument?>(Document("second"));
+        });
+        await using var service = new LyricsService(new[] { provider }, new LyricsCache(), new CapturingLogger(),
+            new FluidBar.Platform.Windows.Diagnostics.PlatformCounters(),
+            providerTimeout: TimeSpan.FromMilliseconds(50));
+
+        Assert.Null(await service.GetLyricsAsync(Query()));   // provider times out
+
+        gate.SetException(new HttpRequestException("late-lyrics-fault"));
+        await Task.Delay(50);
+
+        // Single-flight bookkeeping must be clean: the abandoned failure cannot wedge the track.
+        var document = await service.GetLyricsAsync(Query());
+        Assert.Equal("second", document!.Title);
+        Assert.Equal(2, provider.Calls);
+    }
+
+    /// <summary>
+    /// Runs a lookup that times out, then faults the abandoned provider task far enough outside this
+    /// frame that the task can be collected (that is what triggers unobserved-task escalation).
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static async Task StartTimedOutRequestAsync()
+    {
+        var gate = new TaskCompletionSource<LyricsDocument?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new FakeProvider("slow", (_, _) => gate.Task);
+        await using (var service = new LyricsService(new[] { provider }, new LyricsCache(), new CapturingLogger(),
+            new FluidBar.Platform.Windows.Diagnostics.PlatformCounters(),
+            providerTimeout: TimeSpan.FromMilliseconds(50)))
+        {
+            Assert.Null(await service.GetLyricsAsync(Query()));
+        }
+
+        // Faulted after the caller stopped waiting. Nothing keeps a strong reference once this frame
+        // returns, so the finalizer is free to escalate if the fault was never observed.
+        gate.SetException(new HttpRequestException("late-lyrics-fault-" + Guid.NewGuid().ToString("N")));
+        await Task.Delay(50);
+    }
 }
 
 public sealed class OnlineLyricsParserTests

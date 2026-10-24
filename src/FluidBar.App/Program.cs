@@ -148,10 +148,32 @@ public sealed class FluidBarApplication : Application
             }
 
             var bootstrap = new AppBootstrap(desktop);
-            _ = bootstrap.StartAsync();
+
+            // Start composition without blocking the framework callback, but never drop the task: a
+            // failure used to reach only the unobserved-task handler (or nothing at all), leaving a
+            // process with no island behind an empty desktop.
+            _ = StartBootstrapAsync(bootstrap);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Runs composition and makes sure a start failure is recorded where it survives the process: the
+    /// JSON-lines log sink is buffered, so <see cref="CrashLog"/> is the only reliable channel.
+    /// </summary>
+    private static async Task StartBootstrapAsync(AppBootstrap bootstrap)
+    {
+        try
+        {
+            await bootstrap.StartAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // StartAsync already logs and shuts down; this is the net for anything thrown outside its try
+            // (including a failing shutdown).
+            CrashLog.Write("startup", ex, isTerminating: false);
+        }
     }
 }
 
