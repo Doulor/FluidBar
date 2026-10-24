@@ -94,10 +94,18 @@ jobs:
             throw 'release artifact, installer exe or publish manifest is missing'
           }
           Write-Host "Uploading $($zip.Name), $($exe.Name); SHA-256 manifest=$($manifest.Name); signing: unsigned"
+
+          # A semver prerelease (3.1.0-preview.1) has to be flagged, otherwise GitHub marks it as "latest" and
+          # stable-channel installs are offered a preview. --latest=false keeps releases/latest on the last stable.
+          $prereleaseArgs = @()
+          if ($version -match '-') {
+            $prereleaseArgs = @('--prerelease', '--latest=false')
+          }
+
           gh release create "v$version" $zip.FullName $exe.FullName $manifest.FullName `
             --title "FluidBar $version" `
-            --notes "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker." `
-            --verify-tag
+            --notes "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/rewrite/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker." `
+            --verify-tag @prereleaseArgs
 
       - name: Release summary
         if: always()
