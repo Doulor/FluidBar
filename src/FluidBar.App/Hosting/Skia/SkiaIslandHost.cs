@@ -159,6 +159,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private bool _luminanceAnimating;
     private bool _backdropDirty;
     private double _lastRawLuminance = -1;
+
+    /// <summary>Content signature of the desktop material currently painted (-1 until the first capture).</summary>
+    private long _lastBackdropSignature = -1;
     private (int X, int Y, int Width, int Height) _lastBackdropRect;
 
     /// <summary>
@@ -2238,6 +2241,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         // force:true re-captures even though the cached frame may still be inside its refresh window; the
         // screenshot itself is throttled inside the provider.
         var masks = BuildIslandMasks(state, dpi);
+        _lastBackdropRect = rect;
         _ = _backdrop.Get(rect, masks.ToArray(), allowComposedCapture: true, force: false,
             luminanceRect: luminanceWindow);
     }
@@ -2262,8 +2266,10 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             if (_backdrop is not null && _lastBackdropRect.Width > 0)
             {
                 var raw = _backdrop.LuminanceFor(_lastBackdropRect);
-                if (_lastRawLuminance < 0 || Math.Abs(raw - _lastRawLuminance) > 0.02)
+                var signature = _backdrop.SignatureFor(_lastBackdropRect);
+                if (IslandGlassRefreshPolicy.ShouldWake(_lastBackdropSignature, signature, _lastRawLuminance, raw))
                 {
+                    _lastBackdropSignature = signature;
                     _lastRawLuminance = raw;
                     _backdropDirty = true;
                 }
@@ -2470,6 +2476,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 {
                     _backdropDirty = false;
                     _lastRawLuminance = _backdrop.LuminanceFor(rect);
+                    _lastBackdropSignature = _backdrop.SignatureFor(rect);
                 }
 
                 renderState = state with

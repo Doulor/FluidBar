@@ -46,7 +46,7 @@ internal sealed class IslandBackdropProvider : IDisposable
     private const int RetireFrames = 12;
 
     private readonly object _gate = new();
-    private readonly Dictionary<(int X, int Y, int Width, int Height), (SKImage Image, double Luminance, long At)> _frames = new(MaxEntries);
+    private readonly Dictionary<(int X, int Y, int Width, int Height), (SKImage Image, double Luminance, long At, long Signature)> _frames = new(MaxEntries);
     private readonly Queue<(SKImage Image, long RetiredAt)> _retired = new();
 
     private Task? _pending;
@@ -108,6 +108,21 @@ internal sealed class IslandBackdropProvider : IDisposable
 
             ScheduleCapture(screenRect, islandMasks, allowComposedCapture, force, luminanceRect);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Coarse content fingerprint of the cached capture for a rectangle (-1 when unknown). Mean luminance cannot
+    /// tell "another window swapped in behind the island" from "nothing happened" when the brightness matches, so
+    /// the idle glass watch needs this to know the material really changed (report 2026-10-25: the glass stayed
+    /// stale until some other activity repainted a frame).
+    /// </summary>
+    /// <param name="screenRect">Window rectangle in physical screen pixels.</param>
+    public long SignatureFor((int X, int Y, int Width, int Height) screenRect)
+    {
+        lock (_gate)
+        {
+            return _frames.TryGetValue(screenRect, out var frame) ? frame.Signature : -1;
         }
     }
 
@@ -212,7 +227,7 @@ internal sealed class IslandBackdropProvider : IDisposable
             }
         }
 
-        var baked = Bake(captured, out var luminance, luminanceRect);
+        var baked = Bake(captured, out var luminance, out var signature, luminanceRect);
         if (baked is null)
         {
             lock (_gate)
@@ -234,7 +249,7 @@ internal sealed class IslandBackdropProvider : IDisposable
             if (_frames.TryGetValue(screenRect, out var previous))
             {
                 _retired.Enqueue((previous.Image, _frame));
-                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp());
+                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp(), signature);
             }
             else
             {
@@ -245,7 +260,7 @@ internal sealed class IslandBackdropProvider : IDisposable
                     _frames.Remove(oldest.Key);
                 }
 
-                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp());
+                _frames[screenRect] = (baked, luminance, Stopwatch.GetTimestamp(), signature);
             }
 
             CaptureCount++;
@@ -319,8 +334,10 @@ internal sealed class IslandBackdropProvider : IDisposable
     private static SKImage? Bake(
         in BackdropFrame frame,
         out double luminance,
+        out long signature,
         (int X, int Y, int Width, int Height)? luminanceRect = null)
     {
+        signature = -1;
         var width = Math.Max(1, frame.Width / Downsample);
         var height = Math.Max(1, frame.Height / Downsample);
         var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -375,6 +392,8 @@ internal sealed class IslandBackdropProvider : IDisposable
                 canvas.Flush();
             }
 
+            signature = ComputeSignature(small);
+
             return SKImage.FromBitmap(small);
         }
         catch (Exception)
@@ -384,6 +403,32 @@ internal sealed class IslandBackdropProvider : IDisposable
     }
 
     /// <summary>Standard luminance-preserving saturation matrix (Skia row-major 4x5).</summary>
+    /// <summary>
+    /// Content fingerprint of the baked backdrop: an 8×8 grid, each channel quantised to 16 levels so blur shimmer
+    /// on a static desktop does not read as a change, folded into one number.
+    /// </summary>
+    /// <param name="image">Baked (blurred, saturated) backdrop.</param>
+    private static long ComputeSignature(SKBitmap image)
+    {
+        const int Cells = 8;
+        var signature = 17L;
+        for (var cellY = 0; cellY < Cells; cellY++)
+        {
+            var y = Math.Clamp((((cellY * 2) + 1) * image.Height) / (Cells * 2), 0, image.Height - 1);
+            for (var cellX = 0; cellX < Cells; cellX++)
+            {
+                var x = Math.Clamp((((cellX * 2) + 1) * image.Width) / (Cells * 2), 0, image.Width - 1);
+                var pixel = image.GetPixel(x, y);
+                signature = unchecked((signature * 1_000_003)
+                    + ((pixel.Red >> 4) * 104_729)
+                    + ((pixel.Green >> 4) * 1_009)
+                    + (pixel.Blue >> 4));
+            }
+        }
+
+        return signature;
+    }
+
     private static float[] SaturationMatrix(float s)
     {
         var inv = 1f - s;
