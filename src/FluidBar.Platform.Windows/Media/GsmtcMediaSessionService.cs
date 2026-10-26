@@ -1611,6 +1611,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 origin = bytes is { Length: > 0 } ? "session-thumbnail" : "session-thumbnail-empty";
             }
 
+            if (bytes is { Length: > 0 } && ArtworkQualityInspector.IsLikelyPlaceholder(bytes))
+            {
+                // A flat "no cover" tile is worse than none: it hides the fallbacks and looks like a bug.
+                MediaDiagnostics.LogAlways(
+                    $"artwork.placeholder title=\"{properties.Title}\" bytes={bytes.Length}");
+                bytes = null;
+                origin = "session-thumbnail-placeholder";
+            }
+
             if (bytes is null || bytes.Length == 0)
             {
                 // KuGou 8.x now *does* register an SMTC session (older builds did not), but its thumbnail
