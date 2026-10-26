@@ -77,6 +77,38 @@ public sealed class TextEngineTests
     }
 
     [Fact]
+    public async Task Trimming_terminates_when_the_split_point_falls_after_a_surrogate_pair()
+    {
+        using var engine = new TextEngine();
+        var style = new TextStyle(FontRole.Ui, 13.5f);
+
+        // "A😀BBBB": the binary search converges on the position right after the emoji. There the old code bumped
+        // `mid` past the pair and then used that bumped value to move the bounds, so with low == high the interval
+        // stopped shrinking and the render thread spun forever — the island froze on the notifications page
+        // (2026-10-26 dump: TextEngine.Trim on the frame clock, 5h41m of CPU).
+        const string text = "A\U0001F600BBBB";
+        var fits = engine.Measure("A\U0001F600…", style);
+        var overflows = engine.Measure("A\U0001F600B…", style);
+        Assert.True(overflows > fits, "the fixture needs the next grapheme to overflow the budget");
+        var midpoint = fits + ((overflows - fits) / 2);
+
+        // 19.0 is a budget found by scanning every half-pixel budget for this text against the committed loop:
+        // it was one of the widths where the old binary search never terminated. Keep it as a literal so the
+        // fixture cannot drift away from the case that actually reproduced the freeze.
+        foreach (var maxWidth in new[] { midpoint, 19.0f })
+        {
+            var trimming = Task.Run(() => engine.GetLayout(text, style, maxWidth));
+            var finished = await Task.WhenAny(trimming, Task.Delay(TimeSpan.FromSeconds(5))) == trimming;
+            Assert.True(finished, $"trimming must terminate at maxWidth={maxWidth}; it used to loop forever");
+
+            var layout = await trimming;
+            Assert.True(layout.Trimmed);
+            Assert.EndsWith("…", layout.Text);
+            Assert.True(layout.Width <= maxWidth + 0.5f, $"trimmed width {layout.Width} > {maxWidth}");
+        }
+    }
+
+    [Fact]
     public void Fractional_sizes_are_supported_and_cached()
     {
         using var text = new TextEngine();

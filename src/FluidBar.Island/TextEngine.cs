@@ -419,6 +419,14 @@ public sealed class TextEngine : IDisposable
         };
     }
 
+    /// <summary>
+    /// Longest prefix (+ ellipsis) that fits <paramref name="maxWidth"/>, found by binary search.
+    /// </summary>
+    /// <param name="text">Source text (already surrogate-sanitised).</param>
+    /// <param name="style">Text style.</param>
+    /// <param name="primaryFont">Font used for measurement.</param>
+    /// <param name="maxWidth">Width budget in pixels.</param>
+    /// <param name="width">Measured width of the returned string.</param>
     private string Trim(string text, TextStyle style, SKFont primaryFont, float maxWidth, out float width)
     {
         const string ellipsis = "…";
@@ -426,26 +434,42 @@ public sealed class TextEngine : IDisposable
         var high = text.Length;
         var best = string.Empty;
         width = 0;
+        var steps = 0;
         while (low <= high)
         {
             var mid = (low + high) / 2;
-            if (mid > 0 && mid < text.Length && char.IsHighSurrogate(text[mid - 1]))
+
+            // Never split a surrogate pair: cut after the whole pair. `cut` is the probe length, `mid` stays the
+            // binary-search position — using the adjusted value for the bound update made the interval stop
+            // shrinking (low == high, surrogate at the split point, candidate still too wide) and the render
+            // thread spun there forever, freezing the island on the notifications page (2026-10-26 dump:
+            // TextEngine.Trim on the frame clock with 5h41m of CPU).
+            var cut = mid;
+            if (cut > 0 && cut < text.Length && char.IsHighSurrogate(text[cut - 1]))
             {
-                mid++;
+                cut++;
             }
 
-            var candidate = text[..Math.Min(mid, text.Length)] + ellipsis;
+            var length = Math.Min(cut, text.Length);
+            var candidate = text[..length] + ellipsis;
             var candidateWidth = MeasureTextWidth(candidate, style, primaryFont);
             _trimSteps++;
             if (candidateWidth <= maxWidth)
             {
                 best = candidate;
                 width = candidateWidth;
-                low = mid + 1;
+                low = Math.Max(mid + 1, length + 1);
             }
             else
             {
-                high = mid - 1;
+                high = Math.Min(mid - 1, length - 1);
+            }
+
+            // Belt and braces: no future edit may turn this loop into a hang again. One probe per character is a
+            // generous budget (the search is O(log n)) and stays unreachable while the bounds shrink.
+            if (++steps > text.Length + TrimSafetySteps)
+            {
+                break;
             }
         }
 
@@ -457,6 +481,9 @@ public sealed class TextEngine : IDisposable
 
         return best;
     }
+
+    /// <summary>Extra probe budget above the text length before the trim loop bails out (see <see cref="Trim"/>).</summary>
+    public const int TrimSafetySteps = 64;
 
     private float MeasureTextWidth(string text, TextStyle style, SKFont primaryFont)
     {

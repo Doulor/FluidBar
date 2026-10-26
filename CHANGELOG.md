@@ -6,6 +6,29 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-26 — 灵动岛卡死（通知页）根因：文本省略号二分查找在 emoji 处不收敛
+
+- 症状：岛经常**直接卡死**，多数发生在"消息/通知"页；整机鼠标也发钝。现场抓取（进程 `Responding=False`）：
+  渲染线程 `Running` 状态已累计 **5 小时 41 分 CPU** —— 不是死锁，是**渲染线程死循环**。
+- 现场调用栈（`dotnet-dump` + `clrstack -all`）：
+  `SkiaFrameClock.OnTick → SkiaIslandHost.OnFrame → RenderAllLocked → RenderEntry →`
+  `IslandRenderer.DrawSceneWithMaterialBlend → CompactRenderer.DrawNotification →`
+  `TextEngine.GetLayout → TextEngine.Build → **TextEngine.Trim**`。
+- 根因：`TextEngine.Trim` 的二分查找为了不切断代理对会把 `mid` **加一**，但随后用的是**被加一的 `mid`**
+  去收缩区间。当 `low == high`、该位置前一个字符是 emoji 的高代理、且"前缀+省略号"仍超宽时：
+  `mid → high+1`，`high = mid-1 = high` —— 区间不再缩小，**永久死循环**。通知标题里只要有 emoji
+  并且需要截断就会中招。
+- 证据：把已提交的旧循环原样取出，用真实字体度量扫描所有半像素宽度，5 个含 emoji 的标题（含
+  `"Alert 😀 from the build server, branch main"`、`"普通中文通知标题 😀 后面还有很长的说明文字"`）
+  全部扫到 100,001 步仍不收敛；修复后同样输入 **≤2 ms** 返回，且宽度都不超预算。
+- 修复：把"探测长度 `cut`"与"二分位置 `mid`"分开，区间更新只用 `mid` 且严格收缩
+  （`low = max(mid+1, cut+1)` / `high = min(mid-1, cut-1)`），另加**局部步数上限**
+  （`TrimSafetySteps`，每次调用独立计数）作为兜底，任何将来的改动都不可能再把渲染线程挂死。
+- 测试：新增 `Trimming_terminates_when_the_split_point_falls_after_a_surrogate_pair`（含扫描发现的
+  19.0px 预算用例，5 秒看门狗）。已双向验证：换回旧 `Trim` 该测试跑不完，修复后 80 ms 通过。
+- 顺带确认：日志里每 10 秒一条的 `island.mouse-hook-reinstall-failed … timed out` 是该卡死的**下游症状**
+  （钩子线程被卡住的渲染/消息线程堵在后面），不是独立缺陷；卡死解除后不再出现。
+
 ## 2026-10-25 — 灵动岛玻璃：背景内容变化时实时刷新（不再只盯亮度）
 
 - 症状：桌面背景变了，岛的玻璃材质一直是旧图，**要等岛上有别的活动（动画/媒体/交互）触发一次渲染才刷新**；
