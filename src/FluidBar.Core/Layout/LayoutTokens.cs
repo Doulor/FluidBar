@@ -335,6 +335,13 @@ public static class LayoutTokens
     private static readonly VisualSize NotificationSize = new(360, 64);
 
     /// <summary>Minimum notification-card width (short, unclipped messages stay here).</summary>
+    /// <summary>
+    /// Widest the media pill may grow when it shows a lyric line. The lyric form widens past the expanded
+    /// shell so a whole line fits instead of being ellipsised; this is the ceiling for that growth
+    /// (expanded width + 1/2, requested 2026-10-26 because lyric lines were still being cut off at 440).
+    /// </summary>
+    public const double MediaMaxWidth = ExpandedWidth * 1.5;
+
     public const double NotificationMinWidth = 360;
 
     /// <summary>Maximum notification-card width after the requested -1/3 from 1215 (810 DIP).</summary>

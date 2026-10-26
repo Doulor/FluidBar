@@ -115,7 +115,7 @@ public sealed class ShellMotionDriver : IDisposable
         var first = _target.Form == ShellForm.Hidden && target.Form != ShellForm.Hidden;
         _target = target;
 
-        var compactW = Math.Clamp(target.CompactSize.Width, 60, LayoutTokens.ExpandedWidth);
+        var compactW = Math.Clamp(target.CompactSize.Width, 60, LayoutTokens.MediaMaxWidth);
         var compactH = Math.Clamp(target.CompactSize.Height, 24, LayoutTokens.ExpandedHeight);
         var peekW = compactW + LayoutTokens.PeekDeltaWidth;
         var peekH = compactH + LayoutTokens.PeekDeltaHeight;
@@ -161,7 +161,7 @@ public sealed class ShellMotionDriver : IDisposable
     /// <summary>Snaps every spring to its target and zeroes velocity (T10 / restore / mode change).</summary>
     public void SnapToTarget()
     {
-        var compactW = Math.Clamp(_target.CompactSize.Width, 60, LayoutTokens.ExpandedWidth);
+        var compactW = Math.Clamp(_target.CompactSize.Width, 60, LayoutTokens.MediaMaxWidth);
         var compactH = Math.Clamp(_target.CompactSize.Height, 24, LayoutTokens.ExpandedHeight);
         var wantsExpanded = _target.Form is ShellForm.Expanded;
         _width.SnapTo(wantsExpanded ? LayoutTokens.ExpandedWidth : compactW);

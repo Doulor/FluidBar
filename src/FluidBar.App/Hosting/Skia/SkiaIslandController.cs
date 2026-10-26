@@ -2250,6 +2250,9 @@ public sealed class SkiaIslandController : IDisposable
         return ContentDamage();
     }
 
+    private double _lastLyricWidth = -1;
+    private long _lastLyricWidthLogMs;
+
     private SkiaMotionTarget BuildTarget(IslandViewModel viewModel)
     {
         var settings = _settings.Current;
@@ -2271,8 +2274,8 @@ public sealed class SkiaIslandController : IDisposable
 
         // Lyric form: widen the pill so the whole line fits instead of ellipsising it. The motion driver
         // tweens the width (380 ms shell transition), so a line change grows/shrinks the pill smoothly;
-        // the clamp keeps the token as the floor and the host surface as the ceiling (over-long lines
-        // then fall back to the ellipsis).
+        // the clamp keeps the token as the floor and LayoutTokens.MediaMaxWidth (expanded + 1/2 = 660) as the
+        // ceiling, so long lyric lines are no longer cut at 440.
         if (mode != IslandMode.Dock
             && compactKind == ActivityKind.Media
             && _compact.Model is { ShowLyrics: true } lyric
@@ -2280,8 +2283,20 @@ public sealed class SkiaIslandController : IDisposable
         {
             var measured = MeasureCompactLyric(lyric.LyricLine, settings.FontScale);
             var width = CompactMediaLayout.AdaptiveWidth(
-                measured, CompactMediaLayout.MinContentWidth, (float)LayoutTokens.ExpandedWidth);
+                measured, CompactMediaLayout.MinContentWidth, (float)LayoutTokens.MediaMaxWidth);
             compactSize = new VisualSize(width, compactSize.Height);
+
+            // Provenance for the pill width: proves from the running app which ceiling a lyric line was given
+            // (rate limited; the diag file is only touched when a value actually changes).
+            if (Math.Abs(width - _lastLyricWidth) > 0.5
+                && Environment.TickCount64 - _lastLyricWidthLogMs > 1000)
+            {
+                _lastLyricWidth = width;
+                _lastLyricWidthLogMs = Environment.TickCount64;
+                FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
+                    $"compact.width measured={measured:0.0} pill={width:0.0} ceiling={LayoutTokens.MediaMaxWidth:0.0} " +
+                    $"lyric='{(lyric.LyricLine.Length > 40 ? lyric.LyricLine[..40] : lyric.LyricLine)}'");
+            }
         }
         var ghostCount = 0;
         foreach (var ghost in viewModel.Ghosts)
