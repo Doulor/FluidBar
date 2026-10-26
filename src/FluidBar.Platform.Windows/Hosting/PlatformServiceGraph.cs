@@ -176,6 +176,9 @@ public sealed class PlatformServiceGraph : IAsyncDisposable
             Lyrics = new LyricsService(
                 new ILyricsProvider[]
                 {
+                    // The player's own .krc/.lrc first: same text and per-word timing the player shows, offline,
+                    // and no fuzzy catalogue matching (which is what served a different song's lyrics for remixes).
+                    new KugouLocalLyricsProvider(timeProvider: timeProvider, logger: Logger),
                     new NeteaseLyricsProvider(httpClient, Logger),
                     new KugouLyricsProvider(httpClient, Logger),
                 },

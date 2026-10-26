@@ -634,6 +634,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             }
 
             _lyricsDocument = document;
+            // What the island is actually about to paint, so a "wrong lyrics" report can be checked against the
+            // document that was chosen instead of guessed at (rare: once per track).
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
+                $"lyrics.shown title=\"{media.Title}\" artist=\"{media.Artist}\" source={document.Source} " +
+                $"lines={document.Lines.Length} first=\"{(document.Lines.Length > 0 ? document.Lines[0].Text : string.Empty)}\"" +
+                $" duration={document.Duration}");
             Changed?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)

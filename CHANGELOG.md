@@ -6,6 +6,22 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-26 — 歌词用回播放器自己的 .krc（本地、逐字、和播放器同源）
+
+- 症状：某些歌"封面没用、歌词也是错的"。
+- 根因一（歌词）：`KugouLocalLyricsProvider` 读播放器自己的 `.krc/.lrc` 早就写好了，但**从未注册进管线**
+  （`PlatformServiceGraph` 里只有 netease + kugou 在线两个），于是只能走在线曲库，而在线版常常是**别的版本**：
+  实测这首 `I Want You To Know (Hella x Pegato Remix)`，NetEase 给的是 **3:00** 结束、行时间 10.86/12.21/12.96，
+  播放器本地 KRC 是 **3:47.86**、行时间 10.870/12.224/13.606 —— 词相同、时间轴不同，看起来就是"歌词错"。
+- 根因二（找不到文件）：即使接上，它的目录探测也只有 `KuGou.ini` 的 `LyricPath`（KuGou 8.x 已不写这个键）
+  和 `%APPDATA%\KuGou8\Lyric`；这台机器的 2390 个 `.krc` 在 **`D:\KuGou\Lyric`**（装在 D 盘）。
+- 修复：`KugouLocalLyricsProvider` 排在歌词管线**第一位**；目录探测补上"运行中播放器安装目录旁的 Lyric"
+  与各固定盘符的 `\KuGou\Lyric` / `\KuGou8\Lyric`。本地命中即离线、逐字（`wordTiming=True`）、与播放器一致。
+- 修复（封面）：KuGou 的 SMTC 封面会滞后/给通用图（同一张 14.1KB 图一小时内出现在 4 首不同歌上），
+  因此 KuGou 会话一旦拿到可用缩略图，仍会再跑一次**经标题+歌手校验的曲库查询**，用验证过的封面覆盖它。
+- 诊断：每首新增 `lyrics.shown`（source/lines/first/duration）与既有 `artwork.origin`，下次可直接对照岛上显示内容。
+- 验证：本地 provider 对这首 48ms 返回 49 行、`source=kugou-krc`、`wordTiming=True`；Platform 762 绿。
+
 ## 2026-10-26 — 封面还是灰的？KuGou 拿灰色占位图冒充封面
 
 - 症状：修好通路后仍有歌曲"没有封面"。现场溯源（`artwork.origin`）显示这一类是

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using FluidBar.Platform.Windows.Diagnostics;
@@ -292,20 +293,113 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
             yield return configured;
         }
 
-        string? roaming = null;
+        foreach (var directory in LyricDirectoriesFor(ResolvePlayerExecutable(), FixedDriveRoots()))
+        {
+            yield return directory;
+        }
+    }
+
+    /// <summary>
+    /// Candidate cache directories, derived from where the player is installed.
+    /// </summary>
+    /// <remarks>
+    /// The cache sits next to the player (`D:\KuGou\Lyric` on this machine, 2390 <c>.krc</c> files) and KuGou 8.x no
+    /// longer records `LyricPath` in its ini, so the settings-based lookup and the roaming fallback both miss it —
+    /// which is why the local lyrics never answered even though the player had the exact file.
+    /// </remarks>
+    /// <param name="playerExecutablePath">Path of the running player, or null when it is not running.</param>
+    /// <param name="driveRoots">Fixed drive roots to probe (e.g. <c>D:</c>).</param>
+    internal static IEnumerable<string> LyricDirectoriesFor(string? playerExecutablePath, IEnumerable<string> driveRoots)
+    {
+        if (!string.IsNullOrWhiteSpace(playerExecutablePath))
+        {
+            var installDirectory = Path.GetDirectoryName(playerExecutablePath);
+            if (!string.IsNullOrWhiteSpace(installDirectory))
+            {
+                yield return Path.Combine(installDirectory, "Lyric");
+            }
+        }
+
+        foreach (var root in driveRoots)
+        {
+            yield return Path.Combine(root, "KuGou", "Lyric");
+            yield return Path.Combine(root, "KuGou8", "Lyric");
+        }
+    }
+
+    /// <summary>Fixed drive roots to probe for a player install (bounded: one entry per drive).</summary>
+    private static IEnumerable<string> FixedDriveRoots()
+    {
+        DriveInfo[] drives;
         try
         {
-            roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            drives = DriveInfo.GetDrives();
         }
         catch (Exception)
         {
-            // Unresolvable roaming folder: no cache.
+            yield break;
         }
 
-        if (!string.IsNullOrWhiteSpace(roaming))
+        foreach (var drive in drives)
         {
-            yield return Path.Combine(roaming, "KuGou8", "Lyric");
+            string root;
+            try
+            {
+                if (drive.DriveType != DriveType.Fixed || !drive.IsReady)
+                {
+                    continue;
+                }
+
+                root = drive.RootDirectory.FullName;
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            yield return root;
         }
+    }
+
+    /// <summary>Executable path of the running player, or null when it is not running.</summary>
+    private static string? ResolvePlayerExecutable()
+    {
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcesses();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        foreach (var process in processes)
+        {
+            try
+            {
+                if (!MediaWindowFallback.IsKugouProcessName(process.ProcessName))
+                {
+                    continue;
+                }
+
+                var path = process.MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    return path;
+                }
+            }
+            catch (Exception)
+            {
+                // Access denied / exited between enumeration and inspection.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Lookup key shared by the index and the query ("artist - title", normalized).</summary>
