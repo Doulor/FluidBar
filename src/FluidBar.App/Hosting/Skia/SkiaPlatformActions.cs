@@ -93,6 +93,15 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private TimeSpan _mediaTickInterval;
     private LyricsDocument? _lyricsDocument;
     private string _lyricsTrackKey = string.Empty;
+
+    /// <summary>Whether the current lyric document came from the player's own file (authoritative).</summary>
+    private bool _lyricsServedLocally;
+
+    /// <summary>Last time the local lyric file was re-probed for the current track.</summary>
+    private DateTimeOffset _lyricsProbeAt;
+
+    /// <summary>How often a provisional online document is re-checked against the player's file.</summary>
+    private static readonly TimeSpan LyricsLocalReprobeInterval = TimeSpan.FromSeconds(5);
     private int _started;
     private int _disposed;
 
@@ -574,11 +583,23 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         if (string.Equals(_lyricsTrackKey, media.TrackKey, StringComparison.Ordinal))
         {
+            // The player downloads its .krc a while after the track starts, so an online document obtained at
+            // track start is provisional. Re-check every few seconds until the local file wins (file index only,
+            // no network: LyricsService re-probes just the local providers on a cache hit).
+            if (!_lyricsServedLocally
+                && _time.GetUtcNow() - _lyricsProbeAt >= LyricsLocalReprobeInterval)
+            {
+                _lyricsProbeAt = _time.GetUtcNow();
+                _ = LoadLyricsAsync(media);
+            }
+
             return;
         }
 
         _lyricsTrackKey = media.TrackKey;
         _lyricsDocument = null;
+        _lyricsServedLocally = false;
+        _lyricsProbeAt = _time.GetUtcNow();
 
         // Browser media sessions are usually videos; matching their title/artist against lyric
         // catalogs produced unrelated lines (e.g. a video's "下一步" caption). Only browsers that
@@ -634,8 +655,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             }
 
             _lyricsDocument = document;
+            _lyricsServedLocally = document.Source.StartsWith("kugou-l", StringComparison.Ordinal)
+                || document.Source.StartsWith("kugou-k", StringComparison.Ordinal);
             // What the island is actually about to paint, so a "wrong lyrics" report can be checked against the
-            // document that was chosen instead of guessed at (rare: once per track).
+            // document that was chosen instead of guessed at (rare: once per track, plus once when the local file lands).
             FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
                 $"lyrics.shown title=\"{media.Title}\" artist=\"{media.Artist}\" source={document.Source} " +
                 $"lines={document.Lines.Length} first=\"{(document.Lines.Length > 0 ? document.Lines[0].Text : string.Empty)}\"" +

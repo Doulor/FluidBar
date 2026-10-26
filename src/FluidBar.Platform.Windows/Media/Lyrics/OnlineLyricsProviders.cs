@@ -81,7 +81,7 @@ public sealed class NeteaseLyricsProvider : HttpLyricsProvider
         var keyword = Uri.EscapeDataString(query.BuildSearchKeyword());
         var searchJson = await TryGetStringAsync(SearchUrl.Replace("{0}", keyword, StringComparison.Ordinal),
             cancellationToken).ConfigureAwait(false);
-        if (searchJson is null || !TryParseNeteaseSongId(searchJson, out var songId))
+        if (searchJson is null || !TryParseNeteaseSongId(searchJson, query, out var songId))
         {
             return null;
         }
@@ -92,8 +92,11 @@ public sealed class NeteaseLyricsProvider : HttpLyricsProvider
         return lyricJson is null ? null : ParseNeteaseLyrics(lyricJson);
     }
 
-    /// <summary>Extracts the first song id from a NetEase search response.</summary>
-    internal static bool TryParseNeteaseSongId(string json, out long songId)
+    /// <summary>Picks the id of the hit that really is this track (null when no hit qualifies).</summary>
+    /// <param name="json">NetEase search response.</param>
+    /// <param name="query">Track being looked up.</param>
+    /// <param name="songId">Accepted song id.</param>
+    internal static bool TryParseNeteaseSongId(string json, LyricsQuery query, out long songId)
     {
         songId = 0;
         try
@@ -101,14 +104,48 @@ public sealed class NeteaseLyricsProvider : HttpLyricsProvider
             using var document = JsonDocument.Parse(json);
             if (!document.RootElement.TryGetProperty("result", out var result)
                 || !result.TryGetProperty("songs", out var songs)
-                || songs.ValueKind != JsonValueKind.Array
-                || songs.GetArrayLength() == 0)
+                || songs.ValueKind != JsonValueKind.Array)
             {
                 return false;
             }
 
-            var first = songs[0];
-            return first.TryGetProperty("id", out var id) && id.TryGetInt64(out songId);
+            var bestScore = double.MinValue;
+            foreach (var song in songs.EnumerateArray())
+            {
+                if (!song.TryGetProperty("id", out var idElement) || !idElement.TryGetInt64(out var id))
+                {
+                    continue;
+                }
+
+                var name = song.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+                var artists = song.TryGetProperty("artists", out var artistArray)
+                    && artistArray.ValueKind == JsonValueKind.Array
+                        ? string.Join('/', artistArray.EnumerateArray()
+                            .Select(artist => artist.TryGetProperty("name", out var artistName)
+                                ? artistName.GetString()
+                                : null)
+                            .Where(artistName => !string.IsNullOrWhiteSpace(artistName)))
+                        : null;
+                var hitDuration = song.TryGetProperty("duration", out var durationElement)
+                    && durationElement.ValueKind == JsonValueKind.Number
+                    && durationElement.TryGetInt64(out var milliseconds)
+                        ? TimeSpan.FromMilliseconds(milliseconds)
+                        : TimeSpan.Zero;
+
+                if (!LyricsHitMatcher.Accept(query.Title, query.Artist, query.Duration, name, artists, hitDuration))
+                {
+                    continue;
+                }
+
+                var score = LyricsHitMatcher.Score(query.Title, query.Artist, name, artists);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    songId = id;
+                }
+            }
+
+            return songId != 0;
         }
         catch (JsonException)
         {
@@ -174,7 +211,7 @@ public sealed class KugouLyricsProvider : HttpLyricsProvider
         var keyword = Uri.EscapeDataString(query.BuildSearchKeyword());
         var searchJson = await TryGetStringAsync(SearchUrl.Replace("{0}", keyword, StringComparison.Ordinal),
             cancellationToken).ConfigureAwait(false);
-        if (searchJson is null || !TryParseKugouSong(searchJson, out var hash, out var durationSeconds))
+        if (searchJson is null || !TryParseKugouSong(searchJson, query, out var hash, out var durationSeconds))
         {
             return null;
         }
@@ -198,8 +235,12 @@ public sealed class KugouLyricsProvider : HttpLyricsProvider
         return downloadJson is null ? null : ParseKugouDownload(downloadJson);
     }
 
-    /// <summary>Extracts hash and duration from a Kugou search response.</summary>
-    internal static bool TryParseKugouSong(string json, out string hash, out int durationSeconds)
+    /// <summary>Picks the hit that really is this track (null when none qualifies).</summary>
+    /// <param name="json">KuGou search response.</param>
+    /// <param name="query">Track being looked up.</param>
+    /// <param name="hash">Accepted song hash.</param>
+    /// <param name="durationSeconds">Length reported for the accepted hit.</param>
+    internal static bool TryParseKugouSong(string json, LyricsQuery query, out string hash, out int durationSeconds)
     {
         hash = string.Empty;
         durationSeconds = 0;
@@ -208,22 +249,46 @@ public sealed class KugouLyricsProvider : HttpLyricsProvider
             using var document = JsonDocument.Parse(json);
             if (!document.RootElement.TryGetProperty("data", out var data)
                 || !data.TryGetProperty("info", out var info)
-                || info.ValueKind != JsonValueKind.Array
-                || info.GetArrayLength() == 0)
+                || info.ValueKind != JsonValueKind.Array)
             {
                 return false;
             }
 
-            var first = info[0];
-            if (!first.TryGetProperty("hash", out var hashElement) || hashElement.ValueKind != JsonValueKind.String)
+            var bestScore = double.MinValue;
+            foreach (var hit in info.EnumerateArray())
             {
-                return false;
-            }
+                if (!hit.TryGetProperty("hash", out var hashElement) || hashElement.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
 
-            hash = hashElement.GetString() ?? string.Empty;
-            if (first.TryGetProperty("duration", out var duration) && duration.ValueKind == JsonValueKind.Number)
-            {
-                durationSeconds = duration.TryGetInt32(out var value) ? value : 0;
+                var candidateHash = hashElement.GetString();
+                if (string.IsNullOrEmpty(candidateHash))
+                {
+                    continue;
+                }
+
+                var songName = hit.TryGetProperty("songname", out var songNameElement) ? songNameElement.GetString() : null;
+                var singerName = hit.TryGetProperty("singername", out var singerElement) ? singerElement.GetString() : null;
+                var seconds = hit.TryGetProperty("duration", out var durationElement)
+                    && durationElement.ValueKind == JsonValueKind.Number
+                    && durationElement.TryGetInt32(out var value)
+                        ? value
+                        : 0;
+
+                if (!LyricsHitMatcher.Accept(query.Title, query.Artist, query.Duration, songName, singerName,
+                        TimeSpan.FromSeconds(seconds)))
+                {
+                    continue;
+                }
+
+                var score = LyricsHitMatcher.Score(query.Title, query.Artist, songName, singerName);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    hash = candidateHash;
+                    durationSeconds = seconds;
+                }
             }
 
             return hash.Length > 0;

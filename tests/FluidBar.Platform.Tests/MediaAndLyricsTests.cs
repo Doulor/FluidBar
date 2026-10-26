@@ -667,13 +667,35 @@ public sealed class LyricsServiceTests
 public sealed class OnlineLyricsParserTests
 {
     [Fact]
-    public void Netease_TryParseSongId_ReadsFirstResult()
+    public void Netease_TryParseSongId_TakesTheHitThatMatchesTheTrack()
     {
-        const string json = """{"result":{"songs":[{"id":12345,"name":"Song"}]}}""";
-        Assert.True(NeteaseLyricsProvider.TryParseNeteaseSongId(json, out var id));
-        Assert.Equal(12345, id);
-        Assert.False(NeteaseLyricsProvider.TryParseNeteaseSongId("""{"result":{}}""", out _));
-        Assert.False(NeteaseLyricsProvider.TryParseNeteaseSongId("not json", out _));
+        // Real shape from 2026-10-26: the engine can rank a different song of the same name first. Taking
+        // songs[0] blind served "作词 : 小柯" for a Jeff Satur track.
+        const string json = """
+        {"result":{"songs":[
+          {"id":111,"name":"Fade (English Version)","artists":[{"name":"Unrelated"}],"duration":262000},
+          {"id":1983149480,"name":"Fade (English Version)","artists":[{"name":"Jeff Satur"}],"duration":262000}
+        ]}}
+        """;
+        var query = new LyricsQuery("Fade (English Version)", "Jeff Satur", TimeSpan.FromSeconds(262), "k");
+        Assert.True(NeteaseLyricsProvider.TryParseNeteaseSongId(json, query, out var id));
+        Assert.Equal(1983149480, id);
+
+        Assert.False(NeteaseLyricsProvider.TryParseNeteaseSongId("""{"result":{}}""", query, out _));
+        Assert.False(NeteaseLyricsProvider.TryParseNeteaseSongId("not json", query, out _));
+    }
+
+    [Fact]
+    public void Netease_TryParseSongId_RejectsEveryHitWhenNoneIsTheTrack()
+    {
+        const string json = """
+        {"result":{"songs":[
+          {"id":5,"name":"Fade","artists":[{"name":"Someone Else"}],"duration":200000}
+        ]}}
+        """;
+        var query = new LyricsQuery("Fade (English Version)", "Jeff Satur", TimeSpan.Zero, "k");
+        Assert.False(NeteaseLyricsProvider.TryParseNeteaseSongId(json, query, out var id));
+        Assert.Equal(0, id);
     }
 
     [Fact]
@@ -699,8 +721,14 @@ public sealed class OnlineLyricsParserTests
     [Fact]
     public void Kugou_Parsers_ReadSearchCandidateAndDownload()
     {
-        const string search = """{"data":{"info":[{"hash":"ABC123","duration":215}]}}""";
-        Assert.True(KugouLyricsProvider.TryParseKugouSong(search, out var hash, out var duration));
+        var query = new LyricsQuery("Song", "Artist", TimeSpan.FromSeconds(215), "k");
+        const string search = """
+        {"data":{"info":[
+          {"hash":"WRONG","songname":"Song","singername":"Someone Else","duration":215},
+          {"hash":"ABC123","songname":"Song","singername":"Artist","duration":215}
+        ]}}
+        """;
+        Assert.True(KugouLyricsProvider.TryParseKugouSong(search, query, out var hash, out var duration));
         Assert.Equal("ABC123", hash);
         Assert.Equal(215, duration);
 
@@ -714,7 +742,10 @@ public sealed class OnlineLyricsParserTests
         Assert.NotNull(document);
         Assert.Equal("Line", document!.Lines[0].Text);
 
-        Assert.False(KugouLyricsProvider.TryParseKugouSong("""{"data":{}}""", out _, out _));
+        Assert.False(KugouLyricsProvider.TryParseKugouSong("""{"data":{}}""", query, out _, out _));
+        Assert.False(KugouLyricsProvider.TryParseKugouSong(
+            """{"data":{"info":[{"hash":"X","songname":"Other","singername":"Nobody","duration":10}]}}""",
+            query, out _, out _));
         Assert.False(KugouLyricsProvider.TryParseKugouCandidate("""{"candidates":[]}""", out _, out _));
         Assert.Null(KugouLyricsProvider.ParseKugouDownload("""{"status":100}"""));
     }

@@ -20,18 +20,6 @@ internal static class MediaArtworkFallbackPolicy
     public static bool ShouldUsePlayerCoverCache(string? sourceAppUserModelId, int thumbnailBytes)
         => thumbnailBytes <= 0 && IsKugou(sourceAppUserModelId);
 
-    /// <summary>
-    /// True when a session thumbnail must still be validated against the catalogue even though it looked usable.
-    /// </summary>
-    /// <remarks>
-    /// KuGou publishes its artwork late and sometimes hands out a generic tile: the same 14 KB image showed up for
-    /// four different tracks an hour apart (2026-10-26), so a "usable" thumbnail can still be the wrong cover. For
-    /// KuGou the catalogue answer is title+artist validated, so letting it supersede the session image fixes the
-    /// wrong cover without any guessing. Other players publish per-track art and are left alone.
-    /// </remarks>
-    /// <param name="sourceAppUserModelId">Session AUMID reported by GSMTC.</param>
-    public static bool ShouldValidateSessionArt(string? sourceAppUserModelId) => IsKugou(sourceAppUserModelId);
-
     /// <summary>True when the catalogue lookup is the last remaining source.</summary>
     /// <param name="availableBytes">Cover bytes obtained so far (0 when nothing was found).</param>
     public static bool ShouldTryCatalogues(int availableBytes) => availableBytes <= 0;

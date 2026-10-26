@@ -20,6 +20,9 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
     private readonly PlatformCounters _counters;
     private readonly TimeSpan _providerTimeout;
     private readonly object _gate = new();
+    /// <summary>Tracks whose cached document came from a local provider (guarded by <c>_gate</c>).</summary>
+    private readonly Dictionary<string, bool> _localServed = new(StringComparer.Ordinal);
+
     private readonly Dictionary<string, PendingRequest> _pending = new(StringComparer.Ordinal);
     private int _disposed;
 
@@ -58,6 +61,18 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
 
         if (_cache.TryGet(query.TrackKey, out var cached))
         {
+            if (ServedByLocalCache(query.TrackKey))
+            {
+                return cached;
+            }
+
+            // The player downloads its .krc a while after the track starts, so an online document obtained earlier is
+            // only provisional: re-probe the local providers (file index, no network) and prefer their answer.
+            if (await TryLocalProvidersAsync(query, cancellationToken).ConfigureAwait(false) is { } local)
+            {
+                return local;
+            }
+
             return cached;
         }
 
@@ -91,6 +106,60 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
         foreach (var request in toCancel)
         {
             request.Cancel();
+        }
+    }
+
+    /// <summary>Re-runs only the local (file-backed) providers; returns null when they cannot answer.</summary>
+    /// <param name="query">Track being looked up.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<LyricsDocument?> TryLocalProvidersAsync(LyricsQuery query, CancellationToken cancellationToken)
+    {
+        foreach (var provider in _providers)
+        {
+            if (provider is not { IsLocalCache: true } || cancellationToken.IsCancellationRequested)
+            {
+                continue;
+            }
+
+            try
+            {
+                var document = await provider.FetchAsync(query, cancellationToken).ConfigureAwait(false);
+                if (document is not { IsEmpty: false })
+                {
+                    continue;
+                }
+
+                _cache.Add(query.TrackKey, document);
+                MarkLocalCache(query.TrackKey, true);
+                _localServed[query.TrackKey] = true;
+                _logger.LogDebug(PlatformLogCategory.Media, "lyrics.kugou-local",
+                    "The player's lyric file appeared; replacing the provisional online document.");
+                return document;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(PlatformLogCategory.Media, "lyrics.local-recheck-failed", ex.Message);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether the cached document came from a local (player file) provider.</summary>
+    /// <param name="trackKey">Track key.</param>
+    private bool ServedByLocalCache(string trackKey)
+    {
+        lock (_gate)
+        {
+            return _localServed.TryGetValue(trackKey, out var local) && local;
+        }
+    }
+
+    private void MarkLocalCache(string trackKey, bool value)
+    {
+        lock (_gate)
+        {
+            _localServed[trackKey] = value;
         }
     }
 
@@ -129,6 +198,7 @@ public sealed class LyricsService : IAsyncDisposable, ILyricsLookup
                     if (document is { IsEmpty: false })
                     {
                         _cache.Add(request.Query.TrackKey, document);
+                        MarkLocalCache(request.Query.TrackKey, provider.IsLocalCache);
                         _logger.LogInfo(PlatformLogCategory.Media, "lyrics.fetched",
                             $"Lyrics found by provider '{provider.Name}'.",
                             new Dictionary<string, object?>

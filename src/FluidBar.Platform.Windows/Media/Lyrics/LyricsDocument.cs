@@ -194,6 +194,9 @@ public interface ILyricsProvider
     /// <summary>Provider name for logs/cache metadata.</summary>
     string Name { get; }
 
+    /// <summary>Whether this provider reads files the player already downloaded (cheap enough to re-probe on every request).</summary>
+    bool IsLocalCache => false;
+
     /// <summary>Fetches lyrics or null when the track has none. Must be cancellable and never block the caller.</summary>
     Task<LyricsDocument?> FetchAsync(LyricsQuery query, CancellationToken cancellationToken);
 }

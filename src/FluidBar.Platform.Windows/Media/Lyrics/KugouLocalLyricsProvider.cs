@@ -49,6 +49,9 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
     public string Name => "kugou-local";
 
     /// <inheritdoc />
+    public bool IsLocalCache => true;
+
+    /// <inheritdoc />
     public Task<LyricsDocument?> FetchAsync(LyricsQuery query, CancellationToken cancellationToken)
         => Task.Run(() => Load(query, cancellationToken), cancellationToken);
 
@@ -68,7 +71,14 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
         var path = FindLyricFile(directory, query.Artist, query.Title, out var matchedFromTitleOnly);
         if (path is null)
         {
-            return null;
+            // KuGou downloads the .krc when the song starts, so the first lookup of a fresh track usually misses.
+            // Refresh the index once and look again instead of waiting out the 5 minute lifetime.
+            InvalidateIndex();
+            path = FindLyricFile(directory, query.Artist, query.Title, out matchedFromTitleOnly);
+            if (path is null)
+            {
+                return null;
+            }
         }
 
         byte[] bytes;
@@ -119,6 +129,17 @@ public sealed class KugouLocalLyricsProvider : ILyricsProvider
                 ["titleOnlyMatch"] = matchedFromTitleOnly,
             });
         return document;
+    }
+
+    /// <summary>Drops the cached directory index so the next lookup sees files the player just downloaded.</summary>
+    private void InvalidateIndex()
+    {
+        lock (_gate)
+        {
+            _byFullKey = null;
+            _byTitleKey = null;
+            _indexBuiltAt = DateTimeOffset.MinValue;
+        }
     }
 
     /// <summary>Finds the cached lyric file for a track (exposed for tests through <see cref="FindLyricFile"/>).</summary>

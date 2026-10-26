@@ -1665,13 +1665,6 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             MediaDiagnostics.LogAlways(
                 $"artwork.origin title=\"{properties.Title}\" origin={origin} bytes={bytes.Length}");
 
-            if (origin == "session-thumbnail"
-                && MediaArtworkFallbackPolicy.ShouldValidateSessionArt(session.SourceAppUserModelId))
-            {
-                // KuGou's own art can be a late or generic tile (the same image served four different tracks),
-                // so let the validated catalogue answer supersede it when one exists.
-                StartArtworkLookup(trackKey, properties.Title, properties.Artist);
-            }
 
             _logger.LogDebug(PlatformLogCategory.Media, "media.artwork-ready",
                 "Artwork cached.", new Dictionary<string, object?>

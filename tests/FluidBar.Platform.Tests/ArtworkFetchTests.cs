@@ -29,15 +29,6 @@ public sealed class ArtworkFetchTests : IDisposable
     }
 
     [Theory]
-    [InlineData("KugouMusic.exe", true)]   // its art lags and is sometimes a generic tile
-    [InlineData("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", false)]
-    [InlineData(null, false)]
-    public void A_kugou_session_art_is_always_validated_against_the_catalogue(string? aumid, bool expected)
-    {
-        Assert.Equal(expected, MediaArtworkFallbackPolicy.ShouldValidateSessionArt(aumid));
-    }
-
-    [Theory]
     [InlineData(0, true)]
     [InlineData(1, false)]
     public void Catalogues_are_the_last_source_only_when_nothing_was_found(int availableBytes, bool expected)
