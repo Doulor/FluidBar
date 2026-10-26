@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b0e13'/%3E%3Crect x='7' y='13' width='18' height='6' rx='3' fill='%234cc9f0'/%3E%3C/svg%3E">
+<title>FluidBar · 展开卡片重构原型（Telegram 语言）</title>
+<style>
+:root{
+  --bg:#07080b; --stage1:#101528; --stage2:#0a1420; --stage3:#1b1030;
+  --panel:#0f1218cc; --rail:#0b0e13cc; --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.11);
+  --ink:#e9edf5; --ink-2:#9aa4b4; --ink-3:#6c7686;
+  --accent:#4cc9f0; --accent-ink:#04212b; --danger:#ff6b6b;
+  --row-hover:rgba(255,255,255,.055); --row-active:rgba(76,201,240,.13);
+  --dur-1:120ms; --dur-2:180ms; --dur-3:260ms;
+  --ease:cubic-bezier(.16,1,.3,1); --spring:cubic-bezier(.2,1.18,.34,1);
+  --r-panel:22px; --r-row:12px;
+  --shadow:0 30px 80px rgba(0,0,0,.62), 0 2px 0 rgba(255,255,255,.05) inset;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font:13px/1.5 "Segoe UI Variable Text","Segoe UI","PingFang SC","Microsoft YaHei UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+.stage{
+  position:fixed; inset:0; display:grid; place-items:center;
+  background:
+    radial-gradient(680px 420px at 22% 12%, #1d2a4d55, transparent 70%),
+    radial-gradient(720px 460px at 82% 78%, #3a1f5255, transparent 72%),
+    linear-gradient(140deg,var(--stage1),var(--stage2) 48%,var(--stage3));
+}
+.stage::after{ /* 模拟桌面上的其它窗口，便于判断玻璃与层次 */
+  content:""; position:absolute; inset:auto 6% 8% auto; width:340px; height:200px; border-radius:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+  border:1px solid rgba(255,255,255,.07); filter:blur(.2px);
+}
+.stage::before{
+  content:""; position:absolute; left:6%; bottom:8%; width:260px; height:150px; border-radius:14px;
+  background:linear-gradient(180deg,rgba(120,200,255,.10),rgba(120,200,255,.02));
+  border:1px solid rgba(120,200,255,.14);
+}
+
+/* ---------- 岛本体 ---------- */
+.island{
+  position:relative; z-index:2;
+  width:var(--w,720px);
+  transition:width var(--dur-3) var(--spring), transform var(--dur-3) var(--spring);
+  transform:translateZ(0);
+}
+.island[data-size="small"]{ --w:488px }
+.island[data-open="false"]{ transform:scale(.985) translateY(6px); }
+.island__glow{
+  position:absolute; inset:-28px -18px -34px; border-radius:40px; pointer-events:none;
+  background:radial-gradient(60% 60% at 50% 30%, color-mix(in oklab, var(--accent) 26%, transparent), transparent 70%);
+  opacity:.5; filter:blur(18px); transition:opacity var(--dur-3) var(--ease);
+}
+.panel{
+  position:relative; border-radius:var(--r-panel); overflow:hidden;
+  background:var(--panel);
+  border:1px solid var(--line-2);
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(26px) saturate(160%);
+  display:flex; flex-direction:column;
+  transform-origin:50% 0%;
+  animation:panelIn var(--dur-3) var(--spring) both;
+}
+@keyframes panelIn{ from{opacity:0; transform:scale(.975) translateY(8px)} to{opacity:1; transform:none} }
+
+/* ---------- 头部 ---------- */
+.head{
+  display:flex; align-items:center; gap:10px; padding:10px 12px;
+  border-bottom:1px solid var(--line); background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
+}
+.brand{display:flex; align-items:center; gap:8px; min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--accent) 22%,transparent)}
+.brand b{font-size:12.5px;letter-spacing:.14em}
+.brand span{color:var(--ink-3);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segs{display:flex; gap:2px; margin-left:6px; background:rgba(255,255,255,.045); border-radius:10px; padding:2px; position:relative}
+.segs__ink{
+  position:absolute; inset:2px auto 2px 2px; width:0; border-radius:8px;
+  background:rgba(255,255,255,.10); box-shadow:0 1px 0 rgba(255,255,255,.08) inset;
+  transition:transform var(--dur-2) var(--spring), width var(--dur-2) var(--spring);
+}
+.segs button{
+  position:relative; z-index:1; border:0; background:none; color:var(--ink-2); cursor:pointer;
+  font:inherit; font-size:12px; padding:5px 11px; border-radius:8px; display:flex; align-items:center; gap:6px;
+  transition:color var(--dur-1) var(--ease);
+}
+.segs button:hover{color:var(--ink)}
+.segs button[aria-selected="true"]{color:var(--ink); font-weight:600}
+.segs .kbd{font-size:9.5px;color:var(--ink-3);border:1px solid var(--line-2);border-radius:4px;padding:0 3px;line-height:13px}
+.search{
+  margin-left:auto; display:flex; align-items:center; gap:6px; min-width:150px; flex:0 1 210px;
+  background:rgba(255,255,255,.05); border:1px solid var(--line); border-radius:9px; padding:4px 8px;
+  transition:border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.search:focus-within{border-color:color-mix(in oklab,var(--accent) 55%,transparent); background:rgba(255,255,255,.07)}
+.search input{all:unset; flex:1; font:inherit; font-size:12px; color:var(--ink); min-width:0}
+.search input::placeholder{color:var(--ink-3)}
+.search kbd{font-size:9.5px;color:var(--ink-3)}
+.iconbtn{
+  width:28px;height:28px;display:grid;place-items:center;border-radius:8px;border:1px solid transparent;
+  background:none;color:var(--ink-2);cursor:pointer;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)
+}
+.iconbtn:hover{background:var(--row-hover);color:var(--ink)}
+.iconbtn:active{transform:scale(.94)}
+
+/* ---------- 主体三栏 ---------- */
+.body{display:grid; grid-template-columns:52px minmax(0,1fr) 268px; min-height:0; height:var(--body-h,352px)}
+.island[data-size="small"] .body{grid-template-columns:48px minmax(0,1fr)}
+.island[data-size="small"] .detail{display:none}
+.island[data-size="small"] .segs{display:none}
+.island[data-size="small"] .search{flex:1 1 auto}
+.rail{
+  border-right:1px solid var(--line); background:var(--rail);
+  display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0;
+}
+.rail button{
+  width:36px;height:34px;border-radius:10px;border:0;background:none;color:var(--ink-3);cursor:pointer;
+  display:grid;place-items:center;position:relative;transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease)
+}
+.rail button:hover{background:var(--row-hover);color:var(--ink)}
+.rail button[aria-current="true"]{background:var(--row-active);color:var(--ink)}
+.rail button[aria-current="true"]::before{content:"";position:absolute;left:-8px;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent)}
+.rail .badge{position:absolute;top:3px;right:3px;min-width:13px;height:13px;border-radius:7px;background:var(--accent);color:var(--accent-ink);font-size:9px;font-weight:700;display:grid;place-items:center;padding:0 3px}
+.rail .spacer{flex:1}
+
+/* ---------- 列表 ---------- */
+.list{display:flex; flex-direction:column; min-width:0; min-height:0}
+.toolbar{display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--line)}
+.chip{
+  border:1px solid var(--line); background:rgba(255,255,255,.03); color:var(--ink-2);
+  font:inherit; font-size:11.5px; padding:3px 9px; border-radius:999px; cursor:pointer;
+  transition:background var(--dur-1) var(--ease),color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)
+}
+.chip:hover{color:var(--ink);border-color:var(--line-2)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.toolbar .right{margin-left:auto;display:flex;align-items:center;gap:4px;color:var(--ink-3);font-size:11px}
+
+.scroll{overflow:auto; padding:6px; min-height:0; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.16) transparent}
+.scroll::-webkit-scrollbar{width:8px}
+.scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+.grouphead{
+  display:flex;align-items:center;gap:8px;padding:8px 8px 4px;color:var(--ink-3);
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase
+}
+.grouphead .line{flex:1;height:1px;background:var(--line)}
+.row{
+  display:grid; grid-template-columns:26px minmax(0,1fr) auto; align-items:center; gap:9px;
+  padding:var(--row-pad,7px) 9px; border-radius:var(--r-row); cursor:pointer; position:relative;
+  border:1px solid transparent;
+  transition:background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+  animation:rowIn var(--dur-2) var(--ease) both;
+}
+@keyframes rowIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.row:hover{background:var(--row-hover)}
+.row[aria-selected="true"]{background:var(--row-active);border-color:color-mix(in oklab,var(--accent) 35%,transparent)}
+.row[aria-selected="true"]::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent)}
+.row.leaving{animation:rowOut var(--dur-2) var(--ease) forwards}
+@keyframes rowOut{to{opacity:0;transform:translateX(18px) scale(.98);filter:blur(2px)}}
+.row__icon{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.06);color:var(--ink-2);font-size:11px}
+.row__main{min-width:0}
+.row__title{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__title .pin{color:var(--accent);font-size:10px}
+.row__sub{margin-top:1px;font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row__sub mark{background:color-mix(in oklab,var(--accent) 30%,transparent);color:var(--ink);border-radius:3px;padding:0 1px}
+.row__meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.row__acts{display:flex;gap:2px;opacity:0;transform:translateX(4px);transition:opacity var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
+.row:hover .row__acts,.row[aria-selected="true"] .row__acts{opacity:1;transform:none}
+.row__acts button{width:22px;height:22px;border-radius:6px;border:0;background:rgba(255,255,255,.08);color:var(--ink-2);cursor:pointer;font-size:11px;line-height:1}
+.row__acts button:hover{background:rgba(255,255,255,.16);color:var(--ink)}
+.row.dragging{transition:none;z-index:3;background:rgba(255,255,255,.10);border-color:var(--line-2);box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.row.gone{animation:rowOut var(--dur-2) var(--ease) forwards}
+
+/* ---------- 下钻详情（小尺寸） ---------- */
+.list{position:relative}
+.sheet{
+  position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; min-height:0;
+  background:linear-gradient(180deg,rgba(18,21,28,.96),rgba(11,14,19,.98));
+  border-left:1px solid var(--line); transform:translateX(102%); visibility:hidden;
+  transition:transform var(--dur-3) var(--spring), visibility 0s linear var(--dur-3);
+}
+.sheet[data-on="true"]{transform:none;visibility:visible;transition:transform var(--dur-3) var(--spring), visibility 0s}
+.sheet__head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px}
+.sheet__body{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:10px;min-height:0}
+.sheet__body .actions{margin-top:auto}
+
+/* ---------- 详情栏 ---------- */
+.detail{border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; background:rgba(255,255,255,.015)}
+.detail__head{padding:10px 12px 8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.detail__head .t{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.detail__body{padding:12px; overflow:auto; display:flex; flex-direction:column; gap:10px; min-height:0}
+.preview{
+  border:1px solid var(--line); border-radius:12px; padding:10px; background:rgba(0,0,0,.22);
+  font-size:12px; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:150px; overflow:auto;
+  font-family:"Cascadia Mono",ui-monospace,Consolas,monospace; line-height:1.55;
+}
+.preview.empty{color:var(--ink-3);font-family:inherit;display:grid;place-items:center;height:120px;text-align:center}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11.5px;color:var(--ink-3)}
+.meta b{color:var(--ink-2);font-weight:500;font-variant-numeric:tabular-nums}
+.actions{display:grid;gap:6px;margin-top:auto}
+.btn{
+  display:flex;align-items:center;gap:8px;justify-content:center;border-radius:9px;border:1px solid var(--line-2);
+  background:rgba(255,255,255,.05);color:var(--ink);font:inherit;font-size:12px;padding:7px 10px;cursor:pointer;
+  transition:background var(--dur-1) var(--ease),transform var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease)
+}
+.btn:hover{background:rgba(255,255,255,.1)}
+.btn:active{transform:scale(.985)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.danger{color:var(--danger);border-color:color-mix(in oklab,var(--danger) 40%,transparent)}
+.btn .k{font-size:10px;opacity:.6;border:1px solid currentColor;border-radius:4px;padding:0 3px;line-height:12px}
+
+/* ---------- 底部 ---------- */
+.foot{
+  display:flex;align-items:center;gap:10px;padding:7px 12px;border-top:1px solid var(--line);
+  color:var(--ink-3);font-size:11px;background:linear-gradient(0deg,rgba(255,255,255,.03),transparent)
+}
+.foot .keys{display:flex;gap:8px;flex-wrap:wrap}
+.foot kbd{font:inherit;font-size:10px;border:1px solid var(--line-2);border-radius:4px;padding:1px 4px;color:var(--ink-2);background:rgba(255,255,255,.04)}
+.foot .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* ---------- 浮层 ---------- */
+.toast{
+  position:fixed; left:50%; bottom:34px; transform:translate(-50%,14px); opacity:0;
+  background:#0d1117f2; border:1px solid color-mix(in oklab,var(--accent) 45%,transparent);
+  color:var(--ink); border-radius:10px; padding:8px 14px; font-size:12px;
+  box-shadow:0 12px 30px rgba(0,0,0,.5); pointer-events:none; z-index:50;
+  transition:opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--spring);
+}
+.toast[data-on="true"]{opacity:1;transform:translate(-50%,0)}
+.menu{
+  position:fixed; z-index:60; min-width:172px; padding:5px; border-radius:10px;
+  background:#0d1017f7; border:1px solid var(--line-2); box-shadow:0 18px 44px rgba(0,0,0,.6);
+  transform-origin:top left; opacity:0; transform:scale(.96); pointer-events:none;
+  transition:opacity var(--dur-1) var(--ease), transform var(--dur-1) var(--spring);
+}
+.menu[data-on="true"]{opacity:1;transform:none;pointer-events:auto}
+.menu button{
+  display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;color:var(--ink);
+  font:inherit;font-size:12px;padding:6px 8px;border-radius:7px;cursor:pointer;text-align:left
+}
+.menu button:hover{background:var(--row-hover)}
+.menu button .k{margin-left:auto;color:var(--ink-3);font-size:10.5px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.menu .danger{color:var(--danger)}
+.help{
+  position:fixed; inset:0; z-index:70; display:grid; place-items:center; background:rgba(3,5,8,.6);
+  opacity:0; pointer-events:none; transition:opacity var(--dur-2) var(--ease)
+}
+.help[data-on="true"]{opacity:1;pointer-events:auto}
+.help__card{width:min(460px,88vw);background:#0c0f15f7;border:1px solid var(--line-2);border-radius:14px;padding:16px 18px;box-shadow:0 30px 70px rgba(0,0,0,.6);transform:scale(.98);transition:transform var(--dur-2) var(--spring)}
+.help[data-on="true"] .help__card{transform:none}
+.help h3{margin:0 0 10px;font-size:13px;letter-spacing:.04em}
+.help dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:12px;color:var(--ink-2)}
+.help dt{color:var(--ink);font-variant-numeric:tabular-nums}
+.help .close{margin-top:14px;display:flex;justify-content:flex-end}
+
+/* 舞台说明 */
+.note{
+  position:fixed; left:22px; top:18px; z-index:3; max-width:430px; color:var(--ink-2); font-size:12px; line-height:1.7;
+}
+.note h1{margin:0 0 4px;font-size:14px;color:var(--ink);letter-spacing:.02em}
+.note kbd{font:inherit;font-size:10px;border:1px solid var(--line-2);border-radius:4px;padding:1px 4px;color:var(--ink-2);background:rgba(255,255,255,.05)}
+.note .row2{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.note .row2 button{
+  border:1px solid var(--line-2);background:rgba(255,255,255,.05);color:var(--ink);font:inherit;font-size:11.5px;
+  border-radius:8px;padding:5px 10px;cursor:pointer
+}
+.note .row2 button:hover{background:rgba(255,255,255,.1)}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:1ms !important; transition-duration:1ms !important}
+}
+</style>
+</head>
+<body>
+<div class="stage"></div>
+
+<div class="note">
+  <h1>展开卡片重构 · 原型 A（Telegram 语言）</h1>
+  <div>三栏：<b>页轨</b> / <b>列表</b> / <b>详情</b>。指针与键盘同权：<kbd>↑</kbd><kbd>↓</kbd> 选、<kbd>Enter</kbd> 执行、
+    <kbd>Space</kbd> 预览、<kbd>Del</kbd> 删除、<kbd>Ctrl</kbd>+点击多选、右键菜单、通知行可直接<b>拖走</b>。</div>
+  <div class="row2">
+    <button data-act="size">切换尺寸（488 ↔ 720）</button>
+    <button data-act="push-clip">来一条剪贴板</button>
+    <button data-act="push-note">来一条通知</button>
+    <button data-act="density">密度：舒适</button>
+    <button data-act="help">快捷键 ?</button>
+  </div>
+</div>
+
+<div class="island" id="island" data-size="large" data-open="true">
+  <div class="island__glow"></div>
+  <div class="panel" role="dialog" aria-label="FluidBar 展开卡片">
+    <header class="head">
+      <div class="brand"><i class="dot"></i><b>FLUIDBAR</b><span id="statusText">剪贴板 · 24 条 · 3 条固定</span></div>
+      <div class="segs" id="segs" role="tablist">
+        <span class="segs__ink" id="segsInk"></span>
+        <button role="tab" data-page="messages" aria-selected="false">消息 <span class="kbd">1</span></button>
+        <button role="tab" data-page="clipboard" aria-selected="true">剪贴板 <span class="kbd">2</span></button>
+        <button role="tab" data-page="home" aria-selected="false">概览 <span class="kbd">3</span></button>
+      </div>
+      <label class="search">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.2"/><path d="M10.4 10.4 14 14"/></svg>
+        <input id="search" placeholder="搜索剪贴板与通知" autocomplete="off" spellcheck="false">
+        <kbd>⌘K</kbd>
+      </label>
+      <button class="iconbtn" id="sizeBtn" title="切换尺寸">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6V2h4M14 10v4h-4M2 2l4 4M14 14l-4-4"/></svg>
+      </button>
+      <button class="iconbtn" id="closeBtn" title="收起（Esc）">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+
+    <div class="body">
+      <nav class="rail" id="rail">
+        <button data-page="messages" title="消息 (1)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4.5h11v7h-6l-3 2v-2h-2z"/></svg>
+          <span class="badge" id="badgeNotes">4</span>
+        </button>
+        <button data-page="clipboard" aria-current="true" title="剪贴板 (2)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="8" height="10.5" rx="1.5"/><path d="M6 3V2h4v1"/></svg>
+        </button>
+        <button data-page="home" title="概览 (3)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="4.6" height="4.6" rx="1"/><rect x="8.9" y="2.5" width="4.6" height="4.6" rx="1"/><rect x="2.5" y="8.9" width="4.6" height="4.6" rx="1"/><rect x="8.9" y="8.9" width="4.6" height="4.6" rx="1"/></svg>
+        </button>
+        <div class="spacer"></div>
+        <button data-act="help" title="快捷键 (?)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M6.4 6.2a1.7 1.7 0 1 1 2.3 1.6c-.5.2-.7.6-.7 1.1"/><circle cx="8" cy="11.4" r=".7" fill="currentColor" stroke="none"/></svg>
+        </button>
+      </nav>
+
+      <section class="list">
+        <div class="toolbar" id="toolbar"></div>
+        <div class="scroll" id="scroll" tabindex="0"></div>
+        <div class="sheet" id="sheet" aria-hidden="true">
+          <div class="sheet__head">
+            <button class="iconbtn" id="sheetBack" title="返回 (Esc)">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 3 5 8l5 5"/></svg>
+            </button>
+            <b id="sheetTitle">详情</b>
+          </div>
+          <div class="sheet__body">
+            <div class="preview" id="sheetPreview"></div>
+            <div class="meta" id="sheetMeta"></div>
+            <div class="actions" id="sheetActions"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="detail">
+        <div class="detail__head"><span class="t" id="detailTitle">详情</span><span style="margin-left:auto;color:var(--ink-3);font-size:10.5px" id="detailPath"></span></div>
+        <div class="detail__body">
+          <div class="preview empty" id="preview">在上方列表里选一条<br>这里显示完整内容与操作</div>
+          <div class="meta" id="meta"></div>
+          <div class="actions" id="actions"></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="foot">
+      <span class="keys"><kbd>↑↓</kbd> 选择 <kbd>Enter</kbd> 执行 <kbd>Space</kbd> 预览 <kbd>Del</kbd> 删除 <kbd>Ctrl</kbd>+A 全选</span>
+      <span class="right"><span id="countText">0 项</span><span>·</span><span id="pageName">剪贴板</span></span>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="menu" id="menu" role="menu"></div>
+<div class="help" id="help">
+  <div class="help__card">
+    <h3>键盘与指针</h3>
+    <dl>
+      <dt>1 / 2 / 3</dt><dd>切页：消息 / 剪贴板 / 概览</dd>
+      <dt>↑ ↓ / Home / End</dt><dd>移动选择</dd>
+      <dt>Enter</dt><dd>执行（复制文本 / 打开通知）</dd>
+      <dt>Space</dt><dd>在详情栏预览</dd>
+      <dt>Ctrl + 点击</dt><dd>多选；Shift + 点击 连选</dd>
+      <dt>Ctrl + A</dt><dd>全选当前列表</dd>
+      <dt>Del / Backspace</dt><dd>删除所选（带动效）</dd>
+      <dt>右键</dt><dd>上下文菜单（复制 / 固定 / 删除）</dd>
+      <dt>拖拽行</dt><dd>左右拖动可划走通知（回弹或删除）</dd>
+      <dt>⌘K / Ctrl + K</dt><dd>聚焦搜索；Esc 清空</dd>
+      <dt>?</dt><dd>打开/关闭本帮助</dd>
+    </dl>
+    <div class="close"><button class="btn" data-act="help">关闭</button></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const now = () => new Date();
+const fmtTime = (d) => d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+const fmtRel = (d) => {
+  const s = Math.round((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  return Math.floor(s / 86400) + ' 天前';
+};
+
+const state = {
+  page: 'clipboard',
+  query: '',
+  filter: 'all',
+  selection: new Set(),
+  anchor: null,
+  size: 'large',
+  density: 'comfortable',
+  open: true,
+};
+
+// ---------------- 数据 ----------------
+let seq = 100;
+const clips = [
+  { id: ++seq, kind: 'text', title: 'https://github.com/Doulor/FluidBar/releases/tag/v3.1.0-preview.1', sub: '发布页链接', at: new Date(Date.now() - 2 * 60000), pinned: true, body: 'https://github.com/Doulor/FluidBar/releases/tag/v3.1.0-preview.1' },
+  { id: ++seq, kind: 'code', title: 'dotnet build src/FluidBar.App -c Release -warnaserror', sub: '命令行 · 62 字符', at: new Date(Date.now() - 9 * 60000), pinned: true, body: 'dotnet build src/FluidBar.App -c Release -warnaserror' },
+  { id: ++seq, kind: 'text', title: '明天 10:00 评审展开卡片的空间利用率，准备 2 个版本对照', sub: '备忘录', at: new Date(Date.now() - 26 * 60000), pinned: false, body: '明天 10:00 评审展开卡片的空间利用率，准备 2 个版本对照' },
+  { id: ++seq, kind: 'image', title: 'Screenshot 2026-10-26 204512.png', sub: '图片 · 1920×1080 · 1.4 MB', at: new Date(Date.now() - 41 * 60000), pinned: false, body: '[图片] 1920×1080 · 1.4 MB' },
+  { id: ++seq, kind: 'text', title: 'SkiaSharp SKImage.FromPixelCopy 会拷贝像素，disposing staging 不影响结果', sub: '笔记 · 转自调试记录', at: new Date(Date.now() - 78 * 60000), pinned: true, body: 'SkiaSharp SKImage.FromPixelCopy 会拷贝像素，disposing staging 不影响结果' },
+  { id: ++seq, kind: 'code', title: 'git rebase -i origin/main', sub: '命令行', at: new Date(Date.now() - 130 * 60000), pinned: false, body: 'git rebase -i origin/main' },
+  { id: ++seq, kind: 'text', title: '会议室 3F-东侧，门禁找前台要临时卡', sub: '消息草稿', at: new Date(Date.now() - 220 * 60000), pinned: false, body: '会议室 3F-东侧，门禁找前台要临时卡' },
+];
+const notes = [
+  { id: ++seq, app: 'Visual Studio Code', kind: 'app', title: '构建完成：FluidBar.sln（2704 通过）', sub: '1 秒前 · 点击回到工作区', at: new Date(Date.now() - 60000), unread: true, body: '生成成功：FluidBar.sln — 2704 通过，0 失败。' },
+  { id: ++seq, app: '邮件', kind: 'app', title: '张工：关于 v3.1 的发布节奏', sub: '8 分钟前 · 需要回复', at: new Date(Date.now() - 8 * 60000), unread: true, body: '关于 v3.1 的发布节奏，能不能把预览版提前到周三？我们这边需要提前验证。' },
+  { id: ++seq, app: 'Teams', kind: 'app', title: '设计组：展开卡片的稿子已上传', sub: '12 分钟前', at: new Date(Date.now() - 12 * 60000), unread: true, body: '三栏方案和单栏方案都在共享盘里，麻烦看下间距与命中区域。' },
+  { id: ++seq, app: '系统', kind: 'sys', title: '磁盘空间不足：C: 剩余 4.2 GB', sub: '25 分钟前 · 建议清理构建缓存', at: new Date(Date.now() - 25 * 60000), unread: true, body: 'C: 剩余 4.2 GB。构建缓存占用 11.4 GB，可在 设置 > 高级 中清理。' },
+  { id: ++seq, app: '微信', kind: 'app', title: '老王：晚上一起打羽毛球？', sub: '1 小时前', at: new Date(Date.now() - 60 * 60000), unread: false, body: '晚上一起打羽毛球？' },
+];
+
+const KIND_ICON = { text: '文', code: '</>', image: '图', link: '链', app: '应', sys: '系' };
+
+// ---------------- 页面渲染 ----------------
+const els = {
+  island: $('#island'), segs: $('#segs'), segsInk: $('#segsInk'), search: $('#search'),
+  rail: $('#rail'), toolbar: $('#toolbar'), scroll: $('#scroll'), preview: $('#preview'),
+  meta: $('#meta'), actions: $('#actions'), statusText: $('#statusText'), countText: $('#countText'),
+  pageName: $('#pageName'), detailTitle: $('#detailTitle'), detailPath: $('#detailPath'),
+  toast: $('#toast'), menu: $('#menu'), help: $('#help'), badgeNotes: $('#badgeNotes'),
+};
+
+const currentItems = () => {
+  const src = state.page === 'messages' ? notes : state.page === 'clipboard' ? clips : [];
+  const q = state.query.trim().toLowerCase();
+  let items = src.filter(it => {
+    if (q && !((it.title || '') + ' ' + (it.sub || '') + ' ' + (it.body || '')).toLowerCase().includes(q)) return false;
+    if (state.page === 'clipboard' && state.filter !== 'all') {
+      if (state.filter === 'pinned' && !it.pinned) return false;
+      if (state.filter === 'image' && it.kind !== 'image') return false;
+      if (state.filter === 'link' && !/^https?:/.test(it.body || '')) return false;
+    }
+    return true;
+  });
+  if (state.page === 'clipboard') items = items.slice().sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at - a.at);
+  return items;
+};
+
+function renderToolbar() {
+  if (state.page === 'clipboard') {
+    els.toolbar.innerHTML = `
+      <button class="chip" data-filter="all" aria-pressed="${state.filter === 'all'}">全部</button>
+      <button class="chip" data-filter="pinned" aria-pressed="${state.filter === 'pinned'}">已固定</button>
+      <button class="chip" data-filter="image" aria-pressed="${state.filter === 'image'}">图片</button>
+      <button class="chip" data-filter="link" aria-pressed="${state.filter === 'link'}">链接</button>
+      <span class="right">${state.selection.size ? state.selection.size + ' 项已选 · ' : ''}空格预览 · 回车复制</span>`;
+  } else if (state.page === 'messages') {
+    els.toolbar.innerHTML = `
+      <button class="chip" data-filter="all" aria-pressed="${state.filter === 'all'}">全部</button>
+      <button class="chip" data-filter="unread" aria-pressed="${state.filter === 'unread'}">未读</button>
+      <span class="right"><button class="chip" data-act="clear-notes">全部清除</button></span>`;
+  } else {
+    els.toolbar.innerHTML = `<span class="right">概览：今日剪贴 24 次 · 通知 12 条 · Agent 空闲</span>`;
+  }
+}
+
+function rowHtml(it) {
+  const kind = state.page === 'messages' ? (it.kind === 'sys' ? 'sys' : 'app') : (it.kind || 'text');
+  const meta = state.page === 'messages' ? fmtRel(it.at) : fmtRel(it.at);
+  const title = hl(it.title || '');
+  const sub = hl(it.sub || '');
+  const sel = state.selection.has(it.id);
+  return `
+    <div class="row" role="option" data-id="${it.id}" aria-selected="${sel}" tabindex="-1">
+      <div class="row__icon">${KIND_ICON[kind] || '文'}</div>
+      <div class="row__main">
+        <div class="row__title">${it.pinned ? '<span class="pin">●</span>' : ''}${title}</div>
+        <div class="row__sub">${state.page === 'messages' ? `<b style="color:var(--ink-2);font-weight:600">${it.app}</b> · ` : ''}${sub}</div>
+      </div>
+      <div class="row__meta">
+        <span>${meta}</span>
+        <div class="row__acts">
+          <button data-act="primary" title="${state.page === 'clipboard' ? '复制' : '打开'}">${state.page === 'clipboard' ? '复' : '开'}</button>
+          ${state.page === 'clipboard'
+            ? '<button data-act="pin" title="固定/取消">' + (it.pinned ? '★' : '☆') + '</button>'
+            : '<button data-act="read" title="标记已读">✓</button>'}
+          <button data-act="remove" title="删除">✕</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function hl(text) {
+  const q = state.query.trim();
+  if (!q) return escapeHtml(text);
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return escapeHtml(text);
+  return escapeHtml(text.slice(0, i)) + '<mark>' + escapeHtml(text.slice(i, i + q.length)) + '</mark>' + escapeHtml(text.slice(i + q.length));
+}
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderList() {
+  const items = currentItems();
+  if (state.page === 'home') {
+    els.scroll.innerHTML = homeHtml();
+    els.countText.textContent = '概览';
+    return;
+  }
+  if (!items.length) {
+    els.scroll.innerHTML = `<div style="padding:26px 12px;text-align:center;color:var(--ink-3);font-size:12px">
+      ${state.query ? '没有匹配「' + escapeHtml(state.query) + '」的条目' : '这里还没有内容'}<br>
+      <span style="font-size:11px">试试切换筛选，或用上面的按钮造一条</span></div>`;
+    els.countText.textContent = '0 项';
+    renderDetail();
+    return;
+  }
+  let html = '';
+  let lastGroup = '';
+  for (const it of items) {
+    if (state.page === 'messages') {
+      const g = it.unread ? '未读' : '更早';
+      if (g !== lastGroup) { html += `<div class="grouphead"><span>${g}</span><span class="line"></span></div>`; lastGroup = g; }
+    }
+    html += rowHtml(it);
+  }
+  els.scroll.innerHTML = html;
+  els.countText.textContent = items.length + ' 项';
+  // 交错入场：每行 12ms，上限 8 行
+  $$('.row', els.scroll).forEach((row, i) => {
+    row.style.animationDelay = Math.min(i, 8) * 12 + 'ms';
+  });
+  renderDetail();
+}
+
+function homeHtml() {
+  const pin = clips.filter(c => c.pinned).length;
+  const unread = notes.filter(n => n.unread).length;
+  return `
+    <div style="padding:10px 8px;display:grid;gap:8px">
+      ${[
+        ['剪贴板', clips.length + ' 条 · ' + pin + ' 条固定', '可按类型筛选、回车即复制'],
+        ['消息', unread + ' 条未读 / 共 ' + notes.length + ' 条', '拖走即清除，右键批量管理'],
+        ['媒体', '正在播放 · 无', '播放时岛内会显示进度与控制'],
+      ].map(([t, s, d]) => `
+        <div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.02)">
+          <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:12.5px">${t}</b>
+            <span style="color:var(--ink-2);font-size:11.5px">${s}</span></div>
+          <div style="color:var(--ink-3);font-size:11.5px;margin-top:3px">${d}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderDetail() {
+  const items = currentItems();
+  const selected = items.filter(i => state.selection.has(i.id));
+  const first = selected[0] || null;
+  els.detailTitle.textContent = state.page === 'messages' ? '通知详情' : '内容预览';
+  renderSheet(selected);
+  els.detailPath.textContent = selected.length > 1 ? selected.length + ' 项' : '';
+  if (!first) {
+    els.preview.className = 'preview empty';
+    els.preview.innerHTML = state.page === 'messages'
+      ? '选一条通知，这里显示完整正文<br>以及「打开 / 已读 / 清除」'
+      : '在左侧列表里选一条<br>这里显示完整内容与操作';
+    els.meta.innerHTML = '';
+    els.actions.innerHTML = '';
+    return;
+  }
+  els.preview.className = 'preview';
+  els.preview.textContent = first.body || first.title;
+  els.meta.innerHTML = [
+    ['来源', first.app || (first.kind === 'image' ? '截图' : '本机剪贴板')],
+    ['时间', now().toDateString() + ' ' + fmtTime(first.at)],
+    ['大小', (first.body || '').length + ' 字符'],
+    ['状态', state.page === 'messages' ? (first.unread ? '未读' : '已读') : (first.pinned ? '已固定' : '普通')],
+  ].map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('');
+  els.actions.innerHTML = state.page === 'clipboard'
+    ? `<button class="btn primary" data-act="primary">复制到剪贴板 <span class="k">Enter</span></button>
+       <button class="btn" data-act="pin">${first.pinned ? '取消固定' : '固定到顶部'} <span class="k">P</span></button>
+       <button class="btn danger" data-act="remove">删除 <span class="k">Del</span></button>`
+    : `<button class="btn primary" data-act="primary">打开来源应用 <span class="k">Enter</span></button>
+       <button class="btn" data-act="read">标记为已读</button>
+       <button class="btn danger" data-act="remove">清除通知 <span class="k">Del</span></button>`;
+}
+
+function renderSheet(selected) {
+  const sheet = $('#sheet');
+  if (!sheet) return;
+  const first = selected[0] || null;
+  $('#sheetTitle').textContent = first
+    ? (state.page === 'messages' ? '通知详情' : '内容预览')
+    : '详情';
+  $('#sheetPreview').textContent = first ? (first.body || first.title) : '选一条查看详情';
+  $('#sheetMeta').innerHTML = first ? [
+    ['来源', first.app || (first.kind === 'image' ? '截图' : '本机剪贴板')],
+    ['时间', fmtTime(first.at)],
+    ['大小', (first.body || '').length + ' 字符'],
+  ].map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('') : '';
+  $('#sheetActions').innerHTML = !first ? '' : state.page === 'clipboard'
+    ? `<button class="btn primary" data-act="primary">复制到剪贴板</button>
+       <button class="btn" data-act="pin">${first.pinned ? '取消固定' : '固定到顶部'}</button>
+       <button class="btn danger" data-act="remove">删除</button>`
+    : `<button class="btn primary" data-act="primary">打开来源应用</button>
+       <button class="btn" data-act="read">标记为已读</button>
+       <button class="btn danger" data-act="remove">清除通知</button>`;
+}
+
+function openSheet() {
+  if (state.size !== 'small') return;
+  renderDetail();
+  $('#sheet').dataset.on = 'true';
+  $('#sheet').setAttribute('aria-hidden', 'false');
+}
+function closeSheet() {
+  $('#sheet').dataset.on = 'false';
+  $('#sheet').setAttribute('aria-hidden', 'true');
+}
+
+function renderChrome() {
+  els.island.dataset.size = state.size;
+  $('#statusText').textContent = state.page === 'clipboard'
+    ? `剪贴板 · ${clips.length} 条 · ${clips.filter(c => c.pinned).length} 条固定`
+    : state.page === 'messages'
+      ? `消息 · ${notes.filter(n => n.unread).length} 条未读`
+      : '概览';
+  els.pageName.textContent = { messages: '消息', clipboard: '剪贴板', home: '概览' }[state.page];
+  const unread = notes.filter(n => n.unread).length;
+  els.badgeNotes.textContent = unread;
+  els.badgeNotes.style.display = unread ? 'grid' : 'none';
+  $$('#segs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.page === state.page)));
+  $$('#rail button[data-page]').forEach(b => b.setAttribute('aria-current', String(b.dataset.page === state.page)));
+  const active = $('#segs button[aria-selected="true"]');
+  if (active) {
+    els.segsInk.style.width = active.offsetWidth + 'px';
+    els.segsInk.style.transform = 'translateX(' + (active.offsetLeft - 2) + 'px)';
+  }
+}
+
+function renderAll() { renderChrome(); renderToolbar(); renderList(); }
+
+// ---------------- 交互 ----------------
+function toast(msg) {
+  els.toast.textContent = msg;
+  els.toast.dataset.on = 'true';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (els.toast.dataset.on = 'false'), 1600);
+}
+
+function setPage(page) {
+  if (state.page === page) return;
+  state.page = page;
+  state.selection.clear();
+  state.filter = 'all';
+  state.query = '';
+  els.search.value = '';
+  renderAll();
+}
+
+function focusRow(index) {
+  const rows = $$('.row', els.scroll);
+  if (!rows.length) return;
+  const i = clamp(index, 0, rows.length - 1);
+  const row = rows[i];
+  const id = Number(row.dataset.id);
+  if (!state.shiftHeld) state.selection.clear();
+  state.selection.add(id);
+  state.anchor = i;
+  $$('.row', els.scroll).forEach(r => r.setAttribute('aria-selected', String(state.selection.has(Number(r.dataset.id)))));
+  row.scrollIntoView({ block: 'nearest' });
+  renderToolbar();
+  renderDetail();
+}
+
+function selectedItem() {
+  const items = currentItems();
+  return items.find(i => state.selection.has(i.id)) || null;
+}
+
+function primaryAction(id) {
+  const items = currentItems();
+  const it = items.find(i => i.id === (id ?? [...state.selection][0]));
+  if (!it) return;
+  if (state.page === 'clipboard') {
+    navigator.clipboard?.writeText(it.body || it.title).catch(() => {});
+    toast('已复制：' + (it.title || '').slice(0, 24) + ((it.title || '').length > 24 ? '…' : ''));
+    const row = $(`.row[data-id="${it.id}"]`, els.scroll);
+    if (row) { row.style.transition = 'background 120ms'; row.style.background = 'rgba(76,201,240,.24)'; setTimeout(() => (row.style.background = ''), 220); }
+  } else {
+    if (it.unread) { it.unread = false; renderAll(); }
+    toast('已打开：' + it.app);
+  }
+}
+
+function removeSelection() {
+  const ids = [...state.selection];
+  if (!ids.length) return;
+  const src = state.page === 'messages' ? notes : clips;
+  ids.forEach(id => {
+    const row = $(`.row[data-id="${id}"]`, els.scroll);
+    if (row) { row.classList.add('gone'); }
+  });
+  const before = src.length;
+  for (let i = src.length - 1; i >= 0; i--) if (ids.includes(src[i].id)) src.splice(i, 1);
+  state.selection.clear();
+  setTimeout(() => { renderAll(); toast('已删除 ' + (before - src.length) + ' 项'); }, 160);
+}
+
+function togglePin(id) {
+  const it = clips.find(c => c.id === id);
+  if (!it) return;
+  it.pinned = !it.pinned;
+  renderAll();
+  toast(it.pinned ? '已固定到顶部' : '已取消固定');
+}
+
+function pushClip() {
+  const samples = [
+    ['text', '把展开卡片的行高从 28 调到 32，命中区域更舒服', '测试文本'],
+    ['code', 'git commit -m "fix(island): 修 Trim 死循环"', '命令行'],
+    ['text', 'https://telegram.org/blog/telegram-desktop-q2', '链接'],
+    ['image', 'Screenshot 2026-10-26 211033.png', '图片 · 2560×1440'],
+  ];
+  const [kind, title, sub] = samples[Math.floor(Math.random() * samples.length)];
+  clips.unshift({ id: ++seq, kind, title, sub, at: now(), pinned: false, body: title });
+  if (state.page !== 'clipboard') setPage('clipboard'); else renderAll();
+  toast('新剪贴项已加入');
+}
+
+function pushNote() {
+  const samples = [
+    ['邮件', '李工：关于胶囊命中区域的复核', '需要回复'],
+    ['Teams', '群聊：三栏布局的间距对齐了吗', '刚刚'],
+    ['系统', '已连接到 5G Wi-Fi · 信号强', '刚刚'],
+  ];
+  const [app, title, sub] = samples[Math.floor(Math.random() * samples.length)];
+  notes.unshift({ id: ++seq, app, kind: 'app', title, sub: sub + ' · 刚刚', at: now(), unread: true, body: title });
+  if (state.page !== 'messages') setPage('messages'); else renderAll();
+  toast('新通知');
+}
+
+function openMenu(x, y, id) {
+  const isClip = state.page === 'clipboard';
+  els.menu.innerHTML = `
+    <button data-act="primary">${isClip ? '复制' : '打开'}<span class="k">Enter</span></button>
+    ${isClip ? '<button data-act="pin">固定 / 取消<span class="k">P</span></button>' : '<button data-act="read">标记已读</button>'}
+    <hr>
+    <button class="danger" data-act="remove">删除<span class="k">Del</span></button>`;
+  els.menu.dataset.on = 'true';
+  els.menu.dataset.id = id;
+  const w = els.menu.offsetWidth, h = els.menu.offsetHeight;
+  els.menu.style.left = clamp(x, 8, innerWidth - w - 8) + 'px';
+  els.menu.style.top = clamp(y, 8, innerHeight - h - 8) + 'px';
+  els.menu.querySelector('button')?.focus();
+}
+
+function closeMenu() { els.menu.dataset.on = 'false'; }
+
+// 拖拽划走（通知页）
+function attachDrag(row) {
+  let startX = 0, dx = 0, dragging = false;
+  row.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button')) return;
+    startX = e.clientX; dragging = true; dx = 0;
+    row.setPointerCapture(e.pointerId);
+  });
+  row.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    dx = e.clientX - startX;
+    if (Math.abs(dx) > 6) {
+      row.classList.add('dragging');
+      row.style.transform = 'translateX(' + dx + 'px)';
+      row.style.opacity = String(1 - Math.min(Math.abs(dx) / 320, .55));
+    }
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    row.classList.remove('dragging');
+    row.style.transform = '';
+    row.style.opacity = '';
+    if (Math.abs(dx) > 120) {
+      row.classList.add('gone');
+      const id = Number(row.dataset.id);
+      const idx = notes.findIndex(n => n.id === id);
+      if (idx >= 0) notes.splice(idx, 1);
+      state.selection.delete(id);
+      setTimeout(() => { renderAll(); toast('已划走'); }, 160);
+    }
+  };
+  row.addEventListener('pointerup', end);
+  row.addEventListener('pointercancel', end);
+}
+
+// ---------------- 事件绑定 ----------------
+els.segs.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-page]');
+  if (b) setPage(b.dataset.page);
+});
+els.rail.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.page) setPage(b.dataset.page);
+  else if (b.dataset.act === 'help') toggleHelp();
+});
+els.toolbar.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-filter]');
+  if (chip) {
+    state.filter = chip.dataset.filter;
+    if (state.page === 'messages' && state.filter === 'unread') {
+      const src = notes;
+      for (let i = src.length - 1; i >= 0; i--) if (!src[i].unread) src.splice(i, 1);
+    }
+    renderAll();
+    return;
+  }
+  const act = e.target.closest('[data-act]');
+  if (act?.dataset.act === 'clear-notes') {
+    const read = notes.filter(n => !n.unread);
+    read.forEach(n => notes.splice(notes.indexOf(n), 1));
+    renderAll();
+    toast('已清除 ' + read.length + ' 条已读通知');
+  }
+});
+els.scroll.addEventListener('click', (e) => {
+  const row = e.target.closest('.row');
+  const actBtn = e.target.closest('[data-act]');
+  if (actBtn && row) {
+    const id = Number(row.dataset.id);
+    const kind = actBtn.dataset.act;
+    if (kind === 'primary') return primaryAction(id);
+    if (kind === 'remove') { state.selection = new Set([id]); return removeSelection(); }
+    if (kind === 'pin') return togglePin(id);
+    if (kind === 'read') {
+      const n = notes.find(x => x.id === id); if (n) { n.unread = false; renderAll(); toast('已标记已读'); }
+      return;
+    }
+  }
+  if (!row) return;
+  const id = Number(row.dataset.id);
+  if (e.ctrlKey || e.metaKey) {
+    state.selection.has(id) ? state.selection.delete(id) : state.selection.add(id);
+  } else if (e.shiftKey && state.anchor != null) {
+    const rows = $$('.row', els.scroll);
+    const idx = rows.indexOf(row);
+    const [a, b] = [Math.min(state.anchor, idx), Math.max(state.anchor, idx)];
+    for (let i = a; i <= b; i++) state.selection.add(Number(rows[i].dataset.id));
+  } else {
+    state.selection = new Set([id]);
+    state.anchor = $$('.row', els.scroll).indexOf(row);
+  }
+  $$('.row', els.scroll).forEach(r => r.setAttribute('aria-selected', String(state.selection.has(Number(r.dataset.id)))));
+  renderToolbar();
+  renderDetail();
+  openSheet();
+});
+els.scroll.addEventListener('dblclick', (e) => {
+  const row = e.target.closest('.row');
+  if (row) primaryAction(Number(row.dataset.id));
+});
+els.scroll.addEventListener('contextmenu', (e) => {
+  const row = e.target.closest('.row');
+  if (!row) return;
+  e.preventDefault();
+  const id = Number(row.dataset.id);
+  if (!state.selection.has(id)) { state.selection = new Set([id]); $$('.row', els.scroll).forEach(r => r.setAttribute('aria-selected', String(r.dataset.id == id))); renderDetail(); }
+  openMenu(e.clientX, e.clientY, id);
+});
+els.menu.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const id = Number(els.menu.dataset.id);
+  closeMenu();
+  if (b.dataset.act === 'primary') return primaryAction(id);
+  if (b.dataset.act === 'pin') return togglePin(id);
+  if (b.dataset.act === 'read') { const n = notes.find(x => x.id === id); if (n) { n.unread = false; renderAll(); } return; }
+  if (b.dataset.act === 'remove') { state.selection = new Set([id]); removeSelection(); }
+});
+document.addEventListener('pointerdown', (e) => { if (!els.menu.contains(e.target)) closeMenu(); }, true);
+addEventListener('resize', () => renderChrome());
+
+// 详情栏按钮
+els.actions.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const it = selectedItem(); if (!it) return;
+  if (b.dataset.act === 'primary') return primaryAction(it.id);
+  if (b.dataset.act === 'pin') return togglePin(it.id);
+  if (b.dataset.act === 'read') { it.unread = false; renderAll(); return; }
+  if (b.dataset.act === 'remove') removeSelection();
+});
+
+$('#sheetBack').addEventListener('click', closeSheet);
+$('#sheetActions').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const it = selectedItem(); if (!it) return;
+  if (b.dataset.act === 'primary') { primaryAction(it.id); return; }
+  if (b.dataset.act === 'pin') { togglePin(it.id); renderSheet([it]); return; }
+  if (b.dataset.act === 'read') { it.unread = false; renderAll(); return; }
+  if (b.dataset.act === 'remove') { removeSelection(); closeSheet(); }
+});
+// 切换尺寸时关掉下钻面板
+$('#sizeBtn').addEventListener('click', () => { if (state.size === 'large') closeSheet(); });
+
+// 搜索
+els.search.addEventListener('input', () => { state.query = els.search.value; renderList(); });
+els.search.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { els.search.value = ''; state.query = ''; renderList(); els.search.blur(); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); els.scroll.focus(); focusRow(0); }
+});
+
+// 全局键盘
+let shiftHeld = false;
+addEventListener('keydown', (e) => {
+  const typing = e.target instanceof HTMLInputElement;
+  if (e.key === 'Shift') shiftHeld = true;
+  if (e.key === '?' && !typing) { e.preventDefault(); return toggleHelp(); }
+  if (e.key === 'Escape') {
+    if ($('#sheet').dataset.on === 'true') return closeSheet();
+    if (els.help.dataset.on === 'true') return toggleHelp();
+    if (els.menu.dataset.on === 'true') return closeMenu();
+    if (typing) return;
+    els.island.dataset.open = 'false';
+    setTimeout(() => (els.island.dataset.open = 'true'), 420);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); return els.search.focus(); }
+  if (typing) return;
+  if (e.key === '1') return setPage('messages');
+  if (e.key === '2') return setPage('clipboard');
+  if (e.key === '3') return setPage('home');
+  const rows = $$('.row', els.scroll);
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+    e.preventDefault();
+    const cur = state.anchor == null ? -1 : state.anchor;
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : e.key === 'ArrowDown' ? cur + 1 : cur - 1;
+    state.shiftHeld = e.shiftKey;
+    focusRow(next);
+    state.shiftHeld = false;
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    state.selection = new Set(currentItems().map(i => i.id));
+    $$('.row', els.scroll).forEach(r => r.setAttribute('aria-selected', 'true'));
+    renderToolbar(); renderDetail();
+    return;
+  }
+  if (e.key === 'Enter') { e.preventDefault(); return primaryAction(); }
+  if (e.key === ' ') { e.preventDefault(); return renderDetail(); }
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); return removeSelection(); }
+  if (e.key.toLowerCase() === 'p' && state.page === 'clipboard') { const it = selectedItem(); if (it) togglePin(it.id); }
+});
+addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftHeld = false; });
+
+// 顶部/底部按钮
+$('#sizeBtn').addEventListener('click', () => {
+  state.size = state.size === 'large' ? 'small' : 'large';
+  renderChrome();
+  toast(state.size === 'large' ? '720 × 470：三栏，详情常驻' : '488 × 384：单栏，详情改为下钻');
+});
+$('#closeBtn').addEventListener('click', () => {
+  els.island.dataset.open = 'false';
+  setTimeout(() => (els.island.dataset.open = 'true'), 420);
+});
+$$('.note [data-act]').forEach(b => {
+  b.addEventListener('click', () => {
+    const act = b.dataset.act;
+    if (act === 'size') return $('#sizeBtn').click();
+    if (act === 'push-clip') return pushClip();
+    if (act === 'push-note') return pushNote();
+    if (act === 'density') {
+      state.density = state.density === 'comfortable' ? 'compact' : 'comfortable';
+      document.documentElement.style.setProperty('--row-pad', state.density === 'compact' ? '4px' : '7px');
+      b.textContent = '密度：' + (state.density === 'compact' ? '紧凑' : '舒适');
+      return;
+    }
+    if (act === 'help') return toggleHelp();
+  });
+});
+
+function toggleHelp() {
+  els.help.dataset.on = els.help.dataset.on === 'true' ? 'false' : 'true';
+}
+els.help.addEventListener('click', (e) => { if (e.target === els.help || e.target.closest('[data-act]')) toggleHelp(); });
+
+// 首次渲染 + 给行挂拖拽
+const baseRender = renderAll;
+renderAll = function () {
+  baseRender();
+  if (state.page === 'messages') $$('.row', els.scroll).forEach(attachDrag);
+};
+renderAll();
+requestAnimationFrame(() => renderChrome());
+</script>
+</body>
+</html>
