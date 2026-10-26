@@ -10,6 +10,9 @@ public enum ArtworkSourceKind
     /// <summary>Fetched from the iTunes Search API catalogue.</summary>
     ITunes,
 
+    /// <summary>Fetched from the KuGou catalogue (the only reachable one from mainland China).</summary>
+    Kugou,
+
     /// <summary>Read from the player's own on-disk cache.</summary>
     PlayerCache,
 }

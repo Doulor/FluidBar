@@ -221,11 +221,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
     /// <summary>Catalogue lookups for the fallback player (created on first use).</summary>
     private KugouDurationCatalog DurationCatalog => _durationCatalog ??= new KugouDurationCatalog(
-        new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(6),
-            DefaultRequestHeaders = { { "User-Agent", "FluidBar/2.0 (duration)" } },
-        });
+        MediaHttpClientFactory.Create(TimeSpan.FromSeconds(6), "FluidBar/2.0 (duration)"));
 
     private KugouDurationCatalog? _durationCatalog;
     private KugouClockReader? _kugouClockReader;
@@ -336,8 +332,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return _artworkFetcher;
             }
 
-            // Two independent public catalogues: iTunes answers most Latin releases, Deezer often has the
-            // CJK/remix editions iTunes lacks. Each source is tried once (no retries) inside a 4 s budget.
+            // Source order matters for users in mainland China: iTunes does not resolve at all there and Deezer
+            // refuses the connection, while KuGou's own catalogue answers in ~0.3 s and is the player the user is
+            // listening to. The two Western catalogues stay for everything KuGou does not carry. Each source is
+            // tried once (no retries) inside a 6 s per-source budget.
             var http = CreateArtworkHttpClient();
             return _defaultArtworkFetcher ??= new ArtworkFetcher(
                 new ArtworkDiskCache(new ArtworkDiskCacheOptions
@@ -346,16 +344,13 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "FluidBar", "artwork"),
                 }),
-                [new ItunesArtworkSource(http), new DeezerArtworkSource(http)]);
+                [new KugouArtworkSource(http), new ItunesArtworkSource(http), new DeezerArtworkSource(http)]);
         }
     }
 
-    /// <summary>HTTP client for catalogue lookups (4 s timeout, no keep-alive thrash).</summary>
-    private static HttpClient CreateArtworkHttpClient() => new()
-    {
-        Timeout = TimeSpan.FromSeconds(6),
-        DefaultRequestHeaders = { { "User-Agent", "FluidBar/2.0 (artwork)" } },
-    };
+    /// <summary>HTTP client for catalogue lookups (12 s ceiling; the per-source budget is the real limit).</summary>
+    private static HttpClient CreateArtworkHttpClient()
+        => MediaHttpClientFactory.Create(TimeSpan.FromSeconds(12), "FluidBar/2.0 (artwork)");
 
     /// <summary>
     /// Channel the next transport command would use. The window-title fallback has no SMTC session, so
@@ -1607,14 +1602,43 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     {
         try
         {
+            byte[]? bytes = null;
+            var origin = "none";
             var thumbnail = properties.Thumbnail;
-            if (thumbnail is null)
+            if (thumbnail is not null)
             {
-                return;
+                bytes = await ReadThumbnailAsync(thumbnail, cancellationToken).ConfigureAwait(false);
+                origin = bytes is { Length: > 0 } ? "session-thumbnail" : "session-thumbnail-empty";
             }
 
-            var bytes = await ReadThumbnailAsync(thumbnail, cancellationToken).ConfigureAwait(false);
-            if (bytes is null || bytes.Length == 0 || cancellationToken.IsCancellationRequested)
+            if (bytes is null || bytes.Length == 0)
+            {
+                // KuGou 8.x now *does* register an SMTC session (older builds did not), but its thumbnail
+                // reference hands out a zero-length stream — no cover at all. Before this fallback existed the
+                // island therefore showed the gradient placeholder for every KuGou track, and the player's own
+                // cover cache was only consulted on the window-title path, which never runs while a session
+                // exists (2026-10-26 report: "封面获取不到了，各种颜色的默认封面").
+                if (MediaArtworkFallbackPolicy.ShouldUsePlayerCoverCache(
+                        session.SourceAppUserModelId, bytes?.Length ?? 0))
+                {
+                    bytes = KugouArtworkCache.TryRead(properties.Title);
+                    origin = bytes is { Length: > 0 } ? "player-cache" : "player-cache-miss";
+                    _logger.LogDebug(PlatformLogCategory.Media, "media.artwork-kugou-cache",
+                        bytes is null ? "KuGou cached no cover for this title." : "Cover taken from KuGou's cache.",
+                        new Dictionary<string, object?> { ["title"] = properties.Title });
+                }
+
+                if (MediaArtworkFallbackPolicy.ShouldTryCatalogues(bytes?.Length ?? 0))
+                {
+                    // Last resort, and the only source for players that expose neither a thumbnail nor a local
+                    // cache: the catalogue lookup runs in the background, the island keeps the placeholder.
+                    StartArtworkLookup(trackKey, properties.Title, properties.Artist);
+                    MediaDiagnostics.LogAlways($"artwork.origin title=\"{properties.Title}\" origin=catalogue");
+                    return;
+                }
+            }
+
+            if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
@@ -1628,6 +1652,9 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             }
 
             PublishArtwork(trackKey, entry);
+            // Rare (once per track) provenance line: which link of the chain produced the cover.
+            MediaDiagnostics.LogAlways(
+                $"artwork.origin title=\"{properties.Title}\" origin={origin} bytes={bytes.Length}");
 
             _logger.LogDebug(PlatformLogCategory.Media, "media.artwork-ready",
                 "Artwork cached.", new Dictionary<string, object?>
@@ -1706,13 +1733,29 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     /// most once per track and never blocks the poll.
     /// </summary>
     private void StartArtworkLookup(WindowMediaCandidate candidate)
+        => StartArtworkLookup(candidate.TrackKey, candidate.Title, candidate.Artist);
+
+    /// <summary>
+    /// Background cover lookup for one track: cache first, then the catalogue sources. Runs at most once per
+    /// track key and never blocks the poll. Shared by the window-title fallback and the SMTC path (a session
+    /// whose thumbnail is empty still deserves a cover).
+    /// </summary>
+    /// <param name="trackKey">Stable track identity the artwork is cached under.</param>
+    /// <param name="title">Track title as reported by the player.</param>
+    /// <param name="artist">Artist as reported by the player (may be null).</param>
+    private void StartArtworkLookup(string trackKey, string? title, string? artist)
     {
         // One lookup per track, not one globally: the old global latch silently skipped every song that
         // changed while a previous lookup was still in flight (fast skipping through a playlist lost most
         // covers). The fetcher already single-flights per key and caps concurrency.
+        if (string.IsNullOrEmpty(trackKey))
+        {
+            return;
+        }
+
         lock (_artworkLookups)
         {
-            if (!_artworkLookups.Add(candidate.TrackKey))
+            if (!_artworkLookups.Add(trackKey))
             {
                 return;
             }
@@ -1720,7 +1763,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             if (_artworkLookups.Count > 256)
             {
                 _artworkLookups.Clear();
-                _artworkLookups.Add(candidate.TrackKey);
+                _artworkLookups.Add(trackKey);
             }
         }
 
@@ -1732,7 +1775,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         // Window-title scrapes carry the player's own chrome ("正在播放: "), and artist/title are often
         // glued into one string; searching raw text is the main reason covers were missed.
-        var (searchTitle, searchArtist) = ArtworkSearchTerms.Split(candidate.Title, candidate.Artist);
+        var (searchTitle, searchArtist) = ArtworkSearchTerms.Split(title, artist);
 
         _ = Task.Run(async () =>
         {
@@ -1746,7 +1789,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     if (attempt > 0)
                     {
                         await Task.Delay(TimeSpan.FromSeconds(attempt * 3)).ConfigureAwait(false);
-                        if (!string.Equals(Current?.TrackKey, candidate.TrackKey, StringComparison.Ordinal))
+                        if (!string.Equals(Current?.TrackKey, trackKey, StringComparison.Ordinal))
                         {
                             return;
                         }
@@ -1759,16 +1802,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                     }
                 }
 
-                if (!outcome.Succeeded || outcome.Entry is not { } entry || string.IsNullOrEmpty(candidate.TrackKey))
+                if (!outcome.Succeeded || outcome.Entry is not { } entry)
                 {
                     // Attributable failure: which level missed and how close the best candidate was.
                     _logger.LogInfo(PlatformLogCategory.Media, "media.artwork-miss",
-                        "No cover for '" + candidate.Title + "': " + outcome.Failure + " (source=" + outcome.Source
+                        "No cover for '" + title + "': " + outcome.Failure + " (source=" + outcome.Source
                         + ", bestScore=" + outcome.Score.ToString("0.000") + ").");
                     return;
                 }
 
-                var artwork = _artworkCache.Add(candidate.TrackKey, entry.Bytes);
+                var artwork = _artworkCache.Add(trackKey, entry.Bytes);
                 if (artwork is null)
                 {
                     return;
@@ -1782,7 +1825,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                         ["url"] = entry.Metadata.SourceUrl,
                         ["score"] = entry.Metadata.Score,
                     });
-                PublishArtwork(candidate.TrackKey, artwork);
+                PublishArtwork(trackKey, artwork);
             }
             catch (Exception ex)
             {

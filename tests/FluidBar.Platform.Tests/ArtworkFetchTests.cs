@@ -17,6 +17,25 @@ public sealed class ArtworkFetchTests : IDisposable
 
     private ArtworkDiskCache Cache() => new(new ArtworkDiskCacheOptions { DirectoryPath = _directory });
 
+    [Theory]
+    [InlineData("KugouMusic.exe", 0, true)]              // KuGou advertises a session but no thumbnail bytes
+    [InlineData("KugouMusic.exe", 4096, false)]          // a real thumbnail wins over the disk cache
+    [InlineData("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", 0, false)]  // unknown layout, no guessing
+    [InlineData(null, 0, false)]
+    public void Player_cover_cache_is_used_only_for_a_thumbnail_less_kugou_session(
+        string? aumid, int thumbnailBytes, bool expected)
+    {
+        Assert.Equal(expected, MediaArtworkFallbackPolicy.ShouldUsePlayerCoverCache(aumid, thumbnailBytes));
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public void Catalogues_are_the_last_source_only_when_nothing_was_found(int availableBytes, bool expected)
+    {
+        Assert.Equal(expected, MediaArtworkFallbackPolicy.ShouldTryCatalogues(availableBytes));
+    }
+
     [Fact]
     public void Normalize_folds_case_decorations_and_punctuation()
     {

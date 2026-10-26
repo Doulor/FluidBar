@@ -154,7 +154,9 @@ public sealed class PlatformServiceGraph : IAsyncDisposable
         var httpClient = _options.HttpClient;
         if (httpClient is null && (_options.EnableLyrics || _options.EnableUpdateCheck))
         {
-            _ownedHttpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            // Direct (system proxy bypassed) — see MediaHttpClientFactory: a local proxy client blackholes the
+            // domestic lyric/artwork hosts and every lookup then times out.
+            _ownedHttpClient = MediaHttpClientFactory.Create(Timeout.InfiniteTimeSpan, "FluidBar/2.0 (lyrics)");
             httpClient = _ownedHttpClient;
         }
 

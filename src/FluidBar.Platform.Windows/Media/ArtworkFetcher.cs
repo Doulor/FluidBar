@@ -60,8 +60,11 @@ public interface IArtworkSource
 /// <summary>Options for <see cref="ArtworkFetcher"/>.</summary>
 public sealed class ArtworkFetcherOptions
 {
-    /// <summary>Per-source budget (the user must never feel the lookup).</summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(4);
+    /// <summary>
+    /// Per-source budget (the user must never feel the lookup). 6 s leaves room for a cold TLS handshake to the
+    /// domestic catalogue, which measured 7.9 s on its very first request in a process (0.3 s afterwards).
+    /// </summary>
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(6);
 
     /// <summary>How many lookups may run at the same time.</summary>
     public int MaxConcurrentFetches { get; init; } = 2;
@@ -207,10 +210,7 @@ public sealed class ArtworkFetcher : IDisposable
                     continue;
                 }
 
-                var kind = result.Candidate.SourceUrl.Contains("itunes", StringComparison.OrdinalIgnoreCase)
-                    || result.Candidate.SourceUrl.Contains("mzstatic", StringComparison.OrdinalIgnoreCase)
-                        ? ArtworkSourceKind.ITunes
-                        : ArtworkSourceKind.PlayerCache;
+                var kind = KindFor(result.Candidate.SourceUrl);
                 var metadata = new ArtworkCacheMetadata(key, kind, result.Candidate.SourceUrl,
                     artist ?? string.Empty, title ?? string.Empty, album ?? string.Empty, result.Candidate.Score,
                     DateTimeOffset.UtcNow);
@@ -231,6 +231,25 @@ public sealed class ArtworkFetcher : IDisposable
         {
             _concurrency.Release();
         }
+    }
+
+    /// <summary>Maps an accepted cover to the recorded source kind (diagnostics and cache provenance).</summary>
+    /// <param name="url">URL the bytes came from.</param>
+    internal static ArtworkSourceKind KindFor(string url)
+    {
+        if (url.Contains("kugou", StringComparison.OrdinalIgnoreCase))
+        {
+            return ArtworkSourceKind.Kugou;
+        }
+
+        if (url.Contains("itunes", StringComparison.OrdinalIgnoreCase)
+            || url.Contains("mzstatic", StringComparison.OrdinalIgnoreCase))
+        {
+            return ArtworkSourceKind.ITunes;
+        }
+
+        // Anything else is a catalogue cover the cache does not model separately (Deezer today).
+        return ArtworkSourceKind.PlayerCache;
     }
 
     /// <summary>Ranks failure classes by how much they explain (higher wins).</summary>

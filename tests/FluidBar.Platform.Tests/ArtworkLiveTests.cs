@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FluidBar.Platform.Windows.Media;
 
 namespace FluidBar.Platform.Tests;
@@ -11,6 +12,55 @@ public sealed class ArtworkLiveTests
 {
     private static bool Enabled =>
         Environment.GetEnvironmentVariable("FLUIDBAR_LIVE_ARTWORK") == "1";
+
+    [Fact]
+    public async Task Kugou_catalogue_answers_where_the_western_ones_are_blocked()
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        // Same order as production: the domestic catalogue first, the Western ones as a last resort.
+        var directory = Path.Combine(Path.GetTempPath(), "fluidbar-artwork-live", Guid.NewGuid().ToString("N"));
+        var cache = new ArtworkDiskCache(new ArtworkDiskCacheOptions { DirectoryPath = directory });
+        // Production egress: same factory, same source order as GsmtcMediaSessionService.ActiveArtworkFetcher.
+        using var http = MediaHttpClientFactory.Create(TimeSpan.FromSeconds(12), "FluidBar/2.0 (artwork)");
+        using var fetcher = new ArtworkFetcher(cache,
+            [new KugouArtworkSource(http), new ItunesArtworkSource(http), new DeezerArtworkSource(http)]);
+
+        var songs = new (string Artist, string Title)[]
+        {
+            ("M83", "Midnight City"),
+            ("周杰伦", "晴天"),
+            ("Coldplay", "Viva La Vida"),
+        };
+
+        var lines = new List<string>();
+        var covers = 0;
+        foreach (var (artist, title) in songs)
+        {
+            var watch = Stopwatch.StartNew();
+            var outcome = await fetcher.FetchAsync(artist, title, album: null);
+            watch.Stop();
+            if (outcome.Entry is not { } entry)
+            {
+                lines.Add($"FAILED artist='{artist}' title='{title}' failure={outcome.Failure} source={outcome.Source}");
+                continue;
+            }
+
+            covers++;
+            var dimensions = ImageHeaderReader.TryReadDimensions(entry.Bytes);
+            lines.Add($"OK artist='{artist}' title='{title}' source={outcome.Source} kind={entry.Metadata.SourceKind} " +
+                $"score={entry.Metadata.Score:0.000} bytes={entry.Bytes.Length} " +
+                $"size={dimensions?.Width}x{dimensions?.Height} elapsed={watch.ElapsedMilliseconds}ms " +
+                $"url={entry.Metadata.SourceUrl}");
+        }
+
+        var evidence = Path.Combine(Path.GetTempPath(), "fluidbar-artwork-live-evidence.txt");
+        File.WriteAllText(evidence, string.Join(Environment.NewLine, lines) + Environment.NewLine);
+        Assert.True(covers > 0, "no cover at all:\n" + string.Join(Environment.NewLine, lines));
+    }
 
     [Fact]
     public async Task Three_songs_get_a_cover_from_the_catalogue()

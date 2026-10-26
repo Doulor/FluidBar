@@ -6,6 +6,29 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-26 — 音乐封面拿不到（Deezer/iTunes 不可达 + 系统代理吞掉国内请求）
+
+- 症状：音乐页经常只有各种颜色的默认封面。
+- 根因一（网络）：`itunes.apple.com` 在本机 **DNS 解析不到任何地址**，`api.deezer.com` 连接被拒 —— 两个曲库源
+  常年失效；而 `%APPDATA%\FluidBar\artwork` 里最后一条缓存停在 **10-22**，之后再没写过。
+- 根因二（更普遍）：KuGou 8.x 现在**会注册 SMTC 会话**，但会话缩略图是**零字节流**，而"读 KuGou 自己的封面缓存"
+  只在窗口标题兜底路径上跑，于是有会话时永远拿不到封面。
+- 根因三（最隐蔽）：系统开着 WinINET 代理 `127.0.0.1:7897`，`.NET HttpClient` 默认走它，而这个代理把国内
+  域名直接吞掉而不是快速失败 —— 请求一直挂到超时（12s），而 curl（不读 WinINET）0.3s 就回来了。日志里
+  `lyrics.provider-timeout`（netease/kugou）也是同一个病。
+- 修复：
+  1. 新增 `KugouArtworkSource`（KuGou 自有曲库，单请求、无 key、`{size}` 占位符换 400），排在源列表首位；
+     注意该端点返回 `Content-Type: text/plain`，必须自己取字符串再反序列化（`GetFromJsonAsync` 会因媒体类型不符直接拒绝）。
+  2. 新增 `MediaHttpClientFactory`：媒体出口（封面曲库、时长、歌词）**默认绕过系统代理**，
+     `ConnectTimeout=4s`，可用 `FLUIDBAR_MEDIA_PROXY=system` 回到系统代理（需要代理的公司网络）。
+  3. SMTC 路径补兜底：缩略图为空 → 读 KuGou 本地封面缓存 → 再退到曲库后台查询（`MediaArtworkFallbackPolicy`）。
+  4. 每首歌写一条 `artwork.origin` 溯源行（session-thumbnail / player-cache / catalogue / none），便于下次定位。
+- 证据：绕过代理后同一台机器 3 首歌全部命中 —— `Midnight City`/`晴天`/`Viva La Vida` 各 400×400，
+  score 1.000，43–71 KB，102–390 ms（此前 100% 失败）；运行中的成品也打印
+  `artwork.origin title="问心" origin=session-thumbnail bytes=24382`。
+- 测试：`KugouArtworkSourceTests`（8 例：解析、选优、肖像图降级、阈值、网络失败、`{size}` 替换、来源分类）、
+  `MediaHttpClientFactoryTests`（4 例：默认绕过代理、可换回、UA）、`ArtworkLiveTests` 新增真实网络用例；Platform 750 绿。
+
 ## 2026-10-26 — 灵动岛卡死（通知页）根因：文本省略号二分查找在 emoji 处不收敛
 
 - 症状：岛经常**直接卡死**，多数发生在"消息/通知"页；整机鼠标也发钝。现场抓取（进程 `Responding=False`）：
