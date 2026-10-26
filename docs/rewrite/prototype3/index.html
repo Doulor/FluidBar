@@ -13,7 +13,7 @@
   --line:rgba(255,255,255,.065); --line-2:rgba(255,255,255,.11);
   --fg:#ffffff; --fg-2:#9b9ba5; --fg-3:#86868f;
   --accent:#4cc9f0; --track:#f06ab0; --danger:#ff453a; --ok:#34c759;
-  --r-win:22px; --r-nav:8px; --r-seg:8px;
+  --r-win:30px; --r-nav:8px; --r-seg:7px;
   --ease:cubic-bezier(.3,.8,.25,1);
   --shadow:0 18px 44px -16px rgba(0,0,0,.78), 0 3px 10px -4px rgba(0,0,0,.42);
   --stage1:#1a1a1c; --stage2:#111113; --stage3:#202022;
@@ -68,70 +68,53 @@ body{background:#06070a;color:var(--fg);overflow:hidden;
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ============ 展开卡片 = 设置面板版面 ============ */
-.panel{width:var(--w,860px);height:560px;border-radius:var(--r-win);overflow:hidden;
+.panel{width:var(--w,600px);height:392px;border-radius:var(--r-win);overflow:hidden;
   display:flex;flex-direction:column;background:var(--shell);box-shadow:var(--shadow);
   animation:panelIn 420ms var(--ease) both}
 @keyframes panelIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
 .island[data-size="small"]{--w:520px}
-.island[data-size="small"] .nav{display:none}
 
 /* 标题栏 50 / pad 18 12 / mark 24 r8 / title 13 / sub 9 uppercase */
-.titlebar{height:50px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 18px}
-.mark{width:24px;height:24px;border-radius:8px;background:rgba(255,255,255,.08);display:grid;place-items:center;flex:none}
-.mark i{width:11px;height:4px;border-radius:2px;background:var(--accent);display:block}
-.tb-text{display:flex;flex-direction:column;gap:1px;min-width:0}
-.tb-text b{font-size:13px;font-weight:600;letter-spacing:.005em}
-.tb-text span{font-size:9px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--fg-3);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tb-spacer{flex:1}
-.tb-close{width:32px;height:32px;border:0;border-radius:8px;background:none;color:var(--fg-2);cursor:pointer;
+.head{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 10px 0 16px}
+.head-text{display:flex;align-items:baseline;gap:8px;min-width:0}
+.head-text b{font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.head-text span{font-size:11px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head-acts{display:flex;align-items:center;gap:4px;margin-left:auto}
+.hbtn{width:28px;height:28px;border:0;border-radius:8px;background:none;color:var(--fg-3);cursor:pointer;
   display:grid;place-items:center;flex:none}
-.tb-close:hover{background:rgba(255,255,255,.08);color:var(--fg)}
+.hbtn:hover{background:rgba(255,255,255,.08);color:var(--fg)}
 
-.body{flex:1;min-height:0;display:grid;grid-template-columns:208px minmax(0,1fr)}
-.island[data-size="small"] .body{grid-template-columns:minmax(0,1fr)}
 
-/* 侧栏 208 / padY14 padX10 / item 40 r8 / icon18 / label13 / count16 r5 */
-.nav{display:flex;flex-direction:column;padding:14px 10px;min-height:0}
-.nav-kicker{font-size:8.5px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-3);
-  padding:4px 10px 7px}
-.nav-item{height:40px;border:0;border-radius:var(--r-nav);background:none;color:var(--fg-2);cursor:pointer;
-  display:flex;align-items:center;gap:9px;padding:0 10px;font:inherit;font-size:13px;text-align:left}
-.nav-item + .nav-item{margin-top:2px}
-.nav-item:hover{background:rgba(255,255,255,.05);color:var(--fg)}
-.nav-item[aria-current="true"]{background:rgba(255,255,255,.09);color:var(--fg);font-weight:600}
-.nav-item svg{flex:none;opacity:.9}
-.nav-item .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nav-item .cnt{height:16px;min-width:16px;padding:0 4px;border-radius:5px;background:rgba(255,255,255,.1);
-  color:var(--fg-2);font-size:8.5px;font-weight:600;display:grid;place-items:center;flex:none}
-.nav-item[aria-current="true"] .cnt{background:rgba(255,255,255,.16);color:var(--fg)}
-.nav-foot{margin-top:auto;padding:12px 10px 4px;border-top:1px solid var(--line)}
-.nav-foot b{display:block;font-size:8.5px;font-weight:500;color:var(--fg-2)}
-.nav-foot span{font-size:8.5px;line-height:1.5;color:var(--fg-3)}
+.body{flex:1;min-height:0;display:flex;flex-direction:column}
+.dots{height:26px;flex:none;display:flex;align-items:center;justify-content:center;gap:6px;padding-bottom:6px}
+.dots button{width:5px;height:5px;padding:0;border:0;border-radius:3px;background:rgba(255,255,255,.22);
+  cursor:pointer;transition:width 200ms var(--ease),background 200ms var(--ease)}
+.dots button:hover{background:rgba(255,255,255,.4)}
+.dots button[aria-current="true"]{width:16px;background:rgba(255,255,255,.85)}
+
 
 /* 内容区 pad 30/24，页头 22，说明 11，小标题 11 大写，行 48/53 */
-.pane{overflow-y:auto;padding:24px 30px 30px;min-width:0;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.pane{overflow-y:auto;padding:2px 16px 4px;min-width:0;flex:1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
 .pane::-webkit-scrollbar{width:9px}
 .pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:5px;border:3px solid var(--shell);background-clip:content-box}
-.island[data-size="small"] .pane{padding:20px 18px 24px}
-.pane-head{font-size:22px;font-weight:600;line-height:1.2;letter-spacing:-.02em;margin:0 0 4px}
-.pane-desc{font-size:11px;line-height:1.55;color:var(--fg-2);margin:0 0 18px;max-width:560px}
-.caption{font-size:11px;font-weight:600;letter-spacing:.036em;text-transform:uppercase;color:var(--fg-3);
-  margin:20px 0 2px;display:flex;align-items:center;gap:8px}
-.caption:first-of-type{margin-top:8px}
+.island[data-size="small"] .pane{padding:2px 14px 4px}
+
+.caption{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);
+  margin:14px 0 2px;display:flex;align-items:center;gap:8px}
+.caption:first-of-type{margin-top:6px}
 .caption .spacer{flex:1}
 .group{border-top:1px solid var(--line)}
 .caption + .group{border-top:0}
 
-.row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;
-  min-height:48px;padding:8px 8px 8px 2px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:6px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;
+  min-height:44px;padding:6px 8px 6px 2px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:7px}
 .group .row:last-child{border-bottom:0}
 .row:hover{background:rgba(255,255,255,.04)}
 .row[aria-selected="true"]{background:rgba(255,255,255,.06)}
 .row-text{min-width:0}
-.row-title{font-size:13px;font-weight:500;line-height:1.35;color:var(--fg);
+.row-title{font-size:13px;font-weight:500;line-height:1.3;color:var(--fg);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-desc{font-size:10px;line-height:1.45;color:var(--fg-3);margin-top:3px;
+.row-desc{font-size:10.5px;line-height:1.35;color:var(--fg-3);margin-top:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-ctl{display:flex;align-items:center;gap:8px;flex:none}
 .row-val{font-size:11px;color:var(--fg-3);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -140,16 +123,16 @@ body{background:#06070a;color:var(--fg);overflow:hidden;
 
 /* 控件：分段 26 r8、开关 38×22、细条 */
 .seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--r-seg);background:rgba(255,255,255,.05)}
-.seg button{height:22px;padding:0 9px;border:0;border-radius:6px;background:none;color:var(--fg-2);
+.seg button{height:20px;padding:0 8px;border:0;border-radius:5px;background:none;color:var(--fg-2);
   font:inherit;font-size:9.5px;font-weight:600;cursor:pointer;white-space:nowrap}
 .seg button[aria-pressed="true"]{background:rgba(255,255,255,.14);color:var(--fg)}
-.sw{width:38px;height:22px;border-radius:11px;background:rgba(255,255,255,.14);position:relative;flex:none;
+.sw{width:34px;height:20px;border-radius:10px;background:rgba(255,255,255,.14);position:relative;flex:none;
   transition:background 200ms var(--ease)}
 .sw[aria-checked="true"]{background:var(--accent)}
-.sw i{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;
+.sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;
   transition:transform 200ms var(--ease)}
-.sw[aria-checked="true"] i{transform:translateX(16px)}
-.bar{width:120px;height:4px;border-radius:2px;background:#23232a;overflow:hidden;flex:none}
+.sw[aria-checked="true"] i{transform:translateX(14px)}
+.bar{width:104px;height:4px;border-radius:2px;background:#23232a;overflow:hidden;flex:none}
 .bar i{display:block;height:100%;background:var(--accent)}
 .bar.track i{background:var(--track)}
 .mini{width:24px;height:24px;border:0;border-radius:7px;background:rgba(255,255,255,.08);color:var(--fg-2);
@@ -201,18 +184,21 @@ body{background:#06070a;color:var(--fg);overflow:hidden;
   <div class="pill pill--secondary" id="pill2" style="display:none"></div>
 
   <div class="panel" role="dialog" aria-label="FluidBar">
-    <header class="titlebar">
-      <div class="mark"><i></i></div>
-      <div class="tb-text"><b>FLUIDBAR</b><span id="tbSub">灵动岛 · 展开</span></div>
-      <div class="tb-spacer"></div>
-      <button class="tb-close" id="collapseBtn" title="收起（Esc）">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-      </button>
+    <header class="head">
+      <div class="head-text">
+        <b id="headTitle">消息</b>
+        <span id="headSub">6 条未读 / 共 18 条</span>
+      </div>
+      <div class="head-acts">
+        <button class="hbtn" id="collapseBtn" title="收起（Esc）">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+      </div>
     </header>
     <div class="body">
-      <nav class="nav" id="nav"></nav>
       <div class="pane" id="pane" tabindex="0"></div>
     </div>
+    <div class="dots" id="dots"></div>
   </div>
 </div>
 
@@ -299,8 +285,8 @@ var TRACKS=[
 ];
 var TASKS=[['把展开卡片改成设置面板版面',true],['删掉页脚键盘条',true],['确认 860 / 520 两档',false],['把结论写进 README',false]];
 
-var els={island:q('#island'),pill1:q('#pill1'),pill2:q('#pill2'),nav:q('#nav'),pane:q('#pane'),
-  tbSub:q('#tbSub'),toast:q('#toast'),menu:q('#menu'),help:q('#help')};
+var els={island:q('#island'),pill1:q('#pill1'),pill2:q('#pill2'),pane:q('#pane'),dots:q('#dots'),
+  headTitle:q('#headTitle'),headSub:q('#headSub'),toast:q('#toast'),menu:q('#menu'),help:q('#help')};
 
 function toast(m){els.toast.textContent=m;els.toast.dataset.on='true';
   clearTimeout(toast.t);toast.t=setTimeout(function(){els.toast.dataset.on='false'},1600)}
@@ -348,16 +334,12 @@ function navCounts(){
   out.agent=AGENTS.filter(function(a){return a.tone==='run'}).length;
   return out;
 }
-function renderNav(){
-  var counts=navCounts();
-  var html='<div class="nav-kicker">页面</div>';
+function renderDots(){
+  var html='';
   NAV.forEach(function(n){
-    var c=counts[n.id];
-    html+='<button class="nav-item" data-page="'+n.id+'" aria-current="'+(S.page===n.id)+'">'+n.icon+
-      '<span class="lbl">'+n.label+'</span>'+(c?'<span class="cnt">'+c+'</span>':'')+'</button>';
+    html+='<button data-page="'+n.id+'" aria-current="'+(S.page===n.id)+'" title="'+n.label+'"></button>';
   });
-  html+='<div class="nav-foot"><b>FluidBar 设计原型</b><span>按设置面板版面重构</span></div>';
-  els.nav.innerHTML=html;
+  els.dots.innerHTML=html;
 }
 
 function clipRows(list){
@@ -378,8 +360,7 @@ var KIND_FILTER={'全部':function(){return true},'已固定':function(c){return
 function paneHtml(){
   if(S.page==='home'){
     var d=new Date();
-    return head('概览','2026 年 10 月 26 日 · 周五 · 18° 多云 · 电量 87%')+
-      caption('设备')+
+    return caption('设备')+
       group([
         row({title:'无线网络',desc:'WLAN · FluidBar-5G',val:'已连接'}),
         row({title:'电池',desc:'充电中 · 预计 1 小时 12 分充满',bar:87}),
@@ -395,8 +376,7 @@ function paneHtml(){
   }
   if(S.page==='media'){
     var t=TRACKS[S.track],cur=Math.round(t.len*S.pos);
-    return head(S.playing?'正在播放':'已暂停',esc(t.artist)+' · '+esc(t.album))+
-      caption('曲目')+
+    return caption('曲目')+
       group([
         row({title:'标题',val:esc(t.title)}),
         row({title:'艺术家',val:esc(t.artist)}),
@@ -417,8 +397,7 @@ function paneHtml(){
     var unread=NOTES.filter(function(n){return n.unread});
     var older=NOTES.filter(function(n){return !n.unread});
     var list=S.filter==='unread'?unread:NOTES;
-    return head('消息',(unread.length)+' 条未读 / 共 '+NOTES.length+' 条。点一行打开，右键可标记或删除。')+
-      caption('未读 ('+unread.length+')',seg([['all','全部'],['unread','只看未读']],S.filter))+
+    return caption('未读 ('+unread.length+')',seg([['all','全部'],['unread','只看未读']],S.filter))+
       group(noteRows(S.filter==='unread'?unread:unread))+
       (S.filter==='all'?caption('更早')+group(noteRows(older)):'');
   }
@@ -428,8 +407,7 @@ function paneHtml(){
     var pinned=list.filter(function(c){return c.pinned});
     var rest=list.filter(function(c){return !c.pinned});
     var segHtml=seg([['全部','全部'],['已固定','已固定'],['图片','图片'],['链接','链接']],S.filter);
-    return head('剪贴板','共 '+CLIPS.length+' 条 · '+CLIPS.filter(function(c){return c.pinned}).length+' 条固定。点一行即复制。')+
-      caption('筛选',segHtml)+
+    return caption('筛选',segHtml)+
       (pinned.length?caption('已固定')+group(clipRows(pinned)):'')+
       (rest.length?caption('最近')+group(clipRows(rest)):'')+
       (!list.length?'<div class="empty">没有符合条件的条目</div>':'');
@@ -444,14 +422,12 @@ function paneHtml(){
           val:pct+'%',bar:pct,chev:true});
       });
     }
-    return head('Agent',run.length+' 个在跑 · '+AGENTS.length+' 个会话。点一行查看日志。')+
-      caption('运行中 ('+run.length+')')+group(agentRows(run))+
+    return caption('运行中 ('+run.length+')')+group(agentRows(run))+
       caption('已结束')+group(agentRows(done));
   }
   // widgets
   var d2=new Date();
-  return head('组件','日历 · 天气 · 系统占用 · 任务')+
-    caption('日历')+
+  return caption('日历')+
     group([row({title:'今天',desc:'没有日程安排',val:'10 月 26 日 · 周五',chev:true})])+
     caption('天气')+
     group([row({title:'天气',val:'18° 多云'}),row({title:'高低温',val:'12° / 21°'}),row({title:'风',val:'东南 3 级'})])+
@@ -474,14 +450,16 @@ function renderChrome(){
   els.island.dataset.size=S.size;
   var nav=NAV.filter(function(n){return n.id===S.page})[0];
   var counts=navCounts();
-  var sub = S.page==='messages' ? '消息 · '+(counts.messages||0)+' 条未读'
-    : S.page==='clipboard' ? '剪贴板 · '+CLIPS.length+' 条'
-    : S.page==='agent' ? 'Agent · '+(counts.agent||0)+' 个在跑'
-    : S.page==='media' ? (S.playing?'媒体 · 正在播放':'媒体 · 已暂停')
-    : S.page==='widgets' ? '组件 · 日历 / 天气 / 系统'
-    : '概览';
-  els.tbSub.textContent=sub;
-  renderNav();
+  var t=TRACKS[S.track];
+  var sub = S.page==='messages' ? (counts.messages||0)+' 条未读 / 共 '+NOTES.length+' 条'
+    : S.page==='clipboard' ? CLIPS.length+' 条 · '+CLIPS.filter(function(c){return c.pinned}).length+' 条固定'
+    : S.page==='agent' ? (counts.agent||0)+' 个在跑 · '+AGENTS.length+' 个会话'
+    : S.page==='media' ? esc(t.artist)+' · '+(S.playing?'播放中':'已暂停')
+    : S.page==='widgets' ? '日历 · 天气 · 系统 · 任务'
+    : '10 月 26 日 · 周五 · 18° 多云';
+  els.headTitle.textContent=nav.label;
+  els.headSub.textContent=sub;
+  renderDots();
 }
 function renderAll(){renderChrome();renderPane()}
 function setPage(p){
@@ -585,7 +563,7 @@ function mediaAction(kind){
 }
 
 /* 导航 */
-els.nav.addEventListener('click',function(e){
+els.dots.addEventListener('click',function(e){
   var b=e.target.closest('[data-page]');if(!b)return;
   setPage(b.dataset.page);
 });
@@ -669,6 +647,10 @@ addEventListener('keydown',function(e){
   var order=['home','media','messages','clipboard','agent','widgets'];
   var n=parseInt(e.key,10);
   if(n>=1&&n<=6){setPage(order[n-1]);return}
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+    var idx=NAV.map(function(n){return n.id}).indexOf(S.page);
+    var next=idx+(e.key==='ArrowRight'?1:-1);
+    setPage(NAV[(next+NAV.length)%NAV.length].id);return}
   if(e.key==='ArrowDown'){e.preventDefault();moveSel(1);return}
   if(e.key==='ArrowUp'){e.preventDefault();moveSel(-1);return}
   if(e.key==='Enter'){e.preventDefault();primaryAction(null);return}
@@ -714,7 +696,7 @@ qa('.dock [data-act]').forEach(function(b){
   b.addEventListener('click',function(){
     if(b.dataset.act==='size'){
       S.size=S.size==='large'?'small':'large';
-      b.textContent='尺寸：'+(S.size==='large'?'860':'520');
+      b.textContent='尺寸：'+(S.size==='large'?'600':'520');
       renderChrome();renderPane();return;
     }
   });
