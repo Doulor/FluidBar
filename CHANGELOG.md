@@ -6,6 +6,16 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-27 — 补上昨天那条 URL 过滤的真实入口（descriptor 里没有标题）
+
+- 昨天新增的 `IsResourceIdentifierTitle` 没有生效：`PollSessions` 构建 `MediaSessionDescriptor` 时把 **title 传了 null**，
+  策略看不到标题，URL 会话仍然以"正在播放"胜出（诊断日志 14:24 仍是
+  `app://./renderer/index.html?webcontentsid=39…#/av`）。
+- 修复：descriptor 携带真实标题（每会话一次 `TryGetMediaPropertiesAsync`，读不到时退回按状态判断）；
+  另在发布快照前加一道兜底——标题是资源标识时记 `media.reject-url-title` 并发布空快照。
+- 附带收益："标题=应用名"的降权此前同样因为 title 为 null 而形同虚设，现在真正生效。
+- 验证：全解决方案 **2762** 测试绿；成品运行后诊断日志不再出现 `app://`，若还有别家应用这么干会留下
+  `media.reject-url-title` 证据行。
 ## 2026-10-27 — 灵动岛把页面 URL 当歌名显示（app://./renderer/index…）
 
 - 症状：岛的媒体位显示 `app://./renderer/index.html?webcontentsid=8&processGroupNS=createBlankWindow1#/screen-record/result`。

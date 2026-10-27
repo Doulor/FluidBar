@@ -1313,16 +1313,28 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             try
             {
                 var playbackStatus = session.GetPlaybackInfo().PlaybackStatus;
-                if (MediaDiagnostics.Enabled)
+                var state = MapPlaybackState(playbackStatus);
+
+                // The descriptor needs the real title: the policy rejects sessions whose "title" is a page URL
+                // (an Electron screen recorder publishes app://…/index.html#/screen-record/result) and demotes
+                // app-name-only titles. Passing null here — as this code used to — meant neither rule could ever
+                // fire, so the recorder's URL was selected as if it were a playing track (report 2026-10-27).
+                string? title = null;
+                try
                 {
                     var props = await session.TryGetMediaPropertiesAsync().AsTask(cancellationToken).ConfigureAwait(false);
+                    title = props?.Title;
                     MediaDiagnostics.Log(
-                        $"session app={session.SourceAppUserModelId} status={playbackStatus} title={props?.Title ?? "null"}");
+                        $"session app={session.SourceAppUserModelId} status={playbackStatus} title={title ?? "null"}");
+                }
+                catch (Exception)
+                {
+                    // A session whose properties cannot be read stays selectable by state alone.
                 }
 
                 _lastSessionUpdate.TryGetValue(session.SourceAppUserModelId, out var updated);
-                descriptors.Add(new MediaSessionDescriptor(session.SourceAppUserModelId, MapPlaybackState(playbackStatus),
-                    null, updated == default ? now : updated));
+                descriptors.Add(new MediaSessionDescriptor(session.SourceAppUserModelId, state,
+                    title, updated == default ? now : updated));
             }
             catch (Exception ex)
             {
@@ -1415,6 +1427,16 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             if (duration > TimeSpan.Zero && position > duration)
             {
                 position = duration;
+            }
+
+            if (MediaSourceSelectionPolicy.IsResourceIdentifierTitle(properties.Title))
+            {
+                // Defence in depth: even if a session slips past selection, a page URL is not a track.
+                MediaDiagnostics.LogAlways(
+                    $"media.reject-url-title app={aumid} title='{properties.Title}'");
+                DetachSession();
+                Publish(MediaSnapshot.Empty);
+                return;
             }
 
             var controls = playbackInfo.Controls;
