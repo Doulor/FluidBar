@@ -83,6 +83,33 @@ public sealed class MediaSelectionTests
         Assert.Equal(expected, MediaSourceSelectionPolicy.IsAppNameOnlyTitle(title));
     }
 
+    [Theory]
+    [InlineData("app://./renderer/index.html?webcontentsid=8&processGroupNS=createBlankWindow1#/screen-record/result", true)]
+    [InlineData("file:///C:/Music/track.mp3", true)]
+    [InlineData("https://example.com/watch?v=1", true)]
+    [InlineData("./renderer/index.html", true)]
+    [InlineData("C:/Program Files/App/renderer/index.js", true)]
+    [InlineData("Midnight City", false)]
+    [InlineData("AC/DC - Thunderstruck", false)]
+    [InlineData("正在播放：晴天 - 周杰伦", false)]
+    public void IsResourceIdentifierTitle_DetectsPageUrlsButKeepsSongTitles(string title, bool expected)
+    {
+        Assert.Equal(expected, MediaSourceSelectionPolicy.IsResourceIdentifierTitle(title));
+    }
+
+    [Fact]
+    public void SelectActive_IgnoresASessionWhoseTitleIsAPageUrl()
+    {
+        // The screen recorder publishes a "playing" session with its page URL as the title; a paused real track must
+        // still win, and with no real track at all nothing may be selected.
+        var recorder = Session("App.ScreenRecorder", MediaPlaybackState.Playing,
+            "app://./renderer/index.html#/screen-record/result");
+        var music = Session("SpotifyAB.SpotifyMusic", MediaPlaybackState.Paused, "Midnight City");
+
+        Assert.Equal("SpotifyAB.SpotifyMusic", MediaSourceSelectionPolicy.SelectActive([recorder, music])?.SourceAppUserModelId);
+        Assert.Null(MediaSourceSelectionPolicy.SelectActive([recorder]));
+    }
+
     [Fact]
     public void IsSamePlayer_MatchesPackagedAndUnpackagedVariants()
     {

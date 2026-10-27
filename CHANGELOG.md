@@ -6,6 +6,18 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-27 — 灵动岛把页面 URL 当歌名显示（app://./renderer/index…）
+
+- 症状：岛的媒体位显示 `app://./renderer/index.html?webcontentsid=8&processGroupNS=createBlankWindow1#/screen-record/result`。
+- 根因：某个 Electron 应用（录屏结果页）发布了一条 SMTC 会话，把**页面 URL 当标题**、时长为 0。选择策略只对
+  "标题等于应用名"做了降权（−400），URL 标题不属于应用名，于是它作为"正在播放"胜出。
+- 修复：`MediaSourceSelectionPolicy.IsResourceIdentifierTitle`——标题是资源标识（含 `://`、以 `file:`/`data:` 开头、
+  或以 `.html/.js/.json` 等页面/脚本扩展名结尾的路径）的会话**直接跳过**，背后根本没有曲目；
+  岛改为显示真正的播放器或空闲。`AC/DC - Thunderstruck` 这类带斜杠的真歌名不受影响。
+- 验证：新增 9 个测试用例（含这条真实 URL、`file://`、`https://`、`./renderer/index.html`、以及反例歌名与中文标题）；
+  Platform 775 绿；成品 3.1.11-preview.1 运行后诊断日志中 `app://` 记录为 0，岛显示的是真实曲目
+  （`track.caption title='Shivers' artist='Rachel Platten'`）。
+
 ## 2026-10-26 — 音乐媒体灵动岛宽度上限 +1/2（长歌词不再被截断）
 
 - 需求：媒体胶囊显示歌词时的长度上限提高 1/2。

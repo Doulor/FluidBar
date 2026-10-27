@@ -115,6 +115,15 @@ public static class MediaSourceSelectionPolicy
                 continue;
             }
 
+            // An Electron app that publishes a session without a real track (a screen recorder does this) reports its
+            // page URL as the title. There is no song behind it, so the island must not paint it at all — demoting it
+            // only helped when a real player was active (report 2026-10-27: the pill showed
+            // "app://./renderer/index.html?webcontentsid=8#/screen-record/result").
+            if (IsResourceIdentifierTitle(session.Title))
+            {
+                continue;
+            }
+
             var score = Score(session);
             if (score > bestScore)
             {
@@ -186,6 +195,56 @@ public static class MediaSourceSelectionPolicy
         return AppNameTitles.Any(name => trimmed.Equals(name, StringComparison.OrdinalIgnoreCase))
                || IsAumidLookingTitle(trimmed);
     }
+
+    /// <summary>
+    /// True when the "title" is a resource identifier rather than a track title: a URL/URI (`app://…`,
+    /// `file:///…`, `https://…`) or a script/page path (`…/renderer/index.html`).
+    /// </summary>
+    /// <param name="title">Title reported by the session.</param>
+    public static bool IsResourceIdentifierTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var trimmed = title.Trim();
+        if (trimmed.Contains("://", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (trimmed.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // A page/script path: at least one separator and a web/source extension. "AC/DC - Thunderstruck" has the
+        // separator but no extension, so real track titles survive.
+        if (!trimmed.Contains('/', StringComparison.Ordinal) && !trimmed.Contains('\\', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var extension in WebPathExtensions)
+        {
+            if (trimmed.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+                || trimmed.Contains(extension + "?", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Contains(extension + "#", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Extensions that mark a resource path rather than a song title.</summary>
+    private static readonly string[] WebPathExtensions =
+    [
+        ".html", ".htm", ".php", ".aspx", ".jsp", ".js", ".mjs", ".json",
+    ];
 
     /// <summary>True when a string looks like a raw AUMID ({GUID} form) rather than a track title.</summary>
     public static bool IsAumidLookingTitle(string? text)
