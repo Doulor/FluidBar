@@ -67,25 +67,29 @@ jobs:
       - name: Build + warning gate + tests + publish
         shell: pwsh
         run: |
-          # Tee the build log and re-emit failures as ::error:: annotations. The job log needs admin rights to
-          # read, but annotations are readable through the API, which is what makes a red release diagnosable
-          # (2026-10-27: the step exited 1 and the reason was invisible).
+          # Tee the build log and re-emit the tail as ::error:: annotations. The job log needs admin rights to read,
+          # while annotations are readable through the API — that is what makes a red release diagnosable
+          # (2026-10-27: the step exited 1 twice and the reason was invisible).
           $log = Join-Path $env:RUNNER_TEMP 'publish.log'
-          ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}' *>&1 | Tee-Object -FilePath $log
-          $code = $LASTEXITCODE
-          if ($code -ne 0) {
-            Write-Host '::group::publish.log tail'
-            Get-Content $log -Tail 40 | ForEach-Object { Write-Host $_ }
-            Write-Host '::endgroup::'
-            $reported = 0
-            foreach ($line in (Get-Content $log)) {
-              if ($reported -ge 20) { break }
-              if ($line -match 'error|FAIL|失败|Exception|Traceback') {
-                Write-Host "::error::$line"
-                $reported++
-              }
+          $failed = $false
+          try {
+            ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}' *>&1 | Tee-Object -FilePath $log
+          } catch {
+            $failed = $true
+            Write-Host "::error::publish.ps1 threw: $($_.Exception.Message)"
+          }
+          if ($failed -or $LASTEXITCODE -ne 0) {
+            if (Test-Path $log) {
+              $lines = Get-Content $log
+              Write-Host '::group::publish.log tail'
+              $lines | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+              Write-Host '::endgroup::'
+              # Annotations are capped, so prioritise the lines that name the failure.
+              $hits = $lines | Where-Object { $_ -match 'error [A-Z]+\d+|error:|\[FAIL\]|failed|失败' } | Select-Object -Last 10
+              if (-not $hits) { $hits = $lines | Select-Object -Last 6 }
+              foreach ($line in $hits) { Write-Host "::error::$line" }
             }
-            throw "build/publish.ps1 failed with exit code $code"
+            exit 1
           }
 
       - name: Upload release artifact
