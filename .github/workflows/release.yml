@@ -67,7 +67,26 @@ jobs:
       - name: Build + warning gate + tests + publish
         shell: pwsh
         run: |
-          ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}'
+          # Tee the build log and re-emit failures as ::error:: annotations. The job log needs admin rights to
+          # read, but annotations are readable through the API, which is what makes a red release diagnosable
+          # (2026-10-27: the step exited 1 and the reason was invisible).
+          $log = Join-Path $env:RUNNER_TEMP 'publish.log'
+          ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}' *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Host '::group::publish.log tail'
+            Get-Content $log -Tail 40 | ForEach-Object { Write-Host $_ }
+            Write-Host '::endgroup::'
+            $reported = 0
+            foreach ($line in (Get-Content $log)) {
+              if ($reported -ge 20) { break }
+              if ($line -match 'error|FAIL|失败|Exception|Traceback') {
+                Write-Host "::error::$line"
+                $reported++
+              }
+            }
+            throw "build/publish.ps1 failed with exit code $code"
+          }
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
