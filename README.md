@@ -25,7 +25,7 @@ FluidBar 2.0 是一次完全重写（v1 代码已从本分支移除，历史保�
 | M5 内置插件 + 市场 CI/文档（23 + 31 集成 tests） | ✅ |
 | M4 Avalonia 外壳（岛/设置/插件市场/i18n，70 tests） | 🚧 桌面验收中 |
 
-- **官方网站**：[website/index.html](website/index.html)（发布会式开场动画 + 产品信息，静态单页）
+- **官方网站**：[website/](website/)（Vite + React，真实 prototype2 嵌入 + 日光光学视觉）
 - 交互与视觉原型：[docs/rewrite/prototype2/index.html](docs/rewrite/prototype2/index.html)（浏览器打开即可；旧 prototype 已归档）
 - **MVP 发布说明**：[docs/rewrite/RELEASE-v2-mvp.md](docs/rewrite/RELEASE-v2-mvp.md)
 - **当前状态 / 文档索引 / 变更记录**：[STATUS](docs/rewrite/STATUS.md) · [docs/rewrite/README.md](docs/rewrite/README.md) · [CHANGELOG.md](CHANGELOG.md)

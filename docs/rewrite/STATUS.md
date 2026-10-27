@@ -3,6 +3,15 @@
 > 最后更新：2026-10-22 18:45（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
+## 2026-10-28 官网检查点（日光光学 + 真实原型嵌入）
+
+- 新官网位于 `website/`：Vite 8 + React 19 + TypeScript，页面为冷银白亮色，产品窗为 488×444 的真实 prototype2 桌面场景。
+- 首屏、故事区、外观配置器都直接加载 `docs/rewrite/prototype2`，通过同源 postMessage 驱动真实 compact/expanded 状态、页面、形态、材质和强调色；网页不重画岛。
+- ReactBits 以 TS-CSS 源码 vendored 六个组件；Shaders 只做材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
+- 验证：`pnpm build` 通过；Vitest 协议测试 5/5、Playwright 站点 5/5、可达性 2/2 通过；1440×900 与 390×844 无横向溢出；axe 无 serious/critical。
+- 部署：`.github/workflows/pages.yml` 使用 `BASE_PATH=/FluidBar/` 构建 `website/dist` 并部署 GitHub Pages。
+- 旧版官网文件已退役，不再复用旧截图或旧视觉。
+
 ## 一句话状态
 
 **灵动岛动画卡顿已修复**：60 fps 帧时钟原来被 50 ms 截止计时器每个 tick 停掉（`_lastRenderHappened` 参与停止判定），展开/悬停/波浪只能画 2–3 帧。现在帧时钟只由动画状态决定（`IslandFrameLoopPolicy`），实测展开 380 ms 走 24 帧、interval p50 15.9 ms，空闲 CPU 12.8% → 2.1%。

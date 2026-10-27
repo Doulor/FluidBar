@@ -1,0 +1,62 @@
+/* ==========================================================================
+   FluidBar website — clean embed shell over docs/rewrite/prototype2
+   --------------------------------------------------------------------------
+   The real prototype stays the source of truth: this file only removes demo
+   chrome and lets the 488 x 444 product window show the dark desktop scene.
+   Loaded after the prototype styles.css by website/scripts/sync-island.mjs.
+   ========================================================================== */
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* The product window is a dark desktop window; never let a light page show
+     through around the scene. */
+  background: #05070a !important;
+}
+
+/* Non-product chrome: demo console, transient toast, settings/market overlay,
+   boot shade, desktop hint, simulated desktop icons and demo windows.
+   They stay in the DOM (the browser bridge clicks the hidden console
+   triggers), but must never be visible in the embedded product window. */
+.console,
+.toast,
+.modal-layer,
+.boot-shade,
+.scene-hint,
+.desktop-icons,
+.scene-windows {
+  display: none !important;
+}
+
+/* Keep the real scene furniture: .scene / .wallpaper / .taskbar / .dock /
+   .island-layer are rendered by the prototype as-is. Dock visibility stays
+   owned by the prototype (float/flush hide it, dock mode shows it). */
+
+/* --------------------------------------------------------------------------
+   First paint only.
+   The generated static markup carries data-theme="light" (the website shell
+   theme); the prototype's app.js applies its real theme — dark by default —
+   during boot and sets html[data-ready="1"]. Until that happens, paint the
+   desktop dark so the embed never flashes a light desktop for a frame.
+   -------------------------------------------------------------------------- */
+html[data-ready="0"] .wallpaper-base {
+  background:
+    radial-gradient(52% 42% at 18% 8%, rgba(72, 118, 148, 0.34) 0%, rgba(72, 118, 148, 0) 72%),
+    radial-gradient(46% 40% at 82% 14%, rgba(96, 116, 132, 0.2) 0%, rgba(96, 116, 132, 0) 70%),
+    radial-gradient(90% 70% at 54% 112%, rgba(22, 92, 94, 0.24) 0%, rgba(22, 92, 94, 0) 64%),
+    linear-gradient(157deg, #131f2b 0%, #0b131d 46%, #060a10 100%);
+}
+
+html[data-ready="0"] .glow-a { background: rgba(94, 152, 186, 0.22); }
+html[data-ready="0"] .glow-b { background: rgba(148, 160, 178, 0.13); }
+html[data-ready="0"] .glow-c { background: rgba(46, 116, 112, 0.18); }
+html[data-ready="0"] .wallpaper-grain { opacity: 0.22; mix-blend-mode: overlay; }
+html[data-ready="0"] .wallpaper-vignette {
+  background: radial-gradient(120% 100% at 50% 42%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.34) 100%);
+}
+html[data-ready="0"] .taskbar {
+  background: rgba(14, 19, 26, 0.78);
+  border-top-color: rgba(255, 255, 255, 0.09);
+}

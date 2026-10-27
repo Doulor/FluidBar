@@ -1,0 +1,191 @@
+.download {
+  padding-block: var(--section-space);
+  border-top: 1px solid var(--line);
+}
+
+.download-panel {
+  position: relative;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) minmax(260px, 0.55fr);
+  gap: 28px 48px;
+  align-items: center;
+  padding: 58px 56px 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(80% 130% at 8% 0%, rgba(255, 255, 255, 0.85), transparent 55%),
+    rgba(250, 251, 252, 0.6);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.download-panel::before {
+  content: '';
+  position: absolute;
+  right: 12%;
+  top: -40%;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.download-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 28px;
+  background: var(--ink);
+  box-shadow: 0 24px 50px -24px rgba(11, 13, 16, 0.45);
+}
+
+.download-mark__orbit {
+  position: absolute;
+  inset: -12px;
+  border: 1px solid var(--line);
+  border-radius: 36px;
+}
+
+.download-copy h2 {
+  font-size: clamp(46px, 5.4vw, 72px);
+  line-height: 0.98;
+}
+
+.download-copy p:last-child {
+  max-width: 34em;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.download-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.download-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 0 24px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.download-primary:hover {
+  background: var(--accent);
+  transform: translateY(-1px);
+}
+
+.download-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  color: var(--muted);
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.download-secondary:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.download-link {
+  margin-top: 2px;
+  color: var(--muted-2);
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.download-meta {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.download-meta strong {
+  margin-right: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--muted-2);
+  text-transform: uppercase;
+}
+
+@media (max-width: 1000px) {
+  .download-panel {
+    grid-template-columns: 80px minmax(0, 1fr);
+    padding: 42px 32px 32px;
+  }
+
+  .download-mark {
+    width: 72px;
+    height: 72px;
+    border-radius: 22px;
+  }
+
+  .download-mark svg {
+    width: 54px;
+    height: 54px;
+  }
+
+  .download-actions {
+    grid-column: 2;
+  }
+
+  .download-meta {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .download-panel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 30px 22px 24px;
+  }
+
+  .download-mark {
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+  }
+
+  .download-mark svg {
+    width: 42px;
+    height: 42px;
+  }
+
+  .download-actions,
+  .download-meta {
+    grid-column: 1;
+  }
+
+  .download-copy h2 {
+    font-size: 46px;
+  }
+
+  .download-primary {
+    width: 100%;
+  }
+}

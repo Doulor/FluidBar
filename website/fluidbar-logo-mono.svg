@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">FluidBar · 黑白简约标志</title>
-  <desc id="desc">纯黑白粗线条设计：圆角方形、灵动岛胶囊轮廓、流动曲线和状态圆点。</desc>
-  <rect width="512" height="512" fill="#fff"/>
-  <rect x="32" y="32" width="448" height="448" rx="104" fill="none" stroke="#000" stroke-width="24"/>
-  <rect x="88" y="176" width="336" height="160" rx="80" fill="#fff" stroke="#000" stroke-width="24"/>
-  <path d="M124 282c40-32 76-45 116-36 28 6 48 9 72-2" fill="none" stroke="#000" stroke-width="20" stroke-linecap="round"/>
-  <circle cx="360" cy="256" r="20" fill="#000"/>
-</svg>

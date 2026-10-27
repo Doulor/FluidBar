@@ -1,0 +1,374 @@
+.lab {
+  padding-block: var(--section-space) 0;
+  border-top: 1px solid var(--line);
+}
+
+.section-heading {
+  max-width: 880px;
+}
+
+.section-kicker {
+  margin-bottom: 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+
+.section-heading h2 {
+  font-size: clamp(48px, 5.8vw, 78px);
+  letter-spacing: -0.055em;
+}
+
+.section-heading > p:last-child {
+  max-width: 42em;
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: 17px;
+}
+
+.lab-heading {
+  margin-bottom: 72px;
+}
+
+.lab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: 64px;
+  align-items: start;
+}
+
+.lab-column {
+  min-width: 0;
+}
+
+.lab-steps {
+  border-top: 1px solid var(--line);
+}
+
+.lab-step {
+  border-bottom: 1px solid var(--line);
+  transition: background 0.25s ease;
+}
+
+.lab-step.is-active {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.lab-step__head {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  padding: 24px 12px 24px 0;
+  text-align: left;
+}
+
+.lab-step__index {
+  padding-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-2);
+  letter-spacing: 0.04em;
+}
+
+.lab-step.is-active .lab-step__index {
+  color: var(--accent);
+}
+
+.lab-step__body strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.lab-step__body span {
+  display: block;
+  max-width: 28em;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.lab-step.is-active .lab-step__body strong {
+  color: var(--accent);
+}
+
+.step-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 22px 52px;
+}
+
+.option-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(250, 251, 252, 0.6);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.option-chip span {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted-2);
+}
+
+.option-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.option-chip.is-selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.option-chip.is-selected span {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.step-options--pages {
+  padding-left: 52px;
+}
+
+.option-chip .option-index {
+  color: var(--muted-2);
+}
+
+.config {
+  padding-top: 66px;
+  scroll-margin-top: calc(var(--nav-h) + 24px);
+}
+
+.config-heading h3 {
+  margin-top: 0;
+  font-size: clamp(34px, 3.8vw, 48px);
+  letter-spacing: -0.05em;
+}
+
+.config-heading > p:last-child {
+  max-width: 30em;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.control-group {
+  margin-top: 28px;
+}
+
+.control-label {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--muted-2);
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(250, 251, 252, 0.6);
+  width: fit-content;
+}
+
+.segmented button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.segmented button:hover {
+  color: var(--ink);
+}
+
+.segmented button.is-selected {
+  background: var(--ink);
+  color: #fff;
+}
+
+.accent-row {
+  display: flex;
+  gap: 9px;
+}
+
+.accent-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px rgba(11, 13, 16, 0.14);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.accent-swatch:hover {
+  transform: translateY(-2px);
+}
+
+.accent-swatch.is-selected {
+  border-color: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--ink),
+    0 4px 10px -4px rgba(11, 13, 16, 0.25);
+}
+
+.config-note {
+  max-width: 28em;
+  margin-top: 32px;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.lab-stage {
+  position: sticky;
+  top: calc(var(--nav-h) + 30px);
+  min-width: 0;
+}
+
+.stage-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-inline: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.stage-status__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+
+.lab-stage__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-inline: 2px;
+  color: var(--muted-2);
+}
+
+.stage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 2px;
+}
+
+.stage-link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.lab-stage .prototype-frame {
+  margin-inline: auto;
+}
+
+@media (max-width: 1100px) {
+  .lab-grid {
+    gap: 36px;
+  }
+
+  .lab-step__body strong {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 900px) {
+  .lab {
+    padding-top: 80px;
+  }
+
+  .lab-heading {
+    margin-bottom: 42px;
+  }
+
+  .lab-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .lab-stage {
+    position: relative;
+    top: auto;
+    order: -1;
+  }
+
+  .lab-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .config {
+    padding-top: 52px;
+  }
+
+  .lab-step__body span {
+    font-size: 13px;
+  }
+
+  .step-options {
+    padding-left: 52px;
+  }
+}
+
+@media (max-width: 480px) {
+  .section-heading h2 {
+    font-size: 42px;
+  }
+
+  .lab-step__head {
+    padding-block: 20px;
+  }
+
+  .step-options {
+    padding-left: 0;
+  }
+
+  .step-options--pages {
+    padding-left: 0;
+  }
+
+  .segmented {
+    width: 100%;
+  }
+
+  .segmented button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+}

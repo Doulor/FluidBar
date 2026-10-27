@@ -1,0 +1,249 @@
+.hero {
+  padding-block: 54px 96px;
+  min-height: calc(100dvh - var(--nav-h));
+  display: flex;
+  align-items: center;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 64px;
+  align-items: center;
+}
+
+.hero-copy {
+  max-width: 560px;
+  padding-block: 16px;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.kicker-line {
+  display: inline-block;
+  width: 26px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.hero h1 {
+  max-width: 560px;
+  font-size: clamp(80px, 7vw, 106px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.hero h1 span {
+  display: block;
+}
+
+.hero-sub {
+  max-width: 34em;
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin-top: 36px;
+}
+
+.hero-cta {
+  min-width: 188px;
+  min-height: 54px;
+  background: var(--ink) !important;
+  font-size: 15px !important;
+  letter-spacing: -0.01em !important;
+  box-shadow: 0 14px 30px -18px rgba(11, 13, 16, 0.55) !important;
+}
+
+.hero-cta .specular-button__light {
+  display: none;
+}
+
+.hero-cta .specular-button__label {
+  color: #ffffff;
+}
+
+.hero-cta::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  z-index: 3;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+}
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 3px;
+  transition: gap 0.2s ease, border-color 0.2s ease;
+}
+
+.text-link:hover {
+  gap: 11px;
+  border-color: var(--accent);
+}
+
+.hero-note {
+  margin-top: 24px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted-2);
+}
+
+.hero-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 28px 0 24px;
+}
+
+.stage-light {
+  position: absolute;
+  inset: 3% 2% 8%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(36, 71, 255, 0.09), transparent 72%);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.stage-frame {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 488px);
+}
+
+.stage-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+  text-transform: uppercase;
+}
+
+.stage-meta--top {
+  margin-bottom: 10px;
+  padding-inline: 2px;
+}
+
+.stage-meta--bottom {
+  margin-top: 12px;
+  padding-inline: 2px;
+}
+
+.stage-demo-label {
+  color: var(--muted);
+}
+
+.live-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+
+.live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 1100px) {
+  .hero-grid {
+    gap: 36px;
+  }
+
+  .hero h1 {
+    font-size: clamp(68px, 7.4vw, 88px);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    min-height: 0;
+    padding-block: 36px 72px;
+    align-items: start;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 46px;
+  }
+
+  .hero-copy {
+    padding-block: 0;
+    max-width: 620px;
+  }
+
+  .hero h1 {
+    font-size: clamp(54px, 12vw, 82px);
+  }
+
+  .hero-sub {
+    margin-top: 22px;
+    font-size: 16px;
+  }
+
+  .hero-stage {
+    padding: 8px 0 0;
+  }
+
+  .stage-frame {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero h1 {
+    font-size: clamp(48px, 13vw, 64px);
+  }
+
+  .hero-actions {
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .hero-cta {
+    min-width: 168px;
+    min-height: 50px;
+  }
+
+  .hero-note {
+    margin-top: 18px;
+  }
+}

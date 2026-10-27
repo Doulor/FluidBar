@@ -1,10 +1,15 @@
-## 2026-10-24
-
-- 官网首页改为克制的 Windows 深色视觉；按反馈移除虚构播放器，直接集成 prototype2 真实灵动岛组件，并使用真实主页、媒体、设置、Dock 与插件市场截图。
-
 # Changelog
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
+
+## 2026-10-28 — 官方网站重建为日光光学单页（真实原型嵌入）
+
+- 旧版 `website/` 视觉与代码完全退役；新站从空白 Vite + React + TypeScript 工程重建。
+- 页面为冷银白亮色，产品区是 488×444 的深色真实桌面窗；首屏、故事区、外观配置器直接嵌入 `docs/rewrite/prototype2`，不在网页里重画灵动岛。
+- 通过同源 postMessage 桥同步真实状态：idle 132×36、media 226×40、notifications 248×36、clipboard 264×36、agent 236×36，展开 440×284；形态、材质、强调色也直接写进原型。
+- ReactBits vendored 六个 TS-CSS 组件；Shaders 作为材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
+- 新增 Playwright 站点/可达性测试、字体子集、OG 图与 GitHub Pages 工作流。
+- 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 
 ## 2026-10-27 — 发布包改为自包含（修复用户端 "You must install .NET Desktop Runtime"）
 
@@ -269,14 +274,6 @@
   provider 绝不返回别的矩形的帧、退休窗口内旧帧确实被释放（即崩溃的前置条件）。
 - 验证：Ui 539/539 绿；`dotnet test FluidBar.sln -m:1` 除 1 个既有 flake 外全绿
   （`LiquidGlassTests.Liquid_glass_settled_frames_stay_in_budget_and_allocate_nothing` 在**未改动**的基线上同样失败）。
-
-## 2026-10-24 — 官方网站（发布会式开场 + 产品信息页）
-
-- 新增 `website/`：无构建步骤的静态单页，可直接打开或用任意静态服务器托管。
-- 首屏上方 2/3 为可交互舞台：滚轮驱动「唤醒 → 预览 → 展开 → 翻页 → 插件 → 归位」六段编排，序列播完并再次滚动才解锁页面滚动，期间页面不滚动。
-- 灵动岛为实时 HTML 复刻（含六个页面），另有形态切换（浮岛/贴顶/Dock）、材质切换（黑曜石/亚克力/液态玻璃）与设置页截图。
-- 文案、版本、体积、SHA-256、性能数字取自 RELEASE-v2-mvp 与 CHANGELOG；插件清单示例对齐 manifest schemaVersion 2。
-
 
 ## 2026-10-24 — 移除多 agent 堆叠环形图标，恢复单环
 
