@@ -1,7 +1,7 @@
 # FluidBar 2.0 官方网站设计 spec（日光光学）
 
 > 日期：2026-10-27
-> 状态：待用户确认
+> 状态：已确认（用户选择方向 A；并追加“灵动岛必须与真实状态一致”的硬约束）
 > 方向：A. 日光光学（Daylight Optics）
 > 范围：`website/` 单页官网，中文本地化首发
 > 事实来源：`README.md`、`docs/rewrite/`、`docs/rewrite/prototype2/`
@@ -63,19 +63,20 @@
 
 ### 4.1 视觉隐喻
 
-页面是一张被冷日光照射的浅色工作台，FluidBar 是台面上唯一的深色精密物件。
+页面是一间被冷日光照射的浅色工作室，产品是一扇嵌在页面里的深色桌面窗（488 × 444）。窗内是真实 prototype2 桌面场景与灵动岛，窗外是亮色排版、尺寸标注和留白。
 
 - 页面底色是亮色，不是暗色。
-- 小岛是深色，玻璃边缘有真实高光。
-- 光影不是装饰，是材质的证据。
+- 深色只出现在产品窗、产品 UI 与主按钮，不出现整页暗色区块。
+- 小岛与桌面窗使用真实 prototype2 渲染，不重画。
+- 光影不是装饰，是产品窗与材质的证据。
 - 版式接近瑞士编辑设计 + 工程标本，不接近 Apple 居中英雄页。
 - 用尺寸标注、细线、错位留白制造“被设计过”的感觉。
 
 ### 4.2 设计原则
 
-1. **光在动，东西不乱动。** 主要动效是鼠标驱动的光源、阴影与焦散，不是漂浮卡片。
-2. **深色只属于产品。** 页面、导航、按钮、说明文字都在亮色系统里；产品 UI 是唯一深色区域。
-3. **真实优先。** 真的可操作小岛、真的尺寸、真的下载链接、真的性能数据。
+1. **光在动，东西不乱动。** 主要动效是产品窗周围的光、阴影与页面排版，不是漂浮卡片。
+2. **深色只属于产品。** 页面、导航、说明文字都在亮色系统里；深色产品窗是唯一大面积暗色区域。
+3. **真实优先。** 直接嵌入 prototype2 的真实岛，不重画状态；下载、性能、插件信息全部真实。
 4. **少即是贵。** 一个强调色、一套圆角、一套字体、最多一次大型网格。
 5. **可读性优先。** 大标题不牺牲正文对比度，动效不阻碍操作。
 6. **优雅降级。** 没 WebGPU、没 WebGL、减少动效、窄屏，页面都必须是完整可用的。
@@ -85,8 +86,8 @@
 单页，锚点导航：
 
 1. `#experience` 首屏：桌面之上，多一座岛。
-2. `#story` 岛的故事：常驻、预览、展开、切换、退场。
-3. `#appearance` 外观：形态、材质、强调色配置器。
+2. `#story` 岛的故事：常驻、活动态、展开、切换、退场。
+3. `#appearance` 外观：形态、材质、强调色配置器。与 `#story` 共用同一个真实岛实例和 sticky 舞台。
 4. `#plugins` 插件生态。
 5. `#performance` 性能与架构。
 6. `#download` 下载。
@@ -119,8 +120,8 @@
 
 - 桌面 5/7 分栏。
 - 左列：H1、副文案、两个 CTA。
-- 右列：浅色产品台面，真实小岛，尺寸标注，柔和投影与轻微焦散。
-- 移动端：H1、副文案、CTA 在上，产品台面在下，仍保证 CTA 在首屏内。
+- 右列：488 × 444 的真实深色产品窗，窗内是 prototype2 桌面场景与灵动岛，窗外是尺寸标注、细线和窗影。
+- 移动端：H1、副文案、CTA 在上，产品窗在下，仍保证 CTA 在首屏内。
 
 文案：
 
@@ -132,21 +133,23 @@
 视觉：
 
 - H1 两行，88 到 120px，黑色，紧字距。
-- 右列台面不是卡片，不画浏览器或 Windows 窗口边框。
-- 小岛按真实尺寸 132×36 出现，保持产品比例。
-- 小岛下方有冷灰长阴影和极轻的色散焦散。
-- 台面周围使用 1px 细线和 mono 尺寸标注：`132 × 36`、`440 × 284`、`380 ms`。
-- 右上角有一束极淡的冷光，不是渐变按钮式光晕。
+- 产品窗是 488 × 444 的深色桌面窗，圆角 28px，1px 冷色描边，冷灰长阴影。
+- 产品窗内部使用真实 prototype2 场景：壁纸、任务栏、灵动岛，不画假浏览器边框。
+- 小岛按真实尺寸出现：idle 132×36，展开 440×284，保持产品比例。
+- 产品窗外围使用 1px 细线和 mono 尺寸标注：`488 × 444`、`132 × 36`、`440 × 284`。
+- 产品窗右上或左上有一束极淡的冷光，不是渐变按钮式光晕。
+- 产品窗使用真实 iframe 嵌入；加载完成前显示同状态静态 poster，避免 CLS。
 
 交互：
 
-- 悬停小岛：进入预览态。
+- 悬停小岛：仅按原型缩放 1.022，不切换出一个并不存在的“预览态”。
 - 点击小岛：展开到 440×284 控制中心。
 - 点击岛外或按 Esc：收起。
 - 方向键、数字键 1 到 6：切换页面。
-- 鼠标移动：高光与焦散偏移 2 到 6px，不产生大幅 3D 倾斜。
+- 鼠标移动：产品窗外的光与阴影偏移 2 到 6px，产品窗内保持原型行为。
 - 主 CTA 链接到 GitHub Releases。
 - 次 CTA 平滑滚动到 `#story`。
+- 首屏右上角显示真实状态标签：`LIVE PROTOTYPE · 真实状态`，不写虚构卖点。
 
 首屏限制：
 
@@ -158,19 +161,20 @@
 
 布局：
 
-- 桌面：左侧 4 列步骤列表，右侧 8 列 sticky 产品舞台。
-- 舞台随滚动保持 sticky，岛在原位连续变形。
+- 桌面：左侧 4 列步骤列表，右侧 8 列 sticky 产品窗（488 × 444）。
+- 产品窗是真实 prototype2 iframe，不是 React 重画的岛；舞台随滚动保持 sticky。
 - 左侧步骤可点击跳转；当前步骤高亮。
-- 移动端：取消 sticky，舞台在上，步骤按钮在下；点击步骤切换岛状态。
+- 故事与外观配置器共用同一个 iframe 和同一套状态协议，岛在整段叙事中不重建。
+- 移动端：取消 sticky，产品窗在上，步骤按钮在下；点击步骤切换真实状态。
 
 五个步骤：
 
 1. **常驻**
    - 文案：`默认只有 132 × 36。不抢窗口，不打断输入。`
-   - 状态：compact。
-2. **预览**
-   - 文案：`悬停，先看到正在发生什么。`
-   - 状态：preview，显示封面、标题、进度。
+   - 状态：idle，真实尺寸 132 × 36。
+2. **活动态**
+   - 文案：`媒体、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。`
+   - 状态：依次展示真实 compact 状态：media 226 × 40、notifications 248 × 36、clipboard 264 × 36、agent 236 × 36。可在步骤内切换。
 3. **展开**
    - 文案：`点击，变成 440 × 284 的控制中心。`
    - 状态：expanded，显示主页。
@@ -179,7 +183,7 @@
    - 状态：expanded，显示六页切换控件。
 5. **退场**
    - 文案：`操作完，安静收起。`
-   - 状态：collapsing / compact。
+   - 状态：collapsed / idle。
 
 六页能力在步骤 4 中完整呈现：
 
@@ -201,8 +205,8 @@
 
 布局：
 
-- 桌面：左侧 4 列控制面板，右侧 8 列浅色台面 + 实时小岛。
-- 移动端：台上产品在前，控制面板在后。
+- 桌面：左侧 4 列控制面板，右侧 8 列真实产品窗 + 实时小岛，与故事区共用同一个 iframe。
+- 移动端：产品窗在前，控制面板在后。
 - 控制项全部可见，不把选项藏进 hover。
 
 控制项：
@@ -213,9 +217,9 @@
 
 行为：
 
-- 形态切换使用共享元素动画，岛在台面中移动、贴顶或下移到 Dock 上方。
-- 材质切换 180ms 交叉淡入。
-- Dock 模式显示真实可放大的六应用 Dock。
+- 形态切换通过 postMessage 驱动真实 prototype2，岛在窗内移动、贴顶或下移到 Dock 上方。
+- 材质切换通过真实原型 CSS 完成，保留 180ms 交叉淡入。
+- Dock 模式显示 prototype2 自己的真实六应用 Dock，不使用 ReactBits Dock 另画一份。
 - 所有控件有可读标签、`aria-pressed` 或等效状态。
 - 页面注明：`网页中的材质为视觉近似，实际效果由 Skia 渲染器绘制。`
 
@@ -444,9 +448,11 @@
 1. `PillNav`：顶部导航，浅色主题。
 2. `SpecularButton`：主下载 CTA，黑色底，细高光。
 3. `SpotlightCard`：插件卡片。
-4. `Dock`：Dock 模式预览。
+4. `BorderGlow`：插件代码面板或单张精选卡片的边缘光。
 5. `Noise`：全站颗粒。
 6. `CountUp`：性能数字。
+
+不使用 ReactBits `Dock`，因为 Dock 必须来自真实 prototype2，避免出现第二个与产品不一致的 Dock。
 
 约束：
 
@@ -511,7 +517,14 @@ website/
   public/
     favicon.svg
     og-image.png
-    lab/                 # 由脚本从 docs/rewrite/prototype2 同步
+    island/              # 由脚本从 docs/rewrite/prototype2 同步并补 embed 壳
+      embed.html
+      embed.css
+      embed-bridge.js
+      app.js
+      icons.js
+      styles.css
+    posters/             # 真实状态的干净 poster，用于 iframe 加载前
   src/
     main.tsx
     App.tsx
@@ -521,23 +534,22 @@ website/
     sections/
       SiteNav.tsx
       Hero.tsx
-      IslandStory.tsx
-      Configurator.tsx
+      IslandLab.tsx      # 故事 + 外观配置器共用一个真实岛 iframe
+      MaterialOptics.tsx
       Plugins.tsx
       Performance.tsx
       Download.tsx
       SiteFooter.tsx
     island/
-      IslandDemo.tsx
-      useIslandState.ts
-      pages/
-      materials.ts
-      icons.tsx
+      PrototypeFrame.tsx # 受控 iframe 外壳 + 缩放 + poster
+      usePrototype.ts    # 状态镜像与控制协议
+      protocol.ts        # postMessage 类型与常量
+      compactStates.ts   # 真实 compact 尺寸与标签
     ui/
       PillNav.tsx
       SpecularButton.tsx
       SpotlightCard.tsx
-      Dock.tsx
+      BorderGlow.tsx
       Noise.tsx
       CountUp.tsx
       MaterialSpecimen.tsx
@@ -546,38 +558,66 @@ website/
       useWebGPU.ts
       useInViewOnce.ts
   scripts/
-    sync-lab.mjs
+    sync-island.mjs
   tests/
     site.spec.ts
     a11y.spec.ts
+    island-protocol.spec.ts
 ```
 
-### 10.3 共享小岛状态机
+### 10.3 真实岛嵌入与状态协议
 
-`useIslandState` 管理：
+官网不重画岛。故事区与外观配置器共用一个 `public/island/embed.html`，它加载真实 prototype2 的 `app.js` 与 `styles.css`，只额外注入：
 
-- `state`: compact / preview / expanded / collapsing
+- `embed.css`：隐藏调试控制台、桌面图标等非产品元素，保留壁纸、任务栏、岛和 Dock。
+- `embed-bridge.js`：同源 `postMessage` 桥，负责把父页面指令转成原型内的真实点击/键盘事件，并把真实 DOM 状态回传。
+
+父页面 `usePrototype` 镜像以下状态：
+
+- `ready`: iframe 是否完成启动
+- `expanded`: 是否展开
+- `view`: idle / media / notifications / clipboard / agent / timer / battery / hud
 - `page`: 0 到 5
 - `mode`: float / flush / dock
 - `material`: obsidian / acrylic / liquid
-- `accent`: aqua / mint / amber / rose / cobalt
+- `accent`: 当前强调色
+- `width` / `height`: 真实 DOM 尺寸，用于调试与验收
 
-`IslandDemo` 接受受控 props 和 `onChange`，支持：
+协议：
 
-- 首屏：内部交互驱动。
-- 故事区：外部步骤驱动。
-- 配置器：外部控件驱动。
-- 保持键盘、滚轮、拖动行为一致。
+- 父 → iframe：`{ type: 'fluidbar:set', state?, page?, mode?, material?, accent?, motion? }`
+- iframe → 父：`{ type: 'fluidbar:state', state: { ... } }`
+- 只接受同源 iframe 的 `event.source`，并校验 `event.origin`。
+- 父页面不直接操作 iframe DOM，不复制原型内部状态机。
+
+真实 compact 状态与尺寸：
+
+| view | 尺寸 |
+|---|---|
+| idle | 132 × 36 |
+| media | 226 × 40 |
+| notifications | 248 × 36 |
+| clipboard | 264 × 36 |
+| agent | 236 × 36 |
+| timer | 190 × 36 |
+| battery | 208 × 36 |
+| hud | 208 × 40 |
+
+展开态固定 440 × 284；产品宿主窗固定 488 × 444。悬停只按原型缩放 1.022，不产生额外的“预览态”。
+
+首屏使用独立的第二个真实实例，保证用户先玩到；故事区与配置器使用同一个 lab 实例，滚动过程中不重建。
 
 ### 10.4 资产与事实
 
 - 旧官网截图全部退役，不使用带调试控制台的图片。
 - 产品视觉以 `docs/rewrite/prototype2` 为唯一参考。
-- 如需截图，使用 Playwright 隐藏控制台后重新截取，并保留真实状态。
+- 产品窗口内是真实 prototype2 DOM，不是截图，也不是重画的岛。
+- prototype2 使用示例媒体、通知、剪贴板与 Agent 数据；页面在演示区标注“示例数据”，不冒充用户真实数据。
+- 如需截图 poster，使用 Playwright 隐藏控制台后重新截取，并保留真实状态。
 - 下载链接指向 GitHub Releases，不复制安装包。
 - 插件 manifest 示例基于 `docs/plugin/` 与 `schemas/`。
 - 性能数字带来源脚注和日期。
-- 网站中的产品状态必须来自真实原型或真实应用，不编造不存在的页面。
+- 网站中的产品状态必须来自真实原型或真实应用，不编造不存在的页面、尺寸或交互。
 
 ### 10.5 SEO 与分享
 
@@ -613,7 +653,9 @@ website/
 
 ### 11.2 性能预算
 
-- 首屏 JS ≤ 240KB gzip，不含懒加载 Shaders。
+- 首屏 JS ≤ 240KB gzip，不含 iframe 内的原型脚本与懒加载 Shaders。
+- 首屏 iframe 使用 poster 占位，`requestIdleCallback` 后再加载原型；CTA 与正文不等待 iframe。
+- 故事区 lab iframe 进入视口前 600px 才加载；整站最多两个原型实例，不创建第三个。
 - Shaders / 材质实验台 chunk 单独懒加载。
 - 字体 ≤ 450KB（中文子集 + 拉丁 + mono）。
 - 首屏图片 ≤ 250KB；优先 SVG、CSS 与实时 DOM。
@@ -621,7 +663,7 @@ website/
 - CLS < 0.05。
 - INP < 200ms。
 - Shader 画布 DPR 上限 1.5，离屏暂停。
-- `prefers-reduced-motion` 下不初始化连续动画。
+- `prefers-reduced-motion` 下不初始化连续动画，并把嵌入实例切到 motion=reduced。
 
 ## 12. 内容规则
 
@@ -690,6 +732,8 @@ website/
 | 实时小岛与原型不一致 | 产品失真 | 以 prototype2 为基准做逐状态视觉对照 |
 | SpecularButton 无 WebGL2 | CTA 失效 | 保留完整 CSS 按钮回退，功能不受影响 |
 | Shaders 与 ReactBits 同时占 GPU | 掉帧 | 同一时间只挂载一个重型画布，离屏卸载 |
+| iframe 桥接状态漂移 | 网页与产品不一致 | 以 iframe 回传的真实 DOM 状态为唯一真值，父层只镜像 |
+| iframe 内原型脚本失败 | 产品窗空白 | 保留真实状态 poster，并显示打开完整原型的外链，不伪造交互 |
 | 中文字体过大 | LCP 变差 | 子集化 + woff2 + 系统回退 |
 | GitHub Pages 子路径 | 资源 404 | `base` 环境变量 + 绝对外部链接 |
 | 旧站已删除 | 无可复用视觉资产 | 从 prototype2 重新截取干净状态，不复用旧截图 |
@@ -703,7 +747,11 @@ website/
 - 不单独做 About 页。
 - 中文首发，不做英文切换。
 - 不引入 Tailwind、GSAP、Three.js、Next.js。
-- ReactBits 只选 6 个组件。
+- ReactBits 只选 6 个组件，不使用 ReactBits Dock。
 - Shaders 只用于材质实验台，渐进增强。
-- 首屏和故事区共用同一个 IslandDemo。
+- 官网页不重画岛：首屏一个真实实例，故事与配置器共用第二个真实实例。
+- 产品窗为 488 × 444 的深色原型场景，页面仍是亮色。
+- 状态以 prototype2 DOM 为唯一真值，父层只通过 postMessage 镜像。
+- 不虚构“悬停预览态”；悬停只缩放 1.022。
+- 展示真实 compact 状态：idle / media / notifications / clipboard / agent / timer / battery / hud。
 - 下载与插件文档只链接真实 GitHub 地址。
