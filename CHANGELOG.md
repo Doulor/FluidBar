@@ -6,6 +6,19 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-27 — 发布包改为自包含（修复用户端 "You must install .NET Desktop Runtime"）
+
+- 症状：用户装上 4.0.0-preview.1 后弹 "You must install .NET Desktop Runtime to run this application."。
+- 根因：`build/publish.ps1` 用 `--self-contained=$($SelfContained.IsPresent)`，而 **release workflow 没有传 `-SelfContained`**，
+  每次发的都是框架依赖包（manifest 里 `"selfContained": false`），机器上没有 .NET 10 桌面运行时就直接被 apphost 拦下。
+- 修复：
+  1. `release.yml` 发布时带 `-SelfContained`；
+  2. `publish.ps1` 加护栏：CI 里（`GITHUB_ACTIONS=true`）不带 `-SelfContained` 直接 **throw**，避免再发一次坏包；
+  3. 单文件开启 `EnableCompressionInSingleFile`——自包含会嵌入整个桌面运行时，压缩后 exe 54.9 MB、zip 49.7 MB
+     （原来的框架依赖版 exe 也有 58.7 MB，所以体积并没有变差）。
+- 验证：自包含构建 `selfContained: true`；用 `DOTNET_ROOT=C:\does-not-exist` + `DOTNET_ROLL_FORWARD=Disable` 启动 →
+  正常运行（框架依赖版在这种条件下必然启动失败）。
+- 由于没有删除线上 release 的权限，坏掉的 4.0.0-preview.1 保留在仓库里，**4.0.0-preview.2 取代它**。
 ## 2026-10-27 — 补上昨天那条 URL 过滤的真实入口（descriptor 里没有标题）
 
 - 昨天新增的 `IsResourceIdentifierTitle` 没有生效：`PollSessions` 构建 `MediaSessionDescriptor` 时把 **title 传了 null**，

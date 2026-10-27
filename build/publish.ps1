@@ -93,6 +93,13 @@ function Get-ShortGitSha {
     return $sha.Trim()
 }
 
+# A published release must carry the runtime with it: end users do not have the .NET 10 desktop runtime and the
+# framework-dependent apphost greets them with "You must install .NET Desktop Runtime to run this application"
+# (reported 2026-10-27, the 4.0.0-preview.1 assets). Refusing here is cheaper than shipping a broken download.
+if (-not $SelfContained -and $env:GITHUB_ACTIONS -eq 'true') {
+    throw 'Refusing to build a framework-dependent release in CI: pass -SelfContained so the published exe runs on machines without .NET installed.'
+}
+
 $version = Resolve-Version -Explicit $Version
 $sha = Get-ShortGitSha
 $informationalVersion = "$version+$sha"
@@ -142,6 +149,10 @@ $publishArgs = @(
     "--self-contained=$($SelfContained.IsPresent.ToString().ToLowerInvariant())",
     '-p:PublishSingleFile=true',
     '-p:IncludeNativeLibrariesForSelfExtract=true',
+    # Compress the bundle: a self-contained single file embeds the whole desktop runtime (~150 MB raw). Users
+    # download this exe through the updater, so the compressed form (~70 MB) matters; first start unpacks the
+    # native libraries into the per-user temp folder, which is a one-off cost.
+    '-p:EnableCompressionInSingleFile=true',
     "-p:Version=$version",
     "-p:FileVersion=$version",
     "-p:InformationalVersion=$informationalVersion",

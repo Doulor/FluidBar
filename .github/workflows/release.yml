@@ -73,7 +73,7 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'publish.log'
           $failed = $false
           try {
-            ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}' *>&1 | Tee-Object -FilePath $log
+            ./build/publish.ps1 -Version '${{ steps.version.outputs.version }}' -SelfContained *>&1 | Tee-Object -FilePath $log
           } catch {
             $failed = $true
             Write-Host "::error::publish.ps1 threw: $($_.Exception.Message)"
