@@ -1,9 +1,14 @@
 import { ArrowDown, ArrowUpRight } from '@phosphor-icons/react';
 import { SpecularButton } from '../ui/reactbits';
 import { PrototypeFrame } from '../island/PrototypeFrame';
+import { usePrototype } from '../island/usePrototype';
 import './hero.css';
 
+const PAGES = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
+
 export function Hero() {
+  const { frameRef, state, setState, send } = usePrototype();
+
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -69,18 +74,38 @@ export function Hero() {
             </div>
 
             <PrototypeFrame
-              title="FluidBar 真实交互原型：点击小岛展开，按 1 到 6 切换页面"
+              ref={frameRef}
+              title="FluidBar 真实交互原型：默认展开控制中心，点击岛内按钮或按 Esc 收起"
               name="fluidbar-hero"
-              poster={`${import.meta.env.BASE_URL}posters/hero-idle.png`}
+              poster={`${import.meta.env.BASE_URL}posters/lab-expanded.png`}
+              startState="expanded"
+              startPage={0}
+              onState={setState}
               defer
             />
 
             <div className="stage-meta stage-meta--bottom">
-              <span className="mono">132 × 36 · COMPACT</span>
-              <span className="mono stage-demo-label">示例数据</span>
               <span className="mono">440 × 284 · EXPANDED</span>
+              <span className="mono stage-demo-label">示例数据 · 可收起</span>
+              <span className="mono">132 × 36 · COMPACT</span>
             </div>
           </div>
+
+          <nav className="hero-page-rail" aria-label="原型页面">
+            <span className="hero-page-rail__label">PAGES</span>
+            {PAGES.map((page, index) => (
+              <button
+                key={page}
+                type="button"
+                className={state.page === index ? 'is-active' : ''}
+                aria-pressed={state.page === index}
+                onClick={() => send({ state: 'expanded', page: index })}
+              >
+                <span>0{index + 1}</span>
+                {page}
+              </button>
+            ))}
+          </nav>
         </div>
       </div>
     </section>

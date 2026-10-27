@@ -20,14 +20,22 @@ test.describe('FluidBar official site', () => {
 
     const frame = await waitForFrame(page, HERO_FRAME);
     const island = frame.locator('#island');
-    await expect(island).toHaveAttribute('data-expanded', 'false');
-    await expect(island).toHaveAttribute('data-view', 'idle');
-
-    await island.click();
     await expect(island).toHaveAttribute('data-expanded', 'true');
+    await expect(island).toHaveAttribute('data-view', 'idle');
     await page.waitForTimeout(700);
     const expandedWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(expandedWidth).toBeGreaterThan(430);
+
+    await page.locator('.hero-page-rail').getByRole('button', { name: /媒体/ }).click();
+    await expect(frame.locator('.pager-title')).toContainText('媒体');
+    await expect(page.locator('.hero-page-rail .is-active')).toContainText('媒体');
+
+    await frame.locator('#pagerCollapse').click();
+    await expect(island).toHaveAttribute('data-expanded', 'false');
+    await expect(island).toHaveAttribute('data-view', 'media');
+
+    await island.click();
+    await expect(island).toHaveAttribute('data-expanded', 'true');
     await page.keyboard.press('Escape');
     await expect(island).toHaveAttribute('data-expanded', 'false');
 

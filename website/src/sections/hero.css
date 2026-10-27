@@ -123,18 +123,88 @@
 
 .stage-light {
   position: absolute;
-  inset: 3% 2% 8%;
+  inset: 6% -4% 6%;
   z-index: 0;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(36, 71, 255, 0.09), transparent 72%);
-  filter: blur(18px);
+  background: radial-gradient(closest-side, rgba(36, 71, 255, 0.12), transparent 70%);
+  filter: blur(26px);
+  pointer-events: none;
+}
+
+.hero-stage::before {
+  content: '';
+  position: absolute;
+  inset: 4% -2% 3%;
+  z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(11, 13, 16, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(11, 13, 16, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(closest-side, #000 32%, transparent 80%);
+  mask-image: radial-gradient(closest-side, #000 32%, transparent 80%);
   pointer-events: none;
 }
 
 .stage-frame {
   position: relative;
   z-index: 1;
-  width: min(100%, 488px);
+  width: min(100%, 560px);
+}
+
+.stage-frame .prototype-frame {
+  max-width: min(560px, 58vh);
+}
+
+.hero-page-rail {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 92px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+  transform: translateY(-50%);
+}
+
+.hero-page-rail__label {
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--muted-2);
+}
+
+.hero-page-rail button {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.hero-page-rail button span {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--muted-2);
+}
+
+.hero-page-rail button:hover {
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+.hero-page-rail button.is-active {
+  color: var(--accent);
+}
+
+.hero-page-rail button.is-active span {
+  color: var(--accent);
 }
 
 .stage-meta {
@@ -183,6 +253,12 @@
   letter-spacing: 0.02em;
 }
 
+@media (max-width: 1250px) {
+  .hero-page-rail {
+    display: none;
+  }
+}
+
 @media (max-width: 1100px) {
   .hero-grid {
     gap: 36px;
@@ -225,6 +301,12 @@
 
   .stage-frame {
     width: 100%;
+  }
+
+  .hero-stage::before {
+    inset: 2% 0;
+    background-size: 36px 36px;
+    opacity: 0.7;
   }
 }
 

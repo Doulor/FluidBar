@@ -5,7 +5,8 @@
 ## 2026-10-28 — 官方网站重建为日光光学单页（真实原型嵌入）
 
 - 旧版 `website/` 视觉与代码完全退役；新站从空白 Vite + React + TypeScript 工程重建。
-- 页面为冷银白亮色，产品区是 488×444 的深色真实桌面窗；首屏、故事区、外观配置器直接嵌入 `docs/rewrite/prototype2`，不在网页里重画灵动岛。
+- 页面为冷银白亮色，产品区是 488×444 的深色真实桌面窗；首屏默认展示真实 expanded 440×284 控制中心，右侧页面索引直接驱动真实 pager。
+- 首屏、故事区、外观配置器直接嵌入 `docs/rewrite/prototype2`，不在网页里重画灵动岛。
 - 通过同源 postMessage 桥同步真实状态：idle 132×36、media 226×40、notifications 248×36、clipboard 264×36、agent 236×36，展开 440×284；形态、材质、强调色也直接写进原型。
 - ReactBits vendored 六个 TS-CSS 组件；Shaders 作为材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
 - 新增 Playwright 站点/可达性测试、字体子集、OG 图与 GitHub Pages 工作流。

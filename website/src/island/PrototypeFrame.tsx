@@ -29,6 +29,8 @@ interface PrototypeFrameProps {
   onReady?: () => void;
   lazy?: boolean;
   defer?: boolean;
+  startState?: 'expanded' | string;
+  startPage?: number;
 }
 
 function scheduleIdle(callback: () => void) {
@@ -47,7 +49,7 @@ function scheduleIdle(callback: () => void) {
 
 export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFrameProps>(
   function PrototypeFrame(
-    { title, name, poster, className = '', onState, onReady, lazy = false, defer = false },
+    { title, name, poster, className = '', onState, onReady, lazy = false, defer = false, startState, startPage },
     forwardedRef,
   ) {
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -82,7 +84,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
       if (!element) return;
       const update = () => {
         const width = element.getBoundingClientRect().width;
-        setScale(Math.min(1, Math.max(0.4, width / FRAME_WIDTH)));
+        setScale(Math.min(1.2, Math.max(0.4, width / FRAME_WIDTH)));
       };
       update();
       const observer = new ResizeObserver(update);
@@ -155,6 +157,11 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
       transform: `scale(${scale})`,
     };
     const wrapperStyle: CSSProperties = { height: FRAME_HEIGHT * scale };
+    const params = new URLSearchParams();
+    if (startState) params.set('state', startState);
+    if (startState === 'expanded') params.set('tab', ['home', 'media', 'notifications', 'clipboard', 'agent', 'widgets'][startPage ?? 0] ?? 'home');
+    const query = params.toString();
+    const frameSrc = `${import.meta.env.BASE_URL}island/embed.html${query ? `?${query}` : ''}`;
 
     return (
       <div
@@ -175,7 +182,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
             className="prototype-frame__iframe"
             title={title}
             name={name}
-            src={`${import.meta.env.BASE_URL}island/embed.html`}
+            src={frameSrc}
             style={frameStyle}
             loading="eager"
           />

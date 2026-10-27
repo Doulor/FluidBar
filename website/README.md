@@ -8,6 +8,8 @@ FluidBar 2.0 的官方单页，构建在 Vite + React + TypeScript 上。
 
 **不要重画灵动岛。**
 
+首屏默认展示真实 expanded 440×284 控制中心，可点岛内 chevron 收起；首屏右侧页面索引也直接驱动真实 pager。
+
 首屏、故事区、外观配置器里的岛都来自 `docs/rewrite/prototype2` 的真实实现。网页通过 `public/island/` 的 clean embed 加载原型，React 外壳只负责：
 
 - 用同源 `postMessage` 发送状态、页面、形态、材质、强调色；
@@ -81,6 +83,7 @@ BASE_PATH=/FluidBar/ pnpm build
 
 ## 事实边界
 
+- axe 审计覆盖官网页面本身；iframe 内是真实产品原型，保留原型自己的文案与对比度 token，不为了让审计变绿而改产品 UI。
 - 下载只跳转 GitHub Releases，不托管安装包。
 - 插件 manifest 示例来自 `docs/plugin/` 与 `schemas/`。
 - 性能数字来自 `docs/rewrite/STATUS.md` 和发布说明，页面底部标注了来源与测量环境。
