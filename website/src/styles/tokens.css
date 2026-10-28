@@ -19,6 +19,11 @@
   --shadow-soft: 0 40px 80px -28px rgba(24, 35, 50, 0.18), 0 8px 24px -12px rgba(24, 35, 50, 0.1);
   --shadow-window: 0 56px 110px -36px rgba(18, 27, 40, 0.32), 0 14px 34px -18px rgba(18, 27, 40, 0.18);
   --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --shadow-glass: 0 30px 70px -45px rgba(18, 27, 40, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-fill: linear-gradient(135deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.035));
+  --spectrum: linear-gradient(100deg, #4cc9f0, #8fb8ff 38%, #ffffff 62%, #f4b15e);
+  --obsidian: #08090c;
 
   --font-ui: 'Satoshi', 'Noto Sans SC', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif;
   --font-display: 'Satoshi', 'Noto Sans SC', 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif;

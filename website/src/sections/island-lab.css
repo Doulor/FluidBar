@@ -151,8 +151,28 @@
 }
 
 .config {
-  padding-top: 66px;
+  position: relative;
+  margin-top: 34px;
+  padding: 26px 26px 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  background: var(--glass-fill);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
   scroll-margin-top: calc(var(--nav-h) + 24px);
+}
+
+.config::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 26px;
+  right: 26px;
+  height: 1px;
+  background: var(--spectrum);
+  opacity: 0.38;
+  pointer-events: none;
 }
 
 .config-heading h3 {
@@ -210,32 +230,6 @@
   color: #fff;
 }
 
-.accent-row {
-  display: flex;
-  gap: 9px;
-}
-
-.accent-swatch {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--swatch);
-  border: 2px solid transparent;
-  box-shadow: 0 0 0 1px rgba(11, 13, 16, 0.14);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.accent-swatch:hover {
-  transform: translateY(-2px);
-}
-
-.accent-swatch.is-selected {
-  border-color: var(--surface);
-  box-shadow:
-    0 0 0 1px var(--ink),
-    0 4px 10px -4px rgba(11, 13, 16, 0.25);
-}
-
 .config-note {
   max-width: 28em;
   margin-top: 32px;
@@ -247,7 +241,33 @@
 .lab-stage {
   position: sticky;
   top: calc(var(--nav-h) + 30px);
+  isolation: isolate;
   min-width: 0;
+}
+
+.lab-stage::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 28px;
+  bottom: 18px;
+  left: max(0px, calc(50% - 270px));
+  right: max(0px, calc(50% - 270px));
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 32px;
+  background: var(--glass-fill);
+  box-shadow: 0 28px 64px -52px rgba(18, 27, 40, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  transform: rotate(1.2deg);
+  pointer-events: none;
+}
+
+.lab-stage .prototype-frame {
+  box-shadow:
+    0 42px 90px -44px rgba(8, 11, 16, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 44px -24px rgba(76, 201, 240, 0.22);
 }
 
 .stage-status {
@@ -334,7 +354,13 @@
   }
 
   .config {
-    padding-top: 52px;
+    margin-top: 28px;
+    padding: 22px 20px 20px;
+  }
+
+  .lab-stage::before {
+    inset: 22px -8px 12px;
+    border-radius: 26px;
   }
 
   .lab-step__body span {

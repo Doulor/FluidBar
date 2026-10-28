@@ -1,0 +1,117 @@
+.netease-card {
+  margin-top: 12px;
+  padding: 11px 10px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.34)),
+    rgba(255, 255, 255, 0.42);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  color: var(--ink);
+}
+
+.netease-card__head,
+.netease-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 4px;
+}
+
+.netease-card__head {
+  margin-bottom: 7px;
+  color: var(--muted-2);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.netease-card__source {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.netease-card__frame {
+  height: 66px;
+  overflow: hidden;
+  border: 1px solid rgba(11, 13, 16, 0.06);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.netease-card__frame iframe {
+  display: block;
+  width: 540px;
+  height: 66px;
+  border: 0;
+  transform-origin: left top;
+}
+
+.netease-card__foot {
+  margin-top: 8px;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
+
+.netease-card__foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 9px;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.netease-card__foot a:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 1300px) {
+  .netease-card__frame {
+    height: 57px;
+  }
+
+  .netease-card__frame iframe {
+    transform: scale(0.86);
+  }
+}
+
+@media (max-width: 1000px) {
+  .netease-card__frame {
+    height: 52px;
+  }
+
+  .netease-card__frame iframe {
+    transform: scale(0.78);
+  }
+}
+
+@media (max-width: 600px) {
+  .netease-card {
+    padding-inline: 8px;
+  }
+
+  .netease-card__frame {
+    height: 42px;
+  }
+
+  .netease-card__frame iframe {
+    transform: scale(0.63);
+  }
+
+  .netease-card__foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+}

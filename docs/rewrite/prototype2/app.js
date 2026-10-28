@@ -52,11 +52,11 @@
 
   var TRACKS = [
     {
-      title: 'Midnight Drive', artist: 'Lumen Fields', album: 'Nocturne', art: 0,
-      accent: '#66e0d4', duration: 214, initials: 'MD',
+      title: 'Take Me Hand', artist: 'DAISHI DANCE / Cécile Corbel', album: 'Take Me Hand', art: 0,
+      accent: '#66e0d4', duration: 252, initials: 'TM',
       lyrics: {
-        zh: ['霓虹在后视镜里融化', '城市把呼吸放慢'],
-        en: ['Neon melts in the rear-view', 'The city lets its breath out']
+        zh: ['官方歌词请在网易云音乐查看', '页面下方有官方歌词入口'],
+        en: ['Official lyrics are available on NetEase Cloud Music', 'Use the official lyrics link below']
       }
     },
     {
@@ -658,7 +658,7 @@
   var S = {
     lang: 'zh', theme: 'dark', mode: 'float', motion: 'normal',
     expanded: false, view: 'idle', tab: 'home',
-    playing: true, track: 0, progress: 74,
+    playing: true, track: 0, progress: 12,
     volume: 62, brightness: 78, hudType: 'volume',
     toggles: { wifi: true, bluetooth: false, focus: false },
     unread: 3, dismissed: new Set(), copiedId: 'c1', pinned: new Set(['c1']),

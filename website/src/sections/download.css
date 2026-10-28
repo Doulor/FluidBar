@@ -5,30 +5,63 @@
 
 .download-panel {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr) minmax(260px, 0.55fr);
   gap: 28px 48px;
   align-items: center;
   padding: 58px 56px 40px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--radius-panel);
   background:
-    radial-gradient(80% 130% at 8% 0%, rgba(255, 255, 255, 0.85), transparent 55%),
-    rgba(250, 251, 252, 0.6);
-  box-shadow: var(--shadow-soft);
+    radial-gradient(75% 120% at 8% 0%, rgba(76, 201, 240, 0.15), transparent 45%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 50%),
+    var(--obsidian);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 50px 100px -42px rgba(8, 11, 16, 0.62);
+  color: #f4f6f8;
   overflow: hidden;
 }
 
 .download-panel::before {
   content: '';
   position: absolute;
-  right: 12%;
-  top: -40%;
-  width: 420px;
-  height: 420px;
+  right: 9%;
+  top: -38%;
+  width: 440px;
+  height: 440px;
   border-radius: 50%;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
+  background:
+    conic-gradient(
+      from 210deg,
+      rgba(76, 201, 240, 0.55),
+      rgba(143, 184, 255, 0.2),
+      transparent 35%,
+      rgba(244, 177, 94, 0.2),
+      rgba(76, 201, 240, 0.55)
+    ) border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.55;
   pointer-events: none;
+}
+
+.download-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(115deg, transparent 28%, rgba(255, 255, 255, 0.06) 46%, transparent 62%);
+  pointer-events: none;
+}
+
+.download-panel .section-kicker {
+  color: #8cdbe8;
 }
 
 .download-mark {
@@ -37,15 +70,22 @@
   place-items: center;
   width: 92px;
   height: 92px;
+  border: 1px solid rgba(255, 255, 255, 0.54);
   border-radius: 28px;
-  background: var(--ink);
-  box-shadow: 0 24px 50px -24px rgba(11, 13, 16, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.38)),
+    rgba(255, 255, 255, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 24px 50px -24px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
 }
 
 .download-mark__orbit {
   position: absolute;
   inset: -12px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 36px;
 }
 
@@ -57,7 +97,7 @@
 .download-copy p:last-child {
   max-width: 34em;
   margin-top: 20px;
-  color: var(--muted);
+  color: rgba(244, 246, 248, 0.62);
   font-size: 15px;
 }
 
@@ -76,15 +116,16 @@
   min-height: 52px;
   padding: 0 24px;
   border-radius: 999px;
-  background: var(--ink);
-  color: #fff;
+  background: #f4f6f8;
+  color: #08090c;
   font-size: 15px;
-  font-weight: 500;
-  transition: background 0.2s ease, transform 0.2s ease;
+  font-weight: 600;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .download-primary:hover {
-  background: var(--accent);
+  background: var(--island-accent);
+  color: #071016;
   transform: translateY(-1px);
 }
 
@@ -93,22 +134,26 @@
   align-items: center;
   gap: 7px;
   min-height: 38px;
-  color: var(--muted);
+  color: rgba(244, 246, 248, 0.72);
   font-size: 13px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .download-secondary:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.42);
 }
 
 .download-link {
   margin-top: 2px;
-  color: var(--muted-2);
+  color: rgba(244, 246, 248, 0.62);
   font-size: 11px;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.download-link:hover {
+  color: #fff;
 }
 
 .download-meta {
@@ -117,8 +162,8 @@
   flex-wrap: wrap;
   gap: 10px 30px;
   padding-top: 26px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(244, 246, 248, 0.64);
   font-size: 11px;
 }
 
@@ -128,7 +173,7 @@
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.05em;
-  color: var(--muted-2);
+  color: rgba(244, 246, 248, 0.48);
   text-transform: uppercase;
 }
 

@@ -3,6 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 const HERO_FRAME = 'iframe[title^="FluidBar 真实交互原型"]';
 const LAB_FRAME = 'iframe[title="FluidBar 真实灵动岛原型"]';
 
+// The NetEase outchain player is a third-party document. Its own browser
+// detector tries to walk the parent window and reports a cross-origin error
+// on non-HTTPS local previews. That error is inside the player, not the site.
+const isThirdPartyPlayerNoise = (message: string) =>
+  /music\.163\.com|device__browser_update|Blocked a frame/.test(message);
+
 async function waitForFrame(page: Page, selector: string) {
   const frame = page.frameLocator(selector);
   await expect(frame.locator('body.ready')).toBeAttached({ timeout: 20_000 });
@@ -12,7 +18,9 @@ async function waitForFrame(page: Page, selector: string) {
 test.describe('FluidBar official site', () => {
   test('hero renders and the real island expands/collapses', async ({ page }) => {
     const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('pageerror', (error) => {
+      if (!isThirdPartyPlayerNoise(error.message)) errors.push(error.message);
+    });
 
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('桌面之上');
@@ -20,15 +28,18 @@ test.describe('FluidBar official site', () => {
 
     const frame = await waitForFrame(page, HERO_FRAME);
     const island = frame.locator('#island');
+    await expect(island).toHaveAttribute('data-expanded', 'false');
+    await expect(island).toHaveAttribute('data-view', 'media');
+    await expect(page.locator('.hero-page-rail .is-active')).toContainText('媒体');
+
+    await island.click();
     await expect(island).toHaveAttribute('data-expanded', 'true');
-    await expect(island).toHaveAttribute('data-view', 'idle');
     await page.waitForTimeout(700);
     const expandedWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(expandedWidth).toBeGreaterThan(430);
 
     await page.locator('.hero-page-rail').getByRole('button', { name: /媒体/ }).click();
     await expect(frame.locator('.pager-title')).toContainText('媒体');
-    await expect(page.locator('.hero-page-rail .is-active')).toContainText('媒体');
 
     await frame.locator('#pagerCollapse').click();
     await expect(island).toHaveAttribute('data-expanded', 'false');
@@ -49,6 +60,7 @@ test.describe('FluidBar official site', () => {
 
     await page.locator('.lab-step').nth(1).locator('.lab-step__head').click();
     await expect(island).toHaveAttribute('data-view', 'media');
+    await expect(page.getByRole('button', { name: /音乐 226/ })).toBeVisible();
     await page.waitForTimeout(500);
     const mediaWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(mediaWidth).toBeGreaterThan(220);
@@ -78,17 +90,16 @@ test.describe('FluidBar official site', () => {
 
     await page.getByRole('button', { name: '液态玻璃', exact: true }).click();
     await expect(body).toHaveAttribute('data-material', 'liquid');
+    await expect(page.getByText('强调色')).toHaveCount(0);
+  });
 
-    await page.getByRole('button', { name: '琥珀', exact: true }).click();
-    const labFrame = page.frame({ name: 'fluidbar-lab' });
-    if (!labFrame) throw new Error('lab prototype frame missing');
-    await expect
-      .poll(() =>
-        labFrame.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
-        ),
-      )
-      .toBe('#ff9500');
+  test('official song preview and lyrics entry are present', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('iframe[src*="music.163.com/outchain/player"]')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: /查看官方歌词/ })).toHaveAttribute(
+      'href',
+      'https://music.163.com/#/song?id=26092806',
+    );
   });
 
   test('mobile layout has no horizontal overflow and menu works', async ({ page }) => {
@@ -105,7 +116,9 @@ test.describe('FluidBar official site', () => {
 
   test('no page errors on the landing page', async ({ page }) => {
     const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('pageerror', (error) => {
+      if (!isThirdPartyPlayerNoise(error.message)) errors.push(error.message);
+    });
     await page.goto('/');
     await page.waitForTimeout(1500);
     expect(errors).toEqual([]);

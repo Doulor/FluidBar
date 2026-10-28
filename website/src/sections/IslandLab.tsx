@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from '@phosphor-icons/react';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
@@ -8,13 +8,6 @@ import './island-lab.css';
 
 const PAGE_LABELS = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 const ACTIVITY_VIEWS: CompactView[] = ['media', 'notifications', 'clipboard', 'agent'];
-const ACCENTS = [
-  { id: 'aqua', label: '青', value: '#4cc9f0' },
-  { id: 'mint', label: '薄荷', value: '#34c759' },
-  { id: 'amber', label: '琥珀', value: '#ff9500' },
-  { id: 'rose', label: '玫红', value: '#ff6b8a' },
-  { id: 'blue', label: '钴蓝', value: '#0a84ff' },
-];
 
 const STEPS = [
   {
@@ -25,7 +18,7 @@ const STEPS = [
   {
     id: 'activity',
     title: '活动态',
-    copy: '媒体、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
+    copy: '音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
   },
   {
     id: 'expand',
@@ -52,7 +45,6 @@ export function IslandLab() {
   const [page, setPage] = useState(0);
   const [mode, setMode] = useState<IslandMode>('float');
   const [material, setMaterial] = useState<IslandMaterial>('obsidian');
-  const [accent, setAccent] = useState('#4cc9f0');
   const stepRefs = useRef<Array<HTMLDivElement | null>>([]);
   const manualUntilRef = useRef(0);
 
@@ -103,10 +95,6 @@ export function IslandLab() {
   useEffect(() => {
     send({ material });
   }, [material, send]);
-
-  useEffect(() => {
-    send({ accent });
-  }, [accent, send]);
 
   const chooseStep = (index: number) => {
     manualUntilRef.current = performance.now() + 1600;
@@ -234,7 +222,7 @@ export function IslandLab() {
                   <br />
                   长成你的样子。
                 </h3>
-                <p>形态、材质和强调色都会直接写进真实原型。Dock 模式来自 prototype2 自己的 Dock，不是另画的。</p>
+                <p>形态和材质会直接写进真实原型。Dock 模式来自 prototype2 自己的 Dock，不是另画的。</p>
               </div>
 
               <div className="control-group">
@@ -281,27 +269,6 @@ export function IslandLab() {
                     >
                       {label}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="control-group">
-                <span className="control-label">强调色</span>
-                <div className="accent-row" role="group" aria-label="强调色">
-                  {ACCENTS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`accent-swatch ${accent === item.value ? 'is-selected' : ''}`}
-                      style={{ '--swatch': item.value } as CSSProperties}
-                      aria-label={item.label}
-                      aria-pressed={accent === item.value}
-                      title={item.label}
-                      onClick={() => {
-                        setAccent(item.value);
-                        send({ accent: item.value });
-                      }}
-                    />
                   ))}
                 </div>
               </div>

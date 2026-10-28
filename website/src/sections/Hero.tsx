@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUpRight } from '@phosphor-icons/react';
 import { SpecularButton } from '../ui/reactbits';
+import { NeteasePlayer } from '../ui/NeteasePlayer';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
 import './hero.css';
@@ -12,6 +13,18 @@ export function Hero() {
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  const activePage = state.expanded
+    ? state.page
+    : state.view === 'media'
+      ? 1
+      : state.view === 'notifications'
+        ? 2
+        : state.view === 'clipboard'
+          ? 3
+          : state.view === 'agent'
+            ? 4
+            : 0;
 
   return (
     <section id="experience" className="hero" aria-labelledby="hero-title">
@@ -26,7 +39,7 @@ export function Hero() {
             <span>多一座岛。</span>
           </h1>
           <p className="hero-sub">
-            常驻，但不打扰。媒体、通知、剪贴板与系统控制，都在一枚小岛里。
+            常驻，但不打扰。音乐、通知、剪贴板与系统控制，都在一枚小岛里。
           </p>
           <div className="hero-actions">
             <SpecularButton
@@ -75,19 +88,20 @@ export function Hero() {
 
             <PrototypeFrame
               ref={frameRef}
-              title="FluidBar 真实交互原型：默认展开控制中心，点击岛内按钮或按 Esc 收起"
+              title="FluidBar 真实交互原型：默认展示音乐播放收起态，点击小岛展开控制中心"
               name="fluidbar-hero"
-              poster={`${import.meta.env.BASE_URL}posters/lab-expanded.png`}
-              startState="expanded"
-              startPage={0}
+              poster={`${import.meta.env.BASE_URL}posters/hero-media.png`}
+              startState="media"
               onState={setState}
               defer
             />
 
+            <NeteasePlayer />
+
             <div className="stage-meta stage-meta--bottom">
+              <span className="mono">226 × 40 · MUSIC</span>
+              <span className="mono stage-demo-label">Take Me Hand · 官方试听</span>
               <span className="mono">440 × 284 · EXPANDED</span>
-              <span className="mono stage-demo-label">示例数据 · 可收起</span>
-              <span className="mono">132 × 36 · COMPACT</span>
             </div>
           </div>
 
@@ -97,8 +111,8 @@ export function Hero() {
               <button
                 key={page}
                 type="button"
-                className={state.page === index ? 'is-active' : ''}
-                aria-pressed={state.page === index}
+                className={activePage === index ? 'is-active' : ''}
+                aria-pressed={activePage === index}
                 onClick={() => send({ state: 'expanded', page: index })}
               >
                 <span>0{index + 1}</span>

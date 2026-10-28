@@ -1,5 +1,5 @@
 .hero {
-  padding-block: 54px 96px;
+  padding-block: 54px 72px;
   min-height: calc(100dvh - var(--nav-h));
   display: flex;
   align-items: center;
@@ -148,11 +148,54 @@
 .stage-frame {
   position: relative;
   z-index: 1;
+  isolation: isolate;
   width: min(100%, 560px);
+}
+
+.stage-frame::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 24px -18px -8px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 34px;
+  background: var(--glass-fill);
+  box-shadow: 0 28px 64px -52px rgba(18, 27, 40, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  transform: rotate(-1.2deg);
+  pointer-events: none;
 }
 
 .stage-frame .prototype-frame {
   max-width: min(560px, 58vh);
+  box-shadow:
+    0 42px 90px -44px rgba(8, 11, 16, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 46px -22px rgba(76, 201, 240, 0.28);
+}
+
+.hero-stage::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  right: -10px;
+  bottom: 24px;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 210deg,
+    rgba(76, 201, 240, 0.2),
+    rgba(143, 184, 255, 0.22),
+    rgba(255, 255, 255, 0),
+    rgba(244, 177, 94, 0.12),
+    rgba(76, 201, 240, 0.2)
+  );
+  -webkit-mask-image: radial-gradient(circle, transparent 54%, #000 55%, #000 65%, transparent 66%);
+  mask-image: radial-gradient(circle, transparent 54%, #000 55%, #000 65%, transparent 66%);
+  opacity: 0.62;
+  pointer-events: none;
 }
 
 .hero-page-rail {
@@ -165,8 +208,20 @@
   gap: 4px;
   width: 92px;
   padding-left: 16px;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid transparent;
+  background: linear-gradient(var(--line), var(--line)) left top / 1px 100% no-repeat;
   transform: translateY(-50%);
+}
+
+.hero-page-rail::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 46px;
+  background: var(--spectrum);
+  opacity: 0.7;
 }
 
 .hero-page-rail__label {
@@ -301,6 +356,19 @@
 
   .stage-frame {
     width: 100%;
+  }
+
+  .stage-frame::before {
+    inset: 26px -10px -8px;
+    border-radius: 26px;
+  }
+
+  .hero-stage::after {
+    width: 230px;
+    height: 230px;
+    right: -30px;
+    bottom: 20px;
+    opacity: 0.45;
   }
 
   .hero-stage::before {

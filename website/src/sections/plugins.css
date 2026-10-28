@@ -21,9 +21,14 @@
 
 .sdk-card {
   padding: 26px 28px !important;
-  border-radius: 20px !important;
-  background: #eef1f4 !important;
-  box-shadow: none !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 22px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.16)),
+    rgba(255, 255, 255, 0.28) !important;
+  box-shadow: var(--shadow-glass) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
   color: var(--ink);
 }
 
@@ -58,8 +63,17 @@
 }
 
 .plugin-list {
-  margin-top: 24px;
-  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding: 0 14px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.2);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.15);
 }
 
 .plugin-row {
@@ -144,7 +158,24 @@
 .plugins-code {
   min-width: 0;
   position: sticky;
+  isolation: isolate;
   top: calc(var(--nav-h) + 30px);
+}
+
+.plugins-code::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 32px -16px -16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 32px;
+  background:
+    radial-gradient(80% 110% at 8% 0%, rgba(76, 201, 240, 0.12), transparent 55%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 55%),
+    var(--obsidian);
+  box-shadow: 0 34px 70px -40px rgba(8, 11, 16, 0.7);
+  transform: rotate(2deg);
+  pointer-events: none;
 }
 
 .code-toolbar {
@@ -192,6 +223,9 @@
 .code-panel {
   padding: 24px;
   color: #f4f6f8;
+  background:
+    radial-gradient(90% 120% at 10% 0%, rgba(76, 201, 240, 0.07), transparent 50%),
+    rgba(8, 9, 12, 0.72);
 }
 
 .code-panel__head {
@@ -272,6 +306,11 @@
   .plugins-code {
     position: relative;
     top: auto;
+  }
+
+  .plugins-code::before {
+    inset: 28px -8px -10px;
+    border-radius: 26px;
   }
 
   .sdk-card h3 {
