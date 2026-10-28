@@ -56,8 +56,20 @@
       art: 0, cover: 'covers/take-me-hand.jpg', year: 2012,
       accent: '#7b9cff', duration: 214, initials: 'TMH',
       lyrics: {
-        zh: ['Take my hand now', 'Stay close to me, be my lover'],
-        en: ['Take my hand now', 'Stay close to me, be my lover']
+        zh: [
+          'In my dreams',
+          'I feel your light',
+          'I feel love is born again',
+          'Take my hand now',
+          'Stay close to me, be my lover'
+        ],
+        en: [
+          'In my dreams',
+          'I feel your light',
+          'I feel love is born again',
+          'Take my hand now',
+          'Stay close to me, be my lover'
+        ]
       }
     },
     {
@@ -296,6 +308,7 @@
       'home.remaining': '剩余 4 小时',
       'media.nowPlaying': '正在播放',
       'media.nextLine': '下一句',
+      'media.lineByLine': '逐句歌词',
       'media.play': '播放',
       'media.pause': '暂停',
       'media.prev': '上一首',
@@ -502,6 +515,7 @@
       'home.remaining': '4h left',
       'media.nowPlaying': 'Now playing',
       'media.nextLine': 'Next',
+      'media.lineByLine': 'Lyrics',
       'media.play': 'Play',
       'media.pause': 'Pause',
       'media.prev': 'Previous',
@@ -867,9 +881,6 @@
         artHTML(tr, 'media-art') +
         '<div class="media-copy"><span class="media-title">' + esc(tr.title) + '</span><span class="media-sub">' + esc(tr.artist) + '</span></div>' +
         '<span class="wave' + (S.playing ? '' : ' paused') + '" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>' +
-        '<button class="mini-play" type="button" data-act="toggle-play" aria-label="' + esc(t(S.playing ? 'media.pause' : 'media.play')) + '">' +
-          icon(S.playing ? 'pause' : 'play', 12) +
-        '</button>' +
         '<span class="media-progress" aria-hidden="true"><span style="width:' + progressPct().toFixed(2) + '%"></span></span>' +
       '</div>';
     }
@@ -981,8 +992,6 @@
       }).join('') + '</div>' +
       '<div class="media-card" data-act="go-media">' + artHTML(tr, 'media-art') +
         '<div class="media-copy"><span class="media-title">' + esc(tr.title) + '</span><span class="media-sub">' + esc(tr.artist) + ' · ' + esc(tr.album) + '</span></div>' +
-        '<button class="mini-play" type="button" data-act="toggle-play" aria-label="' + esc(t(S.playing ? 'media.pause' : 'media.play')) + '">' +
-          icon(S.playing ? 'pause' : 'play', 12) + '</button>' +
         '<span class="media-progress" aria-hidden="true"><span style="width:' + progressPct().toFixed(2) + '%"></span></span>' +
       '</div>' +
       '<div class="slider-card">' +
@@ -1017,10 +1026,18 @@
           '<div class="media-album">' + esc(tr.album) + ' · ' + (tr.year || 2026) + '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="lyric-card">' +
-        '<div class="lyric-now">' + esc(lyric[0]) + '</div>' +
-        '<div class="lyric-next"><span class="tag">' + esc(t('media.nextLine')) + '</span><span class="text">' + esc(lyric[1]) + '</span></div>' +
-      '</div>' +
+      (function () {
+        var current = Math.min(lyric.length - 1, Math.max(0, Math.floor((S.progress / tr.duration) * lyric.length)));
+        var start = Math.max(0, Math.min(lyric.length - 3, current - 1));
+        var visible = lyric.slice(start, start + 3);
+        var lineNumber = ('0' + (current + 1)).slice(-2) + ' / ' + ('0' + lyric.length).slice(-2);
+        return '<div class="lyric-card lyric-card--lines">' +
+          '<div class="lyric-head"><span>' + esc(t('media.lineByLine')) + '</span><span>' + lineNumber + '</span></div>' +
+          '<div class="lyric-lines">' + visible.map(function (line, index) {
+            return '<span class="lyric-line' + (start + index === current ? ' is-active' : '') + '">' + esc(line) + '</span>';
+          }).join('') + '</div>' +
+        '</div>';
+      })() +
       '<div class="seek-row">' +
         '<span class="seek-time js-time-current">' + fmtTime(S.progress) + '</span>' +
         '<div class="seek" data-act="seek" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="' + tr.duration + '" aria-valuenow="' + Math.round(S.progress) + '">' +
@@ -1029,11 +1046,6 @@
         '<span class="seek-time end js-time-remaining">' + fmtTime(tr.duration - S.progress) + '</span>' +
       '</div>' +
       '<div class="media-foot">' +
-        '<div class="transport">' +
-          '<button class="transport-btn" type="button" data-act="prev" aria-label="' + esc(t('media.prev')) + '">' + icon('prev', 14) + '</button>' +
-          '<button class="play-btn" type="button" data-act="toggle-play" aria-label="' + esc(t(S.playing ? 'media.pause' : 'media.play')) + '">' + icon(S.playing ? 'pause' : 'play', 13) + '</button>' +
-          '<button class="transport-btn" type="button" data-act="next" aria-label="' + esc(t('media.next')) + '">' + icon('next', 14) + '</button>' +
-        '</div>' +
         '<div class="media-output">' +
           '<button class="output-btn" type="button" data-act="output">' + icon('speaker', 12) + '<span>' + esc(t('media.speaker')) + '</span></button>' +
           '<button class="queue-btn" type="button" data-act="queue">' + icon('queue', 12) + '<span>' + esc(t('media.queue')) + '</span><span class="queue-count">· 3</span></button>' +

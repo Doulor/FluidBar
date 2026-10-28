@@ -9,6 +9,13 @@ import './island-lab.css';
 const PAGE_LABELS = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 const ACTIVITY_VIEWS: CompactView[] = ['media', 'notifications', 'clipboard', 'agent'];
 const MUSIC_COVER = `${import.meta.env.BASE_URL}island/covers/take-me-hand.jpg`;
+const MUSIC_LYRICS = [
+  'In my dreams',
+  'I feel your light',
+  'I feel love is born again',
+  'Take my hand now',
+  'Stay close to me, be my lover',
+];
 
 const STEPS = [
   {
@@ -204,10 +211,16 @@ export function IslandLab() {
                         <span className="music-study__eyebrow mono">REAL MEDIA STATE · 2012</span>
                         <strong>Take Me Hand</strong>
                         <span className="music-study__artist">DAISHI DANCE feat. Cécile Corbel</span>
-                        <span className="music-study__lyric">
-                          “Take my hand now”
-                          <br />
-                          “Stay close to me, be my lover”
+                        <span className="music-study__lyrics">
+                          <span className="music-study__lyric-label mono">逐句歌词 · LYRICS</span>
+                          {MUSIC_LYRICS.map((line, index) => (
+                            <span
+                              key={line}
+                              className={`music-study__lyric-line ${index === 0 ? 'is-current' : ''}`}
+                            >
+                              {line}
+                            </span>
+                          ))}
                         </span>
                         <span className="music-study__note">封面与歌词片段 · 仅视觉演示，不播放音频</span>
                       </span>

@@ -1463,6 +1463,39 @@ input[type="range"].fb-range::-webkit-slider-thumb {
 }
 .lyric-next .tag { flex: none; font-size: 7.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-3); }
 .lyric-next .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
+.lyric-card--lines {
+  height: 62px;
+  gap: 2px;
+  padding: 6px 10px;
+}
+.lyric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--fg-3);
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lyric-lines {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+.lyric-line {
+  overflow: hidden;
+  color: var(--fg-3);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lyric-line.is-active {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+}
 
 .seek-row { flex: none; display: flex; align-items: center; gap: 9px; height: 22px; margin-top: 10px; }
 .seek-time { flex: none; width: 30px; font-size: 8.5px; color: var(--fg-3); }
@@ -1488,7 +1521,7 @@ input[type="range"].fb-range::-webkit-slider-thumb {
   transform: translateY(-50%);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
-.media-foot { flex: none; margin-top: auto; height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.media-foot { flex: none; margin-top: auto; height: 38px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .transport { display: flex; align-items: center; gap: 3px; }
 .transport-btn {
   width: 28px;

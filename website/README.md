@@ -118,4 +118,4 @@ wrangler deploy --config wrangler.worker.toml
 - 插件 manifest 示例来自 `docs/plugin/` 与 `schemas/`。
 - 性能数字来自 `docs/rewrite/STATUS.md` 和发布说明，页面底部标注了来源与测量环境。
 - 演示区标注“示例数据”，不冒充用户真实数据。
-- 媒体活动态使用 `Take Me Hand` 的封面与歌词片段做视觉样本，不加载、不播放音频。
+- 媒体活动态使用 `Take Me Hand` 的封面与逐句歌词片段做视觉样本，不加载、不播放音频，也不显示播放/暂停按钮。

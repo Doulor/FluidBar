@@ -259,13 +259,31 @@
   white-space: nowrap;
 }
 
-.music-study__lyric {
+.music-study__lyrics {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   margin-top: 12px;
-  padding-top: 10px;
+  padding-top: 9px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(244, 246, 248, 0.82);
+}
+
+.music-study__lyric-label {
+  margin-bottom: 3px;
+  color: rgba(244, 246, 248, 0.6);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.music-study__lyric-line {
+  color: rgba(244, 246, 248, 0.48);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.45;
+}
+
+.music-study__lyric-line.is-current {
+  color: rgba(244, 246, 248, 0.94);
+  font-weight: 500;
 }
 
 .music-study__note {
@@ -542,7 +560,7 @@
     font-size: 23px;
   }
 
-  .music-study__lyric {
+  .music-study__lyric-line {
     font-size: 11px;
   }
 
