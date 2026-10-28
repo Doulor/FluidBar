@@ -218,6 +218,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     private async Task AttachAndPrimeAsync(UserNotificationListener listener, CancellationToken cancellationToken)
     {
+        Media.MediaDiagnostics.LogAlways("notifications.attach " +
+            $"polling={(_pollingFallback ? "yes" : "no")} at={DateTimeOffset.Now:HH:mm:ss.fff}");
         SubscribeOrEnablePolling(listener);
 
         IReadOnlyList<UserNotification> notifications = Array.Empty<UserNotification>();
@@ -425,6 +427,19 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             }
 
             var added = _history.Process(candidates);
+
+            // Always-on provenance: one line per arrival (id + creation time + title). A toast that keeps
+            // re-appearing on the island shows up here either with the same id (consumer-side repeat) or with a
+            // fresh id for identical content (listener id instability) — the two need different fixes.
+            if (added.Count > 0)
+            {
+                Media.MediaDiagnostics.LogAlways(
+                    "notifications.added " + string.Join(" | ",
+                        added.Select(entry =>
+                            $"id={entry.Id} created={entry.CreatedAt:HH:mm:ss} app='{entry.AppName}' " +
+                            $"title='{(entry.Title.Length > 40 ? entry.Title[..40] : entry.Title)}' " +
+                            $"body='{(entry.Body.Length > 60 ? entry.Body[..60] : entry.Body)}'")));
+            }
 
             // Close sync: toasts the user removed from Action Center are no longer returned by the
             // listener, so the recent list must drop them (before this, only additions were handled and

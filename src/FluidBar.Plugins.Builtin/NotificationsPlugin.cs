@@ -15,7 +15,19 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
     private readonly Func<string, Task<bool>>? _copyText;
     private readonly object _stateGate = new();
     private uint _lastNotificationId;
+    private string? _lastContentKey;
+    private DateTimeOffset _lastShownAt;
     private NotificationAccessState _lastAccess = NotificationAccessState.Unavailable;
+
+    /// <summary>
+    /// How long content that was already shown must stay away before it may be shown again.
+    /// <para>
+    /// Messengers re-post the same toast with a fresh id (Phone Link does it for every QQ message: same app, same
+    /// "QQ" title, same body, new id), so id-only de-duplication let the island pop the same notification up again
+    /// every few minutes (report 2026-10-28). Content is what the user sees, so content is what we compare.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan DuplicateContentWindow = TimeSpan.FromMinutes(5);
 
     public NotificationsPlugin(INotificationSource notifications, Func<string, Task<bool>>? copyText = null)
     {
@@ -51,9 +63,14 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
             return ValueTask.CompletedTask;
         });
 
+        MediaAndState("plugin.notify.started");
         _lastAccess = _notifications.AccessState;
         PublishAccessState(_lastAccess);
-        PublishSnapshot(_notifications.Current);
+
+        // The listener is primed before the plugin starts, so whatever Current holds is backlog. Remembering it
+        // silently is what keeps a plugin (re)start from replaying the last toast on the island — the other half of
+        // the "the same notification shows up again and again" report.
+        RememberWithoutPublishing(_notifications.Current?.Latest);
     }
 
     private void OnSnapshotChanged(object? sender, SnapshotEventArgs<NotificationsSnapshot> args)
@@ -123,19 +140,56 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
                 _lastNotificationId = 0;
             }
 
+            MediaAndState("plugin.notify.retract");
             Retract();
             return;
         }
 
+        var now = Context.Time.GetUtcNow();
+        var contentKey = ContentKey(latest);
+        var suppressed = false;
+        var olderThanShown = false;
         lock (_stateGate)
         {
-            if (latest.Id == _lastNotificationId)
+            // Notification ids only ever grow within a session. A *lower* id therefore means the snapshot went
+            // backwards — which happens when the newer toasts are cleared from Action Center and the listener's list
+            // falls back to an older one. Republishing it popped an already-shown notification up again (seen with
+            // PowerToys' "AlwaysOnTop" right after three QQ toasts, 2026-10-28).
+            if (latest.Id <= _lastNotificationId)
             {
-                return;
+                olderThanShown = latest.Id < _lastNotificationId;
+                if (!olderThanShown)
+                {
+                    return;
+                }
             }
 
             _lastNotificationId = latest.Id;
+            if (string.Equals(contentKey, _lastContentKey, StringComparison.Ordinal)
+                && now - _lastShownAt < DuplicateContentWindow)
+            {
+                suppressed = true;
+            }
+            else
+            {
+                _lastContentKey = contentKey;
+                _lastShownAt = now;
+            }
         }
+
+        if (olderThanShown)
+        {
+            MediaAndState($"plugin.notify.skipped-older id={latest.Id} title='{ShortText(latest.Title)}'");
+            return;
+        }
+
+        if (suppressed)
+        {
+            MediaAndState($"plugin.notify.suppressed id={latest.Id} title='{ShortText(latest.Title)}'");
+            return;
+        }
+
+        MediaAndState($"plugin.notify.publish id={latest.Id} title='{ShortText(latest.Title)}'");
 
         var code = latest.VerificationCode;
         var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -166,11 +220,42 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
         });
     }
 
+    /// <summary>Remembers a notification without showing it (startup backlog / restart replay guard).</summary>
+    /// <param name="latest">Newest entry of the current snapshot, or null.</param>
+    private void RememberWithoutPublishing(NotificationEntry? latest)
+    {
+        if (latest is null)
+        {
+            return;
+        }
+
+        lock (_stateGate)
+        {
+            _lastNotificationId = latest.Id;
+            _lastContentKey = ContentKey(latest);
+            _lastShownAt = Context.Time.GetUtcNow();
+        }
+    }
+
+    /// <summary>Identity of what the user actually sees (app + title + body).</summary>
+    /// <param name="entry">Notification entry.</param>
+    private static string ContentKey(NotificationEntry entry)
+        => entry.AppName + "|" + entry.Title + "|" + entry.Body;
+
+    private static string ShortText(string? value)
+        => value is { Length: > 40 } ? value[..40] : value ?? string.Empty;
+
     protected override void OnStopped()
     {
         lock (_stateGate)
         {
             _lastNotificationId = 0;
         }
+
+        MediaAndState("plugin.notify.stopped");
     }
+
+    /// <summary>Diagnostic line into the shared media-state log (rare: one per notification transition).</summary>
+    private static void MediaAndState(string message)
+        => FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(message);
 }

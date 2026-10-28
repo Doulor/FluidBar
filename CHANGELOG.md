@@ -12,6 +12,22 @@
 - 新增 Playwright 站点/可达性测试、字体子集、OG 图与 GitHub Pages 工作流。
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 
+## 2026-10-28 — 同一个通知被反复弹出来（两个真实机制 + 打点）
+
+- 症状：通知插件把"同一条通知"隔一会儿又显示一次。
+- 机制一（id 抖动）：手机连接（Phone Link）会把同一条消息**用新 id 重投**——日志里同一秒出现
+  `id=338005/338006/338007 app='QQ' title='4-301'`，每条都被当成新通知发布。
+- 机制二（指针回退）：新通知从通知中心消失后，监听器返回的列表"最新一条"会**退回到更旧的通知**，插件只比较
+  "id 是否变化"，于是把已经展示过的旧通知又弹一次（日志：三条 QQ 之后又 `plugin.notify.publish id=338003 AlwaysOnTop`）。
+- 机制三（插件重启重放）：插件启动时会把当前快照"最新一条"当作新通知发布——插件重启即重弹。
+- 修复（`NotificationsPlugin`）：
+  1. **单调 id**：只发布比"已展示最大 id"更大的通知，旧通知回退时记 `plugin.notify.skipped-older` 并忽略；
+  2. **内容窗口**：app+标题+正文完全相同且 5 分钟内已展示过 → 记 `plugin.notify.suppressed`，不再弹；
+  3. **启动静默**：插件启动时把当前最新一条记为已展示（不发布），插件重启不再重放。
+- 打点：`notifications.attach` / `notifications.added`（id/时间/应用/标题/正文）/ `plugin.notify.publish|suppressed|skipped-older|started|stopped`，
+  都在 `%TEMP%\fluidbar-pin-diag.log`，下次再出现可直接定位是哪一层。
+- 验证：实测日志里"同标题不同正文"的两条 QQ 群消息仍会各自弹出（内容不同，属正常）；
+  旧通知回退重弹的路径由新增单测覆盖；插件 30 测试绿、UI 565 绿、全量 2766 绿。
 ## 2026-10-27 — 发布包改为自包含（修复用户端 "You must install .NET Desktop Runtime"）
 
 - 症状：用户装上 4.0.0-preview.1 后弹 "You must install .NET Desktop Runtime to run this application."。

@@ -227,6 +227,102 @@ public sealed class NotificationsPluginTests
     }
 
     [Fact]
+    public async Task Starting_with_a_backlog_does_not_replay_the_last_toast()
+    {
+        // The listener is primed before the plugin starts, so the current snapshot is Action Center backlog. It used
+        // to be published on start, which replayed the newest toast every time the plugin restarted.
+        var notifications = new FakeNotificationSource();
+        notifications.Emit(PluginTestHarness.Notification("123456", id: 42));
+
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications),
+            BuiltinIds.NotificationsPlugin);
+
+        Assert.Equal(0, context.Publisher.Count);
+    }
+
+    [Fact]
+    public async Task Identical_content_with_a_fresh_id_is_shown_once_inside_the_window()
+    {
+        // Phone Link re-posts the same QQ toast with a new id for every message: same app, same title, same body.
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-10-28T10:00:00Z"));
+        var notifications = new FakeNotificationSource();
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications),
+            BuiltinIds.NotificationsPlugin, time);
+
+        notifications.Emit(PluginTestHarness.Notification(null, id: 1));
+        Assert.Equal(1, context.Publisher.Count);
+
+        time.Advance(TimeSpan.FromMinutes(1));
+        notifications.Emit(PluginTestHarness.Notification(null, id: 2));
+        Assert.Equal(1, context.Publisher.Count);
+
+        time.Advance(TimeSpan.FromMinutes(1));
+        notifications.Emit(PluginTestHarness.Notification(null, id: 3));
+        Assert.Equal(1, context.Publisher.Count);
+    }
+
+    [Fact]
+    public async Task A_newer_toast_disappearing_does_not_bring_the_previous_one_back()
+    {
+        // Windows drops a toast from the listener list (user dismissed it, Action Center pruned it) and the snapshot's
+        // "latest" then falls back to an older notification. Republishing that popped an already-seen pill again.
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-10-28T10:00:00Z"));
+        var notifications = new FakeNotificationSource();
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications),
+            BuiltinIds.NotificationsPlugin, time);
+
+        notifications.Emit(new NotificationEntry(10, "App", "First", "one", DateTimeOffset.UnixEpoch, null));
+        notifications.Emit(new NotificationEntry(20, "App", "Second", "two", DateTimeOffset.UnixEpoch, null));
+        Assert.Equal(2, context.Publisher.Count);
+
+        time.Advance(TimeSpan.FromSeconds(2));
+        notifications.Emit(new NotificationEntry(10, "App", "First", "one", DateTimeOffset.UnixEpoch, null));
+
+        Assert.Equal(2, context.Publisher.Count);
+    }
+
+    [Fact]
+    public async Task Identical_content_is_shown_again_after_the_window()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-10-28T10:00:00Z"));
+        var notifications = new FakeNotificationSource();
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications),
+            BuiltinIds.NotificationsPlugin, time);
+
+        notifications.Emit(PluginTestHarness.Notification(null, id: 1));
+        time.Advance(TimeSpan.FromMinutes(6));
+        notifications.Emit(PluginTestHarness.Notification(null, id: 2));
+
+        Assert.Equal(2, context.Publisher.Count);
+    }
+
+    [Fact]
+    public async Task Different_content_is_shown_even_inside_the_window()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-10-28T10:00:00Z"));
+        var notifications = new FakeNotificationSource();
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications),
+            BuiltinIds.NotificationsPlugin, time);
+
+        notifications.Emit(PluginTestHarness.Notification(null, id: 1));
+        time.Advance(TimeSpan.FromSeconds(5));
+        notifications.Emit(new NotificationEntry(2, "App", "Title", "A different message",
+            DateTimeOffset.UnixEpoch, null));
+
+        Assert.Equal(2, context.Publisher.Count);
+    }
+
+    /// <summary>Deterministic clock for the duplicate window.</summary>
+    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
+    {
+        private DateTimeOffset _now = start;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now += by;
+    }
+
+    [Fact]
     public async Task CopyCodeAndRequestAccessCommandsRoute()
     {
         var notifications = new FakeNotificationSource();
