@@ -11,6 +11,7 @@
 - ReactBits vendored 六个 TS-CSS 组件；Shaders 作为材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
 - 新增 Playwright 站点/可达性测试、字体子集、OG 图与 Cloudflare Pages 静态部署配置（`wrangler.toml`、`_headers`、`SITE_URL`）。
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
+- 部署：Cloudflare Pages 项目 `fluidbar` 已上线；`fluidbar.doulor.cn` 通过 `fluidbar-site` Worker 路由代理，真实 iframe、字体、Shaders 与 axe 站点检查通过。
 
 ## 2026-10-28 — 封面：通用默认图被当成真封面、好封面被晚到的差图顶掉、抓取被位置刷新反复取消
 

@@ -639,6 +639,7 @@ website/
 - `SITE_URL` 通过构建环境变量注入，用于 canonical、OG、JSON-LD；默认 `https://fluidbar.pages.dev`。
 - `public/_headers` 设置静态缓存与基础安全头；`public/robots.txt` 允许抓取。
 - `wrangler.toml` 配置 `pages_build_output_dir = "dist"`。
+- 当前自定义域名 `fluidbar.doulor.cn` 由 `fluidbar-site` Worker 路由代理到 Pages；原因是该域名已有 A 记录，Pages 自定义域名验证要求 CNAME。Worker 配置独立在 `wrangler.worker.toml`，不改变 Pages 部署流程。
 - 所有仓库内文档链接使用 GitHub 绝对 URL，不依赖部署域名。
 - `pnpm build` 与 `pnpm test:e2e` 在 CI 中运行。
 

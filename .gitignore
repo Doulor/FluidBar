@@ -18,6 +18,7 @@ TestResults/
 # Local agent / tooling state
 .superpowers/
 .claude/
+.wrangler/
 
 # Prototype review artifacts (screenshots are regenerated on demand)
 docs/rewrite/prototype/_shots/

@@ -93,7 +93,23 @@ npx wrangler pages deploy dist
 
 `wrangler.toml` 已配置 `pages_build_output_dir = "dist"` 和项目名 `fluidbar`。`public/_headers` 会在构建时复制到产物，用于设置静态缓存与基础安全头。
 
-注意：`SITE_URL` 只影响 canonical、OG 图和 JSON-LD 的绝对地址；不改站点运行逻辑。
+### 当前线上部署
+
+- Pages 项目：`fluidbar` → `https://fluidbar.pages.dev`
+- 自定义域名：`https://fluidbar.doulor.cn`
+- 自定义域名由 `fluidbar-site` Worker 路由代理到 Pages。原因是 `fluidbar.doulor.cn` 已有一条 A 记录，Pages 的自定义域名验证要求 CNAME；Worker 路由复用现有 Cloudflare 代理记录，不改 DNS。
+- Worker 配置：`wrangler.worker.toml`，脚本：`worker-proxy.js`
+- 更新流程：
+
+```bash
+cd website
+SITE_URL=https://fluidbar.doulor.cn pnpm build
+wrangler pages deploy dist --project-name fluidbar --branch main --commit-dirty=true
+# 只有 worker-proxy.js 或路由变更时才需要：
+wrangler deploy --config wrangler.worker.toml
+```
+
+注意：`SITE_URL` 只影响 canonical、OG 图和 JSON-LD 的绝对地址；不改站点运行逻辑。Worker 代理不缓存独立副本，Pages 新部署会自动生效。
 
 ## 事实边界
 
