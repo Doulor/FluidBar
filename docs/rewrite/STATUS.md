@@ -6,7 +6,7 @@
 ## 2026-10-28 官网检查点（日光光学 + 真实原型嵌入）
 
 - 新官网位于 `website/`：Vite 8 + React 19 + TypeScript，页面为冷银白亮色，产品窗为 488×444 的真实 prototype2 桌面场景。
-- 首屏默认展示真实 music 收起态，右侧页面索引直接驱动真实 pager；下方接网易云音乐官方入口卡（官方封面、试听、歌词入口）。首屏、故事区、外观配置器都直接加载 `docs/rewrite/prototype2`，通过同源 postMessage 驱动真实 compact/expanded 状态、页面、形态和材质；网页不重画岛。
+- 首屏默认展示真实 music 收起态，右侧页面索引直接驱动真实 pager；下方接站内公版曲库卡（《送别》《康定情歌》的自托管器乐改编、歌词、封面和曲目切换）。首屏、故事区、外观配置器都直接加载 `docs/rewrite/prototype2`，通过同源 postMessage 驱动真实 compact/expanded 状态、页面、形态、材质和曲目；网页不重画岛。
 - ReactBits 以 TS-CSS 源码 vendored 六个组件；Shaders 只做材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
 - 验证：`pnpm build` 通过；Vitest 协议测试 5/5、Playwright 站点 6/6、可达性 2/2 通过；1440×900 与 390×844 无横向溢出；官网页面 chrome 的 axe 无 serious/critical（iframe 内真实原型的 UI token 不做改名/改色）。
 - 部署：已上线 Cloudflare Pages 项目 `fluidbar`（`https://fluidbar.pages.dev`）。`https://fluidbar.doulor.cn` 已通过 `fluidbar-site` Worker 路由代理到 Pages，真实 iframe 与 Shaders 在该域名下验证通过；`SITE_URL` 构建为 `https://fluidbar.doulor.cn`。Worker 配置见 `website/wrangler.worker.toml`。

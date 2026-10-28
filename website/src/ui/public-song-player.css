@@ -1,0 +1,209 @@
+.public-song {
+  position: relative;
+  margin-top: 12px;
+  padding: 11px 12px 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background:
+    radial-gradient(100% 130% at 12% 0%, rgba(76, 201, 240, 0.12), transparent 52%),
+    linear-gradient(135deg, rgba(21, 25, 31, 0.96), rgba(8, 10, 14, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 20px 44px -30px rgba(0, 0, 0, 0.72);
+  color: #f2f6f8;
+}
+
+.public-song::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--spectrum);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.public-song__top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.public-song__cover {
+  position: relative;
+  flex: 0 0 auto;
+  width: 60px;
+  height: 60px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #0a0c10;
+}
+
+.public-song__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.public-song__number {
+  position: absolute;
+  left: 6px;
+  bottom: 5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(5, 7, 10, 0.64);
+  color: rgba(255, 255, 255, 0.82);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.public-song__identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.public-song__eyebrow {
+  color: #8fdfeb;
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.public-song__identity strong {
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-song__identity > span:last-child {
+  overflow: hidden;
+  color: rgba(238, 244, 247, 0.55);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-song__play {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0b0d10;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.public-song__play:hover {
+  background: #fff;
+  transform: scale(1.05);
+}
+
+.public-song__lyrics {
+  display: grid;
+  gap: 2px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.public-song__lyrics p {
+  overflow: hidden;
+  color: rgba(237, 244, 247, 0.4);
+  font-size: 10px;
+  line-height: 1.55;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.28s ease;
+}
+
+.public-song__lyrics p.is-active {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.public-song__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.public-song__tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.public-song__tabs button {
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 999px;
+  color: rgba(238, 244, 247, 0.52);
+  font-size: 8.5px;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.public-song__tabs button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.public-song__tabs button.is-active {
+  color: #0b0d10;
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.public-song__time {
+  flex: 0 0 auto;
+  color: rgba(238, 244, 247, 0.4);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.public-song__progress {
+  height: 2px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.public-song__progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4cc9f0, #9be7d8);
+  transition: width 0.2s linear;
+}
+
+@media (max-width: 480px) {
+  .public-song__cover {
+    width: 52px;
+    height: 52px;
+  }
+
+  .public-song__identity strong {
+    font-size: 16px;
+  }
+
+  .public-song__lyrics p {
+    font-size: 9px;
+  }
+}

@@ -8,7 +8,7 @@
 
    Protocol (same-origin only; the parent must be the embedding window):
      parent -> iframe:
-       { type: 'fluidbar:set', state?, page?, mode?, material?, accent?, motion? }
+       { type: 'fluidbar:set', state?, page?, track?, mode?, material?, accent?, motion? }
      iframe -> parent:
        { type: 'fluidbar:state', state: {
            ready, expanded, view, page, mode, material, theme, accent,
@@ -17,6 +17,7 @@
    - `state`: 'idle' | 'media' | 'notifications' | 'clipboard' | 'agent' |
               'timer' | 'battery' | 'hud' | 'expanded'
    - `page`: integer 0..5 (ensures the island is expanded, then presses 1..6)
+   - `track`: integer 0..2 (real public-domain demo media track)
    - `mode`: 'float' | 'flush' | 'dock'
    - `material`: 'obsidian' | 'acrylic' | 'liquid'
    - `accent`: any CSS color string
@@ -98,6 +99,10 @@
 
   function isValidPage(value) {
     return typeof value === 'number' && isFinite(value) && Math.floor(value) === value;
+  }
+
+  function isValidTrack(value) {
+    return isValidPage(value) && value >= 0 && value <= 2;
   }
 
   function isValidAccent(value) {
@@ -194,6 +199,12 @@
     if (isOneOf(MATERIALS, message.material)) {
       desiredMaterial = message.material;
       document.body.dataset.material = message.material;
+      applied = true;
+    }
+
+    if (isValidTrack(message.track) && window.FluidBarPrototype &&
+        typeof window.FluidBarPrototype.setTrack === 'function') {
+      window.FluidBarPrototype.setTrack(message.track);
       applied = true;
     }
 

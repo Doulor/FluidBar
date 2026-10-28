@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { ArrowDown, ArrowUpRight } from '@phosphor-icons/react';
 import { SpecularButton } from '../ui/reactbits';
-import { NeteasePlayer } from '../ui/NeteasePlayer';
+import { PublicSongPlayer } from '../ui/PublicSongPlayer';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
 import './hero.css';
@@ -9,9 +10,15 @@ const PAGES = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 
 export function Hero() {
   const { frameRef, state, setState, send } = usePrototype();
+  const [songIndex, setSongIndex] = useState(0);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const selectSong = (index: number) => {
+    setSongIndex(index);
+    send({ state: 'media', track: index });
   };
 
   const activePage = state.expanded
@@ -96,11 +103,11 @@ export function Hero() {
               defer
             />
 
-            <NeteasePlayer />
+            <PublicSongPlayer index={songIndex} onSelect={selectSong} />
 
             <div className="stage-meta stage-meta--bottom">
               <span className="mono">226 × 40 · MUSIC</span>
-              <span className="mono stage-demo-label">Take Me Hand · 官方入口</span>
+              <span className="mono stage-demo-label">PUBLIC DOMAIN · 直接内置</span>
               <span className="mono">440 × 284 · EXPANDED</span>
             </div>
           </div>

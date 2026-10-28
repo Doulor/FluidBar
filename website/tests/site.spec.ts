@@ -48,7 +48,8 @@ test.describe('FluidBar official site', () => {
   });
 
   test('lab drives real compact states, expansion and pages', async ({ page }) => {
-    await page.goto('/#story');
+    await page.goto('/');
+    await page.locator('#story').scrollIntoViewIfNeeded();
     const frame = await waitForFrame(page, LAB_FRAME);
     const island = frame.locator('#island');
 
@@ -74,7 +75,8 @@ test.describe('FluidBar official site', () => {
   });
 
   test('appearance controls write into the real prototype', async ({ page }) => {
-    await page.goto('/#appearance');
+    await page.goto('/');
+    await page.locator('#appearance').scrollIntoViewIfNeeded();
     const frame = await waitForFrame(page, LAB_FRAME);
     const body = frame.locator('body');
 
@@ -87,20 +89,15 @@ test.describe('FluidBar official site', () => {
     await expect(page.getByText('强调色')).toHaveCount(0);
   });
 
-  test('official song preview and lyrics entry are present', async ({ page }) => {
+  test('public-domain songs play from the official card', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.netease-card__cover img')).toHaveAttribute(
-      'alt',
-      'Take Me Hand 官方封面',
-    );
-    await expect(page.getByRole('link', { name: '在网易云试听' })).toHaveAttribute(
-      'href',
-      'https://music.163.com/#/song?id=26092806',
-    );
-    await expect(page.getByRole('link', { name: '官方歌词' })).toHaveAttribute(
-      'href',
-      'https://music.163.com/#/song?id=26092806',
-    );
+    await expect(page.locator('.public-song__cover img')).toHaveAttribute('alt', '送别 封面');
+    await expect(page.locator('.public-song audio')).toHaveAttribute('src', /songbie\.mp3/);
+    await expect(page.locator('.public-song__lyrics')).toContainText('长亭外');
+
+    await page.getByRole('tab', { name: '康定情歌' }).click();
+    await expect(page.locator('.public-song__identity strong')).toHaveText('康定情歌');
+    await expect(page.locator('.public-song audio')).toHaveAttribute('src', /kangding\.mp3/);
   });
 
   test('mobile layout has no horizontal overflow and menu works', async ({ page }) => {

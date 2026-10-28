@@ -52,27 +52,27 @@
 
   var TRACKS = [
     {
-      title: 'Take Me Hand', artist: 'DAISHI DANCE / Cécile Corbel', album: 'Take Me Hand', art: 0,
-      accent: '#66e0d4', duration: 252, initials: 'TM',
+      title: '送别', artist: '李叔同 / John P. Ordway', album: '公版曲库', art: 0,
+      accent: '#66e0d4', duration: 53, initials: 'SB',
       lyrics: {
-        zh: ['官方歌词请在网易云音乐查看', '页面下方有官方歌词入口'],
-        en: ['Official lyrics are available on NetEase Cloud Music', 'Use the official lyrics link below']
+        zh: ['长亭外，古道边，芳草碧连天。', '晚风拂柳笛声残，夕阳山外山。'],
+        en: ['Beyond the pavilion, beside the old road.', 'The evening wind bends the willows.']
       }
     },
     {
-      title: 'Glass Harbor', artist: 'Aster Vale', album: 'Tidal', art: 1,
-      accent: '#f4b15e', duration: 188, initials: 'GH',
+      title: '康定情歌', artist: '四川康定民歌', album: '公版曲库', art: 1,
+      accent: '#f4b15e', duration: 44, initials: 'KD',
       lyrics: {
-        zh: ['潮汐把灯光推回岸边', '玻璃港没有回声'],
-        en: ['The tide pushes light ashore', 'Glass harbor keeps no echo']
+        zh: ['跑马溜溜的山上，一朵溜溜的云哟。', '端端溜溜的照在，康定溜溜的城哟。'],
+        en: ['On the running-horse hill, a drifting cloud.', 'It shines over the town of Kangding.']
       }
     },
     {
-      title: 'Amber Hours', artist: 'Sable & Co.', album: 'Late Sun', art: 2,
-      accent: '#8fb8ff', duration: 236, initials: 'AH',
+      title: 'Auld Lang Syne', artist: 'Robert Burns / traditional', album: '公版曲库', art: 2,
+      accent: '#8fb8ff', duration: 42, initials: 'AS',
       lyrics: {
-        zh: ['琥珀色的钟停在六点', '影子比路更长'],
-        en: ['Amber clocks stop at six', 'Shadows run past the road']
+        zh: ['Should auld acquaintance be forgot', 'And never brought to mind?'],
+        en: ['Should auld acquaintance be forgot', 'And never brought to mind?']
       }
     }
   ];
@@ -2980,6 +2980,18 @@
       });
     });
   }
+
+  /* Website embed only: switch the real media track without inventing a new
+     island state. Used by the parent's public-domain song selector. */
+  window.FluidBarPrototype = {
+    setTrack: function (index) {
+      if (typeof index !== 'number' || !isFinite(index)) return;
+      S.track = Math.max(0, Math.min(TRACKS.length - 1, Math.floor(index)));
+      S.progress = 0;
+      renderCompact();
+      renderPages();
+    }
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
