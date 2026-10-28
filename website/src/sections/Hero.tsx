@@ -100,7 +100,7 @@ export function Hero() {
 
             <div className="stage-meta stage-meta--bottom">
               <span className="mono">226 × 40 · MUSIC</span>
-              <span className="mono stage-demo-label">Take Me Hand · 官方试听</span>
+              <span className="mono stage-demo-label">Take Me Hand · 官方入口</span>
               <span className="mono">440 × 284 · EXPANDED</span>
             </div>
           </div>

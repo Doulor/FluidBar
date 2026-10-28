@@ -1,6 +1,9 @@
 .netease-card {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 13px;
   margin-top: 12px;
-  padding: 11px 10px 9px;
+  padding: 10px;
   border: 1px solid var(--glass-border);
   border-radius: 20px;
   background:
@@ -12,106 +15,120 @@
   color: var(--ink);
 }
 
-.netease-card__head,
-.netease-card__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-inline: 4px;
+.netease-card__cover {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 60% 30%, rgba(76, 201, 240, 0.65), transparent 52%),
+    #090b0e;
 }
 
-.netease-card__head {
-  margin-bottom: 7px;
-  color: var(--muted-2);
+.netease-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.netease-card__play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  background: rgba(8, 9, 12, 0.66);
+  color: #fff;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transform: translate(-50%, -50%);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.netease-card__cover:hover .netease-card__play {
+  background: var(--accent);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.netease-card__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  justify-content: center;
+}
+
+.netease-card__eyebrow {
+  font-family: var(--font-mono);
   font-size: 8px;
   letter-spacing: 0.08em;
-}
-
-.netease-card__source {
-  font-size: 9px;
-  color: var(--muted);
-}
-
-.netease-card__frame {
-  height: 66px;
-  overflow: hidden;
-  border: 1px solid rgba(11, 13, 16, 0.06);
-  border-radius: 11px;
-  background: #fff;
-}
-
-.netease-card__frame iframe {
-  display: block;
-  width: 540px;
-  height: 66px;
-  border: 0;
-  transform-origin: left top;
-}
-
-.netease-card__foot {
-  margin-top: 8px;
   color: var(--muted-2);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.01em;
 }
 
-.netease-card__foot a {
+.netease-card__main strong {
+  margin-top: 3px;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.netease-card__artist {
+  margin-top: 1px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.netease-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.netease-card__actions a {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 26px;
-  padding: 0 9px;
+  gap: 3px;
+  min-height: 24px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  color: var(--ink);
+  color: var(--muted);
   font-size: 9px;
   transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
-.netease-card__foot a:hover {
+.netease-card__actions a:hover {
   color: var(--ink);
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.62);
 }
 
-@media (max-width: 1300px) {
-  .netease-card__frame {
-    height: 57px;
-  }
-
-  .netease-card__frame iframe {
-    transform: scale(0.86);
-  }
-}
-
-@media (max-width: 1000px) {
-  .netease-card__frame {
-    height: 52px;
-  }
-
-  .netease-card__frame iframe {
-    transform: scale(0.78);
-  }
-}
-
-@media (max-width: 600px) {
+@media (max-width: 480px) {
   .netease-card {
-    padding-inline: 8px;
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 10px;
   }
 
-  .netease-card__frame {
-    height: 42px;
+  .netease-card__cover {
+    width: 60px;
+    height: 60px;
   }
 
-  .netease-card__frame iframe {
-    transform: scale(0.63);
-  }
-
-  .netease-card__foot {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 5px;
+  .netease-card__main strong {
+    font-size: 16px;
   }
 }

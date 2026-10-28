@@ -3,12 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 const HERO_FRAME = 'iframe[title^="FluidBar 真实交互原型"]';
 const LAB_FRAME = 'iframe[title="FluidBar 真实灵动岛原型"]';
 
-// The NetEase outchain player is a third-party document. Its own browser
-// detector tries to walk the parent window and reports a cross-origin error
-// on non-HTTPS local previews. That error is inside the player, not the site.
-const isThirdPartyPlayerNoise = (message: string) =>
-  /music\.163\.com|device__browser_update|Blocked a frame/.test(message);
-
 async function waitForFrame(page: Page, selector: string) {
   const frame = page.frameLocator(selector);
   await expect(frame.locator('body.ready')).toBeAttached({ timeout: 20_000 });
@@ -19,7 +13,7 @@ test.describe('FluidBar official site', () => {
   test('hero renders and the real island expands/collapses', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => {
-      if (!isThirdPartyPlayerNoise(error.message)) errors.push(error.message);
+      errors.push(error.message);
     });
 
     await page.goto('/');
@@ -95,8 +89,15 @@ test.describe('FluidBar official site', () => {
 
   test('official song preview and lyrics entry are present', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('iframe[src*="music.163.com/outchain/player"]')).toHaveCount(1);
-    await expect(page.getByRole('link', { name: /查看官方歌词/ })).toHaveAttribute(
+    await expect(page.locator('.netease-card__cover img')).toHaveAttribute(
+      'alt',
+      'Take Me Hand 官方封面',
+    );
+    await expect(page.getByRole('link', { name: '在网易云试听' })).toHaveAttribute(
+      'href',
+      'https://music.163.com/#/song?id=26092806',
+    );
+    await expect(page.getByRole('link', { name: '官方歌词' })).toHaveAttribute(
       'href',
       'https://music.163.com/#/song?id=26092806',
     );
@@ -117,7 +118,7 @@ test.describe('FluidBar official site', () => {
   test('no page errors on the landing page', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => {
-      if (!isThirdPartyPlayerNoise(error.message)) errors.push(error.message);
+      errors.push(error.message);
     });
     await page.goto('/');
     await page.waitForTimeout(1500);

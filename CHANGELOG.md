@@ -5,13 +5,13 @@
 ## 2026-10-28 — 官方网站重建为日光光学单页（真实原型嵌入）
 
 - 旧版 `website/` 视觉与代码完全退役；新站从空白 Vite + React + TypeScript 工程重建。
-- 页面为冷银白亮色，产品区是 488×444 的深色真实桌面窗；首屏默认展示真实 music 收起态，右侧页面索引直接驱动真实 pager，下方接网易云音乐官方外链播放器。
+- 页面为冷银白亮色，产品区是 488×444 的深色真实桌面窗；首屏默认展示真实 music 收起态，右侧页面索引直接驱动真实 pager，下方接网易云音乐官方入口卡。
 - 首屏、故事区、外观配置器直接嵌入 `docs/rewrite/prototype2`，不在网页里重画灵动岛。
 - 通过同源 postMessage 桥同步真实状态：idle 132×36、music 226×40、notifications 248×36、clipboard 264×36、agent 236×36，展开 440×284；形态和材质也直接写进原型。
 - ReactBits vendored 六个 TS-CSS 组件；Shaders 作为材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
 - 新增 Playwright 站点/可达性测试、字体子集、OG 图与 Cloudflare Pages 静态部署配置（`wrangler.toml`、`_headers`、`SITE_URL`）。
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 6/6、可达性 2/2 通过。
-- 音乐预览接网易云音乐官方外链（歌曲 ID `26092806`），官方封面/试听/歌词入口；站内不复制歌词。
+- 音乐预览接网易云音乐官方入口卡（歌曲 ID `26092806`），官方封面/试听/歌词入口；站内不复制歌词。
 - 部署：Cloudflare Pages 项目 `fluidbar` 已上线；`fluidbar.doulor.cn` 通过 `fluidbar-site` Worker 路由代理，真实 iframe、字体、Shaders 与 axe 站点检查通过。
 
 ## 2026-10-28 — 封面：通用默认图被当成真封面、好封面被晚到的差图顶掉、抓取被位置刷新反复取消
