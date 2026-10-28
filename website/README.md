@@ -81,7 +81,7 @@ Cloudflare Pages Git 集成设置：
 - Build command：`pnpm build`
 - Build output directory：`dist`
 - Node.js version：`22`
-- Environment variable（可选）：`SITE_URL=https://<你的域名>`，默认是 `https://fluidbar.pages.dev`
+- Environment variable（可选）：`SITE_URL=https://<你的域名>`，默认是 `https://fluidbar.doulor.cn`
 
 也可以直接 CLI 部署：
 
@@ -118,3 +118,4 @@ wrangler deploy --config wrangler.worker.toml
 - 插件 manifest 示例来自 `docs/plugin/` 与 `schemas/`。
 - 性能数字来自 `docs/rewrite/STATUS.md` 和发布说明，页面底部标注了来源与测量环境。
 - 演示区标注“示例数据”，不冒充用户真实数据。
+- 媒体活动态使用 `Take Me Hand` 的封面与歌词片段做视觉样本，不加载、不播放音频。

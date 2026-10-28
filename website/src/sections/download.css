@@ -89,6 +89,27 @@
   border-radius: 36px;
 }
 
+.download-copy {
+  position: relative;
+  isolation: isolate;
+}
+
+.download-copy[data-ghost]::after {
+  content: attr(data-ghost);
+  position: absolute;
+  z-index: -1;
+  top: -0.76em;
+  right: 0;
+  color: rgba(255, 255, 255, 0.05);
+  font-family: var(--font-display);
+  font-size: clamp(72px, 9vw, 138px);
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: -0.09em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .download-copy h2 {
   font-size: clamp(46px, 5.4vw, 72px);
   line-height: 0.98;

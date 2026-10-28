@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-29 — 官网活动态加入《Take Me Hand》音乐样本 + 画廊式排版
+
+- 活动态媒体样本改为 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel），使用真实专辑封面与两句歌词片段；不加载、不播放音频。
+- 故事区新增音乐研究卡，封面、曲名、歌词、说明都在网页层可读；点击仍驱动同一个真实 media compact 状态。
+- 全站 section heading 加入超大低对比 ghost wordmark（ISLAND / PLUGINS / 120 / FLUIDBAR），延续材质研究区的画廊式排版语言。
+- 原型 media 视图支持封面图片，媒体页显示 `Wonder Tourism · 2012`；同步脚本照常复制 app.js/styles.css，封面资源随静态站发布。
+
 ## 2026-10-28 — 官方网站重建为日光光学单页（真实原型嵌入）
 
 - 旧版 `website/` 视觉与代码完全退役；新站从空白 Vite + React + TypeScript 工程重建。

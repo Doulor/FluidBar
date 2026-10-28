@@ -175,8 +175,9 @@
    - 文案：`默认只有 132 × 36。不抢窗口，不打断输入。`
    - 状态：idle，真实尺寸 132 × 36。
 2. **活动态**
-   - 文案：`媒体、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。`
+   - 文案：`媒体 / 音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。`
    - 状态：依次展示真实 compact 状态：media 226 × 40、notifications 248 × 36、clipboard 264 × 36、agent 236 × 36。可在步骤内切换。
+   - 媒体态使用真实歌曲样本 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel）的封面与歌词片段；只做视觉演示，不加载或播放音频。
 3. **展开**
    - 文案：`点击，变成 440 × 284 的控制中心。`
    - 状态：expanded，显示主页。
@@ -635,7 +636,7 @@ website/
 - 构建输出 `website/dist`，是可直接部署的纯静态目录。
 - 目标托管：Cloudflare Pages（Git 集成或 `wrangler pages deploy`）。
 - Vite `base` 固定为根路径 `/`；Cloudflare Pages 项目根目录为 `website`，输出目录为 `dist`。
-- `SITE_URL` 通过构建环境变量注入，用于 canonical、OG、JSON-LD；默认 `https://fluidbar.pages.dev`。
+- `SITE_URL` 通过构建环境变量注入，用于 canonical、OG、JSON-LD；默认 `https://fluidbar.doulor.cn`。
 - `public/_headers` 设置静态缓存与基础安全头；`public/robots.txt` 允许抓取。
 - `wrangler.toml` 配置 `pages_build_output_dir = "dist"`。
 - 当前自定义域名 `fluidbar.doulor.cn` 由 `fluidbar-site` Worker 路由代理到 Pages；原因是该域名已有 A 记录，Pages 自定义域名验证要求 CNAME。Worker 配置独立在 `wrangler.worker.toml`，不改变 Pages 部署流程。

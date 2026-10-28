@@ -8,6 +8,7 @@ import './island-lab.css';
 
 const PAGE_LABELS = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 const ACTIVITY_VIEWS: CompactView[] = ['media', 'notifications', 'clipboard', 'agent'];
+const MUSIC_COVER = `${import.meta.env.BASE_URL}island/covers/take-me-hand.jpg`;
 
 const STEPS = [
   {
@@ -18,7 +19,7 @@ const STEPS = [
   {
     id: 'activity',
     title: '活动态',
-    copy: '媒体、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
+    copy: '媒体 / 音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
   },
   {
     id: 'expand',
@@ -134,7 +135,7 @@ export function IslandLab() {
   return (
     <section id="story" className="lab" aria-labelledby="lab-title">
       <div className="site-shell">
-        <div className="section-heading lab-heading">
+        <div className="section-heading lab-heading" data-ghost="ISLAND">
           <p className="section-kicker">01 / THE ISLAND</p>
           <h2 id="lab-title">
             不是窗口，
@@ -171,6 +172,7 @@ export function IslandLab() {
                   </button>
 
                   {index === 1 ? (
+                    <>
                     <div className="step-options" aria-label="真实活动态">
                       {ACTIVITY_VIEWS.map((view) => {
                         const meta = COMPACT_STATE_META.find((item) => item.id === view)!;
@@ -188,6 +190,29 @@ export function IslandLab() {
                         );
                       })}
                     </div>
+                    <button
+                      type="button"
+                      className={`music-study ${activity === 'media' ? 'is-selected' : ''}`}
+                      aria-pressed={activity === 'media'}
+                      onClick={() => chooseActivity('media')}
+                    >
+                      <span className="music-study__cover">
+                        <img src={MUSIC_COVER} alt="Take Me Hand 专辑封面" width="600" height="600" />
+                        <span className="music-study__number mono">01</span>
+                      </span>
+                      <span className="music-study__body">
+                        <span className="music-study__eyebrow mono">REAL MEDIA STATE · 2012</span>
+                        <strong>Take Me Hand</strong>
+                        <span className="music-study__artist">DAISHI DANCE feat. Cécile Corbel</span>
+                        <span className="music-study__lyric">
+                          “Take my hand now”
+                          <br />
+                          “Stay close to me, be my lover”
+                        </span>
+                        <span className="music-study__note">封面与歌词片段 · 仅视觉演示，不播放音频</span>
+                      </span>
+                    </button>
+                    </>
                   ) : null}
 
                   {index === 3 ? (

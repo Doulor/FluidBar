@@ -52,11 +52,12 @@
 
   var TRACKS = [
     {
-      title: 'Midnight Drive', artist: 'Lumen Fields', album: 'Nocturne', art: 0,
-      accent: '#66e0d4', duration: 214, initials: 'MD',
+      title: 'Take Me Hand', artist: 'DAISHI DANCE feat. Cécile Corbel', album: 'Wonder Tourism',
+      art: 0, cover: 'covers/take-me-hand.jpg', year: 2012,
+      accent: '#7b9cff', duration: 214, initials: 'TMH',
       lyrics: {
-        zh: ['夜晚把城市调成静音', '仪表盘还亮着'],
-        en: ['The city turns itself to silence', 'The dashboard is still lit']
+        zh: ['Take my hand now', 'Stay close to me, be my lover'],
+        en: ['Take my hand now', 'Stay close to me, be my lover']
       }
     },
     {
@@ -755,6 +756,10 @@
     return 'idle';
   }
   function artHTML(track, cls) {
+    if (track.cover) {
+      return '<span class="art art--cover ' + (cls || '') + '" data-art="' + track.art + '" aria-hidden="true">' +
+        '<img src="' + esc(track.cover) + '" alt="" loading="lazy"></span>';
+    }
     return '<span class="art ' + (cls || '') + '" data-art="' + track.art + '" aria-hidden="true"></span>';
   }
 
@@ -1009,7 +1014,7 @@
           '<div class="media-eyebrow">' + esc(t('media.nowPlaying')) + '</div>' +
           '<div class="media-title">' + esc(tr.title) + '</div>' +
           '<div class="media-artist">' + esc(tr.artist) + '</div>' +
-          '<div class="media-album">' + esc(tr.album) + ' · 2026</div>' +
+          '<div class="media-album">' + esc(tr.album) + ' · ' + (tr.year || 2026) + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="lyric-card">' +

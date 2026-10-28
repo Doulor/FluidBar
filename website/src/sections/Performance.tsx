@@ -11,7 +11,7 @@ export function Performance() {
     <section id="performance" className="performance" aria-labelledby="performance-title">
       <div className="site-shell">
         <div className="performance-head">
-          <div className="section-heading">
+          <div className="section-heading" data-ghost="120">
             <p className="section-kicker">04 / PERFORMANCE</p>
             <h2 id="performance-title">
               丝滑不是形容词，

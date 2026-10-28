@@ -51,7 +51,9 @@ test.describe('FluidBar official site', () => {
 
     await page.locator('.lab-step').nth(1).locator('.lab-step__head').click();
     await expect(island).toHaveAttribute('data-view', 'media');
-    await expect(page.getByRole('button', { name: /媒体 226/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /媒体.*226/ })).toBeVisible();
+    await expect(page.locator('.music-study')).toContainText('Take Me Hand');
+    await expect(page.locator('.music-study')).toContainText('Stay close to me');
     await page.waitForTimeout(500);
     const mediaWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(mediaWidth).toBeGreaterThan(220);

@@ -13,7 +13,7 @@ export function Download() {
             <span className="download-mark__orbit" />
           </div>
 
-          <div className="download-copy">
+          <div className="download-copy" data-ghost="FLUIDBAR">
             <p className="section-kicker">05 / DOWNLOAD</p>
             <h2 id="download-title">
               现在，
