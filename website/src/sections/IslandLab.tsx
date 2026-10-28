@@ -18,7 +18,7 @@ const STEPS = [
   {
     id: 'activity',
     title: '活动态',
-    copy: '音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
+    copy: '媒体、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
   },
   {
     id: 'expand',

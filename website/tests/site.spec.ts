@@ -22,13 +22,10 @@ test.describe('FluidBar official site', () => {
 
     const frame = await waitForFrame(page, HERO_FRAME);
     const island = frame.locator('#island');
-    await expect(island).toHaveAttribute('data-expanded', 'false');
-    await expect(island).toHaveAttribute('data-view', 'media');
-    await expect(page.locator('.hero-page-rail .is-active')).toContainText('媒体');
-
-    await island.click();
     await expect(island).toHaveAttribute('data-expanded', 'true');
-    await page.waitForTimeout(700);
+    await expect(page.locator('.hero-page-rail .is-active')).toContainText('主页');
+
+    await page.waitForTimeout(600);
     const expandedWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(expandedWidth).toBeGreaterThan(430);
 
@@ -37,7 +34,6 @@ test.describe('FluidBar official site', () => {
 
     await frame.locator('#pagerCollapse').click();
     await expect(island).toHaveAttribute('data-expanded', 'false');
-    await expect(island).toHaveAttribute('data-view', 'media');
 
     await island.click();
     await expect(island).toHaveAttribute('data-expanded', 'true');
@@ -55,7 +51,7 @@ test.describe('FluidBar official site', () => {
 
     await page.locator('.lab-step').nth(1).locator('.lab-step__head').click();
     await expect(island).toHaveAttribute('data-view', 'media');
-    await expect(page.getByRole('button', { name: /音乐 226/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /媒体 226/ })).toBeVisible();
     await page.waitForTimeout(500);
     const mediaWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
     expect(mediaWidth).toBeGreaterThan(220);
@@ -87,17 +83,6 @@ test.describe('FluidBar official site', () => {
     await page.getByRole('button', { name: '液态玻璃', exact: true }).click();
     await expect(body).toHaveAttribute('data-material', 'liquid');
     await expect(page.getByText('强调色')).toHaveCount(0);
-  });
-
-  test('public-domain songs play from the official card', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('.public-song__cover img')).toHaveAttribute('alt', '送别 封面');
-    await expect(page.locator('.public-song audio')).toHaveAttribute('src', /songbie\.mp3/);
-    await expect(page.locator('.public-song__lyrics')).toContainText('长亭外');
-
-    await page.getByRole('tab', { name: '康定情歌' }).click();
-    await expect(page.locator('.public-song__identity strong')).toHaveText('康定情歌');
-    await expect(page.locator('.public-song audio')).toHaveAttribute('src', /kangding\.mp3/);
   });
 
   test('mobile layout has no horizontal overflow and menu works', async ({ page }) => {

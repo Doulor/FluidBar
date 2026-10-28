@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import { ArrowDown, ArrowUpRight } from '@phosphor-icons/react';
 import { SpecularButton } from '../ui/reactbits';
-import { PublicSongPlayer } from '../ui/PublicSongPlayer';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
 import './hero.css';
@@ -10,15 +8,9 @@ const PAGES = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 
 export function Hero() {
   const { frameRef, state, setState, send } = usePrototype();
-  const [songIndex, setSongIndex] = useState(0);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const selectSong = (index: number) => {
-    setSongIndex(index);
-    send({ state: 'media', track: index });
   };
 
   const activePage = state.expanded
@@ -46,7 +38,7 @@ export function Hero() {
             <span>多一座岛。</span>
           </h1>
           <p className="hero-sub">
-            常驻，但不打扰。音乐、通知、剪贴板与系统控制，都在一枚小岛里。
+            常驻，但不打扰。媒体、通知、剪贴板与系统控制，都在一枚小岛里。
           </p>
           <div className="hero-actions">
             <SpecularButton
@@ -95,19 +87,17 @@ export function Hero() {
 
             <PrototypeFrame
               ref={frameRef}
-              title="FluidBar 真实交互原型：默认展示音乐播放收起态，点击小岛展开控制中心"
+              title="FluidBar 真实交互原型：默认展示控制中心，点击小岛可收起"
               name="fluidbar-hero"
-              poster={`${import.meta.env.BASE_URL}posters/hero-media.png`}
-              startState="media"
+              poster={`${import.meta.env.BASE_URL}posters/lab-expanded.png`}
+              startState="expanded"
               onState={setState}
               defer
             />
 
-            <PublicSongPlayer index={songIndex} onSelect={selectSong} />
-
             <div className="stage-meta stage-meta--bottom">
-              <span className="mono">226 × 40 · MUSIC</span>
-              <span className="mono stage-demo-label">PUBLIC DOMAIN · 直接内置</span>
+              <span className="mono">132 × 36 · IDLE</span>
+              <span className="mono stage-demo-label">真实控制中心 · 示例数据</span>
               <span className="mono">440 × 284 · EXPANDED</span>
             </div>
           </div>

@@ -30,7 +30,6 @@ export interface PrototypeCommand {
   type: 'fluidbar:set';
   state?: CompactView | 'expanded';
   page?: number;
-  track?: number;
   mode?: IslandMode;
   material?: IslandMaterial;
   accent?: string;
