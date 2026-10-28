@@ -944,6 +944,20 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             artwork = _lastArtworkEntry.Data;
         }
 
+        // Island-side provenance: whether the pill actually received cover bytes for this track. The fetch side logs
+        // "artwork.origin" (what the chain produced); this line says whether the island saw it (2026-10-28 report:
+        // "还是总是获取不到音频封面" while the fetch side claimed success).
+        var hasArt = artwork is { Length: > 0 };
+        if (!string.Equals(_lastArtworkLogKey, media.TrackKey, StringComparison.Ordinal)
+            || hasArt != _lastArtworkLogHasArt)
+        {
+            _lastArtworkLogKey = media.TrackKey;
+            _lastArtworkLogHasArt = hasArt;
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.LogAlways(
+                $"artwork.island title=\"{media.Title}\" hasArt={hasArt} bytes={artwork?.Length ?? 0} " +
+                $"sticky={artwork is not null && _artworkCache.TryGet(media.TrackKey, out _) == false}");
+        }
+
         var (lyricLine, nextLyricLine, lyricHighlight, karaoke) = ResolveLyrics(media, position);
 
         // A fallback source can know the position without knowing the track length (KuGou persists the
@@ -977,6 +991,9 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             TrackCount = 0,
         };
     }
+
+    private string? _lastArtworkLogKey;
+    private bool _lastArtworkLogHasArt;
 
     /// <summary>Last artwork shown, reused while the track (by title core) is unchanged.</summary>
     private string _lastArtworkTitle = string.Empty;

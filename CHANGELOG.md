@@ -12,6 +12,29 @@
 - 新增 Playwright 站点/可达性测试、字体子集、OG 图与 Cloudflare Pages 静态部署配置（`wrangler.toml`、`_headers`、`SITE_URL`）。
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 
+## 2026-10-28 — 封面：通用默认图被当成真封面、好封面被晚到的差图顶掉、抓取被位置刷新反复取消
+
+现场日志（`%TEMP%\fluidbar-pin-diag.log`）三条实证：
+1. 同一首歌 300ms 内发起 3 次抓取：酷狗 250ms 一次的位置刷新不断取消正在进行的封面读取，谁先回来就用谁
+   （`artwork.placeholder` ×3 → `origin=session-thumbnail bytes=18081`，18081 是酷狗的另一张通用默认图，
+   同一首歌的真实封面是 26987 字节 / 97 色）。
+2. `One Last Kiss`：曲库 `score=1.000 bytes=44875` 命中后，又被晚到的 `session-thumbnail bytes=15985` 覆盖；
+   `Last Goodbye`：`player-cache 31214` 被 `session-thumbnail 15985` 覆盖。
+3. `ArtworkRankKey` 用 trackKey 记"已发布等级"时守卫不触发——trackKey 会随播放器元数据补全而漂移。
+
+- 修复：
+  1. `ArtworkThumbprintRegistry`（新增）：同一份图片字节出现在**不同歌**上 → 判定为播放器通用封面并拒绝，继续走后备链路；
+  2. 抓取节流 1.5s/首：位置刷新不再取消并重启同一条轨道的封面读取；
+  3. **好封面不被降级**：按标题记录已发布封面的质量等级（session-thumbnail / player-cache / catalogue = 3），
+     之后弱于它的候选记 `artwork.kept` 并丢弃；拿到等级 3 就停止"升级重试"（否则每 3 秒刷一条）；
+  4. 曲库查询第三次尝试**去掉歌手**只按标题搜（酷狗常报翻唱歌手，导致有封面却查不到）；
+  5. 打点补齐：`artwork.generic` / `artwork.kept` / `artwork.catalogue-hit|miss`（含 reason、source、bestScore），
+     以及岛侧 `artwork.island hasArt=… bytes=…`（说明封面到底有没有送到胶囊）。
+- 验证（本机实测）：`遗憾皆在风中` → `player-cache 48270` 送达岛；`慢慢爱` → 灰块拒绝 → 曲库 `score=1.000 68436` 送达岛，
+  随后 `session-thumbnail 14419` 被 `artwork.kept` 拦下且不再重试。
+- 测试：新增 `ArtworkThumbprintRegistryTests` 5 例；Platform 780 / Builtin 30 / Core 655 / Sdk 167 / Integration 31 /
+  PluginHost 40 / Architecture 18 / UI 565 全绿（Island 486 里 `Liquid_glass_settled_frames...` 在整套并行跑时偶发超预算，
+  单独跑通过，属既有的时间敏感用例）。
 ## 2026-10-28 — 同一个通知被反复弹出来（两个真实机制 + 打点）
 
 - 症状：通知插件把"同一条通知"隔一会儿又显示一次。

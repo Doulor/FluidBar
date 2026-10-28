@@ -319,6 +319,21 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
     private long _textClockAtMs;
     private string _textClockTitle = string.Empty;
 
+    /// <summary>Learns which thumbnail bytes are the player's generic "no cover" image.</summary>
+    private readonly ArtworkThumbprintRegistry _thumbnailRegistry = new();
+
+    /// <summary>Per-track thumbprint of the artwork currently published (upgrade detection).</summary>
+    private readonly Dictionary<string, string> _publishedThumbprints = new(StringComparer.Ordinal);
+
+    /// <summary>Quality rank of the cover already published per track (see <see cref="ArtworkRank"/>).</summary>
+    private readonly Dictionary<string, int> _publishedRank = new(StringComparer.Ordinal);
+
+    /// <summary>Tracks whose published art came from a fallback and may still be replaced by better player art.</summary>
+    private readonly Dictionary<string, long> _artworkUpgradeDueMs = new(StringComparer.Ordinal);
+
+    private string? _artworkInFlightTrack;
+    private long _artworkInFlightAtMs;
+
     /// <summary>Track keys whose cover lookup was already started (bounded; prevents retry storms).</summary>
     private readonly HashSet<string> _artworkLookups = new(StringComparer.Ordinal);
 
@@ -1468,7 +1483,7 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             MediaDiagnostics.Log($"publish source=gsmtc app={aumid} title={properties.Title} playing={snapshot.IsPlaying}");
             Publish(snapshot);
 
-            if (changed || !_artworkCache.TryGet(trackKey, out _))
+            if (changed || !_artworkCache.TryGet(trackKey, out _) || IsArtworkUpgradeDue(trackKey))
             {
                 StartArtworkFetch(session, trackKey, properties);
             }
@@ -1598,6 +1613,22 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             return;
         }
 
+        // Position ticks arrive every 250 ms for KuGou; without this throttle each one cancelled the in-flight read and
+        // started a new one, so a track could burn three attempts in 130 ms and publish whatever came back first
+        // (2026-10-28: three placeholder reads and a generic tile inside 300 ms).
+        var nowMs = Environment.TickCount64;
+        lock (_artworkGate)
+        {
+            if (string.Equals(_artworkInFlightTrack, trackKey, StringComparison.Ordinal)
+                && nowMs - _artworkInFlightAtMs < ArtworkFetchThrottleMs)
+            {
+                return;
+            }
+
+            _artworkInFlightTrack = trackKey;
+            _artworkInFlightAtMs = nowMs;
+        }
+
         CancellationTokenSource cts;
         lock (_artworkGate)
         {
@@ -1608,6 +1639,74 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
 
         _ = FetchArtworkSafeAsync(session, trackKey, properties, cts.Token);
     }
+
+    /// <summary>Rank at which a cover counts as final (nothing to upgrade).</summary>
+    private const int GoodArtworkRank = 3;
+
+    /// <summary>
+    /// Quality rank of a cover source: 3 = the player's own art (thumbnail or its cover cache) or a catalogue match,
+    /// 2 = a weaker catalogue match, 1 = anything else. A later candidate must outrank the published cover to replace
+    /// it, so a slow, low-quality image can never overwrite a good one.
+    /// </summary>
+    /// <param name="origin">Origin label of the candidate.</param>
+    private static int ArtworkRank(string origin)
+        => origin switch
+        {
+            "session-thumbnail" => 3,
+            "player-cache" => 3,
+            "catalogue" => 3,
+            _ => 1,
+        };
+
+    /// <summary>Whether publishing a candidate of <paramref name="rank"/> would replace a better existing cover.</summary>
+    /// <param name="trackKey">Track key.</param>
+    /// <param name="rank">Rank of the candidate.</param>
+    private bool IsDowngrade(string rankKey, int rank)
+    {
+        lock (_artworkGate)
+        {
+            return _publishedRank.TryGetValue(rankKey, out var existing) && existing >= rank;
+        }
+    }
+
+    /// <summary>
+    /// Stable key for the "which cover did this song already get" map. The track key itself is not usable: it is
+    /// rebuilt from player metadata that refines a beat after the track starts (it changed between the player-cache
+    /// and the session-thumbnail publish of "Last Goodbye" on 2026-10-28), so a key-based guard never fired.
+    /// </summary>
+    /// <param name="title">Track title.</param>
+    private static string ArtworkRankKey(string? title)
+        => (title ?? string.Empty).Trim().ToLowerInvariant();
+
+    /// <summary>How long one artwork fetch may not be restarted for the same track.</summary>
+    private const int ArtworkFetchThrottleMs = 1500;
+
+    /// <summary>How often a fallback cover is re-checked against the player's thumbnail.</summary>
+    private const int ArtworkUpgradeIntervalMs = 3000;
+
+    /// <summary>Whether the published art for this track came from a fallback and the player may have real art now.</summary>
+    /// <param name="trackKey">Track key.</param>
+    private bool IsArtworkUpgradeDue(string trackKey)
+    {
+        lock (_artworkGate)
+        {
+            if (!_artworkUpgradeDueMs.TryGetValue(trackKey, out var due))
+            {
+                return false;
+            }
+
+            if (Environment.TickCount64 < due)
+            {
+                return false;
+            }
+
+            _artworkUpgradeDueMs[trackKey] = Environment.TickCount64 + ArtworkUpgradeIntervalMs;
+            return true;
+        }
+    }
+
+    private static string ShortTrackKey(string? trackKey)
+        => trackKey is null ? string.Empty : trackKey.Length <= 48 ? trackKey : trackKey[..48];
 
     private void CancelArtworkFetch()
     {
@@ -1642,6 +1741,20 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 origin = "session-thumbnail-placeholder";
             }
 
+            if (bytes is { Length: > 0 })
+            {
+                var thumbprint = ArtworkThumbprintRegistry.Thumbprint(bytes);
+                if (_thumbnailRegistry.IsGeneric(thumbprint, trackKey, out var otherTrack))
+                {
+                    // Looks like a photo but is the same bytes another track already got: the player's generic cover.
+                    MediaDiagnostics.LogAlways(
+                        $"artwork.generic title=\"{properties.Title}\" bytes={bytes.Length} " +
+                        $"alsoUsedBy=\"{ShortTrackKey(otherTrack)}\"");
+                    bytes = null;
+                    origin = "session-thumbnail-generic";
+                }
+            }
+
             if (bytes is null || bytes.Length == 0)
             {
                 // KuGou 8.x now *does* register an SMTC session (older builds did not), but its thumbnail
@@ -1674,6 +1787,25 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 return;
             }
 
+            var rank = ArtworkRank(origin);
+            var rankKey = ArtworkRankKey(properties.Title);
+            if (IsDowngrade(rankKey, rank))
+            {
+                // The upgrade retry re-read the player's thumbnail after a better source had already produced the
+                // cover; the late image replaced a verified cover with a smaller, lower-quality one (2026-10-28:
+                // player-cache 27 KB -> session thumbnail 14 KB, and a score-1.000 catalogue cover -> 16 KB).
+                MediaDiagnostics.LogAlways(
+                    $"artwork.kept title=\"{properties.Title}\" origin={origin} bytes={bytes.Length} " +
+                    $"existingRank={_publishedRank.GetValueOrDefault(rankKey)} newRank={rank}");
+                lock (_artworkGate)
+                {
+                    // The cover is settled; stop re-reading a thumbnail that can only lose to it.
+                    _artworkUpgradeDueMs.Remove(trackKey);
+                }
+
+                return;
+            }
+
             var entry = _artworkCache.Add(trackKey, bytes);
             if (entry is null)
             {
@@ -1686,6 +1818,27 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
             // Rare (once per track) provenance line: which link of the chain produced the cover.
             MediaDiagnostics.LogAlways(
                 $"artwork.origin title=\"{properties.Title}\" origin={origin} bytes={bytes.Length}");
+
+            lock (_artworkGate)
+            {
+                _publishedRank[ArtworkRankKey(properties.Title)] = rank;
+                _publishedThumbprints[trackKey] = ArtworkThumbprintRegistry.Thumbprint(bytes);
+                if (_publishedRank.Count > 256)
+                {
+                    _publishedRank.Clear();
+                }
+                if (rank >= GoodArtworkRank)
+                {
+                    // Player art or a verified catalogue match: nothing left to upgrade (retrying here re-read the
+                    // thumbnail every 3 s and logged a rejected "artwork.kept" line each time).
+                    _artworkUpgradeDueMs.Remove(trackKey);
+                }
+                else
+                {
+                    // Fallback art: keep an eye out for the player publishing the real cover later.
+                    _artworkUpgradeDueMs[trackKey] = Environment.TickCount64 + ArtworkUpgradeIntervalMs;
+                }
+            }
 
 
             _logger.LogDebug(PlatformLogCategory.Media, "media.artwork-ready",
@@ -1827,7 +1980,10 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                         }
                     }
 
-                    outcome = await fetcher.FetchAsync(searchArtist, searchTitle, album: null).ConfigureAwait(false);
+                    // The last attempt drops the artist: a wrong/unknown artist is the most common reason a title that
+                    // exists in the catalogue is reported as missing (KuGou hands out cover-version artists).
+                    var queryArtist = attempt >= 2 ? null : searchArtist;
+                    outcome = await fetcher.FetchAsync(queryArtist, searchTitle, album: null).ConfigureAwait(false);
                     if (outcome.Succeeded)
                     {
                         break;
@@ -1837,9 +1993,24 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 if (!outcome.Succeeded || outcome.Entry is not { } entry)
                 {
                     // Attributable failure: which level missed and how close the best candidate was.
+                    MediaDiagnostics.LogAlways(
+                        $"artwork.catalogue-miss title=\"{title}\" artist=\"{artist}\" " +
+                        $"reason={outcome.Failure} source={outcome.Source} bestScore={outcome.Score:0.000}");
                     _logger.LogInfo(PlatformLogCategory.Media, "media.artwork-miss",
                         "No cover for '" + title + "': " + outcome.Failure + " (source=" + outcome.Source
                         + ", bestScore=" + outcome.Score.ToString("0.000") + ").");
+                    return;
+                }
+
+                MediaDiagnostics.LogAlways(
+                    $"artwork.catalogue-hit title=\"{title}\" artist=\"{artist}\" source={outcome.Source} " +
+                    $"score={outcome.Score:0.000} bytes={entry.Bytes.Length}");
+
+                if (IsDowngrade(ArtworkRankKey(title), ArtworkRank("catalogue")))
+                {
+                    MediaDiagnostics.LogAlways(
+                        $"artwork.kept title=\"{title}\" origin=catalogue bytes={entry.Bytes.Length} " +
+                        "reason=better-cover-already-published");
                     return;
                 }
 
@@ -1847,6 +2018,15 @@ public sealed class GsmtcMediaSessionService : PlatformMonitor<MediaSnapshot>, I
                 if (artwork is null)
                 {
                     return;
+                }
+
+                lock (_artworkGate)
+                {
+                    _publishedRank[ArtworkRankKey(title)] = ArtworkRank("catalogue");
+                    if (_publishedRank.Count > 256)
+                    {
+                        _publishedRank.Clear();
+                    }
                 }
 
                 _logger.LogInfo(PlatformLogCategory.Media, "media.artwork-fetched",
