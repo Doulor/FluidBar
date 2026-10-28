@@ -31,7 +31,7 @@
 - 让访客在首屏亲手体验“小岛 → 悬停预览 → 点击展开 → 切换页面 → 收起”。
 - 用明亮、精密、有工程感的视觉，把 FluidBar 从“又一个暗色效率工具”提升为“值得安装的桌面物件”。
 - 让普通用户看到下载入口，让插件开发者看到文档入口。
-- 静态部署，无后端，可直接托管到 GitHub Pages。
+- 静态部署，无后端，可直接托管到 Cloudflare Pages。
 
 ### 2.2 非目标
 
@@ -633,10 +633,13 @@ website/
 
 ### 10.6 部署
 
-- 构建输出 `website/dist`。
-- GitHub Actions 构建并部署到 GitHub Pages。
-- Vite `base` 通过环境变量配置，默认 `/FluidBar/`。
-- 所有仓库内文档链接改为 GitHub 绝对 URL，避免 Pages 子路径失效。
+- 构建输出 `website/dist`，是可直接部署的纯静态目录。
+- 目标托管：Cloudflare Pages（Git 集成或 `wrangler pages deploy`）。
+- Vite `base` 固定为根路径 `/`；Cloudflare Pages 项目根目录为 `website`，输出目录为 `dist`。
+- `SITE_URL` 通过构建环境变量注入，用于 canonical、OG、JSON-LD；默认 `https://fluidbar.pages.dev`。
+- `public/_headers` 设置静态缓存与基础安全头；`public/robots.txt` 允许抓取。
+- `wrangler.toml` 配置 `pages_build_output_dir = "dist"`。
+- 所有仓库内文档链接使用 GitHub 绝对 URL，不依赖部署域名。
 - `pnpm build` 与 `pnpm test:e2e` 在 CI 中运行。
 
 ## 11. 可访问性与性能
@@ -737,7 +740,8 @@ website/
 | iframe 桥接状态漂移 | 网页与产品不一致 | 以 iframe 回传的真实 DOM 状态为唯一真值，父层只镜像 |
 | iframe 内原型脚本失败 | 产品窗空白 | 保留真实状态 poster，并显示打开完整原型的外链，不伪造交互 |
 | 中文字体过大 | LCP 变差 | 子集化 + woff2 + 系统回退 |
-| GitHub Pages 子路径 | 资源 404 | `base` 环境变量 + 绝对外部链接 |
+| 自定义域名 / 部署域名变化 | canonical、OG 指错 | 构建时设置 `SITE_URL`，不改运行逻辑 |
+| 静态托管根路径变化 | 资源 404 | Vite `base` 固定 `/`；CF Pages 从站点根目录提供 `dist` |
 | 旧站已删除 | 无可复用视觉资产 | 从 prototype2 重新截取干净状态，不复用旧截图 |
 
 ## 16. 已决议事项

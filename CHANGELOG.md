@@ -9,7 +9,7 @@
 - 首屏、故事区、外观配置器直接嵌入 `docs/rewrite/prototype2`，不在网页里重画灵动岛。
 - 通过同源 postMessage 桥同步真实状态：idle 132×36、media 226×40、notifications 248×36、clipboard 264×36、agent 236×36，展开 440×284；形态、材质、强调色也直接写进原型。
 - ReactBits vendored 六个 TS-CSS 组件；Shaders 作为材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
-- 新增 Playwright 站点/可达性测试、字体子集、OG 图与 GitHub Pages 工作流。
+- 新增 Playwright 站点/可达性测试、字体子集、OG 图与 Cloudflare Pages 静态部署配置（`wrangler.toml`、`_headers`、`SITE_URL`）。
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 
 ## 2026-10-28 — 同一个通知被反复弹出来（两个真实机制 + 打点）

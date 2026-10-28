@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 从空白 `website/` 实现 FluidBar 2.0「日光光学」官网，产品窗内直接运行真实 prototype2，完成响应式、无障碍、测试与 GitHub Pages 构建。
+**Goal:** 从空白 `website/` 实现 FluidBar 2.0「日光光学」官网，产品窗内直接运行真实 prototype2，完成响应式、无障碍、测试与 Cloudflare Pages 静态构建。
 
 **Architecture:** Vite + React 19 + TypeScript 单页。页面为冷银白亮色；产品窗是 488×444 的真实 prototype2 iframe。首屏一个真实实例，故事与外观配置器共用一个 lab 实例，父页面通过同源 postMessage 控制并镜像真实 DOM 状态。ReactBits 只做导航、CTA、卡片、颗粒和数字；Shaders 只做材质光学实验台。
 
@@ -375,7 +375,9 @@ Capture 1440×900 and 390×844 full page. Inspect manually. Keep only if stable.
 **Files:**
 - Modify: `website/index.html`
 - Create: `website/public/og-image.png`
-- Create: `.github/workflows/pages.yml`
+- Create: `website/wrangler.toml`
+- Create: `website/public/_headers`
+- Create: `website/public/robots.txt`
 - Modify: `README.md`
 - Modify: `docs/rewrite/STATUS.md`
 - Modify: `CHANGELOG.md`
@@ -385,9 +387,9 @@ Capture 1440×900 and 390×844 full page. Inspect manually. Keep only if stable.
 
 Title, description, canonical, OG/Twitter, JSON-LD `SoftwareApplication` with real fields only, favicon, `lang="zh-CN"`.
 
-- [ ] **Step 2: pages**
+- [ ] **Step 2: Cloudflare Pages**
 
-Workflow installs pnpm, builds with `BASE_PATH=/FluidBar/`, uploads `website/dist` to Pages. Ensure assets use `import.meta.env.BASE_URL` and external docs use GitHub URLs.
+Build with `pnpm build` at root base `/`; deploy `website/dist` via Cloudflare Pages Git integration or `npx wrangler pages deploy dist`. `wrangler.toml` sets `pages_build_output_dir = "dist"`; `SITE_URL` injects canonical/OG absolute URLs. Ensure assets use root-relative URLs and external docs use GitHub URLs.
 
 - [ ] **Step 3: docs**
 

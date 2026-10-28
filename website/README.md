@@ -71,15 +71,29 @@ website/
 - **Shaders**：只用于材质研究的 WebGPU 黑曜石样本，进入视口后才动态加载；WebGPU 不可用时保留 CSS 材质研究。
 - 字体：Satoshi、Noto Sans SC 子集、IBM Plex Mono，全部自托管。字体来源、许可和再生成方式见 `public/fonts/FONT-SOURCES.md`。
 
-## 部署
+## Cloudflare Pages 部署
 
-GitHub Actions 工作流 `.github/workflows/pages.yml` 构建并部署到 GitHub Pages。
+这是一个纯静态单页，构建产物在 `website/dist/`，不依赖 Node 服务端。
+
+Cloudflare Pages Git 集成设置：
+
+- Root directory：`website`
+- Build command：`pnpm build`
+- Build output directory：`dist`
+- Node.js version：`22`
+- Environment variable（可选）：`SITE_URL=https://<你的域名>`，默认是 `https://fluidbar.pages.dev`
+
+也可以直接 CLI 部署：
 
 ```bash
-BASE_PATH=/FluidBar/ pnpm build
+cd website
+pnpm build
+npx wrangler pages deploy dist
 ```
 
-本地预览 GitHub Pages 子路径时，将 `dist/` 放在服务器的 `/FluidBar/` 路径下，或直接使用工作流。
+`wrangler.toml` 已配置 `pages_build_output_dir = "dist"` 和项目名 `fluidbar`。`public/_headers` 会在构建时复制到产物，用于设置静态缓存与基础安全头。
+
+注意：`SITE_URL` 只影响 canonical、OG 图和 JSON-LD 的绝对地址；不改站点运行逻辑。
 
 ## 事实边界
 

@@ -9,7 +9,7 @@
 - 首屏默认展示真实 expanded 440×284 控制中心，右侧页面索引直接驱动真实 pager；首屏、故事区、外观配置器都直接加载 `docs/rewrite/prototype2`，通过同源 postMessage 驱动真实 compact/expanded 状态、页面、形态、材质和强调色；网页不重画岛。
 - ReactBits 以 TS-CSS 源码 vendored 六个组件；Shaders 只做材质研究的 WebGPU 黑曜石样本，WebGPU 不可用时保留 CSS 回退。
 - 验证：`pnpm build` 通过；Vitest 协议测试 5/5、Playwright 站点 5/5、可达性 2/2 通过；1440×900 与 390×844 无横向溢出；官网页面 chrome 的 axe 无 serious/critical（iframe 内真实原型的 UI token 不做改名/改色）。
-- 部署：`.github/workflows/pages.yml` 使用 `BASE_PATH=/FluidBar/` 构建 `website/dist` 并部署 GitHub Pages。
+- 部署：目标为 Cloudflare Pages 静态托管；`pnpm build` 产出根路径 `website/dist`，`wrangler.toml` 与 `public/_headers` 已就绪；`SITE_URL` 控制 canonical/OG 绝对地址，默认 `https://fluidbar.pages.dev`。
 - 旧版官网文件已退役，不再复用旧截图或旧视觉。
 
 ## 一句话状态
