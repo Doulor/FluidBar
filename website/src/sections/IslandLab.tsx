@@ -353,7 +353,11 @@ export function IslandLab() {
                       aria-pressed={material === value}
                       onClick={() => {
                         setMaterial(value as IslandMaterial);
-                        send({ material: value as IslandMaterial });
+                        send({
+                          material: value as IslandMaterial,
+                          state: 'expanded',
+                          page: 0,
+                        });
                       }}
                     >
                       {label}
@@ -363,7 +367,7 @@ export function IslandLab() {
               </div>
 
               <p className="config-note">
-                网页中的材质为视觉近似。实际效果由 Skia 渲染器绘制。
+                切换材质会展开 440×284 的真实原型预览。网页中的材质为视觉近似，实际效果由 Skia 渲染器绘制。
               </p>
             </div>
           </div>
