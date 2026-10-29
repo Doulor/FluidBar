@@ -145,11 +145,26 @@ public static class SettingsMigrator
             return Failure(deserializeError ?? "Settings JSON is invalid.", version.Value);
         }
 
+        var upgrade = ImmutableArray<MigrationEntry>.Empty;
+        if (version.Value == 2)
+        {
+            // v2 documents stored general.telemetry from a switch that could not be toggled (the UI forced
+            // false), so that value was never a user choice: v3 resets it to the shipped default instead.
+            var shippedTelemetry = new FluidBarSettings().General.Telemetry;
+            parsed = parsed with { General = parsed.General with { Telemetry = shippedTelemetry } };
+            upgrade =
+            [
+                new MigrationEntry("general.telemetry", "general.telemetry",
+                    "Pre-v3 builds wrote this from an inert switch; reset to the shipped default."),
+            ];
+        }
+
         var normalized = SettingsValidator.Normalize(parsed, out var validation);
         var report = new MigrationReport
         {
             FromVersion = version.Value,
             ToVersion = FluidBarSettings.CurrentSchemaVersion,
+            Mapped = upgrade,
             Success = !validation.HasErrors,
             Failed = validation.HasErrors
                 ? [.. validation.Issues

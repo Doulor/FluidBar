@@ -716,6 +716,12 @@ public static partial class LocKeys
             public const string Telemetry = "Settings.General.Telemetry";
             /// <summary><c>Settings.General.TelemetryHint</c></summary>
             public const string TelemetryHint = "Settings.General.TelemetryHint";
+            /// <summary><c>Settings.General.TelemetryPreview</c></summary>
+            public const string TelemetryPreview = "Settings.General.TelemetryPreview";
+            /// <summary><c>Settings.General.TelemetryReset</c></summary>
+            public const string TelemetryReset = "Settings.General.TelemetryReset";
+            /// <summary><c>Settings.General.TelemetryResetDone</c></summary>
+            public const string TelemetryResetDone = "Settings.General.TelemetryResetDone";
             /// <summary><c>Settings.General.Hotkeys</c></summary>
             public const string Hotkeys = "Settings.General.Hotkeys";
             /// <summary>Keys in the 'AutoUpdate' area.</summary>

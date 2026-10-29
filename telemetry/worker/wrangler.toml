@@ -1,0 +1,15 @@
+name = "fluidbar-telemetry"
+main = "src/index.js"
+compatibility_date = "2026-10-28"
+
+# Custom domain (Cloudflare creates the DNS record). Comment out to test on *.workers.dev first.
+routes = [{ pattern = "t.fluidbar.doulor.cn", custom_domain = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fluidbar_telemetry"
+database_id = "REPLACE_WITH_wrangler_d1_create_output"
+
+[triggers]
+# Daily retention job (see the scheduled handler in src/index.js).
+crons = ["17 3 * * *"]

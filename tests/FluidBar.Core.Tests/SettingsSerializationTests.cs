@@ -26,7 +26,7 @@ public class SettingsSerializationTests
     {
         var json = SettingsJson.Serialize(FluidBarSettings.CreateDefault());
 
-        Assert.Contains("\"schemaVersion\":2", json);
+        Assert.Contains($"\"schemaVersion\":{FluidBarSettings.CurrentSchemaVersion}", json);
         Assert.Contains("\"theme\":\"dark\"", json);
         Assert.Contains("\"mode\":\"float\"", json);
         Assert.Contains("\"anchor\":\"top-center\"", json);
@@ -410,7 +410,7 @@ public class SettingsMigrationTests
         Assert.Null(error);
 
         var v2 = SettingsJson.Serialize(FluidBarSettings.CreateDefault());
-        Assert.Equal(2, SettingsMigrator.DetectVersion(v2, out _));
+        Assert.Equal(FluidBarSettings.CurrentSchemaVersion, SettingsMigrator.DetectVersion(v2, out _));
 
         _ = SettingsMigrator.DetectVersion("{oops", out var jsonError);
         Assert.NotNull(jsonError);
@@ -423,7 +423,7 @@ public class SettingsMigrationTests
 
         Assert.True(result.Report.Success);
         Assert.Equal(1, result.Report.FromVersion);
-        Assert.Equal(2, result.Report.ToVersion);
+        Assert.Equal(FluidBarSettings.CurrentSchemaVersion, result.Report.ToVersion);
         Assert.True(result.Report.MappedCount >= 8);
 
         var settings = result.Settings;
@@ -483,8 +483,40 @@ public class SettingsMigrationTests
         var result = SettingsMigrator.Migrate(json);
 
         Assert.True(result.Report.Success);
-        Assert.Equal(2, result.Report.FromVersion);
+        Assert.Equal(FluidBarSettings.CurrentSchemaVersion, result.Report.FromVersion);
         Assert.Equal(AppTheme.Light, result.Settings.Appearance.Theme);
+    }
+
+    [Fact]
+    public void Migrate_V2Document_ResetsTheInertTelemetrySwitch()
+    {
+        // Pre-v3 builds wrote general.telemetry from a switch that could not be toggled, so a stored `false`
+        // is an artifact rather than a choice: upgrading to v3 must apply the shipped default.
+        var v2 = SettingsJson.Serialize(FluidBarSettings.CreateDefault() with
+        {
+            General = new GeneralSettings { Telemetry = false },
+        }).Replace($"\"schemaVersion\":{FluidBarSettings.CurrentSchemaVersion}", "\"schemaVersion\":2");
+
+        var result = SettingsMigrator.Migrate(v2);
+
+        Assert.True(result.Report.Success);
+        Assert.Equal(2, result.Report.FromVersion);
+        Assert.True(result.Settings.General.Telemetry);
+        Assert.Contains(result.Report.Mapped, e => e.SourcePath == "general.telemetry");
+    }
+
+    [Fact]
+    public void Migrate_KeepsATelemetryChoiceMadeOnV3()
+    {
+        var v3 = SettingsJson.Serialize(FluidBarSettings.CreateDefault() with
+        {
+            General = new GeneralSettings { Telemetry = false },
+        });
+
+        var result = SettingsMigrator.Migrate(v3);
+
+        Assert.True(result.Report.Success);
+        Assert.False(result.Settings.General.Telemetry);
     }
 
     [Fact]

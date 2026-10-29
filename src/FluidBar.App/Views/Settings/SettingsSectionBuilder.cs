@@ -119,6 +119,46 @@ public static class SettingsSectionBuilder
         return panel;
     }
 
+    /// <summary>Preview/reset actions for the anonymous-usage-data row.</summary>
+    /// <param name="ctx">Settings context.</param>
+    /// <param name="palette">Current palette.</param>
+    private static Control TelemetryActions(SettingsWindowContext ctx, SettingsPalette palette)
+    {
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        actions.Children.Add(SettingsControls.Button(
+            ctx.Localizer.Get(LocKeys.Settings.General.TelemetryPreview),
+            palette,
+            SettingsButtonVariant.Raised,
+            SettingsButtonSize.Md,
+            SettingsIconKind.File,
+            () =>
+            {
+                // "View what would be sent": the exact batch bytes, written verbatim to a temp file.
+                var path = FluidBar.App.Hosting.TelemetryRuntime.Current?.WritePreview();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    ctx.OpenPath(path);
+                }
+            }));
+        actions.Children.Add(SettingsControls.Button(
+            ctx.Localizer.Get(LocKeys.Settings.General.TelemetryReset),
+            palette,
+            SettingsButtonVariant.Raised,
+            SettingsButtonSize.Md,
+            SettingsIconKind.Trash,
+            () =>
+            {
+                FluidBar.App.Hosting.TelemetryRuntime.Current?.ResetInstallId();
+                ctx.ShowStatus(ctx.Localizer.Get(LocKeys.Settings.General.TelemetryResetDone));
+            }));
+        return actions;
+    }
+
     private static Control Row(string title, string? description, Control control)
         => SettingsWidgets.Row(title, description, control, Ambient.Palette);
 
@@ -1324,18 +1364,10 @@ public static class SettingsSectionBuilder
                     ],
                     settings.AutoUpdate,
                     value => ctx.Settings.Update(s => s with { AutoUpdate = value }), small: true),
-                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
-                    ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint),
-                    new SettingsSwitch
-                    {
-                        IsOn = false,
-                        IsEnabled = false,
-                        Accent = new SolidColorBrush(AccentOf(ctx)),
-                        OffTrack = palette.RaisedHoverBrush,
-                        OffHairline = palette.LineStrongBrush,
-                        OffKnob = palette.SecondaryBrush,
-                    },
-                    palette))});
+                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Telemetry),
+                    ctx.Localizer.Get(LocKeys.Settings.General.TelemetryHint), settings.Telemetry,
+                    value => ctx.Settings.Update(s => s with { Telemetry = value })),
+                TelemetryActions(ctx, palette))});
         // The reset action must be the chip's own callback: SmallAction marks PointerPressed as
         // handled, so a second handler appended after creation would never run (the reset chip used
         // to be a dead button).

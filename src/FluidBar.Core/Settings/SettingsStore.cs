@@ -272,6 +272,31 @@ public sealed class SettingsStore
                     saveError);
             }
 
+            if (version.Value < FluidBarSettings.CurrentSchemaVersion)
+            {
+                // In-place schema upgrade (v2 -> v3, 2026-10-30): pre-v3 builds stored general.telemetry from a
+                // switch that could not be toggled, so the migrator resets it to the shipped default.
+                var upgrade = SettingsMigrator.Migrate(text);
+                if (!upgrade.Report.Success)
+                {
+                    _counters?.Increment(CounterKind.MigrationFailures);
+                    _logger.Error(LogCategories.Settings, "settings.upgrade.failed",
+                        "Settings schema upgrade failed.", null,
+                        new Dictionary<string, object?> { ["error"] = upgrade.Report.Error });
+                    return RecoverOrDefaults("settings.upgrade.failed", upgrade.Report.Error);
+                }
+
+                _counters?.Increment(CounterKind.MigrationRuns);
+                var upgraded = SettingsValidator.Normalize(upgrade.Settings, out var upgradeValidation);
+                LogValidation("settings.upgrade", upgradeValidation);
+                var upgradeWriteError = WriteLocked(upgraded).Error;
+                _current = upgraded;
+                _logger.Information(LogCategories.Settings, "settings.upgrade.succeeded",
+                    $"Upgraded settings schemaVersion {version.Value} -> {FluidBarSettings.CurrentSchemaVersion}.");
+                return new SettingsLoadResult(
+                    SettingsLoadStatus.Loaded, upgraded, upgradeValidation, upgrade.Report, upgradeWriteError);
+            }
+
             if (version > FluidBarSettings.CurrentSchemaVersion)
             {
                 _logger.Error(LogCategories.Settings, "settings.load.futureSchema",

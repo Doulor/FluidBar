@@ -227,6 +227,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             Language = core.General.Language,
             StartWithWindows = core.General.StartWithWindows,
             TrayIcon = core.General.TrayIcon,
+            Telemetry = core.General.Telemetry,
             AutoUpdate = core.General.AutoUpdate switch
             {
                 AutoUpdatePreference.Notify => "notify",
@@ -332,6 +333,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 Language = app.Language,
                 StartWithWindows = app.StartWithWindows,
                 TrayIcon = app.TrayIcon,
+                Telemetry = app.Telemetry,
                 AutoUpdate = app.AutoUpdate switch
                 {
                     "auto" => AutoUpdatePreference.Notify,

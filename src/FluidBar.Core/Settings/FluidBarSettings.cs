@@ -170,8 +170,12 @@ public sealed record GeneralSettings
     /// <summary>Auto update behaviour.</summary>
     public AutoUpdatePreference AutoUpdate { get; init; } = AutoUpdatePreference.Notify;
 
-    /// <summary>Anonymous telemetry (always false in v2.0 unless explicitly shipped).</summary>
-    public bool Telemetry { get; init; }
+    /// <summary>
+    /// Anonymous usage data: launch count, session length, startup time, app/OS version, architecture and UI
+    /// language. No song titles, lyrics, notification text, window titles, file paths or plugin content —
+    /// see docs/privacy/telemetry.md. On by default; turning it off discards everything pending.
+    /// </summary>
+    public bool Telemetry { get; init; } = true;
 
     /// <summary>Safe-mode flag set by the crash guard.</summary>
     public bool SafeMode { get; init; }
@@ -502,12 +506,13 @@ public sealed record AdvancedSettings
 
 /// <summary>
 /// Root of the v2 settings model (spec 8.2). Immutable record tree; mutate with <c>with</c>.
-/// <see cref="SchemaVersion"/> is 2; v1 files are migrated by <see cref="SettingsMigrator"/>.
+/// <see cref="SchemaVersion"/> is 3; v1 files are migrated by <see cref="SettingsMigrator"/> and v2 files are
+/// upgraded in place (an inert telemetry switch from v2 is reset to the shipped default).
 /// </summary>
 public sealed record FluidBarSettings
 {
     /// <summary>Current schema version.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     /// <summary>Schema version of this document.</summary>
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;

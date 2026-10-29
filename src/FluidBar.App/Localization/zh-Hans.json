@@ -312,7 +312,10 @@
     "Settings.General.AutoUpdate.Auto": "自动安装",
     "Settings.General.AutoUpdate.Off": "从不检查",
     "Settings.General.Telemetry": "匿名使用数据",
-    "Settings.General.TelemetryHint": "FluidBar 不收集遥测数据；此项始终关闭。",
+    "Settings.General.TelemetryHint": "只发送启动次数、运行时长、启动耗时、版本、系统版本、架构与界面语言。不含歌名、歌词、通知内容、窗口标题或任何文件路径；关闭后本地排队数据一并删除。",
+    "Settings.General.TelemetryPreview": "查看将要发送的数据",
+    "Settings.General.TelemetryReset": "重置匿名 ID",
+    "Settings.General.TelemetryResetDone": "已重置，本地排队数据已清空。",
     "Settings.General.Hotkeys": "全局快捷键",
     "Settings.General.Hotkey.Toggle": "唤起控制中心",
     "Settings.General.Hotkey.Hide": "隐藏或显示灵动岛",
@@ -654,7 +657,7 @@
   "_meta": {
     "comments": {
       "Market.Consent.Body": "安全立场——必须保持诚实：能力是披露，不是沙箱（规范 6.5）。",
-      "Settings.General.Telemetry": "FluidBar 不含遥测；该开关仅为说明。"
+      "Settings.General.Telemetry": "匿名统计的开关，关闭时本地排队数据立即删除。"
     }
   }
 }

@@ -312,7 +312,10 @@
     "Settings.General.AutoUpdate.Auto": "Install automatically",
     "Settings.General.AutoUpdate.Off": "Never check",
     "Settings.General.Telemetry": "Anonymous usage data",
-    "Settings.General.TelemetryHint": "FluidBar sends no telemetry; this is always off.",
+    "Settings.General.TelemetryHint": "Only launch counts, session length, startup time, app/OS version, architecture and UI language are sent — never song titles, lyrics, notification text, window titles or file paths. Turning it off also deletes the local queue.",
+    "Settings.General.TelemetryPreview": "View what would be sent",
+    "Settings.General.TelemetryReset": "Reset anonymous ID",
+    "Settings.General.TelemetryResetDone": "Reset — the local queue was cleared.",
     "Settings.General.Hotkeys": "Global shortcuts",
     "Settings.General.Hotkey.Toggle": "Open the control centre",
     "Settings.General.Hotkey.Hide": "Hide or show the island",
@@ -654,7 +657,7 @@
   "_meta": {
     "comments": {
       "Market.Consent.Body": "Security stance — must stay honest: capabilities are disclosure, not a sandbox (spec 6.5).",
-      "Settings.General.Telemetry": "FluidBar ships without telemetry; the switch is informational."
+      "Settings.General.Telemetry": "Anonymous statistics switch; turning it off deletes the local queue immediately."
     }
   }
 }

@@ -39,6 +39,7 @@ internal sealed class AppBootstrap
     private readonly SettingsAwareLogger _logger;
     private LocalizationService? _localizer;
     private SettingsController? _settings;
+    private TelemetryService? _telemetry;
     private DesignIslandDataSource? _data;
     private EmptyIslandDataSource? _emptyData;
     private IslandHost? _host;
@@ -89,6 +90,7 @@ internal sealed class AppBootstrap
                 showMissingKeys: false,
                 enablePseudoLocale: pseudo);
             LocalizationRuntime.Current = _localizer;
+            StartTelemetryIfEnabled(settingsRoot);
 
             _data = new DesignIslandDataSource(_localizer);
             _emptyData = new EmptyIslandDataSource();
@@ -100,6 +102,8 @@ internal sealed class AppBootstrap
             StartLogFileSink();
             EvaluateCrashGuard();
             await StartIslandHostAsync().ConfigureAwait(true);
+            // The island is up: this is the moment "the app became usable" for the startup-time report.
+            _telemetry?.MarkReady();
             await StartStartupRegistrationAsync().ConfigureAwait(true);
             await StartShellIntegrationAsync().ConfigureAwait(true);
             await StartUpdateCoordinatorAsync().ConfigureAwait(true);
@@ -893,6 +897,12 @@ internal sealed class AppBootstrap
 
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.Telemetry != current.Telemetry)
+        {
+            // Applied live: turning it off discards whatever is queued instead of sending it later.
+            TelemetryRuntime.Current?.SetEnabled(current.Telemetry);
+        }
+
         if (previous.Advanced.SafeMode != current.Advanced.SafeMode && !_shutdownStarted)
         {
             // Plugin-runtime composition is process-global: creating a second runtime after the
@@ -1338,6 +1348,24 @@ internal sealed class AppBootstrap
         _startupRegistration = null;
         UninstallCrashHooks();
 
+        // Anonymous usage data: record the session and try one last (deadline-bounded) upload.
+        if (_telemetry is not null)
+        {
+            try
+            {
+                _telemetry.StopAsync().Wait(TimeSpan.FromSeconds(3));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(LogCategories.Lifecycle, "telemetry.stop-failed",
+                    "The anonymous usage data session did not shut down cleanly.", ex);
+            }
+
+            TelemetryRuntime.Current = null;
+            _telemetry.Dispose();
+            _telemetry = null;
+        }
+
         _settings?.Changed -= OnSettingsChanged;
         if (_shell is not null)
         {
@@ -1387,6 +1415,48 @@ internal sealed class AppBootstrap
         catch (Exception)
         {
             // Exit path: a log sink that cannot stop must not block shutdown.
+        }
+    }
+
+    /// <summary>
+    /// Starts the anonymous-usage-data pipeline. Off means off: nothing is written and anything queued is dropped.
+    /// </summary>
+    /// <param name="settingsRoot">Data-root override for portable/smoke runs (null = <c>%APPDATA%\FluidBar</c>).</param>
+    private void StartTelemetryIfEnabled(string? settingsRoot)
+    {
+        if (_settings is null || _localizer is null)
+        {
+            return;
+        }
+
+        var root = settingsRoot
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar");
+        try
+        {
+            _telemetry = new TelemetryService(
+                root,
+                AppUpdateCoordinator.InformationalVersion(),
+                string.IsNullOrEmpty(typeof(object).Assembly.Location),
+                _localizer.CurrentCulture.Name,
+                _logger);
+            TelemetryRuntime.Current = _telemetry;
+            if (_settings.Current.Telemetry)
+            {
+                _telemetry.Begin();
+                _ = Task.Run(() => _telemetry.FlushAsync());
+            }
+            else
+            {
+                _telemetry.DiscardPending();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Telemetry must never be the reason FluidBar fails to start.
+            _logger.Warning(LogCategories.Lifecycle, "telemetry.init-failed",
+                "Anonymous usage data could not be initialised.", ex);
+            _telemetry = null;
+            TelemetryRuntime.Current = null;
         }
     }
 

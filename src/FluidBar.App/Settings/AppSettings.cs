@@ -163,6 +163,9 @@ public sealed record AppSettings
     /// <summary>Show the tray icon.</summary>
     public bool TrayIcon { get; init; } = true;
 
+    /// <summary>Send anonymous usage data (heartbeat and crash counts only, never user content).</summary>
+    public bool Telemetry { get; init; } = true;
+
     /// <summary>Auto-update preference (<c>notify</c>/<c>auto</c>/<c>off</c>).</summary>
     public string AutoUpdate { get; init; } = "notify";
 
@@ -462,11 +465,11 @@ public sealed record AppSettings
                 Language = Language,
                 StartWithWindows = StartWithWindows,
                 TrayIcon = TrayIcon,
+                Telemetry = Telemetry,
                 AutoUpdate = AutoUpdate,
                 HotkeyToggle = HotkeyToggle,
                 HotkeyHide = HotkeyHide,
                 HotkeySettings = HotkeySettings,
-                Telemetry = false,
             },
             Appearance = new AppearanceJson
             {
@@ -549,6 +552,7 @@ public sealed record AppSettings
                 Language = document.General?.Language ?? defaults.Language,
                 StartWithWindows = document.General?.StartWithWindows ?? defaults.StartWithWindows,
                 TrayIcon = document.General?.TrayIcon ?? defaults.TrayIcon,
+                Telemetry = document.General?.Telemetry ?? defaults.Telemetry,
                 AutoUpdate = document.General?.AutoUpdate ?? defaults.AutoUpdate,
                 HotkeyToggle = document.General?.HotkeyToggle ?? defaults.HotkeyToggle,
                 HotkeyHide = document.General?.HotkeyHide ?? defaults.HotkeyHide,

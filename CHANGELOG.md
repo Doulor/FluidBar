@@ -22,6 +22,25 @@
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 - 部署：Cloudflare Pages 项目 `fluidbar` 已上线；`fluidbar.doulor.cn` 通过 `fluidbar-site` Worker 路由代理，真实 iframe、字体、Shaders 与 axe 站点检查通过。
 
+## 2026-10-30 — 官网链接改到新域名；匿名使用数据（默认开）落地
+
+- 关于页「官网」从已下线的 `https://fluidbar.app` 改为 `https://fluidbar.doulor.cn`（实测 HTTP 200）；
+  「文档」改指 GitHub `docs/`（新官网是单页站，`/docs` 只是 SPA 回退，没有真实文档页）。
+- 设置里的「匿名使用数据」从**永远关闭的假开关**变成真功能，**默认开启**：
+  - 只发心跳级计数：启动次数/会话时长/启动耗时/崩溃、版本、通道、系统版本、架构、界面语言；
+    **不含**歌名、歌词、通知内容、窗口标题、文件路径、插件内容、IP、硬件指纹；
+  - payload 由手写白名单序列化；Worker 对白名单以外的新顶层字段**直接 400**；
+  - 本地队列 256 条上限、失败重试三次、离线留待下次启动；关闭开关会**立即删除**本地排队数据；
+  - 设置页新增「查看将要发送的数据」（原样输出下一批字节）与「重置匿名 ID」。
+- 设置架构升级 v2 → v3：v2 里那个 `general.telemetry:false` 是被强制写入的、不代表用户选择，
+  升级时重置为出厂默认（开启）；`SettingsStore.Load` 现在会对**低版本文件**就地升级并落盘（以前只处理 v1）。
+- 崩溃统计：会话开始时写 `session.tsv`，正常退出删除；上次没删 → 下次启动补记一条 `crash` 会话。
+- 后端：新增 `telemetry/worker`（Cloudflare Worker + D1，`POST /v1/batch`、`GET /v1/health`，
+  installId 加盐 SHA-256 后入库、不落 IP、30 天 cron 清理）。合同见 `docs/privacy/telemetry.md`。
+- 实测（本机）：schemaVersion 2→3 迁移生效、`telemetry:true`；强杀进程后重启补记 `1` 条 Crash；
+  Worker 未部署时日志 `telemetry.upload-deferred status=Failed detail=HttpRequestException`，队列保留待重试，
+  功能无影响。
+- 测试：新增 22 例（payload 白名单 5、队列/安装 ID 7、HTTP 发送 10）；全套 2796 例全绿。
 ## 2026-10-28 — 封面：通用默认图被当成真封面、好封面被晚到的差图顶掉、抓取被位置刷新反复取消
 
 现场日志（`%TEMP%\fluidbar-pin-diag.log`）三条实证：

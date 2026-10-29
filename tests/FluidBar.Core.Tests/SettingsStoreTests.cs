@@ -165,7 +165,7 @@ public class SettingsStoreTests
         Assert.Equal(IslandAnchor.TopLeft, result.Settings.Island.Anchor);
         Assert.NotNull(fs.PeekFile(V1BackupPath));
         var written = fs.PeekFile(SettingsPath);
-        Assert.Contains("\"schemaVersion\":2", written);
+        Assert.Contains($"\"schemaVersion\":{FluidBarSettings.CurrentSchemaVersion}", written);
         Assert.True(logger.HasEvent("settings.migrate.succeeded"));
         Assert.Equal(1L, counters.Get(CounterKind.MigrationRuns));
 
