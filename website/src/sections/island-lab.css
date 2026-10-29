@@ -286,6 +286,18 @@
   font-weight: 500;
 }
 
+.music-study__lyric-word {
+  display: inline-block;
+  margin-right: 3px;
+}
+
+.music-study__lyric-word.is-current {
+  color: #9db8ff;
+  background: rgba(123, 156, 255, 0.16);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
 .music-study__note {
   margin-top: 8px;
   color: rgba(244, 246, 248, 0.68);

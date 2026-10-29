@@ -308,7 +308,7 @@
       'home.remaining': '剩余 4 小时',
       'media.nowPlaying': '正在播放',
       'media.nextLine': '下一句',
-      'media.lineByLine': '逐句歌词',
+      'media.lineByLine': '逐词歌词',
       'media.play': '播放',
       'media.pause': '暂停',
       'media.prev': '上一首',
@@ -515,7 +515,7 @@
       'home.remaining': '4h left',
       'media.nowPlaying': 'Now playing',
       'media.nextLine': 'Next',
-      'media.lineByLine': 'Lyrics',
+      'media.lineByLine': 'Word lyrics',
       'media.play': 'Play',
       'media.pause': 'Pause',
       'media.prev': 'Previous',
@@ -673,7 +673,7 @@
   var S = {
     lang: 'zh', theme: 'dark', mode: 'float', motion: 'normal',
     expanded: false, view: 'idle', tab: 'home',
-    playing: true, track: 0, progress: 12,
+    playing: true, track: 0, progress: 25,
     volume: 62, brightness: 78, hudType: 'volume',
     toggles: { wifi: true, bluetooth: false, focus: false },
     unread: 3, dismissed: new Set(), copiedId: 'c1', pinned: new Set(['c1']),
@@ -740,6 +740,22 @@
   }
   function currentTrack() { return TRACKS[S.track]; }
   function progressPct() { return clamp((S.progress / currentTrack().duration) * 100, 0, 100); }
+  function lyricContext() {
+    var tr = currentTrack();
+    var lyric = tr.lyrics[S.lang] || tr.lyrics.zh;
+    var position = clamp(S.progress / tr.duration, 0, 0.999);
+    var lineIndex = Math.min(lyric.length - 1, Math.floor(position * lyric.length));
+    var line = lyric[lineIndex] || lyric[0] || '';
+    var words = line.split(/\s+/);
+    var withinLine = position * lyric.length - lineIndex;
+    var wordIndex = Math.min(words.length - 1, Math.max(0, Math.floor(withinLine * words.length)));
+    return { tr: tr, lyric: lyric, lineIndex: lineIndex, line: line, words: words, wordIndex: wordIndex };
+  }
+  function lyricWordsHTML(words, activeIndex) {
+    return words.map(function (word, index) {
+      return '<span class="lyric-word' + (index === activeIndex ? ' is-current' : '') + '">' + esc(word) + '</span>';
+    }).join(' ');
+  }
   function visibleNotifs() { return NOTIFICATIONS.filter(function (n) { return !S.dismissed.has(n.id); }); }
   function activeNotif() { return visibleNotifs()[0] || NOTIFICATIONS[0]; }
   function activeClip() {
@@ -877,9 +893,11 @@
 
     if (view === 'media') {
       var tr = currentTrack();
+      var lyric = lyricContext();
       return '<div class="pill pill-media">' +
         artHTML(tr, 'media-art') +
-        '<div class="media-copy"><span class="media-title">' + esc(tr.title) + '</span><span class="media-sub">' + esc(tr.artist) + '</span></div>' +
+        '<div class="media-copy"><span class="media-title">' + esc(tr.title) + '</span>' +
+          '<span class="media-sub media-lyric">' + lyricWordsHTML(lyric.words, lyric.wordIndex) + '</span></div>' +
         '<span class="wave' + (S.playing ? '' : ' paused') + '" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>' +
         '<span class="media-progress" aria-hidden="true"><span style="width:' + progressPct().toFixed(2) + '%"></span></span>' +
       '</div>';
@@ -1015,7 +1033,7 @@
 
   function mediaHTML() {
     var tr = currentTrack();
-    var lyric = tr.lyrics[S.lang] || tr.lyrics.zh;
+    var lyric = lyricContext();
     var pct = progressPct();
     return '<div class="media-page">' +
       '<div class="media-top">' + artHTML(tr, 'media-art-lg') +
@@ -1027,14 +1045,17 @@
         '</div>' +
       '</div>' +
       (function () {
-        var current = Math.min(lyric.length - 1, Math.max(0, Math.floor((S.progress / tr.duration) * lyric.length)));
-        var start = Math.max(0, Math.min(lyric.length - 3, current - 1));
-        var visible = lyric.slice(start, start + 3);
-        var lineNumber = ('0' + (current + 1)).slice(-2) + ' / ' + ('0' + lyric.length).slice(-2);
+        var current = lyric.lineIndex;
+        var start = Math.max(0, Math.min(lyric.lyric.length - 3, current - 1));
+        var visible = lyric.lyric.slice(start, start + 3);
+        var lineNumber = ('0' + (current + 1)).slice(-2) + ' / ' + ('0' + lyric.lyric.length).slice(-2);
         return '<div class="lyric-card lyric-card--lines">' +
           '<div class="lyric-head"><span>' + esc(t('media.lineByLine')) + '</span><span>' + lineNumber + '</span></div>' +
           '<div class="lyric-lines">' + visible.map(function (line, index) {
-            return '<span class="lyric-line' + (start + index === current ? ' is-active' : '') + '">' + esc(line) + '</span>';
+            var active = start + index === current;
+            return '<span class="lyric-line' + (active ? ' is-active' : '') + '">' +
+              lyricWordsHTML(line.split(/\s+/), active ? lyric.wordIndex : -1) +
+            '</span>';
           }).join('') + '</div>' +
         '</div>';
       })() +

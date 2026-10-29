@@ -878,6 +878,28 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
   font-size: 10px;
   color: var(--fg-2);
 }
+.media-lyric {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.lyric-word {
+  display: inline-block;
+  color: var(--fg-2);
+}
+.lyric-word.is-current {
+  color: var(--track-accent);
+  background: rgba(123, 156, 255, 0.14);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.lyric-line .lyric-word {
+  color: inherit;
+}
+.lyric-line .lyric-word.is-current {
+  color: var(--track-accent);
+}
 .wave {
   flex: none;
   width: 20px;

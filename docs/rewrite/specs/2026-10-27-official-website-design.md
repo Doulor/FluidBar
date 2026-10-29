@@ -177,7 +177,7 @@
 2. **活动态**
    - 文案：`媒体 / 音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。`
    - 状态：依次展示真实 compact 状态：media 226 × 40、notifications 248 × 36、clipboard 264 × 36、agent 236 × 36。可在步骤内切换。
-   - 媒体态使用真实歌曲样本 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel）的封面与逐句歌词片段；只做视觉演示，不加载或播放音频，也不显示播放/暂停按钮。
+   - 媒体态使用真实歌曲样本 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel）的封面与逐词歌词片段；只做视觉演示，不加载或播放音频，也不显示播放/暂停按钮。
 3. **展开**
    - 文案：`点击，变成 440 × 284 的控制中心。`
    - 状态：expanded，显示主页。

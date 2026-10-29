@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from '@phosphor-icons/react';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
@@ -212,17 +212,27 @@ export function IslandLab() {
                         <strong>Take Me Hand</strong>
                         <span className="music-study__artist">DAISHI DANCE feat. Cécile Corbel</span>
                         <span className="music-study__lyrics">
-                          <span className="music-study__lyric-label mono">逐句歌词 · LYRICS</span>
+                          <span className="music-study__lyric-label mono">逐词歌词 · WORD BY WORD</span>
                           {MUSIC_LYRICS.map((line, index) => (
                             <span
                               key={line}
                               className={`music-study__lyric-line ${index === 0 ? 'is-current' : ''}`}
                             >
-                              {line}
+                              {line.split(' ').map((word, wordIndex) => (
+                                <Fragment key={`${line}-${word}`}>
+                                  <span
+                                    className={`music-study__lyric-word ${
+                                      index === 0 && wordIndex === 1 ? 'is-current' : ''
+                                    }`}
+                                  >
+                                    {word}
+                                  </span>{' '}
+                                </Fragment>
+                              ))}
                             </span>
                           ))}
                         </span>
-                        <span className="music-study__note">封面与歌词片段 · 仅视觉演示，不播放音频</span>
+                        <span className="music-study__note">封面与逐词歌词片段 · 仅视觉演示，不播放音频</span>
                       </span>
                     </button>
                     </>

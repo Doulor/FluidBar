@@ -55,6 +55,8 @@ test.describe('FluidBar official site', () => {
     await expect(page.locator('.music-study')).toContainText('Take Me Hand');
     await expect(page.locator('.music-study')).toContainText('Stay close to me');
     await expect(page.locator('.music-study__lyric-line')).toHaveCount(5);
+    await expect(page.locator('.music-study__lyric-word.is-current')).toHaveText('my');
+    await expect(frame.locator('.media-lyric .lyric-word')).toHaveCount(3);
     await expect(frame.locator('.mini-play, .play-btn, .transport')).toHaveCount(0);
     await page.waitForTimeout(500);
     const mediaWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
