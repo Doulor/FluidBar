@@ -883,68 +883,33 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
   align-items: center;
   gap: 3px;
 }
+.media-lyric,
+.lyric-line {
+  --lyric-accent: var(--track-accent);
+  --lyric-idle: var(--fg-2);
+}
 .lyric-word {
   display: inline-block;
-  color: var(--fg-2);
+  padding: 0 2px;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--lyric-accent) var(--fill, 0%),
+    var(--lyric-idle) var(--fill, 0%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .lyric-word.is-current {
-  color: var(--track-accent);
-  background: rgba(123, 156, 255, 0.14);
-  border-radius: 3px;
-  padding: 0 2px;
   font-weight: 600;
 }
-.lyric-line .lyric-word {
-  color: inherit;
-}
-.lyric-line .lyric-word.is-current {
-  color: var(--track-accent);
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  .media-lyric,
-  .lyric-line {
-    --lyric-accent: var(--track-accent);
-    --lyric-idle: var(--fg-2);
-  }
-
-  .media-lyric .lyric-word,
-  .lyric-line.is-active .lyric-word {
-    animation: lyric-word-cycle 3.6s linear infinite;
-  }
-
-  .media-lyric .lyric-word:nth-child(1),
-  .lyric-line.is-active .lyric-word:nth-child(1) {
-    animation-delay: 0s;
-  }
-
-  .media-lyric .lyric-word:nth-child(2),
-  .lyric-line.is-active .lyric-word:nth-child(2) {
-    animation-delay: -1.2s;
-  }
-
-  .media-lyric .lyric-word:nth-child(3),
-  .lyric-line.is-active .lyric-word:nth-child(3) {
-    animation-delay: -2.4s;
-  }
-}
-
-@keyframes lyric-word-cycle {
-  0%,
-  33% {
+@media (prefers-reduced-motion: reduce) {
+  .lyric-word.is-current {
     color: var(--lyric-accent);
-    background: rgba(123, 156, 255, 0.16);
-    border-radius: 3px;
-    padding: 0 2px;
-    transform: translateY(-1px);
-  }
-
-  34%,
-  100% {
-    color: var(--lyric-idle);
-    background: transparent;
-    padding: 0 2px;
-    transform: translateY(0);
+    -webkit-text-fill-color: var(--lyric-accent);
+    background-image: none;
   }
 }
 .wave {

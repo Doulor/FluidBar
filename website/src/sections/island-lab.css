@@ -260,6 +260,8 @@
 }
 
 .music-study__lyrics {
+  --lyric-accent: #9db8ff;
+  --lyric-idle: rgba(244, 246, 248, 0.48);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -268,9 +270,19 @@
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.music-study__lyric-label {
+.music-study__lyric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 3px;
   color: rgba(244, 246, 248, 0.6);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+.music-study__lyric-label {
+  color: inherit;
   font-size: 8px;
   letter-spacing: 0.06em;
 }
@@ -289,49 +301,27 @@
 .music-study__lyric-word {
   display: inline-block;
   margin-right: 3px;
+  padding: 0 2px;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--lyric-accent) var(--fill, 0%),
+    var(--lyric-idle) var(--fill, 0%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .music-study__lyric-word.is-current {
-  color: #9db8ff;
-  background: rgba(123, 156, 255, 0.16);
-  border-radius: 3px;
-  padding: 0 2px;
+  font-weight: 600;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .music-study__lyric-line.is-current .music-study__lyric-word {
-    animation: study-word-cycle 3.6s linear infinite;
-  }
-
-  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(1) {
-    animation-delay: 0s;
-  }
-
-  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(2) {
-    animation-delay: -1.2s;
-  }
-
-  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(3) {
-    animation-delay: -2.4s;
-  }
-}
-
-@keyframes study-word-cycle {
-  0%,
-  33% {
-    color: #9db8ff;
-    background: rgba(123, 156, 255, 0.16);
-    border-radius: 3px;
-    padding: 0 2px;
-    transform: translateY(-1px);
-  }
-
-  34%,
-  100% {
-    color: rgba(244, 246, 248, 0.48);
-    background: transparent;
-    padding: 0 2px;
-    transform: translateY(0);
+@media (prefers-reduced-motion: reduce) {
+  .music-study__lyric-word.is-current {
+    color: var(--lyric-accent);
+    -webkit-text-fill-color: var(--lyric-accent);
+    background-image: none;
   }
 }
 

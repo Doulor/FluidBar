@@ -5,7 +5,7 @@
 
 ## 2026-10-29 官网视觉与媒体更新
 
-- 活动态媒体样本改为 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel）的真实封面与逐词歌词片段；当前词按 3.6 秒循环高亮，逐词歌词会动起来。只做视觉演示，不加载音频；媒体面板不显示播放/暂停按钮。
+- 活动态媒体样本改为 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel）的真实封面与完整 29 行歌词时间轴；当前词按真实播放时钟连续填充，歌词行随时间推进，不再单行循环。只做视觉演示，不加载音频；媒体面板不显示播放/暂停按钮。
 - 故事区加入音乐研究卡，仍驱动同一个真实 media compact 状态；原型 media 页显示 `Wonder Tourism · 2012`。
 - 全站 section heading 加入 ghost wordmark（ISLAND / PLUGINS / 120 / FLUIDBAR），沿用材质研究区的画廊式排版。
 - 验证：`pnpm check` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2。

@@ -55,20 +55,69 @@
       title: 'Take Me Hand', artist: 'DAISHI DANCE feat. Cécile Corbel', album: 'Wonder Tourism',
       art: 0, cover: 'covers/take-me-hand.jpg', year: 2012,
       accent: '#7b9cff', duration: 214, initials: 'TMH',
+      lyricStart: 0, lyricEnd: 208,
       lyrics: {
         zh: [
           'In my dreams',
           'I feel your light',
           'I feel love is born again',
+          'Fireflies in the moonlight',
+          'Rising stars',
+          'Remember the day',
+          'I fell in love with you',
+          "Darling, won't you break my heart?",
           'Take my hand now',
-          'Stay close to me, be my lover'
+          'Stay close to me, be my lover',
+          "Won't you let me go?",
+          'Close your eyes now',
+          'And you will see',
+          "There's a rainbow",
+          'For you and me',
+          'As I wake up I see your face',
+          'I feel love is born again',
+          'Cherry blossom, flying birds',
+          'In the sky',
+          "Can't you see the sun",
+          'That is shining on the fields?',
+          'Is it shining in your heart?',
+          'Take my hand now',
+          'Stay close to me, be my lover',
+          "Won't you let me go?",
+          'Close your eyes now',
+          'And you will see',
+          "There's a rainbow",
+          'For you and me'
         ],
         en: [
           'In my dreams',
           'I feel your light',
           'I feel love is born again',
+          'Fireflies in the moonlight',
+          'Rising stars',
+          'Remember the day',
+          'I fell in love with you',
+          "Darling, won't you break my heart?",
           'Take my hand now',
-          'Stay close to me, be my lover'
+          'Stay close to me, be my lover',
+          "Won't you let me go?",
+          'Close your eyes now',
+          'And you will see',
+          "There's a rainbow",
+          'For you and me',
+          'As I wake up I see your face',
+          'I feel love is born again',
+          'Cherry blossom, flying birds',
+          'In the sky',
+          "Can't you see the sun",
+          'That is shining on the fields?',
+          'Is it shining in your heart?',
+          'Take my hand now',
+          'Stay close to me, be my lover',
+          "Won't you let me go?",
+          'Close your eyes now',
+          'And you will see',
+          "There's a rainbow",
+          'For you and me'
         ]
       }
     },
@@ -673,7 +722,7 @@
   var S = {
     lang: 'zh', theme: 'dark', mode: 'float', motion: 'normal',
     expanded: false, view: 'idle', tab: 'home',
-    playing: true, track: 0, progress: 25,
+    playing: true, track: 0, progress: 0,
     volume: 62, brightness: 78, hudType: 'volume',
     toggles: { wifi: true, bluetooth: false, focus: false },
     unread: 3, dismissed: new Set(), copiedId: 'c1', pinned: new Set(['c1']),
@@ -743,18 +792,88 @@
   function lyricContext() {
     var tr = currentTrack();
     var lyric = tr.lyrics[S.lang] || tr.lyrics.zh;
-    var position = clamp(S.progress / tr.duration, 0, 0.999);
+    var position = clamp(S.progress / tr.duration, 0, 0.9999);
     var lineIndex = Math.min(lyric.length - 1, Math.floor(position * lyric.length));
     var line = lyric[lineIndex] || lyric[0] || '';
     var words = line.split(/\s+/);
     var withinLine = position * lyric.length - lineIndex;
     var wordIndex = Math.min(words.length - 1, Math.max(0, Math.floor(withinLine * words.length)));
-    return { tr: tr, lyric: lyric, lineIndex: lineIndex, line: line, words: words, wordIndex: wordIndex };
+    var wordProgress = clamp(withinLine * words.length - wordIndex, 0, 1);
+    return {
+      tr: tr,
+      lyric: lyric,
+      lineIndex: lineIndex,
+      line: line,
+      words: words,
+      wordIndex: wordIndex,
+      wordProgress: wordProgress
+    };
   }
-  function lyricWordsHTML(words, activeIndex) {
+  function lyricWordsHTML(words, activeIndex, lineIndex) {
     return words.map(function (word, index) {
-      return '<span class="lyric-word' + (index === activeIndex ? ' is-current' : '') + '">' + esc(word) + '</span>';
+      return '<span class="lyric-word' + (index === activeIndex ? ' is-current' : '') +
+        '" data-line="' + lineIndex + '" data-word="' + index + '" style="--fill:0%">' +
+        esc(word) + '</span>';
     }).join(' ');
+  }
+  var LYRIC = { raf: 0, last: 0, lastLine: -1, lastWindow: -1 };
+  function lyricActive() {
+    return S.view === 'media' || (S.expanded && S.tab === 'media');
+  }
+  function updateLyricFill() {
+    var ctx = lyricContext();
+    var nodes = document.querySelectorAll('.lyric-word');
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var line = Number(node.dataset.line);
+      var word = Number(node.dataset.word);
+      var fill = 0;
+      if (line === ctx.lineIndex) {
+        if (word < ctx.wordIndex) fill = 100;
+        else if (word === ctx.wordIndex) fill = ctx.wordProgress * 100;
+      }
+      node.style.setProperty('--fill', fill.toFixed(1) + '%');
+      node.classList.toggle('is-current', line === ctx.lineIndex && word === ctx.wordIndex);
+    }
+    var bars = document.querySelectorAll('.media-progress span');
+    for (var b = 0; b < bars.length; b++) bars[b].style.width = progressPct().toFixed(2) + '%';
+    var fills = document.querySelectorAll('.seek-fill');
+    for (var f = 0; f < fills.length; f++) fills[f].style.width = progressPct().toFixed(2) + '%';
+    var thumbs = document.querySelectorAll('.seek-thumb');
+    for (var th = 0; th < thumbs.length; th++) thumbs[th].style.left = progressPct().toFixed(2) + '%';
+    var current = document.querySelector('.js-time-current');
+    if (current) current.textContent = fmtTime(S.progress);
+    var remaining = document.querySelector('.js-time-remaining');
+    if (remaining) remaining.textContent = fmtTime(ctx.tr.duration - S.progress);
+    var seek = document.querySelector('.seek[role="slider"]');
+    if (seek) seek.setAttribute('aria-valuenow', String(Math.round(S.progress)));
+  }
+  function lyricTick(now) {
+    if (!lyricActive()) { LYRIC.raf = 0; return; }
+    if (!LYRIC.last) LYRIC.last = now;
+    var delta = Math.min(0.1, (now - LYRIC.last) / 1000);
+    LYRIC.last = now;
+    S.progress += delta;
+    if (S.progress >= currentTrack().duration) S.progress = 0;
+    var ctx = lyricContext();
+    var windowStart = Math.max(0, Math.min(ctx.lyric.length - 3, ctx.lineIndex - 1));
+    if (ctx.lineIndex !== LYRIC.lastLine || windowStart !== LYRIC.lastWindow) {
+      LYRIC.lastLine = ctx.lineIndex;
+      LYRIC.lastWindow = windowStart;
+      renderCompact();
+      renderPages();
+    }
+    updateLyricFill();
+    LYRIC.raf = requestAnimationFrame(lyricTick);
+  }
+  function ensureLyricClock() {
+    if (lyricActive() && !LYRIC.raf && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+      LYRIC.last = 0;
+      LYRIC.raf = requestAnimationFrame(lyricTick);
+    } else if (!lyricActive() && LYRIC.raf) {
+      cancelAnimationFrame(LYRIC.raf);
+      LYRIC.raf = 0;
+    }
   }
   function visibleNotifs() { return NOTIFICATIONS.filter(function (n) { return !S.dismissed.has(n.id); }); }
   function activeNotif() { return visibleNotifs()[0] || NOTIFICATIONS[0]; }
@@ -897,7 +1016,7 @@
       return '<div class="pill pill-media">' +
         artHTML(tr, 'media-art') +
         '<div class="media-copy"><span class="media-title">' + esc(tr.title) + '</span>' +
-          '<span class="media-sub media-lyric">' + lyricWordsHTML(lyric.words, lyric.wordIndex) + '</span></div>' +
+          '<span class="media-sub media-lyric">' + lyricWordsHTML(lyric.words, lyric.wordIndex, lyric.lineIndex) + '</span></div>' +
         '<span class="wave' + (S.playing ? '' : ' paused') + '" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>' +
         '<span class="media-progress" aria-hidden="true"><span style="width:' + progressPct().toFixed(2) + '%"></span></span>' +
       '</div>';
@@ -975,6 +1094,7 @@
     E.island.dataset.view = S.view;
     E.island.style.setProperty('--track-accent', currentTrack().accent);
     E.compactLayer.innerHTML = compactHTML();
+    ensureLyricClock();
   }
 
   /* ==========================================================================
@@ -1054,7 +1174,7 @@
           '<div class="lyric-lines">' + visible.map(function (line, index) {
             var active = start + index === current;
             return '<span class="lyric-line' + (active ? ' is-active' : '') + '">' +
-              lyricWordsHTML(line.split(/\s+/), active ? lyric.wordIndex : -1) +
+              lyricWordsHTML(line.split(/\s+/), active ? lyric.wordIndex : -1, start + index) +
             '</span>';
           }).join('') + '</div>' +
         '</div>';
@@ -1208,6 +1328,7 @@
     var idx = clamp(P.uiIndex >= 0 ? P.uiIndex : Math.round(P.offset), 0, MAX_PAGE);
     updatePageA11y(idx);
     syncTitle(idx);
+    ensureLyricClock();
   }
 
   /* ==========================================================================

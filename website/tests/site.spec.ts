@@ -53,9 +53,9 @@ test.describe('FluidBar official site', () => {
     await expect(island).toHaveAttribute('data-view', 'media');
     await expect(page.getByRole('button', { name: /媒体.*226/ })).toBeVisible();
     await expect(page.locator('.music-study')).toContainText('Take Me Hand');
-    await expect(page.locator('.music-study')).toContainText('Stay close to me');
-    await expect(page.locator('.music-study__lyric-line')).toHaveCount(5);
-    await expect(page.locator('.music-study__lyric-word.is-current')).toHaveText('my');
+    await expect(page.locator('.music-study')).toContainText('In my dreams');
+    await expect(page.locator('.music-study__lyric-line')).toHaveCount(3);
+    await expect(page.locator('.music-study__lyric-head')).toContainText('LIVE');
     await expect(frame.locator('.media-lyric .lyric-word')).toHaveCount(3);
     await expect(frame.locator('.mini-play, .play-btn, .transport')).toHaveCount(0);
     await page.waitForTimeout(500);

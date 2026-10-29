@@ -1,21 +1,15 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { ArrowUpRight } from '@phosphor-icons/react';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
 import { COMPACT_STATE_META } from '../island/compactStates';
+import { lyricFrameAt, TAKE_ME_HAND_DURATION, TAKE_ME_HAND_LYRICS } from '../data/takeMeHand';
 import type { CompactView, IslandMaterial, IslandMode } from '../island/protocol';
 import './island-lab.css';
 
 const PAGE_LABELS = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 const ACTIVITY_VIEWS: CompactView[] = ['media', 'notifications', 'clipboard', 'agent'];
 const MUSIC_COVER = `${import.meta.env.BASE_URL}island/covers/take-me-hand.jpg`;
-const MUSIC_LYRICS = [
-  'In my dreams',
-  'I feel your light',
-  'I feel love is born again',
-  'Take my hand now',
-  'Stay close to me, be my lover',
-];
 
 const STEPS = [
   {
@@ -53,6 +47,7 @@ export function IslandLab() {
   const [page, setPage] = useState(0);
   const [mode, setMode] = useState<IslandMode>('float');
   const [material, setMaterial] = useState<IslandMaterial>('obsidian');
+  const [lyricTime, setLyricTime] = useState(0);
   const stepRefs = useRef<Array<HTMLDivElement | null>>([]);
   const manualUntilRef = useRef(0);
 
@@ -104,6 +99,23 @@ export function IslandLab() {
     send({ material });
   }, [material, send]);
 
+  useEffect(() => {
+    if (activeStep !== 1 || activity !== 'media') {
+      setLyricTime(0);
+      return;
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let raf = 0;
+    const started = performance.now();
+    const tick = (now: number) => {
+      setLyricTime(((now - started) / 1000) % TAKE_ME_HAND_DURATION);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [activeStep, activity]);
+
   const chooseStep = (index: number) => {
     manualUntilRef.current = performance.now() + 1600;
     setActiveStep(index);
@@ -129,6 +141,7 @@ export function IslandLab() {
   };
 
   const compact = COMPACT_STATE_META.find((item) => item.id === state.view) ?? COMPACT_STATE_META[0];
+  const lyricFrame = lyricFrameAt(lyricTime);
   const status = !state.ready
     ? '载入真实原型…'
     : state.expanded
@@ -212,27 +225,55 @@ export function IslandLab() {
                         <strong>Take Me Hand</strong>
                         <span className="music-study__artist">DAISHI DANCE feat. Cécile Corbel</span>
                         <span className="music-study__lyrics">
-                          <span className="music-study__lyric-label mono">逐词歌词 · WORD BY WORD</span>
-                          {MUSIC_LYRICS.map((line, index) => (
-                            <span
-                              key={line}
-                              className={`music-study__lyric-line ${index === 0 ? 'is-current' : ''}`}
-                            >
-                              {line.split(' ').map((word, wordIndex) => (
-                                <Fragment key={`${line}-${word}`}>
-                                  <span
-                                    className={`music-study__lyric-word ${
-                                      index === 0 && wordIndex === 1 ? 'is-current' : ''
-                                    }`}
-                                  >
-                                    {word}
-                                  </span>{' '}
-                                </Fragment>
-                              ))}
+                          <span className="music-study__lyric-head">
+                            <span className="music-study__lyric-label mono">逐词歌词 · LIVE</span>
+                            <span className="mono">
+                              {String(lyricFrame.lineIndex + 1).padStart(2, '0')} /{' '}
+                              {String(TAKE_ME_HAND_LYRICS.length).padStart(2, '0')}
                             </span>
-                          ))}
+                          </span>
+                          {lyricFrame.lines.map((line, index) => {
+                            const lineIndex = lyricFrame.windowStart + index;
+                            const words = line.split(' ');
+                            return (
+                              <span
+                                key={`${lineIndex}-${line}`}
+                                className={`music-study__lyric-line ${
+                                  lineIndex === lyricFrame.lineIndex ? 'is-current' : ''
+                                }`}
+                              >
+                                {words.map((word, wordIndex) => {
+                                  const fill =
+                                    lineIndex < lyricFrame.lineIndex
+                                      ? 100
+                                      : lineIndex > lyricFrame.lineIndex
+                                        ? 0
+                                        : wordIndex < lyricFrame.wordIndex
+                                          ? 100
+                                          : wordIndex === lyricFrame.wordIndex
+                                            ? lyricFrame.wordProgress * 100
+                                            : 0;
+                                  return (
+                                    <Fragment key={`${line}-${word}`}>
+                                      <span
+                                        className={`music-study__lyric-word ${
+                                          lineIndex === lyricFrame.lineIndex &&
+                                          wordIndex === lyricFrame.wordIndex
+                                            ? 'is-current'
+                                            : ''
+                                        }`}
+                                        style={{ '--fill': `${fill}%` } as CSSProperties}
+                                      >
+                                        {word}
+                                      </span>{' '}
+                                    </Fragment>
+                                  );
+                                })}
+                              </span>
+                            );
+                          })}
                         </span>
-                        <span className="music-study__note">封面与逐词歌词片段 · 仅视觉演示，不播放音频</span>
+                        <span className="music-study__note">封面与完整歌词时间轴 · 仅视觉演示，不播放音频</span>
                       </span>
                     </button>
                     </>
