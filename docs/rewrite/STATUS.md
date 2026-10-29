@@ -1,7 +1,14 @@
 # FluidBar v2 — 当前状态（STATUS）
 
-> 最后更新：2026-10-30 00:12（Asia/Shanghai）
+> 最后更新：2026-10-30 01:40（Asia/Shanghai）
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
+
+## 2026-10-30 插件市场静态托管层
+
+- `public/market/index.json` 从 `marketplace/index.json` 逐字节复制；远端 SHA-256 与源文件一致（`54837f9cf1bf7788ae168b25b802a5d714b24275631c53b3a05121c201367958`）。
+- 顶层 `public/404.html` 关闭 Cloudflare Pages 的 SPA 回退；`/market/*`、`/schemas/*` 不存在的路径实测 404，实际文件正常返回 JSON。
+- 已提供 `market/plugins/sample-minimal.json`、`sample-rich.json`，96×96 透明图标，1440×900（16:10）截图，两个静态 listing 页，以及 6 个 schema 文件。
+- 索引响应实测：`application/json; charset=utf-8`、ETag 304、GET body 4672 bytes、`Cache-Control: public, max-age=300`、CORS `*`。
 
 ## 2026-10-29 官网视觉与媒体更新
 

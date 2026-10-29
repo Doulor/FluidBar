@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FluidBar Marketplace</title>
+<meta name="description" content="Plugins for FluidBar 2.0, signed and reviewed for the Windows desktop island.">
+<link rel="canonical" href="https://fluidbar.doulor.cn/market/">
+<style>
+:root { color-scheme:light; --ink:#10151b; --muted:#5d6874; --line:#d8dee5; --paper:#f3f5f6; --card:#fff; --accent:#2447ff; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.6 "Segoe UI",system-ui,sans-serif; }
+main { width:min(860px,calc(100% - 40px)); margin:0 auto; padding:72px 0 90px; }
+.eyebrow { margin:0 0 14px; color:var(--muted); font:11px/1.4 "Cascadia Mono",Consolas,monospace; letter-spacing:.13em; }
+h1 { margin:0; font-size:clamp(42px,7vw,78px); line-height:.94; letter-spacing:-.065em; }
+.lede { max-width:650px; margin:22px 0 34px; color:var(--muted); font-size:17px; }
+.plugins { display:grid; gap:10px; }
+.plugin { display:flex; align-items:center; gap:15px; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--card); color:inherit; text-decoration:none; }
+.plugin:hover { border-color:#9aa7b4; }
+.plugin img { flex:none; border-radius:10px; }
+.plugin span { display:flex; min-width:0; flex-direction:column; gap:3px; }
+.plugin strong { font-size:16px; }
+.plugin small { overflow:hidden; color:var(--muted); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.plugin b { margin-left:auto; flex:none; color:var(--muted); font:11px "Cascadia Mono",Consolas,monospace; }
+@media(max-width:560px) { .plugin small { white-space:normal; } .plugin b { display:none; } }
+</style>
+</head>
+<body><main>
+<p class="eyebrow">FLUIDBAR / MARKETPLACE</p>
+<h1>Tools for<br>the quiet island.</h1>
+<p class="lede">Signed sample plugins for FluidBar 2.0. Each package is reviewed, hashed and published through the marketplace index.</p>
+<nav class="plugins" aria-label="Plugins"><a class="plugin" href="https://fluidbar.doulor.cn/market/listings/sample-minimal/"><img src="https://fluidbar.doulor.cn/market/assets/sample-minimal/icon.png" alt="" width="48" height="48"><span><strong>Sample Minimal</strong><small>A minimal starter plugin that shows one island message.</small></span><b>v1.0.0</b></a><a class="plugin" href="https://fluidbar.doulor.cn/market/listings/sample-rich/"><img src="https://fluidbar.doulor.cn/market/assets/sample-rich/icon.png" alt="" width="48" height="48"><span><strong>Sample Rich</strong><small>Reference plugin with settings, commands, widgets and a hover card.</small></span><b>v1.0.0</b></a></nav>
+</main></body>
+</html>

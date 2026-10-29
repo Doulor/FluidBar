@@ -2,6 +2,13 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-30 — 插件市场静态托管层
+
+- 新增 `public/market/` 与 `public/schemas/`：签名索引按原始字节复制，提供两个 plugin history shard、96×96 透明图标、16:10 截图、静态 listing 页面和 6 个 schema 文件。
+- 新增顶层 `public/404.html`，关闭 Cloudflare Pages 默认 SPA 回退；`/market/*` 与 `/schemas/*` 的不存在路径返回真实 404，不再返回官网 HTML。
+- `public/_headers` 为市场 JSON、schema、图标和 listing 设置 `application/json; charset=utf-8`、CORS 与缓存头；索引保留 Pages 自动 ETag / If-None-Match 304。
+- 新增 `website/scripts/generate-marketplace.py`；索引源仍是 `marketplace/index.json`，本脚本只读取并复制，不重写签名 JSON。
+
 ## 2026-10-29 — 官网活动态加入《Take Me Hand》音乐样本 + 画廊式排版
 
 - 材质选择器切到液态玻璃时会展开 440×284 的真实原型预览；液态玻璃深色 tint 从 68% 降到 30%，配合 `blur(16px) saturate(175%) brightness(1.04)` 透出桌面，不再在 idle 132×36 胶囊下看起来和黑曜石一样。

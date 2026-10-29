@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidbar.doulor.cn/schemas/listing.schema.json",
+  "title": "FluidBar Marketplace Listing",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pluginId",
+    "defaultLocale",
+    "availableLocales",
+    "baseUrl"
+  ],
+  "properties": {
+    "pluginId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "defaultLocale": {
+      "type": "string"
+    },
+    "availableLocales": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    }
+  }
+}

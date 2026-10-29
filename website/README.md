@@ -119,3 +119,16 @@ wrangler deploy --config wrangler.worker.toml
 - 性能数字来自 `docs/rewrite/STATUS.md` 和发布说明，页面底部标注了来源与测量环境。
 - 演示区标注“示例数据”，不冒充用户真实数据。
 - 媒体活动态使用 `Take Me Hand` 的封面与完整 29 行歌词时间轴做视觉样本；当前词按播放时钟连续填充，歌词行随时间推进。不加载、不播放音频，也不显示播放/暂停按钮。
+
+## 插件市场静态层
+
+- `website/public/market/index.json` 是签名源 `marketplace/index.json` 的逐字节副本；不要在 `public/` 里手改，也不要重新格式化。
+- `website/public/404.html` 是必要的：Cloudflare Pages 只有在没有顶层 `404.html` 时才会把未知路径回退到 SPA `index.html`。不要删除它。
+- 生成 shards、图标、截图和 listing 页面：
+
+```powershell
+python website/scripts/generate-marketplace.py
+```
+
+- 生成脚本只读取 `marketplace/index.json`；签名、URL 替换和 `generatedAt` 单调性由市场签名流程负责。
+- `/market/*` 与 `/schemas/*` 的实际文件会返回真实 content-type；不存在的路径返回 404。
