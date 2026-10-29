@@ -34,3 +34,6 @@ third_party/
 
 # Tool artefact: ImageMagick expands %SystemDrive% literally
 %SystemDrive%/
+
+# Local-only keys, notes and handoff artifacts (never commit private material)
+.local/

@@ -149,7 +149,7 @@ public enum AutoUpdatePreference
 public static class SettingsJsonNames
 {
     /// <summary>Default marketplace index URL until the mirror decision (spec Q8) is made.</summary>
-    public const string DefaultMarketSourceUrl = "https://fluidbar.app/market/index.json";
+    public const string DefaultMarketSourceUrl = "https://fluidbar.doulor.cn/market/index.json";
 
     /// <summary>Placement dictionary key used by the v1 migration (primary monitor fallback).</summary>
     public const string PrimaryPlacementKey = "primary";

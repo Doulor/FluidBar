@@ -1,28 +1,42 @@
 {
-  "$schema": "https://fluidbar.app/schemas/marketplace-index.schema.json",
+  "$schema": "https://fluidbar.doulor.cn/schemas/marketplace-index.schema.json",
   "schemaVersion": 1,
   "generatedAt": "2026-10-18T09:12:00Z",
-  "sourceCommit": "9f2c1b7e5d4a3c2b1a0f9e8d7c6b5a4f3e2d1c0b",
+  "sourceCommit": "18da6a1cb362f25ce399f03d70080ae15aa64b9b",
   "appCompatibility": {
     "minAppVersion": "2.0.0",
-    "supportedApiVersions": ["2.0"]
+    "supportedApiVersions": [
+      "2.0"
+    ]
   },
   "defaultLocale": "en-US",
-  "availableLocales": ["en-US", "zh-Hans"],
+  "availableLocales": [
+    "en-US",
+    "zh-Hans"
+  ],
   "categories": [
     {
       "id": "media",
-      "name": { "en-US": "Media", "zh-Hans": "媒体" }
+      "name": {
+        "en-US": "Media",
+        "zh-Hans": "媒体"
+      }
     },
     {
       "id": "developer",
-      "name": { "en-US": "Developer", "zh-Hans": "开发者" }
+      "name": {
+        "en-US": "Developer",
+        "zh-Hans": "开发者"
+      }
     }
   ],
   "plugins": [
     {
       "id": "sample-minimal",
-      "name": { "en-US": "Sample Minimal", "zh-Hans": "最小示例" },
+      "name": {
+        "en-US": "Sample Minimal",
+        "zh-Hans": "最小示例"
+      },
       "summary": {
         "en-US": "A minimal starter plugin that shows one island message.",
         "zh-Hans": "一个最小化的入门插件，显示一条灵动岛消息。"
@@ -32,14 +46,14 @@
         "displayName": "FluidBar Samples",
         "verified": true,
         "keyId": "fluidbar-marketplace-sample",
-        "url": "https://fluidbar.app"
+        "url": "https://fluidbar.doulor.cn"
       },
       "latest": {
         "version": "1.0.0",
         "apiVersion": "2.0.0",
         "minAppVersion": "2.0.0",
         "maxAppVersion": null,
-        "publishedAt": "2026-10-18T08:00:00Z",
+        "publishedAt": "2026-10-18T08:00:00+00:00",
         "channel": "stable",
         "yanked": false,
         "yankReason": null,
@@ -51,35 +65,60 @@
           "keyId": "fluidbar-marketplace-sample",
           "algorithm": "ECDSA-P256-SHA256"
         },
-        "capabilities": ["ui"],
-        "locales": ["en-US", "zh-Hans"],
-        "localeCoverage": { "en-US": 100, "zh-Hans": 100 },
+        "capabilities": [
+          "ui"
+        ],
+        "locales": [
+          "en-US",
+          "zh-Hans"
+        ],
+        "localeCoverage": {
+          "en-US": 100,
+          "zh-Hans": 100
+        },
         "changelog": "### 1.0.0\n- First sample release.",
         "license": "MIT"
       },
-      "categories": ["developer"],
-      "tags": ["sample", "minimal"],
-      "icon": "https://marketplace.fluidbar.app/assets/sample-minimal/icon.png",
+      "categories": [
+        "developer"
+      ],
+      "tags": [
+        "sample",
+        "minimal"
+      ],
+      "icon": "https://fluidbar.doulor.cn/market/assets/sample-minimal/icon.png",
       "screenshots": [
         {
-          "src": "https://marketplace.fluidbar.app/assets/sample-minimal/compact.png",
-          "alt": { "en-US": "Compact island", "zh-Hans": "紧凑灵动岛" }
+          "src": "https://fluidbar.doulor.cn/market/assets/sample-minimal/compact.png",
+          "alt": {
+            "en-US": "Compact island",
+            "zh-Hans": "紧凑灵动岛"
+          }
         }
       ],
       "listing": {
         "defaultLocale": "en-US",
-        "availableLocales": ["en-US", "zh-Hans"],
-        "baseUrl": "https://marketplace.fluidbar.app/listings/sample-minimal/"
+        "availableLocales": [
+          "en-US",
+          "zh-Hans"
+        ],
+        "baseUrl": "https://fluidbar.doulor.cn/market/listings/sample-minimal/"
       },
-      "historyUrl": "https://marketplace.fluidbar.app/plugins/sample-minimal.json",
-      "stats": { "downloads": 0, "rating": null },
+      "historyUrl": "https://fluidbar.doulor.cn/market/plugins/sample-minimal.json",
+      "stats": {
+        "downloads": 0,
+        "rating": null
+      },
       "status": "active",
       "featured": true,
       "blocked": null
     },
     {
       "id": "sample-rich",
-      "name": { "en-US": "Sample Rich", "zh-Hans": "丰富示例" },
+      "name": {
+        "en-US": "Sample Rich",
+        "zh-Hans": "丰富示例"
+      },
       "summary": {
         "en-US": "Reference plugin with settings, commands, widgets and a hover card.",
         "zh-Hans": "包含设置、命令、小组件和悬停卡片的参考插件。"
@@ -89,14 +128,14 @@
         "displayName": "FluidBar Samples",
         "verified": true,
         "keyId": "fluidbar-marketplace-sample",
-        "url": "https://fluidbar.app"
+        "url": "https://fluidbar.doulor.cn"
       },
       "latest": {
         "version": "1.0.0",
         "apiVersion": "2.0.0",
         "minAppVersion": "2.0.0",
         "maxAppVersion": null,
-        "publishedAt": "2026-10-18T08:05:00Z",
+        "publishedAt": "2026-10-18T08:05:00+00:00",
         "channel": "stable",
         "yanked": false,
         "yankReason": null,
@@ -108,29 +147,60 @@
           "keyId": "fluidbar-marketplace-sample",
           "algorithm": "ECDSA-P256-SHA256"
         },
-        "capabilities": ["ui", "background"],
-        "locales": ["en-US", "zh-Hans"],
-        "localeCoverage": { "en-US": 100, "zh-Hans": 100 },
+        "capabilities": [
+          "ui",
+          "background"
+        ],
+        "locales": [
+          "en-US",
+          "zh-Hans"
+        ],
+        "localeCoverage": {
+          "en-US": 100,
+          "zh-Hans": 100
+        },
         "changelog": "### 1.0.0\n- First rich sample release.",
         "license": "MIT"
       },
-      "categories": ["media", "developer"],
-      "tags": ["sample", "media", "settings"],
-      "icon": "https://marketplace.fluidbar.app/assets/sample-rich/icon.png",
+      "categories": [
+        "media",
+        "developer"
+      ],
+      "tags": [
+        "sample",
+        "media",
+        "settings"
+      ],
+      "icon": "https://fluidbar.doulor.cn/market/assets/sample-rich/icon.png",
       "screenshots": [],
       "listing": {
         "defaultLocale": "en-US",
-        "availableLocales": ["en-US", "zh-Hans"],
-        "baseUrl": "https://marketplace.fluidbar.app/listings/sample-rich/"
+        "availableLocales": [
+          "en-US",
+          "zh-Hans"
+        ],
+        "baseUrl": "https://fluidbar.doulor.cn/market/listings/sample-rich/"
       },
-      "historyUrl": "https://marketplace.fluidbar.app/plugins/sample-rich.json",
-      "stats": { "downloads": 0, "rating": null },
+      "historyUrl": "https://fluidbar.doulor.cn/market/plugins/sample-rich.json",
+      "stats": {
+        "downloads": 0,
+        "rating": null
+      },
       "status": "active",
       "featured": false,
       "blocked": null
     }
   ],
   "advisories": [],
-  "keys": [],
-  "signatures": []
+  "keys": [
+    {
+      "keyId": "fluidbar-marketplace-2026",
+      "role": "marketplace",
+      "algorithm": "ECDSA-P256-SHA256",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErQ4ZzxaXz6R9J6Z+/E+DG5BTv6ufj92H1RQ+KgdTeoxvpP4D//yGgez0HWmIIG8SC0y9MKYpcbRVlPuyr82aUA==",
+      "notBefore": "2026-10-28T17:54:06+00:00",
+      "notAfter": "2029-10-28T17:54:06+00:00",
+      "revokedAt": null
+    }
+  ]
 }

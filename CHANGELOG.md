@@ -29,6 +29,15 @@
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 - 部署：Cloudflare Pages 项目 `fluidbar` 已上线；`fluidbar.doulor.cn` 通过 `fluidbar-site` Worker 路由代理，真实 iframe、字体、Shaders 与 axe 站点检查通过。
 
+## 2026-10-30 — 插件市场接入正式域名与签名信任根
+
+- 官网 AI 已完成 `/market/index.json`、图标/截图、版本历史、详情页和 schema 的静态托管。
+- 索引内旧域名全部改为 `https://fluidbar.doulor.cn/market/...`；使用新生成的 ECDSA P-256 密钥
+  `fluidbar-marketplace-2026` 重签，`verify-index` 通过。
+- 客户端内置市场地址与**公钥信任根**，不再要求用户配置 `FLUIDBAR_MARKET_*`；开发环境变量仍可覆盖。
+- 旧默认 `https://fluidbar.app/market/index.json` 自动迁移到新地址；用户自定义镜像保持不变。
+- `.local/` 加入忽略：签名私钥只保存在本机 `.local/keys/`，不会进入仓库。
+- 示例 `.fbp` 下载仍指向示例 GitHub Release；真实插件包发布后才有可安装内容。
 ## 2026-10-30 — 官网链接改到新域名；匿名使用数据（默认开）落地
 
 - 关于页「官网」从已下线的 `https://fluidbar.app` 改为 `https://fluidbar.doulor.cn`（实测 HTTP 200）；

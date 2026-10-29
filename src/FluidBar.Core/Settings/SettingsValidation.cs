@@ -360,6 +360,12 @@ public static partial class SettingsValidator
     private static MarketSettings NormalizeMarket(MarketSettings market, ImmutableArray<SettingsIssue>.Builder issues)
     {
         var url = market.SourceUrl?.Trim() ?? string.Empty;
+        if (string.Equals(url, "https://fluidbar.app/market/index.json", StringComparison.OrdinalIgnoreCase))
+        {
+            // The former built-in host is retired; preserve genuinely custom mirrors, but move the old default to
+            // the signed catalog on the official site (2026-10-30).
+            url = SettingsJsonNames.DefaultMarketSourceUrl;
+        }
         if (url.Length == 0)
         {
             issues.Add(new SettingsIssue("market.sourceUrl", "url.empty",

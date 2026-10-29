@@ -10,7 +10,7 @@ name: marketplace
 #     secret MARKETPLACE_SIGNING_KEY_PEM      = PKCS#8 PEM of the ECDSA P-256 marketplace key
 #   repository/environment variables
 #     MARKETPLACE_ARTIFACT_BASE_URL           = e.g. https://github.com/<org>/<repo>/releases/download
-#     MARKETPLACE_BASE_URL                    = e.g. https://marketplace.fluidbar.app
+#     MARKETPLACE_BASE_URL                    = e.g. https://fluidbar.doulor.cn/market
 #     MARKETPLACE_SIGNING_KEY_ID              = e.g. fluidbar-marketplace-2026
 #     MARKETPLACE_PLUGINS_ROOT                = optional, default `plugins/samples` in this repo
 #     MARKETPLACE_DEPLOY_PAGES                = set `false` for explicit artifact-only publishing

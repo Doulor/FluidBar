@@ -1154,18 +1154,18 @@ internal sealed class AppBootstrap
         }
     }
 
-    private static Uri? ResolveMarketplaceIndexUrl()
+    private static Uri ResolveMarketplaceIndexUrl()
     {
         var configured = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_URL");
         return !string.IsNullOrWhiteSpace(configured) && Uri.TryCreate(configured, UriKind.Absolute, out var uri)
             ? uri
-            : null;
+            : new Uri(MarketplaceReleaseConfiguration.IndexUrl);
     }
 
     /// <summary>
-    /// Production trust keys are injected at build/release time; this dev hook reads them from the
-    /// environment. Without a key the signed index cannot be verified, so the marketplace falls back to the
-    /// clearly-labelled demo catalog instead of trusting an unsigned document.
+    /// Production uses the public key compiled into <see cref="MarketplaceReleaseConfiguration"/>; development
+    /// can override both it and the catalog URL through FLUIDBAR_MARKET_* environment variables. An unsigned or
+    /// wrongly-signed catalog is rejected rather than silently replaced by the demo catalog.
     /// </summary>
     private MarketplaceTrustOptions ResolveMarketplaceTrust()
     {
@@ -1179,7 +1179,7 @@ internal sealed class AppBootstrap
                     "FLUIDBAR_MARKET_URL is set without FLUIDBAR_MARKET_KEY/FLUIDBAR_MARKET_KEY_ID; the signed index cannot be verified and the demo catalog is used.");
             }
 
-            return MarketplaceTrustOptions.Empty;
+            return MarketplaceReleaseConfiguration.Trust;
         }
 
         return MarketplaceTrustOptions.ForMarketplaceKeys(new TrustedKey
