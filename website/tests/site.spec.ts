@@ -52,10 +52,7 @@ test.describe('FluidBar official site', () => {
     await page.locator('.lab-step').nth(1).locator('.lab-step__head').click();
     await expect(island).toHaveAttribute('data-view', 'media');
     await expect(page.getByRole('button', { name: /媒体.*226/ })).toBeVisible();
-    await expect(page.locator('.music-study')).toContainText('Take Me Hand');
-    await expect(page.locator('.music-study')).toContainText('In my dreams');
-    await expect(page.locator('.music-study__lyric-line')).toHaveCount(3);
-    await expect(page.locator('.music-study__lyric-head')).toContainText('LIVE');
+    await expect(page.locator('.music-study')).toHaveCount(0);
     await expect(frame.locator('.media-lyric .lyric-word')).toHaveCount(3);
     await expect(frame.locator('.mini-play, .play-btn, .transport')).toHaveCount(0);
     await page.waitForTimeout(500);
