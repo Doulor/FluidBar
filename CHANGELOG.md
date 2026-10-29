@@ -4,6 +4,7 @@
 
 ## 2026-10-29 — 官网活动态加入《Take Me Hand》音乐样本 + 画廊式排版
 
+- 材质研究区的液态玻璃样本按真实 `LiquidGlassTokens` 重做：深色半透明本体透出桌面光与 `FLUIDBAR` 字影，叠加透镜边缘、顶部高光、底部焦散和指针跟随光，不再使用白底白色磨砂卡片。
 - 活动态媒体样本改为 `Take Me Hand`（DAISHI DANCE feat. Cécile Corbel），使用真实专辑封面与完整 29 行歌词时间轴；当前词按真实播放时钟连续填充，歌词行随时间推进，不再单行循环。不加载、不播放音频，媒体面板不显示播放/暂停按钮。
 - 故事区新增音乐研究卡，封面、曲名、歌词、说明都在网页层可读；点击仍驱动同一个真实 media compact 状态。
 - 全站 section heading 加入超大低对比 ghost wordmark（ISLAND / PLUGINS / 120 / FLUIDBAR），延续材质研究区的画廊式排版语言。
