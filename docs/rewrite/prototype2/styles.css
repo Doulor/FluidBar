@@ -900,6 +900,53 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
 .lyric-line .lyric-word.is-current {
   color: var(--track-accent);
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .media-lyric,
+  .lyric-line {
+    --lyric-accent: var(--track-accent);
+    --lyric-idle: var(--fg-2);
+  }
+
+  .media-lyric .lyric-word,
+  .lyric-line.is-active .lyric-word {
+    animation: lyric-word-cycle 3.6s linear infinite;
+  }
+
+  .media-lyric .lyric-word:nth-child(1),
+  .lyric-line.is-active .lyric-word:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .media-lyric .lyric-word:nth-child(2),
+  .lyric-line.is-active .lyric-word:nth-child(2) {
+    animation-delay: -1.2s;
+  }
+
+  .media-lyric .lyric-word:nth-child(3),
+  .lyric-line.is-active .lyric-word:nth-child(3) {
+    animation-delay: -2.4s;
+  }
+}
+
+@keyframes lyric-word-cycle {
+  0%,
+  33% {
+    color: var(--lyric-accent);
+    background: rgba(123, 156, 255, 0.16);
+    border-radius: 3px;
+    padding: 0 2px;
+    transform: translateY(-1px);
+  }
+
+  34%,
+  100% {
+    color: var(--lyric-idle);
+    background: transparent;
+    padding: 0 2px;
+    transform: translateY(0);
+  }
+}
 .wave {
   flex: none;
   width: 20px;

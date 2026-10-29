@@ -298,6 +298,43 @@
   padding: 0 2px;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .music-study__lyric-line.is-current .music-study__lyric-word {
+    animation: study-word-cycle 3.6s linear infinite;
+  }
+
+  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(2) {
+    animation-delay: -1.2s;
+  }
+
+  .music-study__lyric-line.is-current .music-study__lyric-word:nth-child(3) {
+    animation-delay: -2.4s;
+  }
+}
+
+@keyframes study-word-cycle {
+  0%,
+  33% {
+    color: #9db8ff;
+    background: rgba(123, 156, 255, 0.16);
+    border-radius: 3px;
+    padding: 0 2px;
+    transform: translateY(-1px);
+  }
+
+  34%,
+  100% {
+    color: rgba(244, 246, 248, 0.48);
+    background: transparent;
+    padding: 0 2px;
+    transform: translateY(0);
+  }
+}
+
 .music-study__note {
   margin-top: 8px;
   color: rgba(244, 246, 248, 0.68);
