@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FluidBar · Quiet Objects UI Study</title>
+  <link rel="preload" href="./assets/fonts/Satoshi-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/NotoSansSC-Subset.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/IBMPlexMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="./assets/fonts/IBMPlexMono-Medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="./showcase.css?v=3">
+  <style>
+    .console { display: none !important; }
+    .compare-note { color: #596572; font-size: 12px; line-height: 1.7; }
+    .compare-note strong { color: #15181c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main class="showcase">
+    <p class="showcase__eyebrow">FLUIDBAR / QUIET OBJECTS / UI STUDY 03</p>
+    <h1>让岛也成为<br>桌面上的展品。</h1>
+    <p class="showcase__intro">
+      同一个真实原型、同一首歌、同一尺寸。左边是当前 UI，右边是新的画廊层级：封面负责颜色，歌词负责节奏，系统控件退回背景。
+    </p>
+
+    <div class="showcase__controls" aria-label="Preview state">
+      <button type="button" data-state="media" aria-pressed="true">媒体 / 画廊</button>
+      <button type="button" data-state="home" aria-pressed="false">主页 / 层级</button>
+      <button type="button" data-state="compact" aria-pressed="false">Compact / 逐词歌词</button>
+    </div>
+
+    <div class="showcase__comparison">
+      <section class="showcase__panel" aria-labelledby="old-label">
+        <div class="showcase__label"><strong id="old-label">CURRENT / 当前 UI</strong><span>prototype2</span></div>
+        <div class="showcase__frame"><iframe id="old-frame" title="FluidBar current UI" src="../prototype2/index.html?state=expanded&tab=media" data-console="hidden"></iframe></div>
+        <p class="showcase__note">播放器结构：元数据、歌词卡、控制条同时争夺注意力。</p>
+      </section>
+
+      <section class="showcase__panel" aria-labelledby="new-label">
+        <div class="showcase__label"><strong id="new-label">QUIET OBJECTS / 新 UI</strong><span>prototype3</span></div>
+        <div class="showcase__frame"><iframe id="new-frame" title="FluidBar quiet objects UI" src="./index.html?state=expanded&tab=media"></iframe></div>
+        <p class="showcase__note">画廊结构：封面、歌词、时间，三层信息各自有位置。</p>
+      </section>
+    </div>
+
+    <p class="showcase__state-note" id="state-note">02 / MEDIA · 440 × 284 · LIVE LYRIC TIMELINE</p>
+  </main>
+
+  <script>
+    const frames = [document.getElementById('old-frame'), document.getElementById('new-frame')];
+    const buttons = [...document.querySelectorAll('[data-state]')];
+    const note = document.getElementById('state-note');
+    const states = {
+      media: { src: 'index.html?state=expanded&tab=media', note: '02 / MEDIA · 440 × 284 · LIVE LYRIC TIMELINE' },
+      home: { src: 'index.html?state=expanded&tab=home', note: '01 / HOME · 440 × 284 · INFORMATION HIERARCHY' },
+      compact: { src: 'index.html?state=media', note: 'MEDIA / COMPACT · 226 × 40 · WORD-BY-WORD LYRICS' },
+    };
+
+    function hidePrototypeChrome(frame) {
+      try {
+        const doc = frame.contentDocument;
+        if (doc) {
+          const style = doc.createElement('style');
+          style.textContent = 'body > .console { display: none !important; }';
+          doc.head.appendChild(style);
+        }
+      } catch (_) { /* The iframe is same-origin in this local study. */ }
+    }
+    frames.forEach((frame) => frame.addEventListener('load', () => hidePrototypeChrome(frame)));
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const next = states[button.dataset.state];
+        frames.forEach((frame) => { frame.src = frame.id === 'old-frame' ? `../prototype2/${next.src}` : `./${next.src}`; });
+        buttons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        note.textContent = next.note;
+      });
+    });
+  </script>
+</body>
+</html>
