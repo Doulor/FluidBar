@@ -54,9 +54,7 @@
 }
 
 .legend-dot--liquid {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(20, 28, 38, 0.72));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  background: linear-gradient(135deg, #fff, rgba(76, 201, 240, 0.55), rgba(255, 255, 255, 0.2));
 }
 
 .optics-stage {
@@ -65,34 +63,12 @@
   position: relative;
   min-height: 430px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 28px;
   background:
-    radial-gradient(90% 80% at 16% 8%, rgba(73, 130, 183, 0.52), transparent 70%),
-    radial-gradient(72% 58% at 88% 82%, rgba(34, 116, 111, 0.3), transparent 68%),
-    linear-gradient(155deg, #111c28 0%, #0b131d 48%, #060a10 100%);
-  box-shadow:
-    0 34px 70px -34px rgba(8, 14, 22, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    radial-gradient(90% 100% at 12% 0%, rgba(255, 255, 255, 0.96), transparent 60%),
+    #e5e9ec;
+  box-shadow: var(--shadow-soft);
   perspective: 900px;
-}
-
-.optics-stage::after {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: 8%;
-  right: -12%;
-  width: 58%;
-  height: 74%;
-  border-radius: 50%;
-  background: radial-gradient(
-    50% 58% at 50% 50%,
-    rgba(113, 171, 224, 0.26),
-    transparent 72%
-  );
-  filter: blur(24px);
-  pointer-events: none;
 }
 
 .optics-stage::before {
@@ -101,7 +77,7 @@
   inset: 0;
   background: radial-gradient(
     240px circle at var(--mx) var(--my),
-    rgba(255, 255, 255, 0.07),
+    rgba(255, 255, 255, 0.7),
     transparent 60%
   );
   pointer-events: none;
@@ -116,7 +92,7 @@
   font-weight: 700;
   line-height: 0.76;
   letter-spacing: -0.09em;
-  color: rgba(255, 255, 255, 0.32);
+  color: rgba(11, 13, 16, 0.9);
   user-select: none;
 }
 
@@ -126,122 +102,70 @@
   right: -10%;
   bottom: 17%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  background: linear-gradient(90deg, transparent, rgba(11, 13, 16, 0.18), transparent);
   transform: rotate(-7deg);
 }
 
 .optics-glass {
-  --gx: 50%;
-  --gy: 34%;
   position: absolute;
-  z-index: 2;
-  right: 28%;
-  top: 26%;
-  width: min(64%, 410px);
+  right: 8%;
+  top: 28%;
+  width: min(58%, 360px);
   aspect-ratio: 1.55;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 30px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
   background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.11) 0%,
-      rgba(255, 255, 255, 0.03) 38%,
-      rgba(255, 255, 255, 0) 62%,
-      rgba(0, 0, 0, 0.1) 100%
-    ),
-    rgba(8, 8, 10, 0.56);
-  -webkit-backdrop-filter: blur(16px) saturate(1.75);
-  backdrop-filter: blur(16px) saturate(1.75);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
+  backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
   box-shadow:
-    inset 0 0 14px 0 rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 6px -3px rgba(255, 255, 255, 0.28),
-    0 18px 44px -16px rgba(0, 0, 0, 0.78),
-    0 3px 10px -4px rgba(0, 0, 0, 0.42);
-  transform: none;
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    0 34px 70px -30px rgba(20, 30, 44, 0.42);
+  transform: rotate(7deg);
   transition: transform 0.6s var(--ease-out);
 }
 
-.optics-glass::before {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  pointer-events: none;
-}
-
-.optics-glass__sheen,
-.optics-glass__glow,
-.optics-glass__edge,
-.optics-glass__caustic {
+.optics-glass__sheen {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  pointer-events: none;
-}
-
-.optics-glass__sheen {
-  z-index: 1;
   background: linear-gradient(
-    118deg,
-    transparent 8%,
-    rgba(255, 255, 255, 0.065) 44%,
-    transparent 78%
+    115deg,
+    transparent 18%,
+    rgba(255, 255, 255, 0.48) 36%,
+    transparent 53%
   );
-  mix-blend-mode: screen;
-}
-
-.optics-glass__glow {
-  z-index: 2;
-  background: radial-gradient(
-    160px circle at var(--gx) var(--gy),
-    rgba(255, 255, 255, 0.13),
-    transparent 70%
-  );
-  mix-blend-mode: screen;
-}
-
-.optics-glass__edge {
-  z-index: 3;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 12%),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.11), transparent 10%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  padding: 1px;
-}
-
-.optics-glass__caustic {
-  z-index: 3;
-  inset: auto 9% 3px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  filter: blur(1px);
+  transform: translateX(-30%);
+  animation: glass-sheen 9s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .optics-glass__label {
   position: absolute;
-  z-index: 4;
-  left: 22px;
-  top: 20px;
-  color: rgba(255, 255, 255, 0.44);
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  left: 20px;
+  bottom: 18px;
+  color: rgba(11, 13, 16, 0.48);
 }
 
-.optics-stage .optics-orb {
-  z-index: 1;
+.optics-glass__pill {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+  width: 82px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 6px 16px -8px rgba(8, 8, 10, 0.6);
 }
 
 .optics-obsidian {
   position: absolute;
-  z-index: 3;
-  left: 9%;
-  bottom: 8%;
+  left: 17%;
+  bottom: 10%;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
@@ -266,7 +190,7 @@
 
 .optics-rule {
   position: absolute;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(11, 13, 16, 0.16);
   pointer-events: none;
 }
 
@@ -282,6 +206,17 @@
   bottom: 8%;
   left: 10%;
   width: 1px;
+}
+
+@keyframes glass-sheen {
+  0%,
+  18% {
+    transform: translateX(-34%);
+  }
+  48%,
+  100% {
+    transform: translateX(36%);
+  }
 }
 
 @media (max-width: 900px) {
@@ -309,5 +244,12 @@
   .optics-obsidian {
     left: 9%;
     bottom: 8%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optics-glass__sheen {
+    animation: none;
+    transform: translateX(0);
   }
 }
