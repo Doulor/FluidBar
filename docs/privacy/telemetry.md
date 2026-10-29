@@ -17,7 +17,7 @@ Server: `telemetry/worker`
 
 ## 发送什么（完整字段表）
 
-一批（`POST https://t.fluidbar.doulor.cn/v1/batch`）最多 32 KB、最多 32 条会话：
+一批（`POST https://fluidbar.doulor.cn/t/v1/batch`）最多 32 KB、最多 32 条会话：
 
 ```json
 {
@@ -65,6 +65,9 @@ Worker 收到**白名单以外的新顶层字段直接 400** —— 客户端将
 `telemetry/worker`（Cloudflare Worker + D1）。数据库**只存** `installId` 的加盐 SHA-256（`install_hash`），
 不存明文 ID、不存 IP/UA。原始行保留 **30 天**，每日 cron 清理；聚合结果长期保留。
 
+生产入口是 `https://fluidbar.doulor.cn/t/v1/batch`：官网 Worker 通过 Cloudflare Service Binding 转发给
+`fluidbar-telemetry`，不依赖当前网络不可达的 `workers.dev` 或新子域 TLS。
+
 ## 本地文件
 
 | 路径 | 内容 |
@@ -78,4 +81,4 @@ Worker 收到**白名单以外的新顶层字段直接 400** —— 客户端将
 
 - 目前只做**心跳级**统计（启动数、时长、启动耗时、崩溃）。功能级计数（封面/歌词命中来源等）尚未启用；
   启用时必须同样走白名单，并同步更新本文档与 Worker 校验。
-- 中国大陆网络下若 `t.fluidbar.doulor.cn` 不可达，客户端重试三次后静默放弃，队列留到下次启动；不影响任何功能。
+- 若遥测地址不可达，客户端重试三次后静默放弃，队列留到下次启动；不影响任何功能。

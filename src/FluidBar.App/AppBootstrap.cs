@@ -90,7 +90,6 @@ internal sealed class AppBootstrap
                 showMissingKeys: false,
                 enablePseudoLocale: pseudo);
             LocalizationRuntime.Current = _localizer;
-            StartTelemetryIfEnabled(settingsRoot);
 
             _data = new DesignIslandDataSource(_localizer);
             _emptyData = new EmptyIslandDataSource();
@@ -100,6 +99,8 @@ internal sealed class AppBootstrap
             // thread; the cached snapshot is what the theme mapper reads on the UI thread.
             await RefreshSystemAppearanceAsync().ConfigureAwait(true);
             StartLogFileSink();
+            // Telemetry failures must be diagnosable: initialise only after the JSON-lines sink exists.
+            StartTelemetryIfEnabled(settingsRoot);
             EvaluateCrashGuard();
             await StartIslandHostAsync().ConfigureAwait(true);
             // The island is up: this is the moment "the app became usable" for the startup-time report.

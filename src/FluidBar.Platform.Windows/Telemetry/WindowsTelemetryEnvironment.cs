@@ -43,6 +43,11 @@ public static class WindowsTelemetryEnvironment
         }
 
         var trimmed = appVersion.Trim();
+        if (trimmed.Contains('+', StringComparison.Ordinal))
+        {
+            return "development";
+        }
+
         return trimmed.Contains("preview", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("beta", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("rc", StringComparison.OrdinalIgnoreCase)

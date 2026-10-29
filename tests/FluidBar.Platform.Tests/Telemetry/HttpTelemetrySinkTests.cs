@@ -95,6 +95,7 @@ public class HttpTelemetrySinkTests
     [InlineData("4.0.0-preview.4", "preview")]
     [InlineData("4.0.0", "stable")]
     [InlineData("3.2.0-rc.1", "preview")]
+    [InlineData("2.0.0+a7745d3e5c6ab47e216a7a764c178087b9142a2f", "development")]
     public void Channel_IsDerivedFromTheVersionStamp(string version, string expected)
     {
         Assert.Equal(expected, WindowsTelemetryEnvironment.ChannelOf(version));

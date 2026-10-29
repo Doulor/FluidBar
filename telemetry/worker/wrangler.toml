@@ -8,7 +8,7 @@ routes = [{ pattern = "t.fluidbar.doulor.cn", custom_domain = true }]
 [[d1_databases]]
 binding = "DB"
 database_name = "fluidbar_telemetry"
-database_id = "REPLACE_WITH_wrangler_d1_create_output"
+database_id = "106dac81-2864-4224-bb4d-832324628a51"
 
 [triggers]
 # Daily retention job (see the scheduled handler in src/index.js).

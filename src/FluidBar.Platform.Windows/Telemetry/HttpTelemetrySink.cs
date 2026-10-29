@@ -40,7 +40,7 @@ public sealed record TelemetrySendResult(TelemetrySendStatus Status, int? Status
 public sealed class HttpTelemetrySink : IDisposable
 {
     /// <summary>Production endpoint (sub-domain owned by the site Worker).</summary>
-    public static readonly Uri DefaultEndpoint = new("https://t.fluidbar.doulor.cn/v1/batch");
+    public static readonly Uri DefaultEndpoint = new("https://fluidbar.doulor.cn/t/v1/batch");
 
     private readonly HttpClient _http;
     private readonly bool _ownsClient;

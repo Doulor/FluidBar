@@ -5,3 +5,7 @@ compatibility_date = "2026-10-28"
 routes = [
   { pattern = "fluidbar.doulor.cn/*", zone_name = "doulor.cn" }
 ]
+
+[[services]]
+binding = "TELEMETRY"
+service = "fluidbar-telemetry"

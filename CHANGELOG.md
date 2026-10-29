@@ -29,6 +29,16 @@
 - 验证：`pnpm build` 通过；Vitest 5/5、Playwright 站点 5/5、可达性 2/2 通过。
 - 部署：Cloudflare Pages 项目 `fluidbar` 已上线；`fluidbar.doulor.cn` 通过 `fluidbar-site` Worker 路由代理，真实 iframe、字体、Shaders 与 axe 站点检查通过。
 
+## 2026-10-30 — 市场与匿名统计完成线上部署
+
+- 市场新索引已发布到 Cloudflare Pages；线上 `verify-index` 通过，真实 `MarketplaceCatalogClient` 返回
+  `Success`，读取 2 个插件；图标、历史 JSON、详情页均为 200 且 Content-Type 正确。
+- 遥测 Worker、D1、30 天清理 cron 已部署。由于新子域 TLS/`workers.dev` 在当前网络不可达，
+  正式入口改为 `https://fluidbar.doulor.cn/t/v1/batch`，官网 Worker 通过 Service Binding 转发。
+- 服务端验证：合法批次 202 入库，夹带 `songTitle` 返回 400 `unexpected-field`；测试数据已清理。
+- 客户端验证：上传成功后本地队列清空，D1 只存 install ID 的加盐哈希。
+- 修复遥测初始化早于日志 sink 导致异常不可见的问题；现在初始化在 sink 启动之后。
+- 开发版 `version+commit` 的通道标为 `development`，不再误报 stable。
 ## 2026-10-30 — 插件市场接入正式域名与签名信任根
 
 - 官网 AI 已完成 `/market/index.json`、图标/截图、版本历史、详情页和 schema 的静态托管。

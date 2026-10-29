@@ -17,12 +17,12 @@ npx wrangler deploy
 部署完自检：
 
 ```powershell
-curl.exe https://t.fluidbar.doulor.cn/v1/health
+curl.exe https://fluidbar.doulor.cn/t/v1/health
 # {"ok":true,"schema":1}
 ```
 
-若自定义域名还没解析，先把 `wrangler.toml` 里的 `routes` 注释掉部署一次，用 `*.workers.dev` 验证逻辑，
-再回来绑域名。
+生产流量通过官网 Worker 的 `/t/*` 路径进入（`website/wrangler.worker.toml` 的 `TELEMETRY` 服务绑定），
+不依赖 `workers.dev` 或新子域在当前网络的可达性。
 
 ## 接口
 
