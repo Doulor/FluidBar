@@ -1624,7 +1624,7 @@ public static class SettingsSectionBuilder
                 }
             }
         }
-        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Website), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.External, () => ctx.OpenPath("https://fluidbar.app")));
+        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.Website), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.External, () => ctx.OpenPath("https://fluidbar.doulor.cn")));
         actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Lg, SettingsIconKind.Github, () => ctx.OpenPath("https://github.com/Doulor/FluidBar")));
         actions.HorizontalAlignment = HorizontalAlignment.Center;
         pane.Children.Add(actions);
@@ -1712,7 +1712,7 @@ public static class SettingsSectionBuilder
             Margin = new Thickness(0, 18, 0, 0),
         };
         links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.Docs), SettingsIconKind.File,
-            () => ctx.OpenPath("https://fluidbar.app/docs"), palette));
+            () => ctx.OpenPath("https://github.com/Doulor/FluidBar/tree/main/docs"), palette));
         links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.SourceCode), SettingsIconKind.Github,
             () => ctx.OpenPath("https://github.com/Doulor/FluidBar"), palette));
         links.Children.Add(AboutLink(ctx.Localizer.Get(LocKeys.Settings.About.Feedback), SettingsIconKind.Chat,
