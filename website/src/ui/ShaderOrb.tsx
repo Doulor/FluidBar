@@ -52,15 +52,8 @@ export function ShaderOrb() {
     };
   }, [inView, lib]);
 
-  if (!lib) {
-    return (
-      <div ref={hostRef} className="optics-orb optics-orb--fallback" aria-hidden="true">
-        <span className="optics-orb__fallback-ring" />
-      </div>
-    );
-  }
-
-  const { Shader, Obsidian } = lib;
+  const Shader = lib?.Shader;
+  const Obsidian = lib?.Obsidian;
 
   return (
     <div
@@ -68,7 +61,8 @@ export function ShaderOrb() {
       className={`optics-orb ${status === 'ready' ? 'is-ready' : ''}`}
       aria-hidden="true"
     >
-      <Shader
+      <span className="optics-orb__fallback-ring" />
+      {Shader && Obsidian && <Shader
         className="optics-orb__canvas"
         onReady={() => setStatus('ready')}
         onUnavailable={() => setStatus('unavailable')}
@@ -82,9 +76,10 @@ export function ShaderOrb() {
           gloss={0.62}
           bevelWidth={0.1}
           bevelShape={0.2}
+          edgeSoftness={0.08}
           speed={0.12}
         />
-      </Shader>
+      </Shader>}
     </div>
   );
 }

@@ -3,42 +3,38 @@
   right: 7%;
   bottom: 5%;
   z-index: 3;
-  width: 168px;
-  height: 168px;
+  width: 26.5cqw;
+  height: 26.5cqw;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.8s var(--ease-out);
 }
 
-.optics-orb.is-ready {
-  opacity: 1;
-}
-
+/* Render at twice the layout size, then downsample. This also improves the
+   shader silhouette at DPR 1, where the old buffer was only 168 x 168. */
 .optics-orb__canvas {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.optics-orb--fallback {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 200%;
+  height: 200%;
+  transform: scale(0.5);
+  transform-origin: top left;
   opacity: 0;
+  transition: opacity 0.6s var(--ease-out);
 }
+.optics-orb.is-ready .optics-orb__canvas { opacity: 1; }
+.optics-orb.is-ready .optics-orb__fallback-ring { opacity: 0; }
 
+/* Keep the composition intact on phones, reduced motion and unsupported GPUs. */
 .optics-orb__fallback-ring {
-  display: none;
+  position: absolute;
+  inset: 15%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 40% 35%, rgba(113, 118, 131, 0.18), transparent 38%),
+    radial-gradient(circle, #08090c 46%, #141d29 61%, #3c5754 68%, #47435f 73%, #1c3047 78%, transparent 79%);
+  -webkit-mask-image: radial-gradient(closest-side, #000 97%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 97%, transparent 100%);
+  transition: opacity 0.6s var(--ease-out);
 }
-
-@media (max-width: 900px) {
-  .optics-orb {
-    right: 2%;
-    bottom: 3%;
-    width: 118px;
-    height: 118px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .optics-orb {
-    transition: none;
-  }
+  .optics-orb__canvas, .optics-orb__fallback-ring { transition: none; }
 }
