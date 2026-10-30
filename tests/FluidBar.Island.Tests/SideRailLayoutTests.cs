@@ -58,6 +58,20 @@ public sealed class SideRailLayoutTests
     }
 
     [Fact]
+    public void VisibleRailBand_EndsAtTheCardBody_AndHidesOffscreenTabs()
+    {
+        var content = new SKRect(60, 12, 460, 272);
+        const int pages = 7;
+        var visible = SideRailLayout.VisibleRect(content, pages);
+        Assert.Equal(content.Top, visible.Top);
+        Assert.Equal(content.Bottom, visible.Bottom);
+        Assert.True(SideRailLayout.RailRect(content, pages).Bottom > content.Bottom);
+        Assert.Equal(-1, SideRailLayout.HitTest(content, pages, 15, content.Bottom + 20));
+        var max = SideRailLayout.MaxScroll(pages, content);
+        Assert.Equal(pages - 1, SideRailLayout.HitTest(content, pages, 15, content.Bottom - 20, max));
+    }
+
+    [Fact]
     public void LastTab_CanBeFollowedIntoTheVisibleRail()
     {
         var content = new SKRect(60, 12, 460, 272);

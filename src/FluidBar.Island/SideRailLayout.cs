@@ -5,7 +5,8 @@ namespace FluidBar.Island;
 /// <summary>
 /// Geometry for the in-card left page rail. The 472 DIP shell reserves 10 + 40 + 10 DIP at the
 /// left; the 400 DIP page content starts at x=60. Six 40×40 tabs with 4 DIP gaps fill the
-/// 260 DIP content height exactly. Paint, pointer hit-testing and hover use this one layout.
+/// 260 DIP content height exactly; extra pages use a follow offset only when the selected tab
+/// would leave the card. Paint, hit-testing, hover and follow use this one layout.
 /// </summary>
 public static class SideRailLayout
 {
@@ -15,7 +16,7 @@ public static class SideRailLayout
     public const float TabHeight = 40;
     public const float TabPitch = TabHeight + TabGap;
 
-    /// <summary>Wheel/drag offset in DIP applied to every tab when there are more pages than fit.</summary>
+    /// <summary>Follow offset in DIP applied to every tab when the selected tab would leave the card.</summary>
     public static float ClampScroll(double offset, int pageCount, SKRect content)
         => (float)Math.Clamp(double.IsFinite(offset) ? offset : 0, 0, MaxScroll(pageCount, content));
 
@@ -45,9 +46,25 @@ public static class SideRailLayout
         content.Left - LeftOffset + TabWidth,
         content.Top + (Math.Max(1, pageCount) * TabPitch) - TabGap);
 
+    /// <summary>
+    /// Visible rail band: enough X room for the active marker/tooltip, clipped to the card body's Y.
+    /// </summary>
+    public static SKRect VisibleRect(SKRect content, int pageCount)
+    {
+        var rail = RailRect(content, pageCount);
+        return new SKRect(rail.Left - 6, content.Top, content.Right, content.Bottom);
+    }
+
     /// <summary>Page index under a point, or -1.</summary>
     public static int HitTest(SKRect content, int pageCount, float x, float y, double scrollOffset = 0)
     {
+        // Tabs scrolled outside the card body are not clickable. The rail lives left of the
+        // content rect, so only the vertical card bounds apply here.
+        if (y < content.Top || y > content.Bottom)
+        {
+            return -1;
+        }
+
         for (var i = 0; i < Math.Max(1, pageCount); i++)
         {
             if (TabRect(content, i, scrollOffset, pageCount).Contains(x, y))

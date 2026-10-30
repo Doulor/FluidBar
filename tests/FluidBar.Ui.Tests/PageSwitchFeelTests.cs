@@ -8,7 +8,7 @@ namespace FluidBar.Ui.Tests;
 /// Prototype2 page-transition contract: the pager must follow the pointer/wheel immediately, queue
 /// page steps instead of swallowing them, land on the page the finger left behind and never rebound
 /// past the target. The expected numbers come from the prototype's own PAGER contract
-/// (T 0.38 s / ζ 0.94, gain 0.85, notch 140 DIP, 180 ms window) measured frame by frame in
+/// (T 0.35 s / ζ 0.75, gain 0.85, notch 60 DIP, 120 ms window) measured frame by frame in
 /// docs/rewrite/prototype2 via Playwright.
 /// </summary>
 public sealed class PageSwitchFeelTests
@@ -42,7 +42,7 @@ public sealed class PageSwitchFeelTests
         using var _fixture = fixture;
         var positions = new List<double> { Position(controller) };
 
-        // One physical notch is one 140 DIP page step.
+        // One physical notch is one 60 DIP page step.
         Assert.True(controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false).Paged);
         for (var i = 0; i < 90; i++)
         {
@@ -59,13 +59,13 @@ public sealed class PageSwitchFeelTests
     }
 
     [Fact]
-    public void ContinuousWheelGestureIsLockedToOnePage()
+    public void ContinuousWheelGestureTurnsOnePagePerNotch()
     {
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at ~15 Hz (a real wheel spin). Feel pass: one physical gesture may never chain
-        // pages — the gesture lock drops every notch until the wheel has been idle for 120 ms.
+        // Six notches at ~15 Hz: each deliberate notch advances one page. The rail follows only
+        // when the selected tab would leave the visible band.
         for (var i = 0; i < 6; i++)
         {
             controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
@@ -77,17 +77,17 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.Equal(1, controller.Pager.SelectedIndex);
+        Assert.Equal(5, controller.Pager.SelectedIndex);
         Assert.Equal(controller.Pager.SelectedIndex, (int)Math.Round(Position(controller)));
     }
 
     [Fact]
-    public void ContinuousWheelAtTenHertzTurnsOnePagePerGesture()
+    public void ContinuousWheelAtTenHertzTurnsOnePagePerNotch()
     {
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at 10 Hz stay inside one gesture (gaps < 120 ms), so exactly one page turns.
+        // Six notches at 10 Hz still advance one page each; no gesture lock swallows them.
         for (var i = 0; i < 6; i++)
         {
             controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
@@ -99,8 +99,8 @@ public sealed class PageSwitchFeelTests
             Advance(fixture, 1);
         }
 
-        Assert.Equal(1, controller.Pager.SelectedIndex);
-        Assert.Equal(1.0, Position(controller), 3);
+        Assert.Equal(5, controller.Pager.SelectedIndex);
+        Assert.Equal(5.0, Position(controller), 3);
     }
 
     [Fact]

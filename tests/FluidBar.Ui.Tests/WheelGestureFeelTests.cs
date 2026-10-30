@@ -18,8 +18,8 @@ public sealed class WheelGestureFeelTests
     public void Contract_values_are_the_feel_pass_ones()
     {
         Assert.InRange(PagerConstants.WheelDipPerNotch, 55, 70);
-        Assert.Equal(120, PagerConstants.WheelGestureIdleMs);
-        Assert.Equal(260, PagerConstants.WheelTransitionLockMs);
+        Assert.Equal(80, PagerConstants.WheelGestureIdleMs);
+        Assert.Equal(120, PagerConstants.WheelTransitionLockMs);
         Assert.Equal(0.75, PagerConstants.SnapSpringDampingRatio, 0.001);
         Assert.InRange(PagerConstants.SnapSpringPeriodSeconds, 0.32, 0.38);
     }

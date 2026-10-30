@@ -318,7 +318,7 @@ public sealed class IslandRenderer : IDisposable
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
-            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y);
+            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset);
             if (tab >= 0)
             {
                 return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);

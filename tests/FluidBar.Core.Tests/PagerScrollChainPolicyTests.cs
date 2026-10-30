@@ -43,8 +43,8 @@ public class PagerScrollChainPolicyTests
     public void Constants_DefaultScrollChainThresholds()
     {
         var policy = NewPolicy();
-        Assert.Equal(40, policy.OverscrollThresholdDip, 1e-9);
-        Assert.Equal(120, policy.DwellMs);
+        Assert.Equal(24, policy.OverscrollThresholdDip, 1e-9);
+        Assert.Equal(50, policy.DwellMs);
         Assert.Equal(PagerConstants.ScrollChainOverscrollDip, policy.OverscrollThresholdDip);
         Assert.Equal(PagerConstants.ScrollChainDwellMs, policy.DwellMs);
     }
@@ -96,7 +96,7 @@ public class PagerScrollChainPolicyTests
         var policy = NewPolicy();
 
         var first = policy.Handle(Request(30, boundary: PagerScrollBoundary.Bottom));
-        var second = policy.Handle(Request(30, boundary: PagerScrollBoundary.Bottom, now: T0.AddMilliseconds(60)));
+        var second = policy.Handle(Request(30, boundary: PagerScrollBoundary.Bottom, now: T0.AddMilliseconds(30)));
 
         Assert.Equal(PagerScrollChainAction.None, first.Action);
         Assert.Equal(PagerScrollChainAction.None, second.Action);

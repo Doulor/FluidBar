@@ -103,6 +103,39 @@ public sealed class IslandRenderTests
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
     }
 
+    [Fact]
+    public void Expanded_rail_with_seven_pages_stays_inside_the_shell()
+    {
+        var baseState = IslandTestFixtures.Expanded(0);
+        var extraSlots = ExpandedPageContent.DefaultPageSlots.Concat(
+        [
+            new PageSlot
+            {
+                PageId = "builtin.extra",
+                Kind = PageSlotKind.Home,
+                TemplateId = "builtin.home",
+                Title = "Extra",
+                ShortTitle = "Extra",
+            },
+        ]).ToList();
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(baseState));
+        var state = baseState with
+        {
+            Pager = PagerRenderState.At(6, 7),
+            Pages = baseState.Pages with
+            {
+                PageSlots = extraSlots,
+                RailScrollOffset = SideRailLayout.MaxScroll(7, content),
+            },
+        };
+
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
+        var lastTab = SideRailLayout.TabRect(content, 6, state.Pages.RailScrollOffset, 7);
+        Assert.Equal(content.Bottom, lastTab.Bottom, 0.001);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

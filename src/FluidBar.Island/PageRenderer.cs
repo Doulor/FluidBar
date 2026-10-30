@@ -185,7 +185,8 @@ internal sealed partial class PageRenderer : IDisposable
         var count = Math.Max(1, state.Pages.PageCount);
         var scroll = SideRailLayout.ClampScroll(state.Pages.RailScrollOffset, count, content);
         canvas.Save();
-        canvas.ClipRect(SideRailLayout.RailRect(content, count));
+        // Clip to the card body: a long rail must never paint past the bottom edge.
+        canvas.ClipRect(SideRailLayout.VisibleRect(content, count));
         for (var i = 0; i < count; i++)
         {
             var rect = SideRailLayout.TabRect(content, i, scroll, count);

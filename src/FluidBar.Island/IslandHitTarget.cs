@@ -61,6 +61,12 @@ public enum IslandPageControl
     /// <summary>In-card left-rail page tab.</summary>
     PageTab,
 
+    /// <summary>Settings gear in expanded chrome.</summary>
+    Settings,
+
+    /// <summary>Collapse chevron in expanded chrome.</summary>
+    Collapse,
+
     /// <summary>Play/pause.</summary>
     PlayPause,
 

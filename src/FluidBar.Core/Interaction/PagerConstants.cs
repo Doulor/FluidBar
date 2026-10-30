@@ -4,9 +4,8 @@ namespace FluidBar.Core.Interaction;
 /// Frozen tokens for the horizontal page pager that replaces the rejected left rail
 /// (user feedback 2026-10-18). Values are DIP except velocities (DIP/ms).
 /// <para>
-/// Pager v2 (approved 2026-10-18): stronger pointer damping (0.80), a dedicated snap spring
-/// (T 0.44 s / ζ 0.97), heavier wheel notch (140 DIP) with a 180 ms cooldown, plus the
-/// scroll-chain hand-off thresholds. These supersede the first-cut values (0.90 / 0.34 s / 100 / 120).
+/// Pager v2: pointer gain 0.85, a dedicated snap spring (T 0.35 s / ζ 0.75), a 60 DIP wheel notch
+/// with a 120 ms cooldown, plus the scroll-chain hand-off thresholds.
 /// </para>
 /// </summary>
 public static class PagerConstants
@@ -42,56 +41,56 @@ public static class PagerConstants
     public const double MaxReleaseVelocityPagesPerSecond = 14;
 
     /// <summary>
-    /// Wheel/trackpad delta (DIP) a page step consumes. Lowered from 140 so a light scroll already
+    /// Wheel/trackpad delta (DIP) a page step consumes. Kept low so a light scroll already
     /// turns one page (feel pass 2026-10-21: "后摇" inertia, threshold band 55-70).
     /// </summary>
     public const double WheelNotchDip = 60;
 
     /// <summary>
-    /// DIP produced by ONE physical wheel notch (140). One notch is one page step; the host maps
+    /// DIP produced by ONE physical wheel notch (60). One notch is one page step; the host maps
     /// the raw 120 delta directly to this value so scrolling feels immediate, not accumulated.
     /// </summary>
     public const double WheelDipPerNotch = WheelNotchDip;
 
-    /// <summary>Minimum time between two wheel-driven page changes (page-turn cooldown: 260 ms).</summary>
-    public const int WheelCooldownMs = 260;
+    /// <summary>Minimum time between two wheel-driven page changes (page-turn cooldown: 120 ms).</summary>
+    public const int WheelCooldownMs = 120;
 
-    /// <summary>Minimum gap before a new wheel intent may start a fresh page turn (150 ms).</summary>
-    public const int WheelNewIntentMinMs = 150;
+    /// <summary>Minimum gap before a new wheel intent may start a fresh page turn (90 ms).</summary>
+    public const int WheelNewIntentMinMs = 90;
 
     /// <summary>
     /// Idle gap (ms) that ends a wheel gesture. Notches closer than this belong to the same gesture
     /// and are ignored once a page step fired, so one flick can never flip several pages.
     /// </summary>
-    public const int WheelGestureIdleMs = 120;
+    public const int WheelGestureIdleMs = 80;
 
     /// <summary>
     /// Minimum gap (ms) before a *new* deliberate gesture may turn the next page. Deliberate repeat
-    /// scrolls (&gt; 150 ms apart) therefore chain pages, while the 260 ms transition lock keeps one
+    /// scrolls (&gt; 90 ms apart) therefore chain pages, while the 120 ms transition lock keeps one
     /// continuous gesture capped at a single page.
     /// </summary>
-    public const int WheelNewIntentMs = 150;
+    public const int WheelNewIntentMs = 90;
 
     /// <summary>
     /// Hard lock (ms) inside a gesture after a page step: notches arriving within this window of the
     /// step are dropped unqueued (the transition is still running).
     /// </summary>
-    public const int WheelTransitionLockMs = 260;
+    public const int WheelTransitionLockMs = 120;
 
-    /// <summary>Snap spring period T in seconds for the pager (feel pass: 0.35 s, "后摇" overshoot).</summary>
+    /// <summary>Snap spring period T in seconds for the pager (0.35 s, slight overshoot).</summary>
     public const double SnapSpringPeriodSeconds = 0.35;
 
-    /// <summary>Snap spring damping ratio ζ for the pager (feel pass: 0.75, a slight overshoot).</summary>
+    /// <summary>Snap spring damping ratio ζ for the pager (0.75, a slight overshoot).</summary>
     public const double SnapSpringDampingRatio = 0.75;
 
     /// <summary>Default retarget frame delta used by <see cref="PagerSnapMotion"/> for velocity clamping.</summary>
     public const double RetargetFrameSeconds = 1.0 / 120.0;
 
     /// <summary>Scroll-chain: overscroll DIP at a content boundary before a wheel page step may fire.</summary>
-    public const double ScrollChainOverscrollDip = 40;
+    public const double ScrollChainOverscrollDip = 24;
 
     /// <summary>Scroll-chain: dwell ms at a content boundary before a wheel page step may fire.</summary>
-    public const int ScrollChainDwellMs = 120;
+    public const int ScrollChainDwellMs = 50;
 
     /// <summary>Default expanded content width (440 − 2 × 20 inset).</summary>
     public const double ContentWidthDip = 400;
