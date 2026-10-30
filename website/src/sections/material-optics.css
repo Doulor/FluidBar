@@ -11,58 +11,382 @@
   align-items: center;
 }
 
-.optics-copy h2 {
-  font-size: clamp(30px, 3vw, 40px);
-  letter-spacing: -0.04em;
-  line-height: 1.2;
+.optics-copy {
+  max-width: 430px;
+  padding-bottom: 32px;
 }
 
-.optics-copy > p:not(.section-kicker) {
-  max-width: 32em;
-  margin-top: 20px;
+.optics-copy h2 {
+  font-size: clamp(36px, 3.3vw, 48px);
+  letter-spacing: -0.045em;
+  line-height: 1.22;
+}
+
+.optics-intro {
+  max-width: 27em;
+  margin-top: 24px;
   color: var(--muted);
   font-size: 15px;
+  line-height: 1.85;
 }
 
-.optics-copy .optics-note { font-size: 12px; }
-.optics-copy .text-link { margin-top: 20px; font-size: 13px; }
+.optics-properties {
+  display: grid;
+  gap: 14px;
+  margin-top: 30px;
+  font-size: 13px;
+}
 
-.optics-samples { display: grid; gap: 20px; }
-.optics-sample { display: grid; grid-template-columns: 128px minmax(0, 1fr); align-items: center; gap: 24px; }
+.optics-properties > div {
+  display: grid;
+  grid-template-columns: 8px 84px auto;
+  gap: 12px;
+  align-items: center;
+}
 
-/* Flat samples, not substitute product UI. A shared backdrop makes opacity visible. */
-.optics-swatch {
+.optics-properties > div > span:last-child {
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.optics-material-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.optics-material-dot--obsidian { background: #111418; }
+.optics-material-dot--acrylic { background: #7b8891; }
+.optics-material-dot--liquid { background: #d4e1e7; box-shadow: inset 0 0 0 1px #8c9ca7; }
+
+.optics-link {
+  margin-top: 32px;
+  font-size: 13px;
+}
+
+.optics-note {
+  max-width: 28em;
+  margin-top: 18px;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.75;
+}
+
+.optics-figure { min-width: 0; }
+
+.optics-stage {
+  --light-x: 65%;
+  --light-y: 24%;
   position: relative;
-  height: 92px;
+  height: 460px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: linear-gradient(110deg, #adc0cc 0% 33%, #e9eef1 33% 67%, #718a9c 67%);
+  isolation: isolate;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse at 12% 0%, #ffffff 0%, transparent 64%),
+    linear-gradient(135deg, #e9edf0, #d2dbe1);
+  box-shadow:
+    0 28px 58px -36px rgba(40, 58, 72, 0.36),
+    0 4px 12px -8px rgba(40, 58, 72, 0.16),
+    inset 0 1px 0 #ffffff;
 }
 
-.optics-swatch__surface { position: absolute; inset: 12px; border-radius: 12px; }
-.optics-swatch__surface--obsidian { background: #08080a; border: 1px solid rgba(255, 255, 255, 0.1); }
-.optics-swatch__surface--acrylic {
-  background: rgba(22, 27, 34, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(12px);
-}
-.optics-swatch__surface--liquid {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent), rgba(22, 27, 34, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(4px) saturate(1.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+.optics-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(59, 78, 94, 0.07);
+  pointer-events: none;
 }
 
-.optics-sample figcaption { display: grid; gap: 6px; }
-.optics-sample strong { font-size: 15px; font-weight: 500; }
-.optics-sample figcaption span { color: var(--muted); font-size: 13px; }
+.optics-stage-heading {
+  position: absolute;
+  inset: 23px 26px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #515f6a;
+}
+
+.optics-stage-heading > span:last-child {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.optics-stage-heading__divider { margin-inline: 8px; color: #88949d; }
+
+.optics-scene {
+  position: absolute;
+  inset: 54px 0 78px;
+}
+
+/* A common physical backdrop makes the three surfaces' opacity visible. */
+.optics-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.optics-backdrop__ribs {
+  position: absolute;
+  top: 4%;
+  right: 11%;
+  width: 43%;
+  height: 90%;
+  border-radius: 50% 50% 6px 6px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.5), transparent 40%, rgba(255, 255, 255, 0.7)),
+    repeating-linear-gradient(90deg, #a1b2be 0 1px, #dce4e9 2px 5px, #edf2f4 6px 7px);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.9);
+}
+
+.optics-backdrop__band {
+  position: absolute;
+  top: 52%;
+  left: 0;
+  right: 0;
+  height: 31%;
+  background: linear-gradient(90deg, #c3ced7, #9fb6c6 55%, #c9d6de);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.optics-backdrop__line {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  top: 65%;
+  height: 1px;
+  background: rgba(71, 95, 113, 0.3);
+}
+
+.optics-plate {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  overflow: hidden;
+  transform: translateY(0);
+  transition: transform 420ms var(--ease-out), box-shadow 420ms var(--ease-out);
+}
+
+.optics-plate__edge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.optics-plate__reflection {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at var(--light-x) var(--light-y), rgba(255, 255, 255, 0.2), transparent 72%);
+  pointer-events: none;
+}
+
+.optics-plate--obsidian {
+  z-index: 1;
+  top: 17%;
+  left: 7%;
+  width: 43%;
+  height: 65%;
+  border-color: #3d4248;
+  border-radius: 22px;
+  background: linear-gradient(140deg, #252b30, #101316 45%, #080a0c);
+  color: #f7f8fa;
+  box-shadow: 0 20px 28px -16px rgba(18, 28, 38, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.optics-plate--obsidian .optics-plate__edge {
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.08), inset -1px -1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.optics-plate--acrylic {
+  z-index: 2;
+  top: 36%;
+  left: 29%;
+  width: 46%;
+  height: 61%;
+  border-radius: 24px;
+  background: rgba(32, 41, 50, 0.66);
+  color: #f7f8fa;
+  -webkit-backdrop-filter: blur(18px) saturate(0.85);
+  backdrop-filter: blur(18px) saturate(0.85);
+  box-shadow: 0 22px 30px -22px rgba(24, 40, 54, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.optics-plate--liquid {
+  z-index: 3;
+  top: 8%;
+  right: 6%;
+  width: 51%;
+  height: 70%;
+  border-color: rgba(255, 255, 255, 0.9);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.05) 55%, rgba(214, 230, 239, 0.12)),
+    rgba(225, 235, 240, 0.12);
+  color: #273845;
+  -webkit-backdrop-filter: blur(3px) saturate(1.15);
+  backdrop-filter: blur(3px) saturate(1.15);
+  box-shadow:
+    0 24px 34px -22px rgba(40, 62, 78, 0.45),
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.66),
+    inset 2px 0 3px rgba(255, 255, 255, 0.45),
+    inset -2px 0 4px rgba(224, 242, 250, 0.5);
+}
+
+.optics-plate--liquid .optics-plate__edge {
+  inset: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.12);
+}
+
+.optics-plate__identity {
+  position: absolute;
+  inset: 22px auto auto 22px;
+  display: grid;
+  gap: 4px;
+}
+
+.optics-plate__number {
+  margin-bottom: 9px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.optics-plate__identity strong { font-size: 14px; font-weight: 500; }
+.optics-plate__english { font-size: 10px; }
+
+.optics-plate--acrylic .optics-plate__identity {
+  inset: auto auto 18px 20px;
+}
+
+.optics-plate--acrylic .optics-plate__number { display: none; }
+
+.optics-plate--liquid .optics-plate__identity {
+  inset: 22px 22px auto auto;
+  text-align: right;
+}
+
+.optics-plate__engraving {
+  position: absolute;
+  left: 24px;
+  bottom: 20px;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  color: #405969;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.optics-stage[data-study-material="obsidian"] .optics-plate--obsidian,
+.optics-stage[data-study-material="acrylic"] .optics-plate--acrylic,
+.optics-stage[data-study-material="liquid"] .optics-plate--liquid {
+  transform: translateY(-10px);
+}
+
+.optics-study-controls {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  border-top: 1px solid rgba(67, 86, 100, 0.14);
+  padding-top: 10px;
+}
+
+.optics-study-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px;
+  border-radius: 9px;
+  color: #4c5c68;
+  font-size: 12px;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.optics-study-controls button:hover { background: rgba(255, 255, 255, 0.4); color: #182a37; }
+.optics-study-controls button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.72); color: #182a37; }
+.optics-study-controls__number { font-family: var(--font-mono); font-size: 8px; }
+.optics-study-controls__indicator { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: 0; }
+.optics-study-controls button[aria-pressed="true"] .optics-study-controls__indicator { opacity: 1; }
+
+.optics-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  min-height: 40px;
+  padding: 16px 3px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.optics-caption__name {
+  flex: none;
+  min-width: 80px;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .optics-grid { gap: 36px; }
+  .optics-stage { height: 420px; }
+  .optics-plate__identity { inset: 18px auto auto 16px; }
+  .optics-plate--liquid .optics-plate__identity { inset: 18px 16px auto auto; }
+}
 
 @media (max-width: 900px) {
   .optics-grid { grid-template-columns: 1fr; gap: 32px; }
+  .optics-copy { max-width: 560px; padding-bottom: 0; }
+  .optics-figure { width: 100%; max-width: 660px; justify-self: center; }
+  .optics-stage { height: 450px; }
+  .optics-copy h2 { font-size: 40px; }
+  .optics-properties { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .optics-properties > div { grid-template-columns: 8px auto; gap: 6px 8px; }
+  .optics-properties > div > span:last-child { grid-column: 2; font-size: 11px; }
+  .optics-link { margin-top: 24px; }
 }
 
 @media (max-width: 480px) {
-  .optics-sample { grid-template-columns: 100px minmax(0, 1fr); gap: 18px; }
-  .optics-swatch { height: 80px; }
+  .optics-copy h2 { font-size: 36px; }
+  .optics-intro { margin-top: 18px; font-size: 14px; }
+  .optics-properties { margin-top: 24px; gap: 8px; font-size: 12px; }
+  .optics-note { margin-top: 14px; }
+  .optics-stage { height: 364px; border-radius: 24px; }
+  .optics-stage-heading { inset: 20px 18px auto; font-size: 10px; }
+  .optics-scene { inset: 54px 0 72px; }
+  .optics-plate--obsidian { border-radius: 16px; }
+  .optics-plate--acrylic { border-radius: 18px; }
+  .optics-plate--liquid { border-radius: 22px; }
+  .optics-plate__identity { inset: 16px auto auto 12px; gap: 3px; }
+  .optics-plate__identity strong { font-size: 12px; }
+  .optics-plate__english { font-size: 8px; }
+  .optics-plate__number { font-size: 8px; margin-bottom: 5px; }
+  .optics-plate--acrylic .optics-plate__identity { inset: auto auto 12px 14px; }
+  .optics-plate--liquid .optics-plate__identity { inset: 16px 12px auto auto; }
+  .optics-plate__engraving { left: 14px; bottom: 14px; font-size: 19px; }
+  .optics-study-controls { left: 14px; right: 14px; bottom: 13px; padding-top: 7px; }
+  .optics-study-controls button { min-height: 40px; gap: 5px; font-size: 11px; }
+  .optics-study-controls__number { font-size: 7px; }
+  .optics-caption { flex-direction: column; gap: 3px; min-height: 64px; padding-top: 12px; font-size: 11px; }
+  .optics-caption__name { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optics-plate { transition: none; transform: none !important; }
+  .optics-plate__reflection { background: none; }
 }

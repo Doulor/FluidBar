@@ -92,3 +92,32 @@ test('landscape phone material controls are not covered by the preview', async (
   await expect(frame.locator('#island')).toHaveAttribute('data-expanded', 'true');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('material study supports keyboard selection without changing the real island', async ({ page }) => {
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto('/');
+    await page.getByRole('group', { name: '岛材质' }).getByRole('button', { name: '黑曜石', exact: true }).click();
+    const product = page.frameLocator('iframe[name="fluidbar-lab"]');
+    await expect(product.locator('body')).toHaveAttribute('data-material', 'obsidian');
+
+    const study = page.getByRole('group', { name: '材质研究样本' });
+    for (const [name, description] of [
+      ['黑曜石', '细腻的边缘反光'],
+      ['亚克力', '一层薄雾'],
+      ['液态玻璃', '通透的表面和亮边'],
+    ]) {
+      const button = study.getByRole('button', { name: new RegExp(`${name}.*材质研究`) });
+      await button.scrollIntoViewIfNeeded();
+      await button.focus();
+      await page.keyboard.press('Enter');
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('.optics-caption')).toContainText(description);
+      await expect(product.locator('body')).toHaveAttribute('data-material', 'obsidian');
+    }
+    const bounds = await page.locator('.optics-stage').boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
