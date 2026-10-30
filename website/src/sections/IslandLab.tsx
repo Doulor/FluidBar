@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from '@phosphor-icons/react';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
 import { COMPACT_STATE_META } from '../island/compactStates';
 import type { CompactView, IslandMaterial, IslandMode } from '../island/protocol';
 import './island-lab.css';
+import { DEMO_PAGES, type DemoPage } from '../lib/demo';
 
 const PAGE_LABELS = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
 const ACTIVITY_VIEWS: CompactView[] = ['media', 'notifications', 'clipboard', 'agent'];
@@ -43,6 +44,7 @@ export function IslandLab() {
   const configRef = useRef<HTMLDivElement>(null);
   const [activity, setActivity] = useState<CompactView>('media');
   const [page, setPage] = useState(0);
+  const [scene, setScene] = useState<DemoPage | null>(null);
   const [mode, setMode] = useState<IslandMode>('float');
   const [material, setMaterial] = useState<IslandMaterial>('obsidian');
   const stepRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -99,6 +101,7 @@ export function IslandLab() {
   const chooseStep = (index: number) => {
     frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
+    setScene(null);
     setActiveStep(index);
     if (index === 0) send({ state: 'idle' });
     if (index === 1) send({ state: activity });
@@ -110,6 +113,7 @@ export function IslandLab() {
   const chooseActivity = (view: CompactView) => {
     frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
+    setScene(null);
     setActivity(view);
     setActiveStep(1);
     send({ state: view });
@@ -118,10 +122,30 @@ export function IslandLab() {
   const choosePage = (index: number) => {
     frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
+    setScene(null);
     setPage(index);
     setActiveStep(3);
     send({ state: 'expanded', page: index });
   };
+
+  const chooseScene = useCallback((value: DemoPage) => {
+    frameRef.current?.load();
+    manualUntilRef.current = performance.now() + 30_000;
+    setScene(value);
+    setPage(DEMO_PAGES[value]);
+    setActiveStep(-1);
+    send({ state: 'expanded', page: DEMO_PAGES[value] });
+  }, [frameRef, send]);
+
+  useEffect(() => {
+    const handle = (event: Event) => {
+      const value = (event as CustomEvent<DemoPage>).detail;
+      if (typeof value !== 'string' || !Object.hasOwn(DEMO_PAGES, value)) return;
+      chooseScene(value);
+    };
+    window.addEventListener('fluidbar:demo', handle);
+    return () => window.removeEventListener('fluidbar:demo', handle);
+  }, [chooseScene]);
 
   const compact = COMPACT_STATE_META.find((item) => item.id === state.view) ?? COMPACT_STATE_META[0];
   const status = !state.ready
@@ -151,6 +175,11 @@ export function IslandLab() {
 
         <div className="lab-grid">
           <div className="lab-column">
+            <div className="lab-scenes" role="group" aria-label="使用场景">
+              <p>从一个日常场景开始</p>
+              {([['media', '听歌看歌词'], ['notifications', '展开看通知'], ['clipboard', '查看剪贴板']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={scene === value} onClick={() => chooseScene(value)}>{label} ↗</button>)}
+              <span className="scene-hint" aria-live="polite">{scene === 'media' ? '歌词随时间逐词推进；可拖动进度查看不同段落。' : scene === 'notifications' ? '展开查看示例通知；右上角可收起小岛。' : scene === 'clipboard' ? '切换到剪贴板页查看示例历史内容。' : '点击场景，直接操作右侧小岛。'}</span>
+            </div>
             <div className="lab-steps">
               {STEPS.map((step, index) => (
                 <div
@@ -305,6 +334,7 @@ export function IslandLab() {
             />
 
             <div className="lab-stage__foot">
+              <a className="stage-link" href="#download">获取 Windows 预览版 ↗</a>
               <span className="mono">示例数据</span>
               <a
                 href={`${import.meta.env.BASE_URL}island/embed.html`}

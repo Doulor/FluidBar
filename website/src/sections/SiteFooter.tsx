@@ -21,7 +21,7 @@ export function SiteFooter() {
             <BrandMark size={28} />
             <span className="brand-name">
               FluidBar
-              <sup>2.0</sup>
+              <sup>PREVIEW</sup>
             </span>
           </a>
           <p>常驻，但不打扰。</p>

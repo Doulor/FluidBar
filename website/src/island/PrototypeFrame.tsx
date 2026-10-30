@@ -76,7 +76,12 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
       () => ({
         send,
         load: () => setShouldLoad(true),
-        reload: () => setAttempt((value) => value + 1),
+        reload: () => {
+          setFailed(false);
+          setReady(false);
+          setShouldLoad(true);
+          setAttempt((value) => value + 1);
+        },
       }),
       [send],
     );
@@ -177,7 +182,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
           <div className="prototype-frame__poster prototype-frame__poster--empty" aria-hidden="true" />
         )}
 
-        {shouldLoad && !failed ? (
+        {shouldLoad ? (
           <iframe
             key={attempt}
             ref={iframeRef}
@@ -200,7 +205,12 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
 
         {failed ? (
           <div className="prototype-frame__fallback" role="status">
-            <strong>原型暂时无法启动</strong>
+            <strong>原型仍在加载，可继续等待或重试</strong>
+            <button type="button" onClick={() => {
+              setFailed(false);
+              setReady(false);
+              setAttempt(value => value + 1);
+            }}>重新加载预览</button>
             <a href={`${import.meta.env.BASE_URL}island/embed.html`} target="_blank" rel="noreferrer">
               在新窗口打开真实原型
             </a>

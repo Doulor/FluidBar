@@ -31,7 +31,7 @@ export function Hero() {
         <div className="hero-copy">
           <p className="kicker">
             <span className="kicker-line" aria-hidden="true" />
-            Windows 10 / 11 · FluidBar 2.0
+            Windows 10 / 11 · 开发预览版
           </p>
           <h1 id="hero-title">
             <span>桌面之上，</span>

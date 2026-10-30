@@ -124,6 +124,15 @@
   text-underline-offset: 3px;
 }
 
+.prototype-frame__fallback button {
+  justify-self: start;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prototype-frame__poster,
   .prototype-frame__iframe {

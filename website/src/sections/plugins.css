@@ -321,3 +321,11 @@
     white-space: normal;
   }
 }
+
+.plugin-purpose { padding-block: 28px 12px; min-height: 270px; }
+.plugin-purpose__label { color: #9ba8b8; font-family: var(--font-mono); font-size: 11px; }
+.plugin-purpose h3 { margin-top: 18px; font-size: 30px; }
+.plugin-purpose > p:not(:first-child) { margin-top: 14px; color: #c0cad6; font-size: 14px; line-height: 1.8; }
+.plugin-purpose > .plugin-purpose__note { color: #9ba8b8; font-size: 12px; }
+.plugin-demo { display: inline-flex; align-items: center; min-height: 44px; margin-top: 22px; padding: 10px 15px; border: 1px solid #657183; border-radius: 10px; color: #f4f6f8; font-size: 13px; }
+.plugin-demo:hover { background: rgba(255,255,255,.08); }

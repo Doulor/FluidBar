@@ -11,6 +11,8 @@ import {
 import { BorderGlow, SpotlightCard } from '../ui/reactbits';
 import { MANIFEST_SAMPLE, PLUGINS, type PluginItem } from '../data/plugins';
 import { PLUGIN_DOCS } from '../lib/links';
+import { DEMO_PAGES, openDemo, type DemoPage } from '../lib/demo';
+import { Marketplace } from './Marketplace';
 import './plugins.css';
 
 const ICONS = {
@@ -30,6 +32,7 @@ function PluginIcon({ icon }: { icon: PluginItem['icon'] }) {
 export function Plugins() {
   const [selected, setSelected] = useState<PluginItem>(PLUGINS[0]);
   const [showManifest, setShowManifest] = useState(false);
+  const [developer, setDeveloper] = useState(false);
 
   return (
     <section id="plugins" className="plugins" aria-labelledby="plugins-title">
@@ -57,11 +60,11 @@ export function Plugins() {
               grain={0.08}
             >
               <div className="sdk-card__top">
-                <span className="mono">PLUGIN SDK</span>
-                <span className="sdk-card__tag">声明式 UI</span>
+                <span className="mono">BUILT-IN + PLUGINS</span>
+                <span className="sdk-card__tag">内置与扩展</span>
               </div>
-              <h3>只写能力，不写 XAML。</h3>
-              <p>布局、设置页、命令和小组件由宿主渲染。插件不再决定岛长什么样。</p>
+              <h3>先用起来，再按需扩展。</h3>
+              <p>媒体、通知、剪贴板等能力随应用提供。需要扩展时，可通过应用内市场安装社区插件。</p>
             </SpotlightCard>
 
             <div className="plugin-list" aria-label="内置插件">
@@ -88,7 +91,7 @@ export function Plugins() {
             </div>
 
             <a className="plugins-link" href={PLUGIN_DOCS} target="_blank" rel="noopener noreferrer">
-              阅读插件文档
+              开发插件：阅读文档
               <ArrowUpRight size={15} aria-hidden="true" />
             </a>
           </div>
@@ -100,14 +103,15 @@ export function Plugins() {
                 <span />
                 <span />
               </div>
-              <span className="mono">{showManifest ? 'manifest.json' : 'capabilities.json'}</span>
-              <button
+              <span className="mono">{developer ? (showManifest ? 'manifest.json' : 'capabilities.json') : '内置能力'}</span>
+              <button type="button" className="code-switch" aria-pressed={developer} onClick={() => setDeveloper(value => !value)}>{developer ? '查看用途' : '开发者信息'}</button>
+              {developer && <button
                 type="button"
                 className="code-switch"
                 onClick={() => setShowManifest((value) => !value)}
               >
                 {showManifest ? '看能力声明' : '看完整 manifest'}
-              </button>
+              </button>}
             </div>
 
             <BorderGlow
@@ -124,16 +128,19 @@ export function Plugins() {
             >
               <div className="code-panel">
                 <div className="code-panel__head">
-                  <span>{showManifest ? '一个可运行的最小插件' : selected.label}</span>
+                  <span>{developer && showManifest ? '一个可运行的最小插件' : selected.label}</span>
                   <span className="code-panel__caps">
-                    {showManifest ? 'schemaVersion 2' : selected.capabilities.join(' · ')}
+                    {developer ? (showManifest ? 'schemaVersion 2' : selected.capabilities.join(' · ')) : 'BUILT-IN'}
                   </span>
                 </div>
-                <pre>
-                  <code>{showManifest ? MANIFEST_SAMPLE : `{\n  ${selected.code}\n}`}</code>
-                </pre>
+                {developer ? <pre><code>{showManifest ? MANIFEST_SAMPLE : `{\n  ${selected.code}\n}`}</code></pre> : <div className="plugin-purpose">
+                  <p className="plugin-purpose__label">内置插件 · 随应用提供</p>
+                  <h3>{selected.label}</h3><p>{selected.summary}</p>
+                  <p className="plugin-purpose__note">在设置中管理插件。网页预览使用示例数据，实际能力以当前软件版本为准。</p>
+                  {selected.id in DEMO_PAGES ? <button type="button" className="plugin-demo" onClick={() => openDemo(selected.id as DemoPage)}>在岛上体验 {selected.label} ↗</button> : <a className="plugin-demo" href="#download">下载后查看设备状态 ↗</a>}
+                </div>}
                 <div className="code-panel__foot">
-                  <span>签名 .fbp</span>
+                  <span>{developer ? '签名 .fbp' : '内置能力'}</span>
                   <span>应用内市场</span>
                   <span>安装 / 更新 / 回滚</span>
                 </div>
@@ -141,6 +148,7 @@ export function Plugins() {
             </BorderGlow>
           </div>
         </div>
+        <Marketplace />
       </div>
     </section>
   );

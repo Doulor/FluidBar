@@ -377,3 +377,10 @@
     top: auto;
   }
 }
+
+.lab-scenes { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 22px; }
+.lab-scenes > p { width: 100%; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.lab-scenes button { min-height: 44px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 10px; font-size: 12px; background: var(--surface); }
+.lab-scenes button[aria-pressed=true] { color: white; background: var(--ink); }
+.scene-hint { display: block; width: 100%; min-height: 40px; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+@media(max-width:480px) { .lab-step__head { padding-block: 15px; gap: 8px; grid-template-columns: 30px minmax(0,1fr); }.lab-step__body strong { font-size: 18px; }.lab-step__body span { margin-top: 4px; }.step-options { padding-bottom: 15px; }.lab-stage__foot { flex-wrap: wrap; gap: 8px; }.lab-grid { gap: 24px; }.lab-heading { margin-bottom: 24px; } }
