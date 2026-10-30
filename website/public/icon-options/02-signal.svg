@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 一点</title>
+  <rect width="128" height="128" rx="34" fill="#101216"/>
+  <rect x="30" y="52" width="68" height="24" rx="12" fill="#F4F6F8"/>
+  <circle cx="85" cy="64" r="6" fill="#78AEBB"/>
+</svg>
