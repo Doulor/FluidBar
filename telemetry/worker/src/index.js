@@ -3,6 +3,8 @@
 // Contract: docs/privacy/telemetry.md (client) and this file must agree. The client sends a closed whitelist of
 // fields; anything else is rejected, so a future client bug cannot start shipping user content into the database.
 
+import { publicStats, storedDownloads } from './public-stats.js';
+
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_RUNS = 64;
 const SCHEMA = 1;
@@ -18,6 +20,10 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/v1/health') {
       return json({ ok: true, schema: SCHEMA });
+    }
+
+    if (request.method === 'GET' && url.pathname === '/v1/public-stats') {
+      return publicStats(env, caches.default);
     }
 
     if (request.method !== 'POST' || url.pathname !== '/v1/batch') {
@@ -75,8 +81,11 @@ export default {
   },
 
   // Daily: raw batches are deleted after the published retention window (30 days).
-  async scheduled(_event, env) {
-    await env.DB.prepare("DELETE FROM batches WHERE received_at < datetime('now', '-30 days')").run();
+  async scheduled(event, env) {
+    if (event.cron === '17 3 * * *') {
+      await env.DB.prepare("DELETE FROM batches WHERE received_at < datetime('now', '-30 days')").run();
+    }
+    await storedDownloads(env, true);
   },
 };
 

@@ -14,7 +14,10 @@ function siteUrlPlugin(): Plugin {
 export default defineConfig({
   plugins: [react(), siteUrlPlugin()],
   base: '/',
-  server: { port: 4173, strictPort: true },
+  server: {
+    port: 4173, strictPort: true,
+    proxy: { '/t/': { target: 'https://fluidbar.doulor.cn', changeOrigin: true } },
+  },
   preview: { port: 4173, strictPort: true },
   build: { target: 'es2022', chunkSizeWarningLimit: 3000 },
 });

@@ -51,7 +51,7 @@ export function SiteNav() {
             <BrandMark size={30} />
             <span className="brand-name">
               FluidBar
-              <sup>PREVIEW</sup>
+              <sup>2.0</sup>
             </span>
           </a>
 

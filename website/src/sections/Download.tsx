@@ -2,6 +2,7 @@ import { ArrowUpRight, GithubLogo } from '@phosphor-icons/react';
 import { BrandMark } from '../ui/BrandMark';
 import { GITHUB, ISSUES, RELEASES } from '../lib/links';
 import { RELEASE } from '../data/release';
+import { DownloadStats } from './DownloadStats';
 import './download.css';
 
 export function Download() {
@@ -53,6 +54,7 @@ export function Download() {
             </span>
           </div>
         </div>
+        <DownloadStats />
         <ol className="install-steps" aria-label="安装步骤">
           <li><span>01</span><strong>下载压缩包</strong><p>选择上方 ZIP；其他历史版本可在 <a href={RELEASES} target="_blank" rel="noopener noreferrer">GitHub Releases</a> 找到。</p></li>
           <li><span>02</span><strong>解压后启动</strong><p>完整解压到独立文件夹，运行 FluidBar.exe。此版本已包含运行时。</p></li>

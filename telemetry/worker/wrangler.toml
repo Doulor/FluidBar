@@ -11,5 +11,5 @@ database_name = "fluidbar_telemetry"
 database_id = "106dac81-2864-4224-bb4d-832324628a51"
 
 [triggers]
-# Daily retention job (see the scheduled handler in src/index.js).
-crons = ["17 3 * * *"]
+# Daily retention plus hourly refresh of public download totals.
+crons = ["17 3 * * *", "7 * * * *"]
