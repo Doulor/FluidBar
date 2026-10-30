@@ -10,10 +10,18 @@ namespace FluidBar.Island;
 public static class SideRailLayout
 {
     public const float TabWidth = 40;
-    public const float TabHeight = 40;
     public const float TabGap = 4;
-    public const float TabPitch = TabHeight + TabGap;
     public const float LeftOffset = 50;
+    public const float TabHeight = 40;
+    public const float TabPitch = TabHeight + TabGap;
+
+    /// <summary>Wheel/drag offset in DIP applied to every tab when there are more pages than fit.</summary>
+    public static float ClampScroll(double offset, int pageCount, SKRect content)
+        => (float)Math.Clamp(double.IsFinite(offset) ? offset : 0, 0, MaxScroll(pageCount, content));
+
+    /// <summary>How far the tab strip exceeds the card body.</summary>
+    public static float MaxScroll(int pageCount, SKRect content)
+        => Math.Max(0, (Math.Max(1, pageCount) * TabPitch) - TabGap - content.Height);
 
     /// <summary>Tab rectangle in host-local DIP for a page index.</summary>
     public static SKRect TabRect(SKRect content, int index) => new(
@@ -21,6 +29,14 @@ public static class SideRailLayout
         content.Top + (index * TabPitch),
         content.Left - LeftOffset + TabWidth,
         content.Top + (index * TabPitch) + TabHeight);
+
+    /// <summary>Tab rectangle with the rail's current scroll offset applied.</summary>
+    public static SKRect TabRect(SKRect content, int index, double scrollOffset, int pageCount)
+    {
+        var rect = TabRect(content, index);
+        rect.Offset(0, -ClampScroll(scrollOffset, pageCount, content));
+        return rect;
+    }
 
     /// <summary>Full rail envelope (40×260), useful for diagnostics/hit regions.</summary>
     public static SKRect RailRect(SKRect content, int pageCount) => new(
@@ -30,11 +46,11 @@ public static class SideRailLayout
         content.Top + (Math.Max(1, pageCount) * TabPitch) - TabGap);
 
     /// <summary>Page index under a point, or -1.</summary>
-    public static int HitTest(SKRect content, int pageCount, float x, float y)
+    public static int HitTest(SKRect content, int pageCount, float x, float y, double scrollOffset = 0)
     {
         for (var i = 0; i < Math.Max(1, pageCount); i++)
         {
-            if (TabRect(content, i).Contains(x, y))
+            if (TabRect(content, i, scrollOffset, pageCount).Contains(x, y))
             {
                 return i;
             }

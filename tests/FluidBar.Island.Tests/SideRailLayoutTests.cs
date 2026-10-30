@@ -44,6 +44,20 @@ public sealed class SideRailLayoutTests
     }
 
     [Fact]
+    public void OverflowTabs_ScrollAndHitAtTheirScrolledPositions()
+    {
+        var content = new SKRect(60, 12, 460, 272);
+        const int pages = 10;
+        var max = SideRailLayout.MaxScroll(pages, content);
+        Assert.True(max > 0);
+        var tab = SideRailLayout.TabRect(content, 9, max, pages);
+        Assert.Equal(content.Bottom, tab.Bottom, 0.001);
+        Assert.Equal(9, SideRailLayout.HitTest(content, pages, tab.MidX, tab.MidY, max));
+        Assert.Equal(0, SideRailLayout.ClampScroll(-100, pages, content));
+        Assert.Equal(max, SideRailLayout.ClampScroll(max + 100, pages, content), 0.001);
+    }
+
+    [Fact]
     public void HitTest_ReturnsPageTab_AndNotDetachedRail()
     {
         var state = IslandRenderState.Expanded(IslandMode.Float, default, ExpandedPageContent.Empty, IslandTheme.Dark);

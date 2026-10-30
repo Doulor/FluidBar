@@ -1074,6 +1074,7 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
+        EnsureRailPageVisible(index);
         _pager.SelectPage(index);
     }
 
@@ -1373,6 +1374,13 @@ public sealed class SkiaIslandController : IDisposable
                 hover = hit.Control;
                 page = hit.PageIndex;
                 index = hit.Index;
+            }
+            else if (hit.Kind is IslandHitKind.Settings or IslandHitKind.Collapse)
+            {
+                hover = hit.Kind == IslandHitKind.Settings
+                    ? IslandPageControl.Settings
+                    : IslandPageControl.Collapse;
+                page = hit.PageIndex;
             }
             else if (hit.Kind == IslandHitKind.PageTab)
             {
@@ -2040,6 +2048,26 @@ public sealed class SkiaIslandController : IDisposable
         // clipboard or notification list scrolls natively and only then flips. Short pages flip at once.
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
+            var railPage = SideRailLayout.HitTest(
+                IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)),
+                _pages.PageCount,
+                (float)_pointerX,
+                (float)_pointerY,
+                _renderState.Pages.RailScrollOffset);
+            if (_pointerInside && railPage >= 0)
+            {
+                var railMax = SideRailLayout.MaxScroll(_pages.PageCount,
+                    IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
+                if (railMax > 0.5)
+                {
+                    RailScrollOffset = Math.Clamp(RailScrollOffset + deltaDip, 0, railMax);
+                    _pages = _pages with { RailScrollOffset = RailScrollOffset };
+                    BuildRenderState();
+                    InvalidateFull();
+                    return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
+                }
+            }
+
             var page = _pager.SelectedIndex;
             var max = MaxScrollForPage(page);
             var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
@@ -3475,7 +3503,43 @@ private void HandlePageControl(in IslandHitTarget hit)
             Clipboard = pages.Clipboard with { ScrollOffset = ScrollForKind(PageSlotKind.Clipboard) },
             Agent = pages.Agent with { ScrollOffset = ScrollForKind(PageSlotKind.Agent) },
             Widgets = pages.Widgets with { ScrollOffset = ScrollForKind(PageSlotKind.Widgets) },
+            RailScrollOffset = RailScrollOffset,
         };
+    }
+
+    /// <summary>Scroll of the in-card page rail (0 when all tabs fit).</summary>
+    public double RailScrollOffset { get; private set; }
+
+    /// <summary>Scrolls just enough to keep the selected tab visible in the clipped rail.</summary>
+    private void EnsureRailPageVisible(int page)
+    {
+        if (page < 0 || _pages.PageCount <= 1)
+        {
+            RailScrollOffset = 0;
+            return;
+        }
+
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState));
+        var max = SideRailLayout.MaxScroll(_pages.PageCount, content);
+        if (max <= 0.5)
+        {
+            RailScrollOffset = 0;
+            return;
+        }
+
+        var tab = SideRailLayout.TabRect(content, page);
+        var top = tab.Top - RailScrollOffset;
+        var bottom = tab.Bottom - RailScrollOffset;
+        if (top < content.Top)
+        {
+            RailScrollOffset = Math.Max(0, tab.Top - content.Top);
+        }
+        else if (bottom > content.Bottom)
+        {
+            RailScrollOffset = Math.Min(max, tab.Bottom - content.Bottom);
+        }
+
+        RailScrollOffset = Math.Clamp(RailScrollOffset, 0, max);
     }
 
     private double ScrollForKind(PageSlotKind kind)

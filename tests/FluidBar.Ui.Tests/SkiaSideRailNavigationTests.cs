@@ -43,6 +43,22 @@ public sealed class SkiaSideRailNavigationTests
     }
 
     [Fact]
+    public void SettingsAndCollapse_HaveImmediateHoverState()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.ExpandAndSettle();
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(fixture.Controller.RenderState));
+        var settings = PageLayout.SettingsRect(content);
+        fixture.Controller.HandlePointerMoved(content.MidX, content.MidY);
+        fixture.Controller.HandlePointerMoved(settings.MidX, settings.MidY);
+        Assert.Equal(IslandPageControl.Settings, fixture.Controller.RenderState.HoverControl);
+
+        var collapse = PageLayout.CollapseRect(content);
+        fixture.Controller.HandlePointerMoved(collapse.MidX, collapse.MidY);
+        Assert.Equal(IslandPageControl.Collapse, fixture.Controller.RenderState.HoverControl);
+    }
+
+    [Fact]
     public void WheelOverRail_PagesInsteadOfHittingRemovedMiniIslands()
     {
         using var fixture = ControllerFixture.Create();

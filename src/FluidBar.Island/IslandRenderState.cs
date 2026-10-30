@@ -659,6 +659,9 @@ public sealed record ExpandedPageContent
     /// <summary>Empty content (defaults).</summary>
     public static ExpandedPageContent Empty { get; } = new();
 
+    /// <summary>Vertical scroll of the in-card page rail when there are more pages than fit.</summary>
+    public double RailScrollOffset { get; init; }
+
     /// <summary>Home page model.</summary>
     public HomePageModel Home { get; init; } = new();
 

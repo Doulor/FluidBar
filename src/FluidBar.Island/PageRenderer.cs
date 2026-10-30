@@ -160,12 +160,8 @@ internal sealed partial class PageRenderer : IDisposable
         // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
         // gear next to the collapse chevron on every page; the same rectangle is the click target and
         // the UI Automation button, so pointer and screen-reader users find one control, not two.
-        var settingsHover = _hasPointer && state.PointerX >= PageLayout.SettingsRect(content).Left
-            && state.PointerX <= PageLayout.SettingsRect(content).Right && state.PointerY >= PageLayout.SettingsRect(content).Top
-            && state.PointerY <= PageLayout.SettingsRect(content).Bottom;
-        var collapseHover = _hasPointer && state.PointerX >= PageLayout.CollapseRect(content).Left
-            && state.PointerX <= PageLayout.CollapseRect(content).Right && state.PointerY >= PageLayout.CollapseRect(content).Top
-            && state.PointerY <= PageLayout.CollapseRect(content).Bottom;
+        var settingsHover = IsHovered(IslandPageControl.Settings) || IsPressed(IslandPageControl.Settings);
+        var collapseHover = IsHovered(IslandPageControl.Collapse) || IsPressed(IslandPageControl.Collapse);
         if (settingsHover)
         {
             _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
@@ -187,9 +183,12 @@ internal sealed partial class PageRenderer : IDisposable
     private void DrawSideRail(SKCanvas canvas, in IslandRenderState state, SKRect content)
     {
         var count = Math.Max(1, state.Pages.PageCount);
+        var scroll = SideRailLayout.ClampScroll(state.Pages.RailScrollOffset, count, content);
+        canvas.Save();
+        canvas.ClipRect(SideRailLayout.RailRect(content, count));
         for (var i = 0; i < count; i++)
         {
-            var rect = SideRailLayout.TabRect(content, i);
+            var rect = SideRailLayout.TabRect(content, i, scroll, count);
             var active = i == state.PageIndex;
             var hovered = _hasPointer && _hoverControl == IslandPageControl.PageTab && _hoverPage == i;
             var pressed = _pressedControl == IslandPageControl.PageTab && _pressedPage == i;
@@ -224,6 +223,8 @@ internal sealed partial class PageRenderer : IDisposable
                 _text.Draw(canvas, label, IslandType.RowMeta, tip, _theme.Foreground, TextAlign.Center, _opacity);
             }
         }
+
+        canvas.Restore();
     }
 
     /// <summary>Draws one page at <paramref name="pageRect"/> (host-local DIP).</summary>
@@ -761,7 +762,7 @@ internal sealed partial class PageRenderer : IDisposable
     /// the clicks use, so the highlight can never sit on a different rectangle than the click target).</summary>
     private bool IsHovered(IslandPageControl control, int index = -1)
         => _hasPointer && _hoverControl == control
-            && (_hoverPage < 0 || _hoverPage == _drawPage)
+            && (_hoverPage < 0 || _hoverPage == _drawPage || control is IslandPageControl.Settings or IslandPageControl.Collapse)
             && (index < 0 || _hoverIndex == index);
 
     // ------------------------------------------------------------- placeholder
