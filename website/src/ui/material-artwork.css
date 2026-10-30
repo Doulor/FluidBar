@@ -1,0 +1,142 @@
+.material-artwork {
+  --mx: 50%;
+  --my: 40%;
+  position: relative;
+  min-width: 0;
+  min-height: 430px;
+  overflow: hidden;
+  border-radius: 28px;
+  background:
+    radial-gradient(90% 100% at 12% 0%, rgba(255, 255, 255, 0.96), transparent 60%),
+    #e5e9ec;
+  box-shadow: var(--shadow-soft);
+  perspective: 900px;
+}
+
+.material-artwork::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(240px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.7), transparent 60%);
+  pointer-events: none;
+}
+
+.material-artwork__wordmark {
+  position: absolute;
+  left: 52px;
+  top: 58px;
+  font-family: var(--font-display);
+  font-size: clamp(80px, 9.4vw, 132px);
+  font-weight: 700;
+  line-height: 0.76;
+  letter-spacing: -0.09em;
+  color: rgba(11, 13, 16, 0.9);
+  user-select: none;
+}
+
+.material-artwork__horizon {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: 17%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(11, 13, 16, 0.18), transparent);
+  transform: rotate(-7deg);
+}
+
+.material-artwork__glass {
+  position: absolute;
+  right: 8%;
+  top: 28%;
+  width: min(58%, 360px);
+  aspect-ratio: 1.55;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
+    rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
+  backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    0 34px 70px -30px rgba(20, 30, 44, 0.42);
+  transform: rotate(7deg);
+}
+
+.material-artwork__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.48) 36%, transparent 53%);
+  transform: translateX(-30%);
+  animation: material-artwork-sheen 9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.material-artwork__label {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  color: rgba(11, 13, 16, 0.48);
+}
+
+.material-artwork__pill {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+  width: 82px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 6px 16px -8px rgba(8, 8, 10, 0.6);
+}
+
+.material-artwork__obsidian {
+  position: absolute;
+  left: 17%;
+  bottom: 10%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  width: 190px;
+  height: 74px;
+  padding: 14px;
+  border-radius: 22px;
+  background: #08080a;
+  color: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 28px 50px -26px rgba(0, 0, 0, 0.55);
+  transform: rotate(-5deg);
+}
+
+.material-artwork__edge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.material-artwork__rule {
+  position: absolute;
+  background: rgba(11, 13, 16, 0.16);
+  pointer-events: none;
+}
+
+.material-artwork__rule--h { left: 8%; right: 8%; top: 22%; height: 1px; }
+.material-artwork__rule--v { top: 8%; bottom: 8%; left: 10%; width: 1px; }
+
+@keyframes material-artwork-sheen {
+  0%, 18% { transform: translateX(-34%); }
+  48%, 100% { transform: translateX(36%); }
+}
+
+@media (max-width: 900px) {
+  .material-artwork { min-height: 360px; }
+  .material-artwork__wordmark { left: 28px; top: 48px; font-size: clamp(70px, 18vw, 108px); }
+  .material-artwork__glass { right: 5%; top: 31%; width: 64%; }
+  .material-artwork__obsidian { left: 9%; bottom: 8%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .material-artwork__sheen { animation: none; transform: translateX(0); }
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CountUp } from '../ui/reactbits';
+import { MaterialArtwork } from '../ui/MaterialArtwork';
 import { ARCHITECTURE, PERFORMANCE_STATS } from '../data/specs';
 import './performance.css';
 
@@ -44,12 +45,7 @@ export function Performance() {
         </div>
 
         <div className="architecture">
-          <div className="architecture-visual" aria-hidden="true">
-            {ARCHITECTURE.map((layer, index) => (
-              <span key={layer.id} className={`arch-plane arch-plane--${index + 1}`} />
-            ))}
-            <span className="arch-beam" />
-          </div>
+          <MaterialArtwork />
 
           <div className="architecture-copy">
             <p className="section-kicker">LAYERS</p>
