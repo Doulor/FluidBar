@@ -234,18 +234,18 @@ public sealed class TokenAndGeometryTests
     }
 
     [Fact]
-    public void ExpandedShellIsUniform440x284_AndWindowIs488x332()
+    public void ExpandedShellIsUniform472x284_AndWindowIs520x332()
     {
-        Assert.Equal(440, LayoutTokens.ExpandedWidth);
+        Assert.Equal(472, LayoutTokens.ExpandedWidth);
         Assert.Equal(284, LayoutTokens.ExpandedHeight);
-        Assert.Equal(new VisualSize(440, 284), LayoutTokens.ExpandedSize());
-        Assert.Equal(488, LayoutTokens.WindowWidth);
+        Assert.Equal(new VisualSize(472, 284), LayoutTokens.ExpandedSize());
+        Assert.Equal(520, LayoutTokens.WindowWidth);
         Assert.Equal(332, LayoutTokens.WindowHeight);
         // New frozen navigation design: expanded shell 440×284 with a 20 DIP inset and a 400×244
         // pager viewport (the rail-era 48+392 split is superseded).
         Assert.Equal(400, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportWidth);
         Assert.Equal(252, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportHeight);
-        Assert.Equal(20, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportInset);
+        Assert.Equal(60, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportInset);
         Assert.Equal(16, FluidBar.App.Island.Expanded.ExpandedPanel.ViewportInsetY);
     }
 

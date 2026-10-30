@@ -18,7 +18,7 @@ public sealed class LayeredHostTests
 
         Assert.Equal(1263, floatSize.WidthDip);
         Assert.Equal(384, floatSize.HeightDip);
-        Assert.Equal(488, dockSize.WidthDip);
+        Assert.Equal(520, dockSize.WidthDip);
         Assert.Equal(444, dockSize.HeightDip);
 
         // The surface must be wide enough for the 440 DIP shell plus 24 DIP bleed on both sides.
@@ -56,10 +56,10 @@ public sealed class LayeredHostTests
     }
 
     [Theory]
-    [InlineData(1.0, 488, 444)]
-    [InlineData(1.25, 610, 555)]
-    [InlineData(1.5, 732, 666)]
-    [InlineData(2.0, 976, 888)]
+    [InlineData(1.0, 520, 444)]
+    [InlineData(1.25, 650, 555)]
+    [InlineData(1.5, 780, 666)]
+    [InlineData(2.0, 1040, 888)]
     public void SurfaceSize_DockToPixels_UsesTheCeilRule(double scale, int expectedWidth, int expectedHeight)
     {
         var pixels = LayeredSurfaceSize.Dock.ToPixels(scale);
@@ -85,7 +85,7 @@ public sealed class LayeredHostTests
     [Fact]
     public void SurfaceSize_ShellLocalOffset_IsPanelTopForAllModes()
     {
-        Assert.Equal(new VisualPoint(411.5, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
+        Assert.Equal(new VisualPoint(395.5, 24), LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float));
 
         // Core dock composition keeps the panel at the top (24..308); the dock strip lives below
         // it (316..368) and the archipelago strip below that (376..408). The host must not shift
@@ -105,7 +105,7 @@ public sealed class LayeredHostTests
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Peek));
         Assert.Equal(new VisualPoint(24, 24),
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Dock, ShellForm.Expanded));
-        Assert.Equal(new VisualPoint(411.5, 24),
+        Assert.Equal(new VisualPoint(395.5, 24),
             LayeredSurfaceSize.ShellLocalOffset(LayeredHostMode.Float, ShellForm.Compact));
 
         // Local rects the renderer paints in dock mode: panel 24..308, strip 316..368, arch 376..408.

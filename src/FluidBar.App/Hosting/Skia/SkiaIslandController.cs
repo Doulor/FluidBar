@@ -230,6 +230,7 @@ public sealed class SkiaIslandController : IDisposable
     private int _pressedIndex = -1;
     private IslandPageControl _hoverControl;
     private int _hoverPage = -1;
+    private int _hoverIndex = -1;
 
     /// <summary>Creates the controller (call <see cref="Start"/> to begin producing content).</summary>
     /// <param name="options">Composition options.</param>
@@ -1362,6 +1363,7 @@ public sealed class SkiaIslandController : IDisposable
     {
         var hover = IslandPageControl.None;
         var page = -1;
+        var index = -1;
         var rail = MiniRailSlot.None;
         if (_hasRenderState && _pointerInside)
         {
@@ -1370,6 +1372,13 @@ public sealed class SkiaIslandController : IDisposable
             {
                 hover = hit.Control;
                 page = hit.PageIndex;
+                index = hit.Index;
+            }
+            else if (hit.Kind == IslandHitKind.PageTab)
+            {
+                hover = IslandPageControl.PageTab;
+                page = hit.PageIndex;
+                index = hit.Index;
             }
             else if (hit.Kind == IslandHitKind.RailSlot)
             {
@@ -1384,14 +1393,18 @@ public sealed class SkiaIslandController : IDisposable
             }
         }
 
-        if (hover == _hoverControl && page == _hoverPage && rail == _railHover)
+        if (hover == _hoverControl && page == _hoverPage && index == _hoverIndex && rail == _railHover)
         {
             return;
         }
 
         _hoverControl = hover;
         _hoverPage = page;
+        _hoverIndex = index;
         _railHover = rail;
+        // Hover must become visible immediately; waiting for the next pointer move or animation frame
+        // would leave the newly-added page rail with a correct hit test but no painted selection state.
+        BuildRenderState();
         InvalidateFull();
     }
 
@@ -1408,6 +1421,7 @@ public sealed class SkiaIslandController : IDisposable
         _pointerInside = false;
         _hoverControl = IslandPageControl.None;
         _hoverPage = -1;
+        _hoverIndex = -1;
         _pointerInHotZone = false;
         _pointerOnStrip = false;
         _pointerInHoverBand = false;
@@ -1469,7 +1483,7 @@ public sealed class SkiaIslandController : IDisposable
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
 
         // Press feedback for every painted control (transport, toggles, list buttons).
-        if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact)
+        if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact or IslandHitKind.PageTab)
         {
             _pressedControl = hit.Control;
             _pressedPage = hit.PageIndex;
@@ -1535,6 +1549,10 @@ public sealed class SkiaIslandController : IDisposable
 
             case IslandHitKind.PageControl:
                 HandlePageControl(hit);
+                return true;
+
+            case IslandHitKind.PageTab:
+                HandlePageRequest(PageAt(hit.PageIndex));
                 return true;
 
             case IslandHitKind.RailOverflow:
@@ -2062,6 +2080,11 @@ public sealed class SkiaIslandController : IDisposable
             {
                 _lastPageStepAt = now;
                 var paged = _pager.Wheel(deltaDip, horizontal: false, shift: false, now, contentScrollable: false);
+                if (paged.Paged)
+                {
+                    ApplyInput(IslandInput.PageRequested(PageAt(_pager.SelectedIndex)));
+                    BuildRenderState();
+                }
                 if (paged.Paged || paged.Consumed)
                 {
                     _archipelago.Reveal(now);
@@ -2080,8 +2103,13 @@ public sealed class SkiaIslandController : IDisposable
 
         var outcome = _pager.Wheel(deltaDip, horizontal, shift, now,
             contentScrollable: MaxScrollForPage(_pager.SelectedIndex) > 0.5);
+        if (outcome.Paged)
+        {
+            ApplyInput(IslandInput.PageRequested(PageAt(_pager.SelectedIndex)));
+        }
         if (outcome.Paged || outcome.Consumed)
         {
+            BuildRenderState();
             _archipelago.Reveal(now);
             UpdateArchipelago(now);
             InvalidateFull();
@@ -2946,6 +2974,10 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         ApplyInput(IslandInput.PageRequested(PageAt(page)));
+        // The pager owns wheel/tab navigation. Rebuild immediately so State.Page, hit-testing and the
+        // next animation frame all see the same committed page; otherwise the next state sync snaps
+        // the user straight back to the page they just left.
+        BuildRenderState();
         // Remember the manual choice so a restart opens on the same page (user request 2026-10-22).
         PageSelectionStore.Save(page);
         InvalidateFull();
@@ -3909,6 +3941,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             PressedIndex = _pressedIndex,
             HoverControl = _hoverControl,
             HoverPage = _hoverPage,
+            HoverIndex = _hoverIndex,
             HasPointer = _pointerInside,
             PointerX = _pointerInside ? _pointerX : double.NaN,
             PointerY = _pointerInside ? _pointerY : double.NaN,

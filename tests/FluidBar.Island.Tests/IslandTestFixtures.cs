@@ -6,7 +6,7 @@ using SkiaSharp;
 namespace FluidBar.Island.Tests;
 
 /// <summary>Shared states and PNG helpers for the island renderer tests.</summary>
-internal static class IslandTestFixtures
+public static class IslandTestFixtures
 {
     public const float Scale = 1.5f;
 
@@ -585,6 +585,17 @@ internal static class IslandTestFixtures
     {
         Directory.CreateDirectory(ReportDir);
         SavePng(bitmap, Path.Combine(ReportDir, fileName));
+    }
+
+    /// <summary>Records the approved 472×284 side-rail frames after the 2026-10-30 navigation redesign.</summary>
+    public static void RegenerateGoldens()
+    {
+        foreach (var name in GoldenNames)
+        {
+            using var renderer = new IslandRenderer(Theme);
+            using var bitmap = renderer.RenderToBitmap(GoldenState(name), Scale);
+            SaveGoldenPng(bitmap, name + ".png");
+        }
     }
 
     public static void SaveGoldenPng(SKBitmap bitmap, string fileName)

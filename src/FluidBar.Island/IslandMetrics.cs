@@ -26,13 +26,13 @@ public static class IslandMetrics
     /// <summary>Expanded shell height (284 DIP).</summary>
     public const double ShellHeight = LayoutTokens.ExpandedHeight;
 
-    /// <summary>Expanded content left inset inside the shell (20 DIP).</summary>
+    /// <summary>Expanded content left inset inside the shell (60 DIP: 10 + 40 rail + 10 gap).</summary>
     public const double ContentLeft = LayoutTokens.ContentHorizontalInset;
 
     /// <summary>Expanded content top inset inside the shell (12 DIP, prototype expanded layer).</summary>
     public const double ContentTop = 12;
 
-    /// <summary>Expanded content width (400 DIP).</summary>
+    /// <summary>Expanded content width (400 DIP); the left page rail lives outside this rect.</summary>
     public const double ContentWidth = LayoutTokens.ContentWidth;
 
     /// <summary>

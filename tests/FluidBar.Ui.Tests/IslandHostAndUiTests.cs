@@ -34,7 +34,7 @@ public sealed class IslandHostTests
             Assert.True(fixture.Backend.Attached);
             Assert.Single(fixture.Backend.Placements);
             var placement = fixture.Backend.Placements[0];
-            Assert.Equal(488, placement.Width / 1.0, 1);
+            Assert.Equal(520, placement.Width / 1.0, 1);
             Assert.Equal(IslandStateKind.Compact, fixture.Host.State.Kind);
 
             fixture.PumpFramesToRest();
@@ -82,13 +82,13 @@ public sealed class IslandHostTests
             fixture.Host.SimulatePrimaryClick();
             fixture.PumpFramesToRest();
             Assert.Equal(IslandStateKind.Expanded, fixture.Host.State.Kind);
-            Assert.Equal(440, fixture.Host.Motion!.Frame.Width, 1);
+            Assert.Equal(472, fixture.Host.Motion!.Frame.Width, 1);
             Assert.Equal(284, fixture.Host.Motion.Frame.Height, 1);
 
             fixture.Host.SimulatePageRequested(CoreIslandPage.Media);
             fixture.PumpFramesToRest();
             Assert.Equal(CoreIslandPage.Media, fixture.Host.State.Page);
-            Assert.Equal(440, fixture.Host.Motion.Frame.Width, 1);
+            Assert.Equal(472, fixture.Host.Motion.Frame.Width, 1);
             Assert.Equal(284, fixture.Host.Motion.Frame.Height, 1);
             Assert.Same(mediaPageBefore, window.Panel.PageFor(CoreIslandPage.Media));
             Assert.Equal(placementsBefore, fixture.Backend.Placements.Count);
@@ -199,7 +199,7 @@ public sealed class IslandHostTests
 public sealed class ExpandedAndSettingsUiTests
 {
     [Fact]
-    public async Task ExpandedPanel_IsUniform440x284_WithSixCachedPagesInOneStrip()
+    public async Task ExpandedPanel_IsUniform472x284_WithSixCachedPagesInOneStrip()
     {
         await AvaloniaTest.Run(() =>
         {
@@ -216,10 +216,10 @@ public sealed class ExpandedAndSettingsUiTests
                 Localizer = localizer,
                 SelectedPage = CoreIslandPage.Home,
             });
-            panel.Measure(new Size(440, 284));
-            panel.Arrange(new Rect(0, 0, 440, 284));
+            panel.Measure(new Size(472, 284));
+            panel.Arrange(new Rect(0, 0, 472, 284));
 
-            Assert.Equal(440, panel.DesiredSize.Width);
+            Assert.Equal(472, panel.DesiredSize.Width);
             Assert.Equal(284, panel.DesiredSize.Height);
             Assert.Equal(400, ExpandedPanel.ViewportWidth);
             Assert.Equal(252, ExpandedPanel.ViewportHeight);
@@ -235,7 +235,7 @@ public sealed class ExpandedAndSettingsUiTests
             panel.SelectIndex(3);
             Assert.Equal(CoreIslandPage.Clipboard, panel.CurrentPage);
             Assert.Equal([CoreIslandPage.Clipboard], requested);
-            Assert.Equal(440, panel.DesiredSize.Width);
+            Assert.Equal(472, panel.DesiredSize.Width);
             Assert.Equal(284, panel.DesiredSize.Height);
 
             // Page roots are stable across page changes (transform-only paging, no rebuild).

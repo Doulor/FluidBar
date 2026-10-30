@@ -69,11 +69,11 @@ public sealed class IslandHitTestTests
         var ox = shell.Left - 24;
         var oy = shell.Top - 24;
 
-        var clock = Hit(state, 60 + ox, 80 + oy);
+        var clock = Hit(state, content.Left + 4, content.Top + 40);
         Assert.Equal(IslandHitKind.Page, clock.Kind);
         Assert.Equal(0, clock.PageIndex);
 
-        var toggle = Hit(state, 60 + ox, 120 + oy);
+        var toggle = Hit(state, PageLayout.HomeToggle(IslandMetrics.PageRect(state, 0), 0).MidX, PageLayout.HomeToggle(IslandMetrics.PageRect(state, 0), 0).MidY);
         Assert.Equal(IslandHitKind.PageControl, toggle.Kind);
         Assert.Equal(IslandPageControl.QuickToggle, toggle.Control);
         Assert.Equal(0, toggle.Index);
@@ -83,27 +83,27 @@ public sealed class IslandHitTestTests
         Assert.Equal(IslandPageControl.QuickToggle, toggle3.Control);
         Assert.Equal(2, toggle3.Index);
 
-        var mediaPlay = Hit(state, 420 + ox, 180 + oy);
+        var mediaPlay = Hit(state, PageMetricsLayout.HomeMediaPlay(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidX, PageMetricsLayout.HomeMediaPlay(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidY);
         Assert.Equal(IslandHitKind.PageControl, mediaPlay.Kind);
         Assert.Equal(IslandPageControl.PlayPause, mediaPlay.Control);
 
-        var mediaCard = Hit(state, 100 + ox, 180 + oy);
+        var mediaCard = Hit(state, PageMetricsLayout.HomeMediaCard(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidX, PageMetricsLayout.HomeMediaCard(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidY);
         Assert.Equal(IslandPageControl.MediaCard, mediaCard.Control);
 
-        var volume = Hit(state, 100 + ox, 231 + oy);
+        var volume = Hit(state, PageMetricsLayout.HomeVolumeTrack(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidX, PageMetricsLayout.HomeVolumeTrack(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidY);
         Assert.Equal(IslandPageControl.VolumeSlider, volume.Control);
 
-        var brightness = Hit(state, 300 + ox, 231 + oy);
+        var brightness = Hit(state, PageMetricsLayout.HomeBrightnessTrack(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidX, PageMetricsLayout.HomeBrightnessTrack(IslandMetrics.PageRect(state, 0), FontScaleMetrics.One).MidY);
         Assert.Equal(IslandPageControl.BrightnessSlider, brightness.Control);
 
-        var collapse = Hit(state, 430 + ox, 44 + oy);
+        var collapse = Hit(state, PageLayout.CollapseRect(content).MidX, PageLayout.CollapseRect(content).MidY);
         Assert.Equal(IslandHitKind.Collapse, collapse.Kind);
 
-        var title = Hit(state, 100 + ox, 40 + oy);
+        var title = Hit(state, PageLayout.PageTitleRect(content).MidX, PageLayout.PageTitleRect(content).MidY);
         Assert.Equal(IslandHitKind.Title, title.Kind);
         Assert.False(title.IsInteractive);
 
-        var background = Hit(state, 250 + ox, 300 + oy);
+        var background = Hit(state, shell.MidX, shell.Top + 2);
         Assert.Equal(IslandHitKind.Shell, background.Kind);
 
         Assert.Equal(IslandHitKind.None, Hit(state, 10, 10).Kind);
@@ -192,81 +192,14 @@ public sealed class IslandHitTestTests
     }
 
     [Fact]
-    public void Transient_strip_hits_mini_islands_and_far_dots()
+    public void DetachedStrip_IsNotInteractive()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Expanded(2, strip: true);
         var layout = renderer.MeasureStrip(state);
-
-        Assert.Equal(2, layout.Page);
-        Assert.Single(layout.DotsLeft);
-        Assert.Equal(2, layout.DotsRight.Length);
-
-        var current = renderer.HitTest(state, layout.Current.MidX, layout.Current.MidY);
-        Assert.Equal(IslandHitKind.RailSlot, current.Kind);
-        Assert.Equal(2, current.PageIndex);
-
-        var previous = renderer.HitTest(state, layout.Previous.MidX, layout.Previous.MidY);
-        Assert.Equal(IslandHitKind.RailSlot, previous.Kind);
-        Assert.Equal(1, previous.PageIndex);
-
-        var next = renderer.HitTest(state, layout.Next.MidX, layout.Next.MidY);
-        Assert.Equal(IslandHitKind.RailSlot, next.Kind);
-        Assert.Equal(3, next.PageIndex);
-
-        var leftDot = renderer.HitTest(state, layout.DotsLeft[0].MidX, layout.DotsLeft[0].MidY);
-        Assert.Equal(IslandHitKind.DotLeft, leftDot.Kind);
-        Assert.Equal(0, leftDot.PageIndex);
-
-        // Each dot stands for its own page: from page 2 the nearest right dot is page 4, the next one 5.
-        var rightDot = renderer.HitTest(state, layout.DotsRight[0].MidX, layout.DotsRight[0].MidY);
-        Assert.Equal(IslandHitKind.DotRight, rightDot.Kind);
-        Assert.Equal(4, rightDot.PageIndex);
-
-        var farRight = renderer.HitTest(state, layout.DotsRight[1].MidX, layout.DotsRight[1].MidY);
-        Assert.Equal(IslandHitKind.DotRight, farRight.Kind);
-        Assert.Equal(5, farRight.PageIndex);
-
-        // The strip background/gaps are transparent.
-        var gap = renderer.HitTest(state, layout.Current.Right + 4, layout.Strip.MidY);
-        Assert.Equal(IslandHitKind.None, gap.Kind);
-    }
-
-    [Fact]
-    public void Transient_strip_keeps_its_geometry_during_the_reveal_fade()
-    {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        var baseState = IslandTestFixtures.Expanded(3, strip: true);
-        var layout = renderer.MeasureStrip(baseState);
-
-        // Prototype2 fades the rail in with an opacity transition only, so the pills never slide or
-        // scale: the measured rects stay hit-testable while the reveal is still in flight.
-        var fading = baseState with
-        {
-            Archipelago = baseState.Archipelago with { TranslateYDip = 6, Scale = 0.95, Opacity = 0.8 },
-        };
-        var hit = renderer.HitTest(fading, layout.Current.MidX, layout.Current.MidY);
-        Assert.Equal(IslandHitKind.RailSlot, hit.Kind);
-        Assert.Equal(3, hit.PageIndex);
-        Assert.Equal(IslandHitKind.None, renderer.HitTest(fading, layout.Current.MidX, layout.Current.Top - 2).Kind);
-    }
-
-    [Fact]
-    public void Dot_hit_targets_are_larger_than_the_three_pixel_dots()
-    {
-        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        var state = IslandTestFixtures.Expanded(3, strip: true);
-        var layout = renderer.MeasureStrip(state);
-        var dot = layout.DotsRight[0];
-
-        var hit = renderer.HitTest(state, dot.MidX, dot.MidY + 5);
-        Assert.Equal(IslandHitKind.DotRight, hit.Kind);
-        Assert.Equal(5, hit.PageIndex);
-
-        // The hit area is 7×22 DIP: 10 DIP above the centre still hits, 12 DIP does not (22 DIP keeps the
-        // 3 DIP dots reachable by hand).
-        Assert.Equal(IslandHitKind.DotRight, renderer.HitTest(state, dot.MidX, dot.MidY + 10).Kind);
-        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, dot.MidX, dot.MidY + 12).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, layout.Current.MidX, layout.Current.MidY).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, layout.Next.MidX, layout.Next.MidY).Kind);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, layout.DotsRight[0].MidX, layout.DotsRight[0].MidY).Kind);
     }
 
     [Fact]

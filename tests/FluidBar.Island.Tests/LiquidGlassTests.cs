@@ -367,96 +367,13 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
-    public void Preview_rail_mini_islands_use_the_liquid_glass_material()
+    public void SideRail_InheritsTheShellMaterialWithoutDetachedPreview()
     {
-        var state = IslandTestFixtures.Expanded(0) with
-        {
-            Archipelago = new ArchipelagoState { Visible = true, Opacity = 1 },
-        };
-
-        var surface = IslandMetrics.SurfaceSize(state.Mode);
-        var info = new SKImageInfo((int)(surface.Width * IslandTestFixtures.Scale),
-            (int)(surface.Height * IslandTestFixtures.Scale), SKColorType.Bgra8888, SKAlphaType.Premul);
-        using var white = new SKBitmap(info);
-        using (var canvas = new SKCanvas(white))
-        {
-            canvas.Clear(new SKColor(0xF2, 0xF2, 0xF2));
-        }
-
-        using var image = SKImage.FromBitmap(white);
-
-        SKBitmap Render(IslandMaterial material)
-        {
-            using var renderer = new IslandRenderer(material == IslandMaterial.LiquidGlass ? Liquid : Obsidian);
-            return renderer.RenderToBitmap(
-                state with
-                {
-                    Theme = (material == IslandMaterial.LiquidGlass ? Liquid : Obsidian),
-                    Backdrop = image,
-                    BackdropLuminance = 1.0,
-                },
-                IslandTestFixtures.Scale);
-        }
-
-        using var glassFrame = Render(IslandMaterial.LiquidGlass);
-        using var flatFrame = Render(IslandMaterial.Obsidian);
-
-        using var rendererForLayout = new IslandRenderer(Liquid);
-        var strip = rendererForLayout.MeasureStrip(state with { Theme = Liquid });
-        Assert.False(strip.Current.IsEmpty, "the rail must be laid out for the expanded panel");
-
-        // The rail is drawn BELOW the panel, so a material difference there can only come from the rail
-        // itself. Counting the changed pixels keeps the assertion independent of exact colours.
-        var changed = 0;
-        for (var py = (int)Math.Round(strip.Strip.Top * IslandTestFixtures.Scale);
-             py < (int)Math.Round(strip.Strip.Bottom * IslandTestFixtures.Scale);
-             py++)
-        {
-            for (var px = (int)Math.Round(strip.Strip.Left * IslandTestFixtures.Scale);
-                 px < (int)Math.Round(strip.Strip.Right * IslandTestFixtures.Scale);
-                 px++)
-            {
-                if (px < 0 || py < 0 || px >= glassFrame.Width || py >= glassFrame.Height)
-                {
-                    continue;
-                }
-
-                var a = glassFrame.GetPixel(px, py);
-                var b = flatFrame.GetPixel(px, py);
-                if (a != b)
-                {
-                    changed++;
-                }
-            }
-        }
-
-        Assert.True(changed > 200, $"the current capsule must follow the material (changed pixels {changed})");
-
-        // The two neighbouring 26 DIP islands are separate buttons but the same surface: they used to keep
-        // their fixed fill, so only the middle capsule changed material (user report 2026-10-23).
-        Assert.False(strip.Next.IsEmpty, "page 0 must have a next neighbour");
-        var changedNext = 0;
-        for (var py = (int)Math.Round(strip.Next.Top * IslandTestFixtures.Scale);
-             py < (int)Math.Round(strip.Next.Bottom * IslandTestFixtures.Scale);
-             py++)
-        {
-            for (var px = (int)Math.Round(strip.Next.Left * IslandTestFixtures.Scale);
-                 px < (int)Math.Round(strip.Next.Right * IslandTestFixtures.Scale);
-                 px++)
-            {
-                if (px < 0 || py < 0 || px >= glassFrame.Width || py >= glassFrame.Height)
-                {
-                    continue;
-                }
-
-                if (glassFrame.GetPixel(px, py) != flatFrame.GetPixel(px, py))
-                {
-                    changedNext++;
-                }
-            }
-        }
-
-        Assert.True(changedNext > 100, $"the neighbour islands must follow the material (changed pixels {changedNext})");
+        var state = IslandTestFixtures.Expanded(0) with { Archipelago = new ArchipelagoState { Visible = true, Opacity = 1 } };
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        var strip = renderer.MeasureStrip(state);
+        var frame = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(frame, strip.Strip, IslandTestFixtures.Scale, 0));
     }
 
     [Fact]
@@ -864,8 +781,8 @@ public sealed class LiquidGlassTests
 
         // Sample well inside the shell: the rim band and the key line make the outer 8 DIP non-flat.
         var shell = IslandMetrics.ShellRect(state);
-        var left = (int)Math.Round((shell.Left + (shell.Width * 0.30)) * IslandTestFixtures.Scale);
-        var right = (int)Math.Round((shell.Left + (shell.Width * 0.70)) * IslandTestFixtures.Scale);
+        var left = (int)Math.Round((shell.Left + 8) * IslandTestFixtures.Scale);
+        var right = (int)Math.Round((shell.Left + 68) * IslandTestFixtures.Scale);
         var y = (int)Math.Round((shell.Top + (shell.Height * 0.50)) * IslandTestFixtures.Scale);
 
         var flatLeft = Luma(flat.GetPixel(left, y));

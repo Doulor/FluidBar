@@ -69,7 +69,7 @@ public readonly record struct LayeredPixelSize(int Width, int Height)
 public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightDip)
 {
     /// <summary>Host surface width for both modes (DIP).</summary>
-    public const double Width = 488;
+    public const double Width = 520;
 
     /// <summary>Float surface width (1263 DIP): host envelope; notification card itself is capped at 810 DIP.</summary>
     public const double FloatWidth = 1263;
@@ -84,7 +84,7 @@ public readonly record struct LayeredSurfaceSize(double WidthDip, double HeightD
     public const double Padding = 24;
 
     /// <summary>Expanded panel width (DIP).</summary>
-    public const double PanelWidth = 440;
+    public const double PanelWidth = 472;
 
     /// <summary>Expanded panel height (DIP).</summary>
     public const double PanelHeight = 284;

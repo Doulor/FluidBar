@@ -25,8 +25,8 @@ public sealed class ShellAndCompactSurfaceTests
         await AvaloniaTest.Run(() =>
         {
             var shell = new IslandShell();
-            shell.Measure(new Size(488, 332));
-            shell.Arrange(new Rect(0, 0, 488, 332));
+            shell.Measure(new Size(520, 332));
+            shell.Arrange(new Rect(0, 0, 520, 332));
 
             // Compact idle frame: 132x36 centred inside the fixed host window.
             shell.ApplyFrame(new ShellFrame(
@@ -52,10 +52,10 @@ public sealed class ShellAndCompactSurfaceTests
             Assert.False(shell.ContainsPoint(new Point(310, 60)));
             Assert.False(shell.ContainsPoint(new Point(100, 40)));
 
-            // Expanded frame: uniform 440x284 at design origin.
+            // Expanded frame: uniform 472x284 at design origin.
             shell.ApplyFrame(shell.Frame with
             {
-                Width = 440,
+                Width = 472,
                 Height = 284,
                 Radii = CornerRadii.Uniform(28),
                 OriginX = 24,
@@ -192,7 +192,7 @@ public sealed class MotionDriverTests
         // expansion takes longer than the 2% envelope time; assert both the 2% envelope and the
         // amplitude-relative settle window.
         Assert.InRange(elapsed, predicted * 1.5, predicted * 4.0);
-        Assert.Equal(440, driver.Frame.Width, 1);
+        Assert.Equal(472, driver.Frame.Width, 1);
         Assert.Equal(284, driver.Frame.Height, 1);
         Assert.Equal(1, driver.Frame.ExpandedOpacity, 2);
         Assert.Equal(0, driver.Frame.CompactOpacity, 2);
@@ -211,7 +211,7 @@ public sealed class MotionDriverTests
         driver.SnapToTarget();
         driver.SetTarget(ExpandedTarget());
         driver.Step(TimeSpan.FromSeconds(1.0 / 60.0));
-        var widthProgress = (driver.Frame.Width - 132) / (440 - 132);
+        var widthProgress = (driver.Frame.Width - 132) / (472 - 132);
         var heightProgress = (driver.Frame.Height - 36) / (284 - 36);
         Assert.True(widthProgress > heightProgress, $"width {widthProgress:0.00} should lead height {heightProgress:0.00}");
     }
@@ -225,7 +225,7 @@ public sealed class MotionDriverTests
         driver.SnapToTarget();
         driver.SetTarget(ExpandedTarget());
         driver.SnapToTarget();
-        Assert.Equal(440, driver.Frame.Width, 1);
+        Assert.Equal(472, driver.Frame.Width, 1);
 
         driver.SetTarget(CompactTarget());
         for (var i = 0; i < 600 && clock.IsRunning; i++)
@@ -279,7 +279,7 @@ public sealed class MotionDriverTests
         for (var i = 0; i < 600 && clock.IsRunning; i++)
         {
             driver.Step(TimeSpan.FromSeconds(1.0 / 120.0));
-            maxOvershoot = Math.Max(maxOvershoot, driver.Width - 440);
+            maxOvershoot = Math.Max(maxOvershoot, driver.Width - 472);
         }
 
         Assert.True(maxOvershoot <= 1.0, $"critically damped springs should not overshoot, saw {maxOvershoot:0.00}");

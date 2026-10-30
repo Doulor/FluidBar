@@ -318,6 +318,12 @@ public sealed class IslandRenderer : IDisposable
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
+            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y);
+            if (tab >= 0)
+            {
+                return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+            }
+
             if (ContainsShell(state, shell, x, y))
             {
                 var page = PageUnder(state, content, x);
@@ -364,8 +370,7 @@ public sealed class IslandRenderer : IDisposable
             return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex);
         }
 
-        var stripHit = _strip.HitTest(state, shell, x, y);
-        return stripHit.IsInteractive ? stripHit : default;
+        return default;
     }
 
     // ------------------------------------------------------------------ rendering
@@ -622,7 +627,7 @@ public sealed class IslandRenderer : IDisposable
         }
 
         DrawSecondaryCompact(canvas, state, opacity, dpiScale);
-        _strip.Draw(canvas, state, shell);
+        // The detached preview rail has been replaced by the in-card side rail.
         DrawFocusRing(canvas, state);
     }
 

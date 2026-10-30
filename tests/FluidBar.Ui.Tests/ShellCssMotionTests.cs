@@ -18,11 +18,11 @@ public sealed class ShellCssMotionTests
     public void Expand_matches_the_prototype2_frame_samples()
     {
         var run = new MotionRun(ExpandedMotion());
-        Assert.Equal(419.141, run.WidthAt(191.2), 0.75);
+        Assert.Equal(448.984, run.WidthAt(191.2), 0.75);
         Assert.Equal(267.172, run.HeightAt(191.1), 0.75);
 
         run = new MotionRun(ExpandedMotion());
-        Assert.Equal(440, run.WidthAt(396.9), 0.001);
+        Assert.Equal(472, run.WidthAt(396.9), 0.001);
         Assert.Equal(284, run.HeightAt(396.9), 0.001);
     }
 
@@ -42,7 +42,7 @@ public sealed class ShellCssMotionTests
             samples.Add(width);
         }
 
-        Assert.Equal(440, samples[^1], 0.5);
+        Assert.Equal(472, samples[^1], 0.5);
         Assert.True(samples.Distinct().Count() > 40, "the shell should change every frame, not snap");
     }
 
@@ -120,7 +120,7 @@ public sealed class ShellCssMotionTests
         motion.SetTarget(CompactTarget());
         motion.SetTarget(ExpandedTarget());
 
-        Assert.Equal(440, motion.Width, 0.001);
+        Assert.Equal(472, motion.Width, 0.001);
         Assert.Equal(284, motion.Height, 0.001);
         Assert.Equal(1, motion.ExpandedContentOpacity, 3);
         Assert.Equal(0, motion.CompactContentOpacity, 3);
@@ -194,7 +194,7 @@ public sealed class ShellCssMotionTests
         };
         var startWidth = motion.Width;
         var startHeight = motion.Height;
-        var endWidth = 440.0;
+        var endWidth = 472.0;
         var endHeight = 284.0;
         var contentStart = -1.0;
         var chromeStart = -1.0;

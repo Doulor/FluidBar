@@ -224,8 +224,10 @@ public sealed class SkiaPager
 
             // The notch policy already decided the step: step from the queued page, not from the
             // (possibly stale) committed page.
-            SelectPage(basePage + notch.PageDelta);
-            return new SkiaWheelOutcome(true, true, SelectedIndex, false, false);
+            var target = basePage + notch.PageDelta;
+            SelectPage(target);
+            // Paged means the committed index really changed, not merely that a wheel notch was seen.
+            return new SkiaWheelOutcome(true, SelectedIndex != basePage, SelectedIndex, false, false);
         }
 
         var decision = _chain.Handle(new PagerScrollChainRequest

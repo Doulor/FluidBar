@@ -13,57 +13,15 @@ public sealed class SatelliteHoverFadeTests
     private const float RenderScale = 4f;
 
     [Fact]
-    public void Hover_eases_in_and_out_monotonically_without_a_one_frame_flip()
+    public void RemovedPreviewRail_DoesNotDriveHoverAnimation()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
-        var hovered = IslandTestFixtures.RailInteractionState(1, hover: MiniRailSlot.Previous);
-        var plain = IslandTestFixtures.RailInteractionState(1, hover: MiniRailSlot.None);
-        var shell = IslandMetrics.ShellRect(hovered);
-        var frame = MiniRailLayout.Measure(hovered, shell, new SKRect[3], new SKRect[3]);
-        var band = new SKRect(
-            frame.Previous.Left - 6, frame.Previous.Top - 6, frame.Previous.Right + 6, frame.Previous.Bottom + 6);
-
-        // Every RenderToBitmap draws one frame, and the strip advances its hover fade by the frame delta
-        // (1/120 s), so rendering eight times samples eight real frames.
-        // 1/120 s per rendered frame: 16 frames cover the 120 ms enter, 20 the 160 ms leave.
-        var enter = Sample(renderer, hovered, band, frames: 16);
-        var leave = Sample(renderer, plain, band, frames: 20);
-
-        // Enter: monotonic, no single frame may jump more than 60 % of the range (a one-frame flip).
-        for (var i = 1; i < enter.Count; i++)
-        {
-            Assert.True(enter[i].Progress >= enter[i - 1].Progress,
-                $"hover enter must never fall (frame {i}: {enter[i - 1].Progress:0.###} -> {enter[i].Progress:0.###})");
-            Assert.True(enter[i].Progress > enter[i - 1].Progress || enter[i].Progress >= 0.999f,
-                $"hover enter must keep rising until it settles (frame {i})");
-            Assert.True(enter[i].Progress - enter[i - 1].Progress < 0.6,
-                $"hover enter must not flip in one frame (frame {i} jumped {enter[i].Progress - enter[i - 1].Progress:0.###})");
-        }
-
-        Assert.True(enter[^1].Progress > 0.99, $"hover enter must settle at 1 (got {enter[^1].Progress:0.###})");
-        Assert.InRange(leave[0].Progress, 0.70, 0.99); // one 1/120 s frame into the 160 ms leave (ease-out)
-        for (var i = 1; i < leave.Count; i++)
-        {
-            Assert.True(leave[i].Progress <= leave[i - 1].Progress,
-                $"hover leave must never rise (frame {i}: {leave[i - 1].Progress:0.###} -> {leave[i].Progress:0.###})");
-            Assert.True(leave[i].Progress < leave[i - 1].Progress || leave[i].Progress <= 0.001f,
-                $"hover leave must keep falling until it settles (frame {i})");
-            Assert.True(leave[i - 1].Progress - leave[i].Progress < 0.6,
-                $"hover leave must not flip in one frame (frame {i})");
-        }
-
-        Assert.True(leave[^1].Progress < 0.01, $"hover leave must settle at 0 (got {leave[^1].Progress:0.###})");
-
-        // One progress drives both channels: alpha is the progress itself and the glass grows 6 %.
-        foreach (var sample in enter.Concat(leave))
-        {
-            Assert.Equal(1f + (0.06f * sample.Progress), sample.Scale, 4);
-        }
-
-        WriteSheet(Thin(enter), Thin(leave));
+        var state = IslandTestFixtures.RailInteractionState(1, hover: MiniRailSlot.Previous);
+        using var frame = renderer.RenderToBitmap(state, RenderScale);
+        var strip = renderer.MeasureStrip(state);
+        Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(frame, strip.Strip, RenderScale, 0));
     }
 
-    /// <summary>Eight evenly spaced samples for the contact sheet (the asserts use every frame).</summary>
     private static List<(float Progress, float Scale, SKBitmap Image)> Thin(
         List<(float Progress, float Scale, SKBitmap Image)> all)
     {

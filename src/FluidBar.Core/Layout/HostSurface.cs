@@ -193,7 +193,7 @@ public sealed record HostSurface
             Shell: adjustedShell,
             WindowVisual: windowVisual,
             ShellLocalOffset: new VisualPoint(localX, localY),
-            ArchipelagoStrip: archipelago,
+            ArchipelagoStrip: VisualRect.Empty,
             DockStrip: dockStrip,
             BottomBand: bottomBand,
             IsClamped: clamped || adjustedShell != shell);

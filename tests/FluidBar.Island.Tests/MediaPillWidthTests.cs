@@ -16,7 +16,7 @@ public sealed class MediaPillWidthTests
     public void The_media_ceiling_is_the_expanded_width_plus_one_half()
     {
         Assert.Equal(LayoutTokens.ExpandedWidth * 1.5, LayoutTokens.MediaMaxWidth);
-        Assert.Equal(660, LayoutTokens.MediaMaxWidth);
+        Assert.Equal(708, LayoutTokens.MediaMaxWidth);
         Assert.True(LayoutTokens.MediaMaxWidth < LayoutTokens.NotificationMaxWidth,
             "the notification card keeps its own wider ceiling");
     }
@@ -24,13 +24,13 @@ public sealed class MediaPillWidthTests
     [Fact]
     public void A_long_lyric_line_gets_the_whole_new_budget()
     {
-        Assert.Equal(660f, CompactMediaLayout.AdaptiveWidth(
+        Assert.Equal(708f, CompactMediaLayout.AdaptiveWidth(
             textWidth: 5000f,
             minWidth: CompactMediaLayout.MinContentWidth,
             maxWidth: (float)LayoutTokens.MediaMaxWidth));
 
         // The previous ceiling, for comparison: the same line stopped 220 DIP earlier.
-        Assert.Equal(440f, CompactMediaLayout.AdaptiveWidth(
+        Assert.Equal(472f, CompactMediaLayout.AdaptiveWidth(
             textWidth: 5000f,
             minWidth: CompactMediaLayout.MinContentWidth,
             maxWidth: (float)LayoutTokens.ExpandedWidth));

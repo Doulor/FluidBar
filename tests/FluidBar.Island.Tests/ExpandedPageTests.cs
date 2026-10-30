@@ -207,6 +207,13 @@ public sealed class ExpandedPageTests
         var hovered = baseState with
         {
             Pages = pages with { Notifications = pages.Notifications with { HoverIndex = 3 } },
+            Pager = PagerRenderState.At(2, baseState.Pages.PageCount),
+            HoverControl = IslandPageControl.Row,
+            HoverPage = 2,
+            HoverIndex = 0,
+            HasPointer = true,
+            PointerX = 100,
+            PointerY = 100,
         };
 
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);

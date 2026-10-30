@@ -350,9 +350,9 @@ public static class IslandLayout
         var radii = LayoutTokens.RadiiFor(request.Form, request.Mode, shell.Height, kind: request.CompactKind);
         var (content, rail) = MeasureContent(request.Form, shell);
         var geometry = ShellGeometry.ForShell(shell, radii);
-        var archipelago = request.Form == ShellForm.Expanded
-            ? ArchipelagoLayout.Calculate(request.PagePosition, placement, request.ArchipelagoVisible)
-            : null;
+        // Detached preview islands were replaced by the in-card SideRailLayout. Keep the legacy
+        // result null so old hit-test/placement consumers cannot retain invisible page buttons.
+        ArchipelagoLayoutResult? archipelago = null;
 
         return new IslandLayoutResult
         {
@@ -471,7 +471,7 @@ public static class IslandLayout
         // No-rail expanded panel (user feedback 2026-10-18): content is 400x252, inset (20,16).
         var contentX = shell.X + LayoutTokens.ContentHorizontalInset;
         var contentY = shell.Y + LayoutTokens.ContentVerticalInset;
-        var contentWidth = Math.Max(0, shell.Width - (2 * LayoutTokens.ContentHorizontalInset));
+        var contentWidth = Math.Max(0, shell.Width - LayoutTokens.ContentHorizontalInset - LayoutTokens.ContentRightInset);
         var contentHeight = Math.Max(0, shell.Height - (2 * LayoutTokens.ContentVerticalInset));
         return (new VisualRect(contentX, contentY, contentWidth, contentHeight), VisualRect.Empty);
     }

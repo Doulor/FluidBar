@@ -13,7 +13,7 @@ public readonly record struct VisualSize(double Width, double Height);
 public static class LayoutTokens
 {
     /// <summary>Expanded shell width (content 400 DIP + 2 × 20 DIP horizontal inset).</summary>
-    public const double ExpandedWidth = 440;
+    public const double ExpandedWidth = 472;
 
     /// <summary>Uniform expanded shell height for all pages.</summary>
     public const double ExpandedHeight = 284;
@@ -26,11 +26,14 @@ public static class LayoutTokens
     [Obsolete("The left rail was rejected (2026-10-18). Navigation is the horizontal pager (PagePagerPolicy); this token is kept for API compatibility only.")]
     public const double RailWidth = 48;
 
-    /// <summary>Expanded content width in DIP (440 − 2 × 20 = 400).</summary>
-    public const double ContentWidth = ExpandedWidth - (2 * ContentHorizontalInset);
+    /// <summary>Expanded content width in DIP (472 − 60 left rail inset − 12 right inset = 400).</summary>
+    public const double ContentWidth = ExpandedWidth - ContentHorizontalInset - ContentRightInset;
 
-    /// <summary>Horizontal inset of the expanded content from the shell edge (20 DIP).</summary>
-    public const double ContentHorizontalInset = 20;
+    /// <summary>Left inset of expanded content (60 DIP: 10 + 40 rail + 10 gap).</summary>
+    public const double ContentHorizontalInset = 60;
+
+    /// <summary>Right inset of expanded content (12 DIP).</summary>
+    public const double ContentRightInset = 12;
 
     /// <summary>Vertical inset of the expanded content from the shell edge (16 DIP).</summary>
     public const double ContentVerticalInset = 16;

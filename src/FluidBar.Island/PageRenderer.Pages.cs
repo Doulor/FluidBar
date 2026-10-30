@@ -47,7 +47,7 @@ internal sealed partial class PageRenderer
 
     private void DrawPluginRow(SKCanvas canvas, PluginPageRowModel item, SKRect row, int index)
     {
-        DrawListRowBackground(canvas, row, index == _hoverPage, false);
+        DrawListRowBackground(canvas, row, IsHovered(IslandPageControl.PluginRow, index) || IsHovered(IslandPageControl.PluginRowButton, index), false);
         var hasTrailing = !string.IsNullOrWhiteSpace(item.TrailingLabel);
         var trailingWidth = hasTrailing ? 76f : 0f;
         var glyph = new SKRect(row.Left + 10, row.Top + 10, row.Left + 30, row.Top + 30);
@@ -138,7 +138,7 @@ internal sealed partial class PageRenderer
         int index,
         NotificationsPageModel model)
     {
-        var hovered = index == model.HoverIndex;
+        var hovered = IsHovered(IslandPageControl.Row, index);
         DrawListRowBackground(canvas, row, hovered, index == model.SelectedIndex);
 
         var accent = _accents.Get(item.AccentHex, _theme.Info);
@@ -216,14 +216,15 @@ internal sealed partial class PageRenderer
         // Bottom row: action chips on the left, timestamp on the right (user request: "右下时间").
         var dismiss = PageMetricsLayout.NotificationDismiss(row);
         var dismissLabel = model.DismissLabel ?? "Close";
-        _fill.Color = Alpha(_theme.Foreground, (hovered ? 0.10f : 0.06f) * _opacity);
+        var dismissHovered = IsHovered(IslandPageControl.Dismiss, index);
+        _fill.Color = Alpha(_theme.Foreground, (dismissHovered ? 0.15f : hovered ? 0.10f : 0.06f) * _opacity);
         canvas.DrawRoundRect(dismiss, 6, 6, _fill);
         _text.Draw(
             canvas,
             dismissLabel,
             IslandType.Chip,
             dismiss,
-            hovered ? _theme.Foreground : _theme.ForegroundSecondary,
+            dismissHovered ? _theme.Foreground : _theme.ForegroundSecondary,
             TextAlign.Center,
             _opacity);
 
@@ -491,12 +492,23 @@ internal sealed partial class PageRenderer
         var delete = new SKRect(row.Right - 82, row.Top + 13, row.Right - 60, row.Top + 35);
         var pin = new SKRect(row.Right - 58, row.Top + 13, row.Right - 36, row.Top + 35);
         var copy = new SKRect(row.Right - 34, row.Top + 13, row.Right - 12, row.Top + 35);
-        if (hovered)
+        if (hovered || IsHovered(IslandPageControl.ClipboardDelete, index)
+            || IsHovered(IslandPageControl.Pin, index) || IsHovered(IslandPageControl.Copy, index))
         {
             _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
-            canvas.DrawRoundRect(delete, 6, 6, _fill);
-            canvas.DrawRoundRect(pin, 6, 6, _fill);
-            canvas.DrawRoundRect(copy, 6, 6, _fill);
+            if (hovered && !IsHovered(IslandPageControl.Pin, index) && !IsHovered(IslandPageControl.Copy, index)
+                && !IsHovered(IslandPageControl.ClipboardDelete, index))
+            {
+                canvas.DrawRoundRect(delete, 6, 6, _fill);
+                canvas.DrawRoundRect(pin, 6, 6, _fill);
+                canvas.DrawRoundRect(copy, 6, 6, _fill);
+            }
+            else
+            {
+                if (IsHovered(IslandPageControl.ClipboardDelete, index)) canvas.DrawRoundRect(delete, 6, 6, _fill);
+                if (IsHovered(IslandPageControl.Pin, index)) canvas.DrawRoundRect(pin, 6, 6, _fill);
+                if (IsHovered(IslandPageControl.Copy, index)) canvas.DrawRoundRect(copy, 6, 6, _fill);
+            }
         }
 
         IconSet.Draw(
@@ -762,6 +774,18 @@ internal sealed partial class PageRenderer
             TextAlign.Left,
             _opacity);
 
+        if (IsHovered(IslandPageControl.CalendarPrevious) || IsPressed(IslandPageControl.CalendarPrevious))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
+            canvas.DrawRoundRect(PageLayout.WidgetsCalendarNav(page, previous: true), 5, 5, _fill);
+        }
+        if (IsHovered(IslandPageControl.CalendarNext) || IsPressed(IslandPageControl.CalendarNext))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
+            canvas.DrawRoundRect(PageLayout.WidgetsCalendarNav(page, previous: false), 5, 5, _fill);
+        }
         IconSet.Draw(
             canvas,
             IconKind.ChevronLeft,
@@ -1020,12 +1044,13 @@ internal sealed partial class PageRenderer
         {
             var task = tasks![i];
             var row = PageMetricsLayout.WidgetsTaskRow(page, i, _metrics);
-            if (i == model.SelectedIndex || i == model.HoverIndex)
+            var taskHovered = IsHovered(IslandPageControl.TaskToggle, i);
+            if (i == model.SelectedIndex || taskHovered)
             {
                 _fill.Style = SKPaintStyle.Fill;
                 _fill.Color = Alpha(
                     i == model.SelectedIndex ? _theme.Accent : SKColors.White,
-                    (i == model.SelectedIndex ? 0.10f : 0.04f) * _opacity);
+                    (i == model.SelectedIndex ? 0.10f : 0.075f) * _opacity);
                 canvas.DrawRoundRect(row, 4, 4, _fill);
             }
 

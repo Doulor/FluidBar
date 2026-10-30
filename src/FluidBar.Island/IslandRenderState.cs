@@ -137,6 +137,9 @@ public readonly record struct IslandRenderState
     /// <summary>Page that owns <see cref="HoverControl"/>.</summary>
     public int HoverPage { get; init; } = -1;
 
+    /// <summary>Row/toggle/tab index under the pointer (-1 when the control has no index).</summary>
+    public int HoverIndex { get; init; } = -1;
+
     /// <summary>Control currently held down (drives the per-button press feedback).</summary>
     public IslandPageControl PressedControl { get; init; }
 

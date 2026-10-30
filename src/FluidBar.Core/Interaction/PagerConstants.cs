@@ -97,7 +97,7 @@ public static class PagerConstants
     public const double ContentWidthDip = 400;
 
     /// <summary>Default horizontal content inset for the no-rail panel.</summary>
-    public const double ContentHorizontalInsetDip = 20;
+    public const double ContentHorizontalInsetDip = 60;
 
     /// <summary>Default vertical content inset for the no-rail panel.</summary>
     public const double ContentVerticalInsetDip = 16;

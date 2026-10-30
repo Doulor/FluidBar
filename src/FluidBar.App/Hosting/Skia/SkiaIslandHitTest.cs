@@ -107,6 +107,12 @@ public static class SkiaIslandHitTest
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
+            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y);
+            if (tab >= 0)
+            {
+                return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+            }
+
             if (ContainsShell(state, shell, x, y))
             {
                 var page = PageUnder(state, content, x);
@@ -134,7 +140,7 @@ public static class SkiaIslandHitTest
             return new IslandHitTarget(IslandHitKind.Compact, state.PageIndex);
         }
 
-        return HitStrip(state, shell, x, y);
+        return default;
     }
 
     /// <summary>Computes the strip geometry for a state (empty when the strip is hidden).</summary>

@@ -10,7 +10,7 @@ public sealed class IslandRenderTests
     [Theory]
     [InlineData(IslandMode.Float, 1263, 384)]
     [InlineData(IslandMode.Flush, 1263, 384)]
-    [InlineData(IslandMode.Dock, 488, 444)]
+    [InlineData(IslandMode.Dock, 520, 444)]
     public void Measure_returns_the_fixed_host_surface(IslandMode mode, double width, double height)
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
@@ -88,17 +88,17 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
-    public void Compact_dock_uses_the_440x52_dock_strip()
+    public void Compact_dock_uses_the_472x52_dock_strip()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var state = IslandTestFixtures.Compact(
             new CompactActivity(ActivityKind.Media, new CompactModel { Title = "Midnight City", Subtitle = "M83", IsActive = true }),
             IslandMode.Dock);
 
-        Assert.Equal(440, state.ShellWidth);
+        Assert.Equal(472, state.ShellWidth);
         Assert.Equal(52, state.ShellHeight);
         using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
-        Assert.Equal(732, bitmap.Width);
+        Assert.Equal(780, bitmap.Width);
         Assert.Equal(666, bitmap.Height);
         Assert.Equal(0, IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state), IslandTestFixtures.Scale));
     }
@@ -152,28 +152,16 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
-    public void Transient_strip_renders_below_the_panel_and_only_when_visible()
+    public void Detached_preview_strip_does_not_render()
     {
         using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
         var hidden = IslandTestFixtures.Expanded(2);
         var shown = IslandTestFixtures.Expanded(2, strip: true);
-
-        var strip = renderer.MeasureStrip(shown);
-        var shell = IslandMetrics.ShellRect(shown);
-        Assert.Equal(shell.Bottom + 8f, strip.Strip.Top, 0.001f);
-
         using var hiddenBitmap = renderer.RenderToBitmap(hidden, IslandTestFixtures.Scale);
         using var shownBitmap = renderer.RenderToBitmap(shown, IslandTestFixtures.Scale);
-
-        var band = new SKRect(strip.Strip.Left, strip.Strip.Top, strip.Strip.Right, strip.Strip.Bottom);
-        Assert.Equal(0, IslandTestFixtures.CountOpaqueInside(hiddenBitmap, band, IslandTestFixtures.Scale, 200));
-        Assert.True(IslandTestFixtures.CountOpaqueInside(shownBitmap, band, IslandTestFixtures.Scale, 200) > 200,
-            "the revealed strip should paint mini-islands and dots");
-
-        // The strip itself has no persistent background: gaps between pills stay transparent.
-        var gapX = strip.Current.Right + 2;
-        var gap = shownBitmap.GetPixel((int)(gapX * IslandTestFixtures.Scale), (int)(strip.Strip.MidY * IslandTestFixtures.Scale));
-        Assert.True(gap.Alpha < 128, $"the strip gap should be transparent, got alpha {gap.Alpha}");
+        Assert.Equal(
+            IslandTestFixtures.CountOpaqueInside(hiddenBitmap, new SKRect(0, 310, 1263, 384), IslandTestFixtures.Scale, 0),
+            IslandTestFixtures.CountOpaqueInside(shownBitmap, new SKRect(0, 310, 1263, 384), IslandTestFixtures.Scale, 0));
     }
 
     [Fact]

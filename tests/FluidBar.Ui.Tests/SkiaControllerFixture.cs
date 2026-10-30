@@ -12,7 +12,7 @@ namespace FluidBar.Ui.Tests;
 /// Headless controller fixture shared by the Skia mapping and page-control tests. No Avalonia, no
 /// HWND and no UI thread: the controller is driven by a fake clock and a fake content source.
 /// </summary>
-internal sealed class ControllerFixture : IDisposable
+public sealed class ControllerFixture : IDisposable
 {
     private ControllerFixture(
         SkiaIslandController controller,

@@ -181,7 +181,7 @@ public class LayoutTests
             Assert.True(result.Shell.Right <= work.Width + Eps, context);
             Assert.True(result.Shell.Bottom <= work.Height + Eps, context);
 
-            var expectedWidth = form == ShellForm.Expanded ? 440 : mode == IslandMode.Dock ? 440 : 360;
+            var expectedWidth = form == ShellForm.Expanded ? 472 : mode == IslandMode.Dock ? 472 : 360;
             var expectedHeight = form == ShellForm.Expanded ? 284 : mode == IslandMode.Dock ? 52 : 64;
             Assert.Equal(expectedWidth, result.Shell.Width, Eps);
             Assert.Equal(expectedHeight, result.Shell.Height, Eps);
@@ -204,7 +204,7 @@ public class LayoutTests
 
             // Host surface is per-mode fixed; the shell remains 440x284.
             Assert.Equal(host, result.HostSurface);
-            Assert.Equal(mode == IslandMode.Dock ? 488 : 1263, host.Width, Eps);
+            Assert.Equal(mode == IslandMode.Dock ? 520 : 1263, host.Width, Eps);
             Assert.Equal(expectedHostHeight, host.Height, Eps);
             Assert.Equal(expectedHostHeight, result.Placement.WindowSizeDip.Height, Eps);
             Assert.Equal(host.Width, result.Placement.WindowSizeDip.Width, Eps);
@@ -301,38 +301,13 @@ public class LayoutTests
                         break;
                 }
 
-                // Detached archipelago geometry (expanded only).
-                var archipelago = result.Archipelago;
-                Assert.NotNull(archipelago);
-                Assert.Equal(result.Placement.ArchipelagoStrip, archipelago.Strip);
-                Assert.Equal(352, archipelago.Strip.Width, Eps);
-                Assert.Equal(32, archipelago.Strip.Height, Eps);
-                Assert.Equal(result.Shell.X + 44, archipelago.Strip.X, Eps);
-                Assert.Equal(ExpectedStripTop(mode, result.Shell), archipelago.Strip.Y, Eps);
-                Assert.True(archipelago.Strip.Bottom <= work.Height + Eps, context + " strip inside work area");
-                Assert.Equal(36, result.Placement.WindowVisual.Bottom - archipelago.Strip.Bottom, Eps);
-                Assert.Equal(6, archipelago.Slots.Length);
-                Assert.Equal(0, archipelago.ActivePage);
-                Assert.Equal(72, archipelago.Slots[0].Width, Eps);
-                Assert.Equal(30, archipelago.Slots[0].Height, Eps);
-                Assert.Equal(48, archipelago.Slots[5].Width, Eps);
-                Assert.Equal(26, archipelago.Slots[5].Height, Eps);
-                Assert.Equal(archipelago.Strip.X, archipelago.Slots[0].Rect.X, Eps);
-                Assert.Equal(archipelago.Strip.Right, archipelago.Slots[5].Rect.Right, Eps);
-                Assert.Equal(result.Shell.Bottom, archipelago.HotZone.Bottom, Eps);
-                Assert.Equal(12, archipelago.HotZone.Height, Eps);
-
-                // Hit-test contract: shell + mini-island pills only; the strip background is
-                // transparent and the host must return HTTRANSPARENT there.
+                // Detached preview islands are removed. Legacy layout returns no invisible hit targets.
+                Assert.Null(result.Archipelago);
+                Assert.True(result.Placement.ArchipelagoStrip.IsEmpty);
                 Assert.Equal(LayoutHitKind.Shell, result.HitTest(result.Shell.CenterX, result.Shell.CenterY).Kind);
-                var lastSlot = archipelago.Slots[5];
-                var slotHit = result.HitTest(lastSlot.Rect.CenterX, lastSlot.Rect.CenterY);
-                Assert.Equal(LayoutHitKind.ArchipelagoSlot, slotHit.Kind);
-                Assert.Equal(5, slotHit.SlotIndex);
-                Assert.Equal(LayoutHitKind.None, result.HitTest(archipelago.Strip.CenterX, archipelago.Strip.Y - 2).Kind);
-                Assert.Equal(LayoutHitKind.None, result.HitTest(archipelago.Strip.Right + 2, archipelago.Strip.CenterY).Kind);
+                Assert.Equal(LayoutHitKind.None, result.HitTest(result.Shell.CenterX, result.Placement.BottomBand.CenterY).Kind);
             }
-            else
+else
             {
                 Assert.Null(result.Archipelago);
                 Assert.Equal(LayoutHitKind.None, result.HitTest(result.Shell.CenterX, result.Placement.BottomBand.CenterY).Kind);
@@ -353,112 +328,15 @@ public class LayoutTests
         }
     }
 
-    [Theory]
-    [MemberData(nameof(ArchipelagoMatrix))]
-    public void Archipelago_Matrix_StaysInsideWorkAreaAndFillsTheStrip(IslandMode mode, IslandAnchor anchor, uint dpi)
-    {
-        var monitor = Monitor(dpi);
-        var work = monitor.WorkAreaDip;
-        var result = IslandLayout.Calculate(
-            Request(ShellForm.Expanded, mode, anchor, pagePosition: 2.5),
-            monitor);
-        var context = $"{mode}/{anchor}@{dpi}";
-        var archipelago = result.Archipelago;
-
-        Assert.NotNull(archipelago);
-        Assert.Equal(2.5, archipelago.PagePosition, Eps);
-        Assert.Equal(3, archipelago.ActivePage);
-        Assert.Equal(6, archipelago.Slots.Length);
-        Assert.Equal(352, archipelago.Strip.Width, Eps);
-        Assert.True(archipelago.Strip.X >= work.X - Eps, context + " strip left");
-        Assert.True(archipelago.Strip.Right <= work.Right + Eps, context + " strip right");
-        Assert.True(archipelago.Strip.Y >= work.Y - Eps, context + " strip top");
-        Assert.True(archipelago.Strip.Bottom <= work.Bottom + Eps, context + " strip bottom");
-
-        // Exactly one active 72x30 pill; all other slots are 48x26 and stay inside the strip.
-        Assert.Single(archipelago.Slots.Where(slot => slot.IsActive));
-        Assert.Equal(72, archipelago.Slots[3].Width, Eps);
-        Assert.Equal(30, archipelago.Slots[3].Height, Eps);
-        foreach (var slot in archipelago.Slots.Where(slot => !slot.IsActive))
-        {
-            Assert.Equal(48, slot.Width, Eps);
-            Assert.Equal(26, slot.Height, Eps);
-        }
-
-        Assert.Equal(archipelago.Strip.X, archipelago.Slots[0].Rect.X, Eps);
-        Assert.Equal(archipelago.Strip.Right, archipelago.Slots[5].Rect.Right, Eps);
-        Assert.Equal(archipelago.Strip.X + (2.5 * 56), archipelago.ActiveIndicator.X, Eps);
-        Assert.Equal(-28, archipelago.FollowOffset, Eps);
-
-        var activeHit = result.HitTest(archipelago.Slots[3].Rect.CenterX, archipelago.Slots[3].Rect.CenterY);
-        Assert.Equal(LayoutHitKind.ArchipelagoSlot, activeHit.Kind);
-        Assert.Equal(3, activeHit.SlotIndex);
-        Assert.Equal(LayoutHitKind.None, result.HitTest(archipelago.Strip.X - 1, archipelago.Strip.CenterY).Kind);
-    }
-
     [Fact]
-    public void Archipelago_SlotGeometryFollowsPagerPosition()
+    public void Expanded_DetachedPreviewRailIsNotCreated()
     {
-        var monitor = Monitor(96);
-        var host = HostSurface.Float;
-        var atZero = ArchipelagoLayout.Calculate(0, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(0, atZero.ActivePage);
-        Assert.Equal(atZero.Strip.X, atZero.ActiveIndicator.X, Eps);
-        Assert.Equal(0, atZero.FollowOffset, Eps);
-
-        var atTwo = ArchipelagoLayout.Calculate(2, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(2, atTwo.ActivePage);
-        Assert.Equal(atTwo.Strip.X + 112, atTwo.ActiveIndicator.X, Eps);
-        Assert.Equal(0, atTwo.FollowOffset, Eps);
-
-        var mid = ArchipelagoLayout.Calculate(2.5, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(3, mid.ActivePage);
-        Assert.Equal(mid.Strip.X + 140, mid.ActiveIndicator.X, Eps);
-        Assert.Equal(-28, mid.FollowOffset, Eps);
-        Assert.Equal(72, mid.Slots[3].Width, Eps);
-        Assert.Equal(48, mid.Slots[2].Width, Eps);
-
-        var atFive = ArchipelagoLayout.Calculate(5, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(5, atFive.ActivePage);
-        Assert.Equal(atFive.Strip.Right - 72, atFive.ActiveIndicator.X, Eps);
-        Assert.Equal(atFive.Strip.Right, atFive.Slots[5].Rect.Right, Eps);
-
-        var clamped = ArchipelagoLayout.Calculate(99, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(5, clamped.ActivePage);
-        var nan = ArchipelagoLayout.Calculate(double.NaN, host, monitor, IslandAnchor.TopCenter);
-        Assert.Equal(0, nan.ActivePage);
-        Assert.Equal(0, nan.PagePosition, Eps);
-    }
-
-    [Fact]
-    public void Archipelago_HitTestExcludesTransparentStripBackground()
-    {
-        var monitor = Monitor(96);
         var result = IslandLayout.Calculate(
-            Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter, pagePosition: 4),
-            monitor);
-        var archipelago = result.Archipelago!;
-
-        // Every pill is interactive.
-        for (var page = 0; page < 6; page++)
-        {
-            var rect = archipelago.Slots[page].Rect;
-            Assert.Equal(page, archipelago.HitTest(rect.CenterX, rect.CenterY));
-        }
-
-        // The strip background, the gaps outside the active indicator, and the shadow band are not.
-        Assert.Equal(-1, archipelago.HitTest(archipelago.Strip.X + 4, archipelago.Strip.Y - 4));
-        Assert.Equal(-1, archipelago.HitTest(archipelago.Strip.Right + 4, archipelago.Strip.CenterY));
-        Assert.Equal(LayoutHitKind.None, result.HitTest(archipelago.Strip.X + 4, archipelago.Strip.Y - 4).Kind);
-
-        // A hidden strip is not interactive even on a pill.
-        var hidden = IslandLayout.Calculate(
-            Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter, pagePosition: 4, archipelagoVisible: false),
-            monitor);
-        Assert.NotNull(hidden.Archipelago);
-        Assert.False(hidden.Archipelago!.IsVisible);
-        Assert.Equal(-1, hidden.Archipelago.HitTest(hidden.Archipelago.Slots[4].Rect.CenterX, hidden.Archipelago.Slots[4].Rect.CenterY));
-        Assert.Equal(LayoutHitKind.None, hidden.HitTest(hidden.Archipelago.Slots[4].Rect.CenterX, hidden.Archipelago.Slots[4].Rect.CenterY).Kind);
+            Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter), Monitor(96));
+        Assert.Null(result.Archipelago);
+        Assert.True(result.Placement.ArchipelagoStrip.IsEmpty);
+        Assert.Equal(LayoutHitKind.None,
+            result.HitTest(result.Shell.CenterX, result.Placement.BottomBand.CenterY).Kind);
     }
 
     [Fact]
@@ -496,7 +374,7 @@ public class LayoutTests
     [Fact]
     public void HostSurface_TokensMatchPerModeContract()
     {
-        Assert.Equal(488, LayoutTokens.HostSurfaceWidth, Eps);
+        Assert.Equal(520, LayoutTokens.HostSurfaceWidth, Eps);
         Assert.Equal(384, LayoutTokens.HostSurfaceFloatHeight, Eps);
         Assert.Equal(444, LayoutTokens.HostSurfaceDockHeight, Eps);
         Assert.Equal(24, LayoutTokens.HostTopPadding, Eps);
@@ -518,11 +396,11 @@ public class LayoutTests
         Assert.Equal(444, dockHost.Height, Eps);
         Assert.Equal(76, floatHost.BottomAllowance, Eps);
         Assert.Equal(136, dockHost.BottomAllowance, Eps);
-        Assert.Equal(new VisualRect(411.5, 24, 440, 284), floatHost.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(24, 24, 440, 284), dockHost.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(395.5, 24, 472, 284), floatHost.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(24, 24, 472, 284), dockHost.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(455.5, 316, 352, 32), floatHost.ArchipelagoStripLocal);
-        Assert.Equal(new VisualRect(24, 316, 440, 52), dockHost.DockStripLocal);
-        Assert.Equal(new VisualRect(68, 376, 352, 32), dockHost.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(24, 316, 472, 52), dockHost.DockStripLocal);
+        Assert.Equal(new VisualRect(84, 376, 352, 32), dockHost.ArchipelagoStripLocal);
         Assert.True(floatHost.BottomBandLocal.Height > floatHost.BottomPadding);
         Assert.True(dockHost.BottomBandLocal.Height > dockHost.BottomPadding);
     }
@@ -539,7 +417,7 @@ public class LayoutTests
             monitor);
         Assert.Equal(work.Height - 12 - host.BottomAllowance, expanded.Shell.Bottom, Eps);
         Assert.Equal(work.Height - 12, expanded.Placement.WindowVisual.Bottom, Eps);
-        Assert.Equal(work.Height - 12 - 36, expanded.Placement.ArchipelagoStrip.Bottom, Eps);
+        Assert.True(expanded.Placement.ArchipelagoStrip.IsEmpty);
         Assert.True(expanded.Placement.ArchipelagoStrip.Bottom <= work.Height);
 
         // The same host position is used for compact and expanded: only the shell morphs.
@@ -574,8 +452,8 @@ public class LayoutTests
         Assert.Equal(work.Height - 4 - 76, compact.Shell.Bottom, Eps);
         Assert.Equal(compact.Shell.Y - 8 - 284, expanded.Shell.Y, Eps);
         Assert.Equal(work.Height - 4 - 76, expanded.Placement.DockStrip.Bottom, Eps);
-        Assert.Equal(work.Height - 4 - 36, expanded.Placement.ArchipelagoStrip.Bottom, Eps);
-        Assert.Equal(expanded.Placement.DockStrip.Bottom + LayoutTokens.ArchipelagoGap, expanded.Placement.ArchipelagoStrip.Y, Eps);
+        Assert.True(expanded.Placement.ArchipelagoStrip.IsEmpty);
+        Assert.True(expanded.Placement.ArchipelagoStrip.IsEmpty);
         Assert.True(expanded.Placement.DockStrip.Bottom <= work.Height);
         Assert.True(expanded.Placement.ArchipelagoStrip.Bottom <= work.Height);
         Assert.True(expanded.Placement.IsClamped);
@@ -661,18 +539,18 @@ public class LayoutTests
     }
 
     [Fact]
-    public void Expanded_IsUniformly440x284()
+    public void Expanded_IsUniformly472x284()
     {
         var monitor = Monitor(96);
         foreach (var page in PageRef.BuiltinPages)
         {
             _ = page;
             var result = IslandLayout.Calculate(Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter), monitor);
-            Assert.Equal(440, result.Shell.Width, Eps);
+            Assert.Equal(472, result.Shell.Width, Eps);
             Assert.Equal(284, result.Shell.Height, Eps);
         }
 
-        Assert.Equal(new VisualSize(440, 284), LayoutTokens.ExpandedSize());
+        Assert.Equal(new VisualSize(472, 284), LayoutTokens.ExpandedSize());
         var expandedRelative = LayoutTokens.RadiiFor(ShellForm.Expanded, IslandMode.Float, 284);
         Assert.Equal(28, expandedRelative.TopLeft, Eps);
     }
@@ -706,7 +584,7 @@ public class LayoutTests
         var monitor = Monitor(96);
         var work = monitor.WorkAreaDip;
         var compact = IslandLayout.Calculate(Request(ShellForm.Compact, IslandMode.Dock, IslandAnchor.TopCenter), monitor);
-        Assert.Equal(440, compact.Shell.Width, Eps);
+        Assert.Equal(472, compact.Shell.Width, Eps);
         Assert.Equal(52, compact.Shell.Height, Eps);
         Assert.Equal(ExpandDirection.Up, compact.ExpandDirection);
         Assert.Equal(work.Height - 4 - 76, compact.Shell.Bottom, Eps);
@@ -802,29 +680,29 @@ public class LayoutTests
     }
 
     [Fact]
-    public void Expanded_NoRailContentIs400x252At20Inset()
+    public void Expanded_NoRailContentIs400x252At60Inset()
     {
         var monitor = Monitor(96);
         var result = IslandLayout.Calculate(Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter), monitor);
 
         Assert.False(result.HasRail);
         Assert.True(result.Rail.IsEmpty);
-        Assert.Equal(440, result.Shell.Width, Eps);
+        Assert.Equal(472, result.Shell.Width, Eps);
         Assert.Equal(284, result.Shell.Height, Eps);
         Assert.Equal(400, result.Content.Width, Eps);
         Assert.Equal(252, result.Content.Height, Eps);
-        Assert.Equal(result.Shell.X + 20, result.Content.X, Eps);
+        Assert.Equal(result.Shell.X + 60, result.Content.X, Eps);
         Assert.Equal(result.Shell.Y + 16, result.Content.Y, Eps);
-        Assert.Equal(result.Shell.Right - 20, result.Content.Right, Eps);
+        Assert.Equal(result.Shell.Right - LayoutTokens.ContentRightInset, result.Content.Right, Eps);
         Assert.Equal(result.Shell.Bottom - 16, result.Content.Bottom, Eps);
     }
 
     [Fact]
     public void NoRailTokens_AreCurrentAndRailTokensStayObsoleteCompatible()
     {
-        Assert.Equal(440, LayoutTokens.ExpandedWidth, Eps);
+        Assert.Equal(472, LayoutTokens.ExpandedWidth, Eps);
         Assert.Equal(284, LayoutTokens.ExpandedHeight, Eps);
-        Assert.Equal(20, LayoutTokens.ContentHorizontalInset, Eps);
+        Assert.Equal(60, LayoutTokens.ContentHorizontalInset, Eps);
         Assert.Equal(16, LayoutTokens.ContentVerticalInset, Eps);
         Assert.Equal(400, LayoutTokens.ContentWidth, Eps);
         Assert.Equal(400, LayoutTokens.ContentUsableWidth, Eps);
@@ -902,9 +780,9 @@ public class LayoutTests
                     Request(form, mode, IslandAnchor.TopCenter, compactKind: ActivityKind.Media),
                     monitor);
                 var expectedHeight = mode == IslandMode.Dock ? 444 : 384;
-                Assert.Equal(mode == IslandMode.Dock ? 976 : 2526, result.Placement.WindowPixel.Width);
+                Assert.Equal(mode == IslandMode.Dock ? 1040 : 2526, result.Placement.WindowPixel.Width);
                 Assert.Equal(WindowPlacementConverter.Ceil(expectedHeight * monitor.Scale), result.Placement.WindowPixel.Height);
-                Assert.Equal(mode == IslandMode.Dock ? 488 : 1263, result.Placement.WindowSizeDip.Width, Eps);
+                Assert.Equal(mode == IslandMode.Dock ? 520 : 1263, result.Placement.WindowSizeDip.Width, Eps);
                 Assert.Equal(expectedHeight, result.Placement.WindowSizeDip.Height, Eps);
             }
         }

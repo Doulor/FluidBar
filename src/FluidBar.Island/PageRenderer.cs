@@ -72,6 +72,9 @@ internal sealed partial class PageRenderer : IDisposable
     private PageSlotKind _hoverKind = PageSlotKind.Plugin;
     private IslandPageControl _hoverControl;
     private int _hoverPage = -1;
+    private int _hoverIndex = -1;
+    private int _pressedIndex = -1;
+    private int _drawPage = -1;
     private double _pointerX = double.NaN;
     private double _pointerY = double.NaN;
     private bool _hasPointer;
@@ -93,10 +96,20 @@ internal sealed partial class PageRenderer : IDisposable
         _opacity = opacity;
         _text.SetScale(state.FontScale);
         _metrics = _text.Metrics;
+        _drawPage = state.PageIndex;
+        _hoverControl = state.HoverControl;
+        _hoverPage = state.HoverPage;
+        _hoverIndex = state.HoverIndex;
+        _pressedControl = state.PressedControl;
+        _pressedPage = state.PressedPage;
+        _pressedIndex = state.PressedIndex;
+        _hasPointer = state.HasPointer;
         if (_opacity <= 0.01f)
         {
             return;
         }
+
+        DrawSideRail(canvas, state, content);
 
         // Prototype2 `.pager-title`: page number 8.5 DIP @ 32 % white, title 10 DIP @ 72 % white, both
         // left aligned at the content inset (left 20 / top 11).
@@ -113,7 +126,7 @@ internal sealed partial class PageRenderer : IDisposable
             var search = PageLayout.ClipboardSearchRect(content);
             _fill.Style = SKPaintStyle.Fill;
             _fill.Shader = null;
-            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            _fill.Color = Alpha(_theme.Foreground, (IsHovered(IslandPageControl.ClipboardSearch) ? 0.15f : IsPressed(IslandPageControl.ClipboardSearch) ? 0.19f : 0.08f) * _opacity);
             canvas.DrawRoundRect(search, 6, 6, _fill);
             _text.Draw(canvas, searchLabel, IslandType.RowMeta, search,
                 _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
@@ -125,7 +138,7 @@ internal sealed partial class PageRenderer : IDisposable
             var filter = PageLayout.ClipboardFilterRect(content);
             _fill.Style = SKPaintStyle.Fill;
             _fill.Shader = null;
-            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            _fill.Color = Alpha(_theme.Foreground, (IsHovered(IslandPageControl.ClipboardFilter) ? 0.15f : IsPressed(IslandPageControl.ClipboardFilter) ? 0.19f : 0.08f) * _opacity);
             canvas.DrawRoundRect(filter, 6, 6, _fill);
             _text.Draw(canvas, filterLabel, IslandType.RowMeta, filter,
                 _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
@@ -137,7 +150,7 @@ internal sealed partial class PageRenderer : IDisposable
             var clear = PageLayout.NotificationClearRect(content);
             _fill.Style = SKPaintStyle.Fill;
             _fill.Shader = null;
-            _fill.Color = Alpha(_theme.Foreground, 0.08f * _opacity);
+            _fill.Color = Alpha(_theme.Foreground, (IsHovered(IslandPageControl.NotificationClear) ? 0.15f : IsPressed(IslandPageControl.NotificationClear) ? 0.19f : 0.08f) * _opacity);
             canvas.DrawRoundRect(clear, 6, 6, _fill);
             _text.Draw(canvas, clearLabel, IslandType.RowMeta, clear,
                 _theme.Foreground.WithAlpha(190), TextAlign.Center, _opacity);
@@ -147,10 +160,70 @@ internal sealed partial class PageRenderer : IDisposable
         // synthetic/keyboard-injection scenarios never deliver). The header now carries the standard
         // gear next to the collapse chevron on every page; the same rectangle is the click target and
         // the UI Automation button, so pointer and screen-reader users find one control, not two.
+        var settingsHover = _hasPointer && state.PointerX >= PageLayout.SettingsRect(content).Left
+            && state.PointerX <= PageLayout.SettingsRect(content).Right && state.PointerY >= PageLayout.SettingsRect(content).Top
+            && state.PointerY <= PageLayout.SettingsRect(content).Bottom;
+        var collapseHover = _hasPointer && state.PointerX >= PageLayout.CollapseRect(content).Left
+            && state.PointerX <= PageLayout.CollapseRect(content).Right && state.PointerY >= PageLayout.CollapseRect(content).Top
+            && state.PointerY <= PageLayout.CollapseRect(content).Bottom;
+        if (settingsHover)
+        {
+            _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
+            canvas.DrawRoundRect(PageLayout.SettingsRect(content), 8, 8, _fill);
+        }
+        if (collapseHover)
+        {
+            _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
+            canvas.DrawRoundRect(PageLayout.CollapseRect(content), 8, 8, _fill);
+        }
         IconSet.Draw(canvas, IconKind.Settings, PageLayout.SettingsRect(content).Deflate(5.5f),
-            Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
+            Alpha(_theme.Foreground.WithAlpha((byte)(settingsHover ? 220 : 128)), _opacity), _icon);
         IconSet.Draw(canvas, IconKind.ChevronDown, PageLayout.CollapseRect(content).Deflate(5),
-            Alpha(_theme.Foreground.WithAlpha(128), _opacity), _icon);
+            Alpha(_theme.Foreground.WithAlpha((byte)(collapseHover ? 220 : 128)), _opacity), _icon);
+    }
+
+
+    /// <summary>Draws the in-card six-page rail that replaces the detached preview islands.</summary>
+    private void DrawSideRail(SKCanvas canvas, in IslandRenderState state, SKRect content)
+    {
+        var count = Math.Max(1, state.Pages.PageCount);
+        for (var i = 0; i < count; i++)
+        {
+            var rect = SideRailLayout.TabRect(content, i);
+            var active = i == state.PageIndex;
+            var hovered = _hasPointer && _hoverControl == IslandPageControl.PageTab && _hoverPage == i;
+            var pressed = _pressedControl == IslandPageControl.PageTab && _pressedPage == i;
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Shader = null;
+            if (active)
+            {
+                _fill.Color = Alpha(_theme.Accent, 0.14f * _opacity);
+                canvas.DrawRoundRect(rect, 12, 12, _fill);
+                _fill.Color = Alpha(_theme.Accent, 0.82f * _opacity);
+                canvas.DrawRoundRect(new SKRect(rect.Left - 5, rect.MidY - 9, rect.Left - 3, rect.MidY + 9), 1, 1, _fill);
+            }
+            else if (hovered || pressed)
+            {
+                _fill.Color = Alpha(_theme.Foreground, (pressed ? 0.12f : 0.07f) * _opacity);
+                canvas.DrawRoundRect(rect, 12, 12, _fill);
+            }
+
+            var kind = state.Pages.PageSlotAt(i)?.Kind ?? PageSlotKind.Plugin;
+            var iconColor = active ? _theme.Accent : hovered || pressed ? _theme.Foreground : _theme.ForegroundTertiary;
+            IconSet.Draw(canvas, SideRailLayout.IconFor(kind), rect.Deflate(11.5f), Alpha(iconColor, _opacity), _icon);
+
+            if (hovered)
+            {
+                // A transient tooltip keeps the icon-only rail discoverable without stealing 60+ DIP
+                // from every page. It is painted only while the pointer is actually over a tab.
+                var label = state.Pages.Title(i);
+                var width = Math.Min(100, _text.Measure(label, IslandType.RowMeta) + 16);
+                var tip = new SKRect(rect.Right + 6, rect.MidY - 9, rect.Right + 6 + width, rect.MidY + 9);
+                _fill.Color = Alpha(_theme.Background, 0.96f * _opacity);
+                canvas.DrawRoundRect(tip, 7, 7, _fill);
+                _text.Draw(canvas, label, IslandType.RowMeta, tip, _theme.Foreground, TextAlign.Center, _opacity);
+            }
+        }
     }
 
     /// <summary>Draws one page at <paramref name="pageRect"/> (host-local DIP).</summary>
@@ -167,6 +240,9 @@ internal sealed partial class PageRenderer : IDisposable
         _pressedKind = state.Pages.PageSlotAt(_pressedPage)?.Kind ?? PageSlotKind.Plugin;
         _hoverControl = state.HoverControl;
         _hoverPage = state.HoverPage;
+        _hoverIndex = state.HoverIndex;
+        _pressedIndex = state.PressedIndex;
+        _drawPage = page;
         _hoverKind = state.Pages.PageSlotAt(_hoverPage)?.Kind ?? PageSlotKind.Plugin;
         _pointerX = state.PointerX;
         _pointerY = state.PointerY;
@@ -274,6 +350,12 @@ internal sealed partial class PageRenderer : IDisposable
                 ? Alpha(_theme.BackgroundRaised, 0.55f * _opacity)
                 : Alpha(toggle.IsOn ? _theme.Accent : _theme.BackgroundRaised, toggle.IsOn ? 0.10f * _opacity : _opacity);
             canvas.DrawRoundRect(rect, 10, 10, _fill);
+            if (IsHovered(IslandPageControl.QuickToggle, i) || IsPressed(IslandPageControl.QuickToggle, i))
+            {
+                _fill.Color = Alpha(toggle.IsOn ? _theme.Accent : _theme.Foreground,
+                    (IsPressed(IslandPageControl.QuickToggle, i) ? 0.16f : 0.10f) * _opacity);
+                canvas.DrawRoundRect(rect, 10, 10, _fill);
+            }
 
             var labelWidth = Math.Min(rect.Width - 30, _text.Measure(toggle.Label, IslandType.Toggle));
             var contentWidth = 14 + 5 + labelWidth;
@@ -290,6 +372,12 @@ internal sealed partial class PageRenderer : IDisposable
     {
         var rect = PageMetricsLayout.HomeMediaCard(page, m);
         DrawCard(canvas, rect, 11);
+        if (IsHovered(IslandPageControl.MediaCard) || IsPressed(IslandPageControl.MediaCard))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, (IsPressed(IslandPageControl.MediaCard) ? 0.08f : 0.045f) * _opacity);
+            canvas.DrawRoundRect(rect, 11, 11, _fill);
+        }
 
         var accent = _accents.Get(media.AccentHex, _theme.TrackAccent);
         DrawArt(canvas, new SKRect(rect.Left + 7, rect.Top + 8, rect.Left + 39, rect.Top + 40), 8, accent, large: false,
@@ -306,7 +394,8 @@ internal sealed partial class PageRenderer : IDisposable
 
         var play = PageMetricsLayout.HomeMediaPlay(page, m);
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(_theme.LineStrong, _opacity);
+        _fill.Color = Alpha(IsHovered(IslandPageControl.PlayPause) ? _theme.Foreground : _theme.LineStrong,
+            IsHovered(IslandPageControl.PlayPause) ? 0.92f * _opacity : _opacity);
         canvas.DrawCircle(play.MidX, play.MidY, play.Width / 2, _fill);
         IconSet.Draw(canvas, media.IsPlaying ? IconKind.Pause : IconKind.Play, play.Deflate(7),
             Alpha(_theme.Foreground, _opacity), _icon);
@@ -585,6 +674,18 @@ internal sealed partial class PageRenderer : IDisposable
         var hasOutput = media.OutputAvailable && !string.IsNullOrWhiteSpace(media.OutputName);
         var hasQueue = media.QueueAvailable && media.QueueCount > 0;
         var outputText = hasOutput ? media.OutputName : media.OutputPlaceholder;
+        if (hasOutput && (IsHovered(IslandPageControl.Output) || IsPressed(IslandPageControl.Output)))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, (IsPressed(IslandPageControl.Output) ? 0.12f : 0.07f) * _opacity);
+            canvas.DrawRoundRect(output, 7, 7, _fill);
+        }
+        if (hasQueue && (IsHovered(IslandPageControl.Queue) || IsPressed(IslandPageControl.Queue)))
+        {
+            _fill.Style = SKPaintStyle.Fill;
+            _fill.Color = Alpha(_theme.Foreground, (IsPressed(IslandPageControl.Queue) ? 0.12f : 0.07f) * _opacity);
+            canvas.DrawRoundRect(queue, 7, 7, _fill);
+        }
         if (!string.IsNullOrWhiteSpace(outputText))
         {
             var outputAlpha = (hasOutput ? 1f : 0.5f) * _opacity;
@@ -651,13 +752,17 @@ internal sealed partial class PageRenderer : IDisposable
             _icon);
     }
 
-    private bool IsPressed(IslandPageControl control)
-        => _pressedControl == control && (_pressedPage < 0 || _pressedKind == PageSlotKind.Media);
+    private bool IsPressed(IslandPageControl control, int index = -1)
+        => _pressedControl == control
+            && (_pressedPage < 0 || _pressedPage == _drawPage)
+            && (index < 0 || _pressedIndex == index);
 
     /// <summary>Whether the given control is hovered (the controller resolves it from the same hit test
     /// the clicks use, so the highlight can never sit on a different rectangle than the click target).</summary>
-    private bool IsHovered(IslandPageControl control)
-        => _hasPointer && _hoverControl == control && (_hoverPage < 0 || _hoverKind == PageSlotKind.Media);
+    private bool IsHovered(IslandPageControl control, int index = -1)
+        => _hasPointer && _hoverControl == control
+            && (_hoverPage < 0 || _hoverPage == _drawPage)
+            && (index < 0 || _hoverIndex == index);
 
     // ------------------------------------------------------------- placeholder
 

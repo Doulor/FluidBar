@@ -39,7 +39,7 @@ public class PagerPolicyTests
         Assert.Equal(40, PagerConstants.ScrollChainOverscrollDip, Eps);
         Assert.Equal(120, PagerConstants.ScrollChainDwellMs);
         Assert.Equal(400, PagerConstants.ContentWidthDip, Eps);
-        Assert.Equal(20, PagerConstants.ContentHorizontalInsetDip, Eps);
+        Assert.Equal(60, PagerConstants.ContentHorizontalInsetDip, Eps);
         Assert.Equal(16, PagerConstants.ContentVerticalInsetDip, Eps);
     }
 

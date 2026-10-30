@@ -24,7 +24,7 @@ namespace FluidBar.App.Island.Expanded;
 public sealed class ExpandedPanel : Panel, ILocalizable
 {
     /// <summary>Expanded shell width.</summary>
-    public const double PanelWidth = 440;
+    public const double PanelWidth = 472;
 
     /// <summary>Expanded shell height (the island itself).</summary>
     public const double PanelHeight = 284;
@@ -33,7 +33,7 @@ public sealed class ExpandedPanel : Panel, ILocalizable
     public const double TotalHeight = HostLayout.ExpandedLayerHeight;
 
     /// <summary>Horizontal shell inset to the page viewport.</summary>
-    public const double ViewportInset = 20;
+    public const double ViewportInset = 60;
 
     /// <summary>Vertical shell inset to the page viewport.</summary>
     public const double ViewportInsetY = 16;

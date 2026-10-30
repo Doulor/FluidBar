@@ -93,12 +93,12 @@ public class CoreArchitectureTests
     [Fact]
     public void LayoutTokens_MatchConfirmedLeadTokens()
     {
-        Assert.Equal(440, Layout.LayoutTokens.ExpandedWidth, 1e-9);
+        Assert.Equal(472, Layout.LayoutTokens.ExpandedWidth, 1e-9);
         Assert.Equal(284, Layout.LayoutTokens.ExpandedHeight, 1e-9);
-        Assert.Equal(488, Layout.LayoutTokens.WindowWidth, 1e-9);
+        Assert.Equal(520, Layout.LayoutTokens.WindowWidth, 1e-9);
         // WindowHeight is the legacy shell-envelope height; the host surfaces are the contract now.
         Assert.Equal(332, Layout.LayoutTokens.WindowHeight, 1e-9);
-        Assert.Equal(488, Layout.LayoutTokens.HostSurfaceWidth, 1e-9);
+        Assert.Equal(520, Layout.LayoutTokens.HostSurfaceWidth, 1e-9);
         Assert.Equal(384, Layout.LayoutTokens.HostSurfaceFloatHeight, 1e-9);
         Assert.Equal(444, Layout.LayoutTokens.HostSurfaceDockHeight, 1e-9);
         Assert.Equal(24, Layout.LayoutTokens.HostTopPadding, 1e-9);

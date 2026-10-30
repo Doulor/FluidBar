@@ -15,15 +15,15 @@ public sealed class SkiaHostDockParityTests
     private const int PageCount = 6;
 
     [Fact]
-    public void Dock_CoreHostSurface_LocalRects_ArePanel24To308_Strip316To368_Arch376To408()
+    public void Dock_CoreHostSurface_LocalRects_ArePanel24To308_Strip316To368_NoDetachedRail()
     {
         var dock = HostSurface.Dock;
 
-        Assert.Equal(new VisualRect(24, 24, 440, 284), dock.ShellEnvelopeLocal);
-        Assert.Equal(new VisualRect(24, 316, 440, 52), dock.DockStripLocal);
-        Assert.Equal(new VisualRect(68, 376, 352, 32), dock.ArchipelagoStripLocal);
+        Assert.Equal(new VisualRect(24, 24, 472, 284), dock.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(24, 316, 472, 52), dock.DockStripLocal);
+        Assert.Equal(new VisualRect(84, 376, 352, 32), dock.ArchipelagoStripLocal);
         Assert.Equal(444, dock.Height);
-        Assert.Equal(488, dock.Width);
+        Assert.Equal(520, dock.Width);
     }
 
     [Fact]
@@ -48,42 +48,30 @@ public sealed class SkiaHostDockParityTests
         Assert.Equal(dock.DockStripLocal.Width, compact.ShellWidth);
         Assert.Equal(dock.DockStripLocal.Height, compact.ShellHeight);
 
-        var stripState = expanded with { Archipelago = ArchipelagoState.Shown(0) };
-        using var renderer = new IslandRenderer();
-        var strip = renderer.MeasureStrip(stripState);
-        Assert.Equal((float)dock.ArchipelagoTopLocal, strip.Strip.Top, 3);
-        Assert.Equal((float)dock.ArchipelagoStripLocal.Height, strip.Strip.Height, 3);
-        Assert.Equal((float)dock.ArchipelagoStripLocal.CenterX, strip.Strip.MidX, 3);
+        // Detached preview rail is gone; the in-card side rail is asserted by SideRailLayoutTests.
     }
 
     [Fact]
-    public void Float_RendererStrip_SitsAt316NotBelowTheShellInDockTerms()
+    public void Float_DetachedPreviewRail_IsNotInteractive()
     {
         var floatSurface = HostSurface.Float;
-        Assert.Equal(new VisualRect(411.5, 24, 440, 284), floatSurface.ShellEnvelopeLocal);
+        Assert.Equal(new VisualRect(395.5, 24, 472, 284), floatSurface.ShellEnvelopeLocal);
         Assert.Equal(new VisualRect(455.5, 316, 352, 32), floatSurface.ArchipelagoStripLocal);
 
+        using var renderer = new IslandRenderer();
         var state = IslandRenderState.Expanded(
             IslandMode.Float,
             PagerRenderState.At(0, PageCount),
             ExpandedPageContent.Empty,
-            IslandTheme.Dark) with
-        {
-            Archipelago = ArchipelagoState.Shown(0),
-        };
-        using var renderer = new IslandRenderer();
+            IslandTheme.Dark) with { Archipelago = ArchipelagoState.Shown(0) };
         var strip = renderer.MeasureStrip(state);
-
-        // Prototype2: rail top = shell bottom + 8 DIP (24 + 284 + 8 = 316), 32 DIP tall.
-        Assert.Equal(316f, strip.Strip.Top, 3);
-        Assert.Equal(32f, strip.Strip.Height, 3);
-        Assert.Equal(631.5f, strip.Strip.MidX, 3);
+        Assert.Equal(IslandHitKind.None, renderer.HitTest(state, strip.Current.MidX, strip.Current.MidY).Kind);
     }
 
     [Theory]
-    [InlineData(96u, 1.0, 1263, 384, 488, 444)]
-    [InlineData(144u, 1.5, 1895, 576, 732, 666)]
-    [InlineData(192u, 2.0, 2526, 768, 976, 888)]
+    [InlineData(96u, 1.0, 1263, 384, 520, 444)]
+    [InlineData(144u, 1.5, 1895, 576, 780, 666)]
+    [InlineData(192u, 2.0, 2526, 768, 1040, 888)]
     public void SurfacePixels_CeilAt150And200Percent(
         uint dpi, double scale, int floatWidth, int floatHeight, int dockWidth, int dockHeight)
     {
@@ -129,20 +117,20 @@ public sealed class SkiaHostDockParityTests
         // The compact dock shell *is* the strip and sits at local y=316 inside the window.
         Assert.Equal(placement.DockStrip, placement.Shell);
         Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.DockStripTopLocal, placement.DockStrip.Y, 3);
-        Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.ArchipelagoTopLocal, placement.ArchipelagoStrip.Y, 3);
+        Assert.True(placement.ArchipelagoStrip.IsEmpty);
 
         // Core's WindowPixel is the host window origin verbatim (no 344 DIP dock correction).
         var computed = LayeredWindowHost.ComputePlacement(placement, LayeredHostMode.Dock);
         Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);
         Assert.Equal(placement.WindowPixel.Y, computed.WindowPixel.Y);
-        Assert.Equal((int)Math.Ceiling(488 * scale), computed.WindowPixel.Width);
+        Assert.Equal((int)Math.Ceiling(520 * scale), computed.WindowPixel.Width);
         Assert.Equal((int)Math.Ceiling(444 * scale), computed.WindowPixel.Height);
     }
 
     [Theory]
-    [InlineData(96u, 716, 592, 488, 444)]
-    [InlineData(144u, 594, 368, 732, 666)]
-    [InlineData(192u, 472, 144, 976, 888)]
+    [InlineData(96u, 700, 592, 520, 444)]
+    [InlineData(144u, 570, 368, 780, 666)]
+    [InlineData(192u, 440, 144, 1040, 888)]
     public void DockPlacement_MeasuredWindowOrigin_ForA1920x1040WorkArea(
         uint dpi, int expectedX, int expectedY, int expectedWidth, int expectedHeight)
     {
@@ -203,7 +191,7 @@ public sealed class SkiaHostDockParityTests
             shell, monitor, HostSurface.Dock, ShellForm.Expanded, IslandAnchor.BottomCenter);
 
         Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.ShellLocalOffset.Y, placement.Shell.Y, 3);
-        Assert.Equal(placement.WindowVisual.Y + HostSurface.Dock.ArchipelagoTopLocal, placement.ArchipelagoStrip.Y, 3);
+        Assert.True(placement.ArchipelagoStrip.IsEmpty);
 
         var computed = LayeredWindowHost.ComputePlacement(placement, LayeredHostMode.Dock);
         Assert.Equal(placement.WindowPixel.X, computed.WindowPixel.X);

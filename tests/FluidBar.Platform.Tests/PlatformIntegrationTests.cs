@@ -280,7 +280,7 @@ public sealed class PlatformIntegrationTests : IAsyncLifetime
             // One SetWindowPos: the panel top-left lands 24 DIP inside the window.
             var shell = new FluidBar.Core.Layout.VisualRect(100, 40, 440, 284);
             var placement = host.Place(monitor, shell, LayeredHostMode.Float);
-            Assert.Equal((int)Math.Round((100 - 411.5) * 1.5), placement.WindowPixel.X);
+            Assert.Equal((int)Math.Round((100 - 395.5) * 1.5), placement.WindowPixel.X);
             Assert.Equal((int)Math.Round((40 - 24) * 1.5), placement.WindowPixel.Y);
             NativeMethods.User32.GetWindowRect(host.Handle, out var windowRect);
             Assert.Equal(placement.WindowPixel.X, windowRect.Left);

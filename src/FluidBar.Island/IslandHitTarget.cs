@@ -42,6 +42,9 @@ public enum IslandHitKind
     /// <summary>A far-page dot on the left of the strip.</summary>
     DotLeft,
 
+    /// <summary>An in-card left-rail page tab; <see cref="IslandHitTarget.PageIndex"/> is the destination.</summary>
+    PageTab,
+
     /// <summary>A far-page dot on the right of the strip.</summary>
     DotRight,
 
@@ -54,6 +57,9 @@ public enum IslandPageControl
 {
     /// <summary>No control.</summary>
     None,
+
+    /// <summary>In-card left-rail page tab.</summary>
+    PageTab,
 
     /// <summary>Play/pause.</summary>
     PlayPause,
@@ -143,7 +149,7 @@ public readonly record struct IslandHitTarget(
 
     /// <summary>Whether the hit is inside the shell (shell/page/compact/collapse/settings/title).</summary>
     public bool IsShell => Kind is IslandHitKind.Shell or IslandHitKind.Compact or IslandHitKind.Page
-        or IslandHitKind.PageControl or IslandHitKind.Title or IslandHitKind.Collapse
+        or IslandHitKind.PageControl or IslandHitKind.Title or IslandHitKind.Collapse or IslandHitKind.PageTab
         or IslandHitKind.Settings or IslandHitKind.OverflowBadge;
 
     /// <summary>Whether the hit is on the detached strip (mini-island or dot).</summary>
