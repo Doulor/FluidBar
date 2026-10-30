@@ -26,7 +26,7 @@ public static class BuiltinPluginManifests
             {
                 Id = "fluidbar",
                 DisplayName = "FluidBar",
-                Url = "https://fluidbar.app",
+                Url = "https://fluidbar.doulor.cn",
             },
             Name = descriptor.DisplayName,
             Summary = LocalizedString.From("Built-in FluidBar plugin."),

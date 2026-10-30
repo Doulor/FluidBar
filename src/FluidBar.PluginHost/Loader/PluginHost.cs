@@ -985,6 +985,12 @@ public sealed class PluginHost : IAsyncDisposable
         {
             return new LifecycleOutcome(false, true, $"Lifecycle call exceeded the {timeout.TotalMilliseconds:0} ms timeout.");
         }
+        catch (OperationCanceledException) when (callCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            // A cooperative plugin observes the timeout token and throws OCE before WaitAsync raises TimeoutException.
+            // Both paths mean "the host timeout fired", never "the plugin failed to start".
+            return new LifecycleOutcome(false, true, $"Lifecycle call exceeded the {timeout.TotalMilliseconds:0} ms timeout.");
+        }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             return new LifecycleOutcome(false, false, "Lifecycle call was cancelled.");

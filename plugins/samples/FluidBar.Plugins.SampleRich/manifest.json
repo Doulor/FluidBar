@@ -1,5 +1,5 @@
 {
-  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "$schema": "https://fluidbar.doulor.cn/schemas/plugin.schema.json",
   "schemaVersion": 2,
   "id": "sample-rich",
   "version": "1.0.0",
@@ -8,12 +8,12 @@
   "publisher": {
     "id": "fluidbar-samples",
     "displayName": "FluidBar Samples",
-    "url": "https://fluidbar.app",
+    "url": "https://fluidbar.doulor.cn",
     "keyId": "fluidbar-samples-2026"
   },
   "author": {
     "name": "FluidBar contributors",
-    "url": "https://fluidbar.app"
+    "url": "https://fluidbar.doulor.cn"
   },
   "name": {
     "en-US": "Sample Rich",
@@ -29,7 +29,7 @@
   },
   "license": "MIT",
   "repository": "https://github.com/Doulor/FluidBar",
-  "homepage": "https://fluidbar.app",
+  "homepage": "https://fluidbar.doulor.cn",
   "categories": ["media", "developer"],
   "tags": ["sample", "media", "settings"],
   "entry": {

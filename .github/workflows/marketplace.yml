@@ -1,20 +1,22 @@
 name: marketplace
 
 # Plugin marketplace CI: PR validation (validate/policy/pack determinism), then on merge/manual dispatch the
-# signed publish pipeline (pack -> sign -> regenerate index.json + shards + keys.json) and a dedicated GitHub
-# Pages deploy job. No private key material is stored in the repository: the signing key comes from the
-# protected `marketplace-publish` environment secret documented in docs/plugin/signing-and-keys.md.
+# signed publish pipeline (pack -> sign -> upload versioned GitHub release assets -> regenerate index.json +
+# shards + keys.json) and the Cloudflare Pages deploy of the official website. No private key material is stored
+# in the repository: the signing key comes from the protected `marketplace-publish` environment secret.
 #
 # Required configuration (all fail fast in the publish job if missing):
-#   environment `marketplace-publish` (required reviewer: Doulor)
+#   environment `marketplace-publish`
 #     secret MARKETPLACE_SIGNING_KEY_PEM      = PKCS#8 PEM of the ECDSA P-256 marketplace key
 #   repository/environment variables
-#     MARKETPLACE_ARTIFACT_BASE_URL           = e.g. https://github.com/<org>/<repo>/releases/download
-#     MARKETPLACE_BASE_URL                    = e.g. https://fluidbar.doulor.cn/market
-#     MARKETPLACE_SIGNING_KEY_ID              = e.g. fluidbar-marketplace-2026
+#     MARKETPLACE_ARTIFACT_BASE_URL           = https://github.com/<org>/<repo>/releases/download
+#     MARKETPLACE_BASE_URL                    = https://fluidbar.doulor.cn/market
+#     MARKETPLACE_SIGNING_KEY_ID              = fluidbar-marketplace-2026
 #     MARKETPLACE_PLUGINS_ROOT                = optional, default `plugins/samples` in this repo
 #     MARKETPLACE_DEPLOY_PAGES                = set `false` for explicit artifact-only publishing
-#   environment `github-pages` (created by the deploy job; required reviewer optional)
+#   environment `marketplace-deploy`
+#     secret CLOUDFLARE_API_TOKEN             = Pages:Edit token for the FluidBar Cloudflare account
+#     variable CLOUDFLARE_ACCOUNT_ID          = Cloudflare account id
 #
 # All actions are pinned to full commit SHAs (tag documented in the trailing comment).
 
@@ -207,7 +209,7 @@ jobs:
     timeout-minutes: 20
     environment: marketplace-publish
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -270,6 +272,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $channel = "${{ inputs.channel }}"
           if ([string]::IsNullOrWhiteSpace($channel)) { $channel = "stable" }
+          $assetBaseUrl = "$($env:MARKETPLACE_BASE_URL.TrimEnd('/'))/assets"
 
           dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- publish-prepare `
             --plugins-root $env:MARKETPLACE_PLUGINS_ROOT `
@@ -279,6 +282,7 @@ jobs:
             --key-id $env:MARKETPLACE_SIGNING_KEY_ID `
             --artifact-base-url $env:MARKETPLACE_ARTIFACT_BASE_URL `
             --marketplace-base-url $env:MARKETPLACE_BASE_URL `
+            --asset-base-url $assetBaseUrl `
             --configuration $env:CONFIGURATION `
             --channel $channel `
             --source-commit "${{ github.sha }}"
@@ -291,6 +295,33 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "generated index failed signature verification" }
           Get-ChildItem marketplace-site -Recurse -File | ForEach-Object {
             Write-Host ("site: {0} ({1} bytes)" -f $_.FullName.Substring((Get-Location).Path.Length + 1), $_.Length)
+          }
+
+      - name: Upload plugin packages to versioned GitHub releases
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $index = Get-Content marketplace-site/index.json -Raw | ConvertFrom-Json
+          foreach ($plugin in $index.plugins) {
+            $version = $plugin.latest.version
+            $tag = "plugin-$($plugin.id)-v$version"
+            $package = Join-Path "artifacts/plugins" "$($plugin.id)-$version.fbp"
+            $signature = "$package.sig.json"
+            if (-not (Test-Path $package)) { throw "Missing package for $($plugin.id): $package" }
+            if (-not (Test-Path $signature)) { throw "Missing package signature for $($plugin.id): $signature" }
+
+            # One release per plugin version keeps the index's documented URL template
+            # (<artifact-base>/plugin-<id>-v<version>/<file>) working with flat GitHub release assets.
+            gh release view $tag 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              gh release create $tag --title "$($plugin.id) v$version" --latest=false --notes "Signed FluidBar marketplace package for $($plugin.id) v$version. The hash and signature are pinned in marketplace/index.json."
+              if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
+            }
+            gh release upload $tag $package $signature --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag" }
+            Write-Host "release $tag: $([IO.Path]::GetFileName($package)) + signature"
           }
 
       - name: Upload plugin packages (workflow artifact, always available)
@@ -326,48 +357,67 @@ jobs:
           $lines | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
   deploy:
-    name: Deploy marketplace site to GitHub Pages
+    name: Deploy official site with the signed marketplace
     needs: publish
     # Explicit artifact-only mode: set the repository variable MARKETPLACE_DEPLOY_PAGES=false. Otherwise the
-    # deployment is expected to succeed (no silent fallback); if Pages is unavailable, the publish artifacts are
-    # still uploaded and the run fails visibly.
+    # deployment is expected to succeed (no silent fallback); artifacts and releases are already published.
     if: vars.MARKETPLACE_DEPLOY_PAGES != 'false'
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      name: marketplace-deploy
+      url: https://fluidbar.doulor.cn/market/
     permissions:
       contents: read
       actions: read
-      pages: write
-      id-token: write
     steps:
-      - name: Download self-contained marketplace site
+      - name: Checkout website source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download signed marketplace site
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: marketplace-site
           path: marketplace-site
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+      - name: Build official website
+        timeout-minutes: 15
+        working-directory: website
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm install --global pnpm@10.17.0
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "website dependency install failed" }
+          pnpm build
+          if ($LASTEXITCODE -ne 0) { throw "website build failed" }
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        with:
-          path: marketplace-site
+      - name: Merge signed marketplace output
+        run: |
+          $ErrorActionPreference = "Stop"
+          $target = "website/dist/market"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item "marketplace-site/*" $target -Recurse -Force
+          foreach ($name in @('index.json', 'keys.json')) {
+            if (-not (Test-Path (Join-Path $target $name))) { throw "Signed marketplace output is missing $name" }
+          }
+          Write-Host "merged signed index: $((Get-Item (Join-Path $target 'index.json')).Length) bytes"
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_API_TOKEN)) { throw "Missing CLOUDFLARE_API_TOKEN in environment marketplace-deploy." }
+          if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_ACCOUNT_ID)) { throw "Missing CLOUDFLARE_ACCOUNT_ID repository variable." }
+          npx --yes wrangler@4.152.0 pages deploy website/dist --project-name fluidbar --branch main --commit-hash $env:GITHUB_SHA --commit-dirty=true
+          if ($LASTEXITCODE -ne 0) { throw "Cloudflare Pages deployment failed" }
 
       - name: Deployment summary
         if: always()
         run: |
-          if ("${{ steps.deployment.outcome }}" -eq "success") {
-            Write-Host "Pages deployed: ${{ steps.deployment.outputs.page_url }}"
-            "## Marketplace Pages deploy`n`nPublished: ${{ steps.deployment.outputs.page_url }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if ("${{ job.status }}" -eq "success") {
+            "## Marketplace deployment`n`nLive: https://fluidbar.doulor.cn/market/" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } else {
-            Write-Host "::warning::Pages deployment failed. Set repository variable MARKETPLACE_DEPLOY_PAGES=false for explicit artifact-only publishing, or fix Pages configuration (see docs/plugin/publish-runbook.md)."
-            "## Marketplace Pages deploy`n`n**Failed** — use the ``marketplace-site`` artifact or set ``MARKETPLACE_DEPLOY_PAGES=false`` for artifact-only publishing. See docs/plugin/publish-runbook.md." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            "## Marketplace deployment`n`n**Failed** — signed release assets are published; check the Cloudflare token and Pages logs." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           }

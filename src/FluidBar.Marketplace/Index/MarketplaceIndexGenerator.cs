@@ -278,7 +278,7 @@ public static class MarketplaceIndexGenerator
 
         var index = new MarketplaceIndexDocument
         {
-            Schema = "https://fluidbar.app/schemas/marketplace-index.schema.json",
+            Schema = "https://fluidbar.doulor.cn/schemas/marketplace-index.schema.json",
             SchemaVersion = 1,
             GeneratedAt = generatedAt,
             SourceCommit = sourceCommit,

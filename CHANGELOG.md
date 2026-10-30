@@ -2,6 +2,18 @@
 
 所有用户可见或架构级变更记录在这里。格式：日期（Asia/Shanghai）+ 摘要 + 影响。
 
+## 2026-10-30 — 插件市场自动发布流水线补齐
+
+- `marketplace.yml` 现在会把每个 `.fbp` 和 `.sig.json` 上传到按版本命名的 GitHub Release：
+  `plugin-<id>-v<version>`，与索引里的下载 URL 模板一致；重复发布使用 `--clobber`，旧版本保留。
+- 发布后构建官网并把新签名索引合并到 `dist/market`，再部署 Cloudflare Pages（需 `marketplace-deploy` 环境里的
+  Pages:Edit API Token）；`MARKETPLACE_DEPLOY_PAGES=false` 可显式只出 artifact。
+- 索引 `$schema`、示例插件 publisher/locale schema、内置插件主页等旧 `fluidbar.app` 地址改到新官网；
+  发布时显式传入 `asset-base-url`，自动生成的市场索引不再丢失图标。
+- 修复插件生命周期超时竞态：插件协作取消时抛出的 `OperationCanceledException` 曾被误判为
+  `StartFailed`，现在统一归类为 `Timeout`，消除 CI 偶发红。
+- 验证：本地 `publish-prepare` 生成并验签通过；两条 Release 下载 200 且 SHA-256 与索引一致；
+  全套 2799 tests 通过。
 ## 2026-10-30 — 液态玻璃空闲时不跟随桌面变化（偶发）
 
 - 修复：空闲时抓屏回调只把 `_backdropDirty` 置位，但帧循环仍按普通脏帧渲染；控制器没有失效时这一帧

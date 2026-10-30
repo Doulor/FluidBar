@@ -1,5 +1,5 @@
 {
-  "$schema": "https://fluidbar.app/schemas/plugin.schema.json",
+  "$schema": "https://fluidbar.doulor.cn/schemas/plugin.schema.json",
   "schemaVersion": 2,
   "id": "sample-minimal",
   "version": "1.0.0",
@@ -8,12 +8,12 @@
   "publisher": {
     "id": "fluidbar-samples",
     "displayName": "FluidBar Samples",
-    "url": "https://fluidbar.app",
+    "url": "https://fluidbar.doulor.cn",
     "keyId": "fluidbar-samples-2026"
   },
   "author": {
     "name": "FluidBar contributors",
-    "url": "https://fluidbar.app"
+    "url": "https://fluidbar.doulor.cn"
   },
   "name": {
     "en-US": "Sample Minimal",

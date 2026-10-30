@@ -41,7 +41,7 @@ public sealed record MarketplaceCatalogOptions
     /// <summary>Rollback protection: reject an index older than the last one the client accepted.</summary>
     public DateTimeOffset? MinimumGeneratedAt { get; init; }
 
-    public string UserAgent { get; init; } = "FluidBar/2.0 (+https://fluidbar.app)";
+    public string UserAgent { get; init; } = "FluidBar/2.0 (+https://fluidbar.doulor.cn)";
 
     /// <summary>Optional host/API version for compatibility filtering.</summary>
     public SemanticVersion? AppVersion { get; init; }

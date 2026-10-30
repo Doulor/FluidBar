@@ -314,7 +314,7 @@ public static class MarketplaceIndexValidator
     {
         "github.com",
         "objects.githubusercontent.com",
-        "marketplace.fluidbar.app",
+        "fluidbar.doulor.cn",
         "raw.githubusercontent.com",
     };
 

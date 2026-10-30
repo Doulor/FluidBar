@@ -20,7 +20,7 @@ and index signatures use base64 **IEEE P1363** (r||s, 64-byte) ECDSA signatures 
 
 ```json
 {
-  "$schema": "https://fluidbar.app/schemas/signature.schema.json",
+  "$schema": "https://fluidbar.doulor.cn/schemas/signature.schema.json",
   "schemaVersion": 1,
   "package": { "sha256": "9f2c…", "size": 184320 },
   "signatures": [
@@ -69,10 +69,11 @@ Maintainer setup steps (one-time):
    Azure Key Vault Premium).
 2. `fluidbar-plugin keygen --out marketplace-2026.pem` (offline demo path), or export the public SPKI from the
    HSM. Store the private key offline; put the **public** key in `marketplace/keys.json` via a normal PR.
-3. GitHub → Settings → Environments → `marketplace-publish`: add required reviewer (Doulor), add the
-   `MARKETPLACE_SIGNING_KEY_PEM` secret, restrict deployment branches to `main`.
-4. Enable GitHub Pages (Settings → Pages → GitHub Actions) or rely on the workflow-artifact fallback documented
-   in [publish-runbook.md](publish-runbook.md).
+3. GitHub → Settings → Environments → `marketplace-publish`: add `MARKETPLACE_SIGNING_KEY_PEM` and restrict
+   deployments to `main`.
+4. Create the `marketplace-deploy` environment with a **Pages: Edit** Cloudflare API token
+   (`CLOUDFLARE_API_TOKEN`) and set the repository variable `CLOUDFLARE_ACCOUNT_ID`; see
+   [publish-runbook.md](publish-runbook.md).
 
 ## Rotation runbook (yearly, or on suspicion)
 

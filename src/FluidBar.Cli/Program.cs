@@ -189,7 +189,7 @@ internal static class FluidBarCli
         var keyId = RequireOption(options, "key-id");
         var configuration = Option(options, "configuration") ?? "Release";
         var artifactBaseUrl = Option(options, "artifact-base-url") ?? "https://github.com/fluidbar/plugins/releases/download";
-        var marketplaceBaseUrl = Option(options, "marketplace-base-url") ?? "https://marketplace.fluidbar.app";
+        var marketplaceBaseUrl = Option(options, "marketplace-base-url") ?? "https://fluidbar.doulor.cn/market";
         var channel = Option(options, "channel") ?? "stable";
         var sourceCommit = Option(options, "source-commit") ?? Environment.GetEnvironmentVariable("GITHUB_SHA") ?? new string('0', 40);
         var generatedAtText = Option(options, "generated-at");
