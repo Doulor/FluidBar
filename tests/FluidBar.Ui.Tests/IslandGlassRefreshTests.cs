@@ -43,6 +43,28 @@ public sealed class IslandGlassRefreshTests
     }
 
     [Fact]
+    public void A_landed_capture_forces_a_full_frame_without_controller_invalidation()
+    {
+        Assert.True(IslandGlassRefreshPolicy.RequiresFullFrame(
+            backdropChanged: true, luminanceAnimating: false, awaitingFirstGlass: false));
+        Assert.False(IslandGlassRefreshPolicy.RequiresFullFrame(
+            backdropChanged: false, luminanceAnimating: false, awaitingFirstGlass: false));
+    }
+
+    [Fact]
+    public void The_idle_loop_cannot_stop_before_the_capture_and_its_fade_are_painted()
+    {
+        Assert.False(IslandGlassRefreshPolicy.CanStopIdleLoop(
+            backdropChanged: true, luminanceAnimating: false, awaitingFirstGlass: false));
+        Assert.False(IslandGlassRefreshPolicy.CanStopIdleLoop(
+            backdropChanged: false, luminanceAnimating: true, awaitingFirstGlass: false));
+        Assert.False(IslandGlassRefreshPolicy.CanStopIdleLoop(
+            backdropChanged: false, luminanceAnimating: false, awaitingFirstGlass: true));
+        Assert.True(IslandGlassRefreshPolicy.CanStopIdleLoop(
+            backdropChanged: false, luminanceAnimating: false, awaitingFirstGlass: false));
+    }
+
+    [Fact]
     public async Task Provider_signature_tracks_content_not_only_mean_luminance()
     {
         using var provider = new IslandBackdropProvider();

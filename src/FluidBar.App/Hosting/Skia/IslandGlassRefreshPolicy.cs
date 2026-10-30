@@ -36,4 +36,19 @@ internal static class IslandGlassRefreshPolicy
 
         return previousLuminance < 0 || Math.Abs(luminance - previousLuminance) > LuminanceThreshold;
     }
+
+    /// <summary>
+    /// True when the next frame must be a full frame. A landed capture has no controller invalidation of its
+    /// own, so a dirty-only frame paints nothing: the new material then stayed unapplied until the next hover
+    /// or state change (recurring report 2026-10-30, same symptom as 2026-10-25).
+    /// </summary>
+    public static bool RequiresFullFrame(bool backdropChanged, bool luminanceAnimating, bool awaitingFirstGlass)
+        => backdropChanged || luminanceAnimating || awaitingFirstGlass;
+
+    /// <summary>
+    /// False while any glass work is still pending. The idle branch used to stop the clock unconditionally,
+    /// which killed the very frame that was supposed to apply the new capture (and truncated the fade).
+    /// </summary>
+    public static bool CanStopIdleLoop(bool backdropChanged, bool luminanceAnimating, bool awaitingFirstGlass)
+        => !RequiresFullFrame(backdropChanged, luminanceAnimating, awaitingFirstGlass);
 }

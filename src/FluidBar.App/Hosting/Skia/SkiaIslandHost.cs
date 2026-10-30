@@ -1499,8 +1499,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             var yieldAnimating = _softYield is not null && _softYield.Step(NowMs());
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
             _probeRenderAllocStart = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes();
-            var painted = RenderAllLocked(forceFull: yieldAnimating || _luminanceAnimating);
-            if (yieldAnimating || _luminanceAnimating || _awaitingFirstGlass)
+            // A landed capture owns no controller invalidation: without a forced full frame the tick paints
+            // nothing, the idle branch stops the clock, and the glass keeps the old material until hover.
+            var glassFramePending = IslandGlassRefreshPolicy.RequiresFullFrame(
+                _backdropDirty, _luminanceAnimating, _awaitingFirstGlass);
+            var painted = RenderAllLocked(forceFull: yieldAnimating || glassFramePending);
+            if (yieldAnimating || glassFramePending)
             {
                 EnsureFrameLoop();
             }
@@ -1563,11 +1567,13 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 // in-memory model (no Win32 calls), so refreshing it per frame is cheap.
                 UpdateHitRegions(force: false);
             }
-            else if (!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
+            else if ((!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
+                && IslandGlassRefreshPolicy.CanStopIdleLoop(_backdropDirty, _luminanceAnimating, _awaitingFirstGlass))
             {
                 // The normal end of an animation: restore 15.6 ms timer granularity and the default
                 // GC latency mode here too. Stopping only the clock left timeBeginPeriod(1) and
                 // SustainedLowLatency active for the rest of the process after the first animation.
+                // Never stop while a landed capture or its tint fade is still waiting for its frame.
                 StopFrameLoopForIdle();
                 UpdateHitRegions(force: false);
                 RefreshAccessibility();
@@ -2269,9 +2275,19 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 var signature = _backdrop.SignatureFor(_lastBackdropRect);
                 if (IslandGlassRefreshPolicy.ShouldWake(_lastBackdropSignature, signature, _lastRawLuminance, raw))
                 {
-                    _lastBackdropSignature = signature;
-                    _lastRawLuminance = raw;
+                    // Do NOT advance the applied signature here. It may only move once a frame actually
+                    // painted the capture; otherwise a skipped frame made the next identical capture look
+                    // unchanged and the glass stayed stale forever (2026-10-30).
                     _backdropDirty = true;
+                    _logger.Debug(LogCategories.Render, "island.glass.backdrop-wake",
+                        "Liquid-glass backdrop changed while idle; waking the frame loop.",
+                        data: new Dictionary<string, object?>
+                        {
+                            ["signature"] = signature,
+                            ["previousSignature"] = _lastBackdropSignature,
+                            ["luminance"] = raw,
+                            ["previousLuminance"] = _lastRawLuminance,
+                        });
                 }
             }
 
@@ -2474,6 +2490,18 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 _luminanceAnimating = !_luminanceSmoother.IsSettled || blend < 1;
                 if (!_luminanceAnimating)
                 {
+                    if (_backdropDirty)
+                    {
+                        _logger.Debug(LogCategories.Render, "island.glass.backdrop-applied",
+                            "Liquid-glass backdrop and tint applied.",
+                            data: new Dictionary<string, object?>
+                            {
+                                ["signature"] = _backdrop.SignatureFor(rect),
+                                ["luminance"] = _backdrop.LuminanceFor(rect),
+                                ["smoothedLuminance"] = smoothed,
+                            });
+                    }
+
                     _backdropDirty = false;
                     _lastRawLuminance = _backdrop.LuminanceFor(rect);
                     _lastBackdropSignature = _backdrop.SignatureFor(rect);
