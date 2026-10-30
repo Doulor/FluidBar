@@ -27,7 +27,7 @@ marketplace/listings/<id>/<bcp47>.json
 
 ```json
 {
-  "$schema": "https://fluidbar.app/schemas/listing.schema.json",
+  "$schema": "https://fluidbar.doulor.cn/schemas/listing.schema.json",
   "locale": "zh-Hans",
   "name": "富示例",
   "summary": "包含设置、命令、小组件和悬停卡片的参考插件。",
