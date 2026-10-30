@@ -22,6 +22,8 @@ namespace FluidBar.App.Hosting.Skia;
 /// <param name="Animating">Whether motion is in flight.</param>
 /// <param name="ShellWidthTenths">Painted shell width in tenths of a DIP.</param>
 /// <param name="ShellHeightTenths">Painted shell height in tenths of a DIP.</param>
+/// <param name="ShellLeftTenths">Painted shell left in tenths of a DIP (notification drag moves it).</param>
+/// <param name="ShellTopTenths">Painted shell top in tenths of a DIP (notification drag moves it).</param>
 public readonly record struct IslandHitRegionSignature(
     ShellForm Form,
     bool Visible,
@@ -30,6 +32,8 @@ public readonly record struct IslandHitRegionSignature(
     bool Animating,
     int ShellWidthTenths,
     int ShellHeightTenths,
+    int ShellLeftTenths,
+    int ShellTopTenths,
     int SecondaryKind,
     int SecondaryWidthTenths,
     int SecondaryHeightTenths)
@@ -48,6 +52,8 @@ public readonly record struct IslandHitRegionSignature(
             animating,
             (int)Math.Round(state.ShellWidth * 10),
             (int)Math.Round(state.ShellHeight * 10),
+            (int)Math.Round(IslandMetrics.ShellRect(state).Left * 10),
+            (int)Math.Round(IslandMetrics.ShellRect(state).Top * 10),
             state.SecondaryCompact is { } activity ? (int)activity.Kind : -1,
             (int)Math.Round(secondary.Width * 10),
             (int)Math.Round(secondary.Height * 10));

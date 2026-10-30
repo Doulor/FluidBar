@@ -204,9 +204,24 @@ public sealed class SkiaIslandController : IDisposable
     // Click-vs-drag: a compact press is only a candidate click; the host turns it into a window move
     // once the pointer passes SkiaDragThreshold in screen space, and the click is committed on release.
     private bool _clickPending;
+    private bool _pendingNotificationClick;
     private double _clickXDip;
     private double _clickYDip;
     private bool _windowDragActive;
+
+    // Notification-card upward dismiss: raw pointer travel is compressed by a logarithmic rubber band,
+    // released into a spring, and only the off-screen end of that spring removes the notification.
+    private readonly Spring _notificationDismissSpring = new(new SpringParameters(0.34, 0.80));
+    private string? _notificationDragKey;
+    private double _notificationDragStartY;
+    private double _notificationDragOffsetY;
+    private double _notificationDragLastOffsetY;
+    private long _notificationDragLastTimestampMs;
+    private double _notificationDragVelocityY;
+    private bool _notificationDragActive;
+    private bool _notificationDismissing;
+    private bool _notificationDismissRequested;
+    private long _notificationDismissRequestedAtMs;
 
     // Press/hover feedback: the control held down and the control under the pointer. Both are resolved
     // by the same hit test the clicks use, so the highlight can never sit on a different rectangle.
@@ -336,7 +351,8 @@ public sealed class SkiaIslandController : IDisposable
     public bool IsAnimating => MaterialSwapActive || !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
         || IsLyricTransitionAnimating || HasSpinningSplitRing
-        || IsMediaProgressAnimating || IsTrackTransitionAnimating;
+        || IsMediaProgressAnimating || IsTrackTransitionAnimating
+        || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationDismissRequested;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
     public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
@@ -837,10 +853,12 @@ public sealed class SkiaIslandController : IDisposable
 
         var now = _time.GetLocalNow();
         var trackTransitionWasRunning = IsTrackTransitionAnimating;
+        var notificationWasAnimating = !_notificationDismissSpring.IsAtRest;
         StepTrackTransition();
         StepMaterialSwap();
         var motionWasRunning = !_motion.IsAtRest;
         _motion.Step(dt);
+        StepNotificationDismiss(dt);
 
         if (State.Kind == IslandStateKind.Closing && _motion.IsAtRest)
         {
@@ -864,6 +882,12 @@ public sealed class SkiaIslandController : IDisposable
         var railWasRunning = SyncRailMotion(dt);
         var mediaProgressChanged = ApplyMediaProgress();
         BuildRenderState();
+
+        if (notificationWasAnimating || _notificationDragActive)
+        {
+            // The card moved vertically: the shell/hit geometry and its shadow all moved with it.
+            InvalidateFull();
+        }
 
         if (mediaProgressChanged)
         {
@@ -1262,6 +1286,14 @@ public sealed class SkiaIslandController : IDisposable
         _pointerX = xDip;
         _pointerY = yDip;
 
+        // The card is moving away from the pointer during the dismiss gesture. Re-running hover and
+        // zone hit tests against the painted (offset) shell would make the notification leave Peek
+        // mid-drag and fight the gesture, so pointer bookkeeping stays frozen until it settles.
+        if (_notificationDragActive || _notificationDismissing || _notificationDismissRequested)
+        {
+            return;
+        }
+
 
         // Dragging the seek row: keep dispatching seeks while the button is held (the press already
         // committed one). The pager only owns page drags, so this is the only way a scrub works.
@@ -1460,10 +1492,12 @@ public sealed class SkiaIslandController : IDisposable
             case IslandHitKind.Compact:
                 if (_compact.Kind == ActivityKind.Notification)
                 {
-                    // The compact notification card is itself the notification action: open the
-                    // originating app (QQ deep link) instead of expanding the island first.
-                    DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, 0),
-                        0);
+                    // Defer activation until release: a press that turns into the upward dismiss drag
+                    // must not open the source app first. A release inside the 6 DIP threshold still
+                    // activates exactly like before.
+                    _pendingNotificationClick = true;
+                    _clickXDip = xDip;
+                    _clickYDip = yDip;
                     return true;
                 }
 
@@ -1573,6 +1607,16 @@ public sealed class SkiaIslandController : IDisposable
             InvalidateFull();
         }
 
+        if (_pendingNotificationClick)
+        {
+            var isClick = !SkiaDragThreshold.Exceeds(_clickXDip, _clickYDip, xDip, yDip);
+            _pendingNotificationClick = false;
+            if (isClick)
+            {
+                DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, 0), 0);
+            }
+        }
+
         // A click is committed on release. A drag that crossed the threshold already cancelled the
         // pending click in BeginWindowDrag, and one that stayed below it is still a click.
         if (_clickPending)
@@ -1613,6 +1657,14 @@ public sealed class SkiaIslandController : IDisposable
             UpdateArchipelago(now);
             InvalidateFull();
             return SkiaDragKind.Pager;
+        }
+
+        if (_renderState.Form is ShellForm.Compact or ShellForm.Peek
+            && _compact.Kind == ActivityKind.Notification
+            && hit.Kind is IslandHitKind.Compact or IslandHitKind.SecondaryCompact)
+        {
+            _notificationDragStartY = yDip;
+            return SkiaDragKind.NotificationCandidate;
         }
 
         if (_renderState.Form is ShellForm.Compact or ShellForm.Peek
@@ -1660,6 +1712,212 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         _pager.EndDrag(timestampMs);
+        InvalidateFull();
+    }
+
+    /// <summary>Begins the vertical notification-card drag once the host threshold is crossed.</summary>
+    public bool BeginNotificationDrag()
+    {
+        if (_notificationDragActive || !_hasRenderState
+            || _renderState.Form is not (ShellForm.Compact or ShellForm.Peek)
+            || _compact.Kind != ActivityKind.Notification)
+        {
+            return false;
+        }
+
+        CancelPendingClick();
+        _notificationDragActive = true;
+        _notificationDismissing = false;
+        _notificationDismissRequested = false;
+        _notificationDragKey = NotificationKey(_compact.Model);
+        _notificationDragOffsetY = 0;
+        _notificationDragLastOffsetY = 0;
+        _notificationDragVelocityY = 0;
+        _notificationDragLastTimestampMs = NowMs();
+        _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismissing: false));
+        _notificationDismissSpring.Reset(0);
+        _logger.Debug(LogCategories.Render, "island.notification.drag-begin",
+            "Notification card dismiss gesture started.",
+            data: new Dictionary<string, object?> { ["title"] = _compact.Model.Title });
+        InvalidateFull();
+        return true;
+    }
+
+    /// <summary>Updates the damped card offset while the pointer is held.</summary>
+    public void HandleNotificationDragMoved(double yDip, long timestampMs)
+    {
+        if (!_notificationDragActive)
+        {
+            return;
+        }
+
+        UpdateNotificationDragOffset(yDip, timestampMs);
+        InvalidateFull();
+    }
+
+    /// <summary>Releases the card: dismiss past the two-row threshold/flick, otherwise spring it back.</summary>
+    public void HandleNotificationDragEnded(double yDip, long timestampMs)
+    {
+        if (!_notificationDragActive)
+        {
+            return;
+        }
+
+        UpdateNotificationDragOffset(yDip, timestampMs);
+        var raw = _notificationDragStartY - yDip;
+        var dismiss = NotificationDismissGesture.ShouldDismiss(raw, _notificationDragVelocityY);
+        _notificationDragActive = false;
+        _notificationDismissing = dismiss;
+        _notificationDismissRequested = false;
+        _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismiss));
+        _notificationDismissSpring.Reset(_notificationDragOffsetY, _notificationDragVelocityY);
+        _notificationDismissSpring.Retarget(
+            dismiss ? NotificationDismissGesture.DismissTargetDip : 0, 0.016);
+        _logger.Debug(LogCategories.Render, "island.notification.drag-end",
+            dismiss ? "Notification card released past the dismiss threshold." : "Notification card released below the dismiss threshold.",
+            data: new Dictionary<string, object?>
+            {
+                ["rawDip"] = raw,
+                ["offsetDip"] = _notificationDragOffsetY,
+                ["velocityDipPerSecond"] = _notificationDragVelocityY,
+                ["dismiss"] = dismiss,
+            });
+        InvalidateFull();
+    }
+
+    /// <summary>Cancels an in-flight notification drag (capture lost) and springs the card back.</summary>
+    public void HandleNotificationDragCancelled()
+    {
+        if (!_notificationDragActive)
+        {
+            _notificationDragKey = null;
+            return;
+        }
+
+        _notificationDragActive = false;
+        _notificationDismissing = false;
+        _notificationDismissRequested = false;
+        _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismissing: false));
+        _notificationDismissSpring.Reset(_notificationDragOffsetY, 0);
+        _notificationDismissSpring.Retarget(0, 0.016);
+        InvalidateFull();
+    }
+
+    /// <summary>Clears a notification candidate that never crossed the drag threshold (a click).</summary>
+    public void CancelNotificationDragCandidate()
+    {
+        if (!_notificationDragActive)
+        {
+            _notificationDragKey = null;
+        }
+    }
+
+    private void UpdateNotificationDragOffset(double yDip, long timestampMs)
+    {
+        var raw = _notificationDragStartY - yDip;
+        var offset = NotificationDismissGesture.OffsetYDip(raw);
+        var elapsedMs = Math.Clamp(timestampMs - _notificationDragLastTimestampMs, 1, 100);
+        _notificationDragVelocityY = (offset - _notificationDragLastOffsetY) / elapsedMs * 1000.0;
+        _notificationDragLastOffsetY = offset;
+        _notificationDragLastTimestampMs = timestampMs;
+        _notificationDragOffsetY = offset;
+        _notificationDismissSpring.SnapTo(offset);
+    }
+
+    private void StepNotificationDismiss(double deltaSeconds)
+    {
+        if (_notificationDismissSpring.IsAtRest)
+        {
+            if (_notificationDismissRequested && NowMs() - _notificationDismissRequestedAtMs > 1200)
+            {
+                // The platform seam reported success but the row never left the list: give the card
+                // back rather than leaving an invisible, permanently hidden notification.
+                _logger.Warning(LogCategories.Render, "island.notification.dismiss-timeout",
+                    "The notification row did not disappear after the dismiss gesture; restoring the card.");
+                ResetNotificationDrag();
+            }
+
+            return;
+        }
+
+        _notificationDismissSpring.Step(deltaSeconds);
+        _notificationDragOffsetY = _notificationDismissSpring.Value;
+        if (!_notificationDismissing || _notificationDragOffsetY > NotificationDismissGesture.DismissAtDip)
+        {
+            return;
+        }
+
+        _notificationDismissSpring.SnapTo(NotificationDismissGesture.DismissTargetDip);
+        _notificationDragOffsetY = _notificationDismissSpring.Value;
+        _notificationDismissing = false;
+        if (TryDismissCurrentNotification())
+        {
+            _notificationDismissRequested = true;
+            _notificationDismissRequestedAtMs = NowMs();
+            _logger.Information(LogCategories.Render, "island.notification.dismissed",
+                "Notification card dismissed by an upward drag.");
+            InvalidateFull();
+            return;
+        }
+
+        _logger.Warning(LogCategories.Render, "island.notification.dismiss-failed",
+            "The platform seam rejected the notification dismissal; restoring the card.");
+        _notificationDismissRequested = false;
+        _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismissing: false));
+        _notificationDismissSpring.Reset(_notificationDragOffsetY, 0);
+        _notificationDismissSpring.Retarget(0, 0.016);
+    }
+
+    private bool TryDismissCurrentNotification()
+    {
+        var action = new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, 0);
+        if (_platformActions is null)
+        {
+            LogControlOutcome(action, 0, "island.skia.control-unsupported",
+                "no IIslandPlatformActions seam is configured for this host");
+            return false;
+        }
+
+        var result = _platformActions.Invoke(action);
+        if (result.Outcome == IslandActionOutcome.Handled)
+        {
+            return true;
+        }
+
+        LogControlOutcome(action, 0, "island.skia.control-unsupported",
+            result.Reason ?? "the notification row no longer exists");
+        return false;
+    }
+
+    private SpringParameters NotificationSpringParameters(bool dismissing)
+    {
+        if (_motion.ReducedMotion)
+        {
+            return new SpringParameters(0.18, 1.0);
+        }
+
+        return dismissing ? new SpringParameters(0.34, 0.80) : new SpringParameters(0.30, 0.88);
+    }
+
+    private static string NotificationKey(CompactModel model)
+        => (model.AppName ?? string.Empty) + "\u001f" + (model.Title ?? string.Empty) + "\u001f"
+           + (model.Body ?? string.Empty) + "\u001f" + (model.TimeText ?? string.Empty);
+
+    private void ResetNotificationDrag()
+    {
+        if (_notificationDragKey is null && !_notificationDragActive && !_notificationDismissing
+            && !_notificationDismissRequested && _notificationDragOffsetY == 0)
+        {
+            return;
+        }
+
+        _notificationDragKey = null;
+        _notificationDragActive = false;
+        _notificationDismissing = false;
+        _notificationDismissRequested = false;
+        _notificationDragOffsetY = 0;
+        _notificationDragVelocityY = 0;
+        _notificationDismissSpring.Reset(0);
         InvalidateFull();
     }
 
@@ -2959,7 +3217,11 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Drops a deferred compact click (drag, leave, escape, re-press).</summary>
-    private void CancelPendingClick() => _clickPending = false;
+    private void CancelPendingClick()
+    {
+        _clickPending = false;
+        _pendingNotificationClick = false;
+    }
 
         private long _lastSeekDragMs;
     private double _lastSeekDragFraction = -1;
@@ -3604,6 +3866,17 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var mode = _settings.Current.IslandMode;
         _motion.PanelRadius = _settings.Current.PanelRadius;
+        var currentNotificationKey = _compact.Kind == ActivityKind.Notification
+            ? NotificationKey(_compact.Model)
+            : null;
+        if (_notificationDragKey is { } dragKey
+            && !string.Equals(dragKey, currentNotificationKey, StringComparison.Ordinal))
+        {
+            // The dragged notification left the presentation (dismissed, replaced or expired): the
+            // offset belongs to that card only and must never hide the next activity.
+            ResetNotificationDrag();
+        }
+
         var form = ResolveVisualForm();
         var expanded = form == ShellForm.Expanded;
         var shellRadii = !expanded && _compact.Kind == ActivityKind.Notification
@@ -3630,6 +3903,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             ExpandedLayerOpacity = _motion.ExpandedContentOpacity,
             ChromeOpacity = _motion.ChromeOpacity,
             NudgeOffsetY = _motion.NudgeOffsetY,
+            NotificationDragOffsetY = _notificationDragKey is null ? 0 : _notificationDragOffsetY,
             PressedControl = _pressedControl,
             PressedPage = _pressedPage,
             PressedIndex = _pressedIndex,

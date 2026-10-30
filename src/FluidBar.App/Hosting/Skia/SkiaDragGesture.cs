@@ -11,6 +11,9 @@ public enum SkiaDragKind
 
     /// <summary>Compact pill press: becomes a window move once the pointer passes the threshold.</summary>
     WindowCandidate,
+
+    /// <summary>Notification card press: becomes a vertical dismiss gesture once the threshold is crossed.</summary>
+    NotificationCandidate,
 }
 
 /// <summary>

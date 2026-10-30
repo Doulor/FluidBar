@@ -1003,11 +1003,56 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                         MoveWindowForDrag(entry, drag);
                         UpdateHitRegions(force: true);
                     }
+                    else if (entry.DragKind == SkiaDragKind.NotificationCandidate)
+                    {
+                        if (!entry.DragActive)
+                        {
+                            var scale = SafeScale(entry.Host.Scale);
+                            if (SkiaDragThreshold.Exceeds(
+                                    entry.DragStartScreenXDip,
+                                    entry.DragStartScreenYDip,
+                                    drag.Pointer.ScreenX / scale,
+                                    drag.Pointer.ScreenY / scale))
+                            {
+                                if (_controller.BeginNotificationDrag())
+                                {
+                                    entry.DragActive = true;
+                                }
+                                else
+                                {
+                                    entry.DragKind = SkiaDragKind.None;
+                                }
+                            }
+                        }
+
+                        if (entry.DragKind == SkiaDragKind.NotificationCandidate)
+                        {
+                            _controller.HandleNotificationDragMoved(y, timestamp);
+                        }
+                    }
 
                     break;
                 case LayeredDragPhase.Ended:
                 case LayeredDragPhase.Cancelled:
-                    if (entry.DragKind == SkiaDragKind.WindowCandidate && entry.DragActive)
+                    if (entry.DragKind == SkiaDragKind.NotificationCandidate)
+                    {
+                        if (entry.DragActive)
+                        {
+                            if (drag.Phase == LayeredDragPhase.Cancelled)
+                            {
+                                _controller.HandleNotificationDragCancelled();
+                            }
+                            else
+                            {
+                                _controller.HandleNotificationDragEnded(y, timestamp);
+                            }
+                        }
+                        else
+                        {
+                            _controller.CancelNotificationDragCandidate();
+                        }
+                    }
+                    else if (entry.DragKind == SkiaDragKind.WindowCandidate && entry.DragActive)
                     {
                         EndWindowDrag(entry, drag.Phase == LayeredDragPhase.Cancelled);
                     }
@@ -1025,7 +1070,17 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         };
         host.PointerCaptureLost += () =>
         {
-            _controller.HandleDragEnded(0, 0, NowMs());
+            if (entry.DragKind == SkiaDragKind.NotificationCandidate)
+            {
+                _controller.HandleNotificationDragCancelled();
+                entry.DragKind = SkiaDragKind.None;
+                entry.DragActive = false;
+            }
+            else
+            {
+                _controller.HandleDragEnded(0, 0, NowMs());
+            }
+
             EnsureFrameLoop();
         };
         host.LayeredDpiChanged += change =>
@@ -2238,11 +2293,12 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         var rect = (window.X, window.Y, window.Width, window.Height);
         var surfaceDip = entry.Host.SurfaceSizeDip;
         var dpi = surfaceDip.WidthDip > 0 ? window.Width / surfaceDip.WidthDip : 1.0;
+        var shellBounds = FluidBar.Island.IslandMetrics.ShellRect(state);
         var luminanceWindow = (
-            X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
-            Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
-            Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
-            Height: (int)Math.Round((state.ShellHeight + 12) * dpi));
+            X: (int)Math.Round((shellBounds.Left - 6) * dpi),
+            Y: (int)Math.Round((shellBounds.Top - 6) * dpi),
+            Width: (int)Math.Round((shellBounds.Width + 12) * dpi),
+            Height: (int)Math.Round((shellBounds.Height + 12) * dpi));
 
         // force:true re-captures even though the cached frame may still be inside its refresh window; the
         // screenshot itself is throttled inside the provider.
@@ -2366,13 +2422,14 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
     private static List<(int X, int Y, int Width, int Height)> BuildIslandMasks(in IslandRenderState state, double dpi)
     {
         const double maskMarginDip = 18.0;
+        var shell = FluidBar.Island.IslandMetrics.ShellRect(state);
         var masks = new List<(int X, int Y, int Width, int Height)>
         {
             (
-                (int)Math.Round((state.ShellOrigin.X - maskMarginDip) * dpi),
-                (int)Math.Round((state.ShellOrigin.Y - maskMarginDip) * dpi),
-                (int)Math.Round((state.ShellWidth + (maskMarginDip * 2)) * dpi),
-                (int)Math.Round((state.ShellHeight + (maskMarginDip * 2)) * dpi)),
+                (int)Math.Round((shell.Left - maskMarginDip) * dpi),
+                (int)Math.Round((shell.Top - maskMarginDip) * dpi),
+                (int)Math.Round((shell.Width + (maskMarginDip * 2)) * dpi),
+                (int)Math.Round((shell.Height + (maskMarginDip * 2)) * dpi)),
         };
 
         // Split capsules live outside the shell: mask them too, otherwise the rotating agent ring is
@@ -2446,10 +2503,11 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                 }
             }
 
+            var shellBounds = FluidBar.Island.IslandMetrics.ShellRect(state);
             var luminanceWindow = (
-                X: (int)Math.Round((state.ShellOrigin.X - 6) * dpi),
-                Y: (int)Math.Round((state.ShellOrigin.Y - 6) * dpi),
-                Width: (int)Math.Round((state.ShellWidth + 12) * dpi),
+                X: (int)Math.Round((shellBounds.Left - 6) * dpi),
+                Y: (int)Math.Round((shellBounds.Top - 6) * dpi),
+                Width: (int)Math.Round((shellBounds.Width + 12) * dpi),
                 Height: (int)Math.Round((lumaHeight + 12) * dpi));
             _lastBackdropRect = rect;
             var backdrop = _backdrop.Get(

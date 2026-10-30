@@ -125,6 +125,9 @@ public readonly record struct IslandRenderState
     /// <summary>Transient vertical nudge in DIP (new-activity kick); 0 when reduced motion.</summary>
     public double NudgeOffsetY { get; init; }
 
+    /// <summary>Notification-card drag offset in DIP (negative = pushed up); 0 for every other state.</summary>
+    public double NotificationDragOffsetY { get; init; }
+
     /// <summary>Press scale about the shell centre (1 = not pressed).</summary>
     public double PressScale { get; init; } = 1;
 

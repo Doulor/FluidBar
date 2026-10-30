@@ -162,12 +162,12 @@ public static class IslandMetrics
             Math.Max(1, (int)Math.Ceiling(size.Height * scale)));
     }
 
-    /// <summary>Shell rectangle (host-local DIP) for a state, including the nudge offset.</summary>
+    /// <summary>Shell rectangle (host-local DIP) for a state, including nudge and notification-drag offsets.</summary>
     public static SKRect ShellRect(in IslandRenderState state) => new(
         (float)state.ShellOrigin.X,
-        (float)(state.ShellOrigin.Y + state.NudgeOffsetY),
+        (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.NotificationDragOffsetY),
         (float)(state.ShellOrigin.X + state.ShellWidth),
-        (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.ShellHeight));
+        (float)(state.ShellOrigin.Y + state.NudgeOffsetY + state.NotificationDragOffsetY + state.ShellHeight));
 
     /// <summary>
     /// Secondary notification pill below the primary compact shell (above it in dock mode). Returns an
