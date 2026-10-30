@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FluidBar · 展开卡片侧栏原型</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="desktop" aria-label="FluidBar 展开卡片交互原型">
+    <div class="scene-window scene-window--back" aria-hidden="true"></div>
+    <div class="scene-window scene-window--front" aria-hidden="true"></div>
+
+    <section class="island" id="island" aria-label="FluidBar 展开卡片">
+      <nav class="rail" id="rail" aria-label="页面导航"></nav>
+      <div class="content">
+        <header class="chrome">
+          <div class="page-heading">
+            <span class="page-number" id="pageNumber">01</span>
+            <span class="page-title" id="pageTitle">主页</span>
+          </div>
+          <div class="chrome-actions">
+            <button class="chrome-button" type="button" aria-label="设置" title="设置" data-act="settings"></button>
+            <button class="chrome-button" type="button" aria-label="收起灵动岛" title="收起" data-act="collapse"></button>
+          </div>
+        </header>
+        <div class="viewport" id="viewport"></div>
+      </div>
+      <div class="wheel-hint">滚轮切换页面 / 滚动内容</div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="../../rewrite/prototype2/icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
