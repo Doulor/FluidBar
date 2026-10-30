@@ -322,7 +322,7 @@ jobs:
             }
             gh release upload $tag $package $signature --clobber
             if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag" }
-            Write-Host "release $tag: $([IO.Path]::GetFileName($package)) + signature"
+            Write-Host "release ${tag}: $([IO.Path]::GetFileName($package)) + signature"
           }
 
       - name: Upload plugin packages (workflow artifact, always available)
