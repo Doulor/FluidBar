@@ -1,4 +1,5 @@
 using System.Globalization;
+using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Localization;
 using FluidBar.App.Settings;
@@ -44,7 +45,8 @@ public sealed class ControllerFixture : IDisposable
         RecordingAppLogger? logger = null,
         Func<SystemAppearanceSnapshot>? appearance = null,
         MediaPillPreferences? mediaPill = null,
-        int? restoredPage = null)
+        int? restoredPage = null,
+        PageRegistry? pageRegistry = null)
     {
         var time = new FakeTimeProvider();
         var localizer = new FakeLocalizer();
@@ -60,6 +62,7 @@ public sealed class ControllerFixture : IDisposable
             Logger = recording,
             TimeProvider = time,
             PlatformActions = actions,
+            PageRegistry = pageRegistry,
             TargetFrameRate = 120,
             AppearanceSnapshot = appearance,
         }, mediaPill: mediaPill ?? MediaPillPreferences.Default, restoredPage: restoredPage);

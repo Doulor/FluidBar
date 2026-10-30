@@ -1,6 +1,9 @@
+using FluidBar.App.Hosting.Pages;
 using FluidBar.App.Hosting.Skia;
 using FluidBar.Core.Interaction;
 using FluidBar.Island;
+using FluidBar.Sdk.Manifest;
+using FluidBar.Sdk.Pages;
 
 namespace FluidBar.Ui.Tests;
 
@@ -56,6 +59,33 @@ public sealed class SkiaSideRailNavigationTests
         var collapse = PageLayout.CollapseRect(content);
         fixture.Controller.HandlePointerMoved(collapse.MidX, collapse.MidY);
         Assert.Equal(IslandPageControl.Collapse, fixture.Controller.RenderState.HoverControl);
+    }
+
+    [Fact]
+    public void SeventhPage_ScrollsTheRailByOnePitch_AndKeepsItsTabVisible()
+    {
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage("test-rail", new PageDescriptor
+        {
+            PageId = "test-rail.extra",
+            Order = 100,
+            Title = new LocalizedString("Extra"),
+            ShortTitle = new LocalizedString("Extra"),
+            IconToken = "list",
+            TemplateId = PageTemplates.List,
+        }, out var error), error);
+
+        using var fixture = ControllerFixture.Create(pageRegistry: registry);
+        fixture.ExpandAndSettle();
+        Assert.Equal(7, fixture.Controller.RenderState.Pages.PageCount);
+
+        fixture.GoToPage(6);
+        var state = fixture.Controller.RenderState;
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
+        Assert.Equal(SideRailLayout.MaxScroll(7, content), state.Pages.RailScrollOffset, 0.001);
+        var tab = SideRailLayout.TabRect(content, 6, state.Pages.RailScrollOffset, 7);
+        Assert.Equal(content.Bottom, tab.Bottom, 0.001);
+        Assert.Equal(IslandHitKind.PageTab, SkiaIslandHitTest.Hit(state, tab.MidX, tab.MidY).Kind);
     }
 
     [Fact]

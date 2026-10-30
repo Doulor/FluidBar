@@ -2450,13 +2450,14 @@ public sealed class SkiaIslandController : IDisposable
         _secondaryCompact = null;
         TrackCompactLyric();
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
-        _pages = ApplyPageScroll(ApplyCopyFeedback(
-            SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings),
-            _time.GetLocalNow())) with
+        // Build the complete page table first: ApplyPageScroll clamps the rail follow offset against
+        // PageCount, so doing it before plugin/extra slots are attached would reset the rail to zero.
+        var pageContent = SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings) with
         {
             PluginPages = _pluginPages,
             PageSlots = BuildPageSlots(),
         };
+        _pages = ApplyPageScroll(ApplyCopyFeedback(pageContent, _time.GetLocalNow()));
         _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
         UpdateSplitPreviews(presentation, settings);
         _motion.SetTarget(BuildTarget(presentation));
