@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 留隙</title>
+  <rect width="128" height="128" rx="34" fill="#17212B"/>
+  <path d="M42 36H36C28 36 25 41 25 49V79C25 87 28 92 36 92H42M86 36H92C100 36 103 41 103 49V79C103 87 100 92 92 92H86" stroke="#DDE6ED" stroke-width="6" stroke-linecap="round"/><rect x="44" y="57" width="40" height="14" rx="7" fill="#DDE6ED"/>
+</svg>

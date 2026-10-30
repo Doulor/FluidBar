@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 墨线</title>
+  <rect width="128" height="128" rx="34" fill="#F4F0E7"/>
+  <path d="M44 50C31 50 27 56 28 65C29 75 36 78 47 77L84 76C95 76 101 72 101 63C100 54 95 50 84 50L44 50Z" stroke="#34404B" stroke-width="5" stroke-linecap="round"/><circle cx="84" cy="64" r="4" fill="#34404B"/>
+</svg>

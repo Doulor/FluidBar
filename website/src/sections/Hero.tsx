@@ -88,7 +88,7 @@ export function Hero() {
               ref={frameRef}
               title="FluidBar 真实交互原型：默认展示控制中心，点击小岛可收起"
               name="fluidbar-hero"
-              poster={`${import.meta.env.BASE_URL}posters/lab-expanded.png`}
+              poster={`${import.meta.env.BASE_URL}posters/lab-expanded-daylight.png`}
               startState="expanded"
               onState={setState}
               defer

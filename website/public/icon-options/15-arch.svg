@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 拱门</title>
+  <rect width="128" height="128" rx="34" fill="#2E3439"/>
+  <path d="M36 95V59C36 21 92 21 92 59V95" stroke="#E8EDF1" stroke-width="9" stroke-linecap="round"/><rect x="50" y="76" width="28" height="10" rx="5" fill="#E8EDF1"/>
+</svg>

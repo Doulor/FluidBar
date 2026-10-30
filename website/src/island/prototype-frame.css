@@ -5,8 +5,8 @@
   margin-inline: auto;
   overflow: hidden;
   border-radius: 24px;
-  border: 1px solid rgba(11, 13, 16, 0.18);
-  background: #05070a;
+  border: 1px solid rgba(39, 67, 85, 0.18);
+  background: #dceaf2;
   box-shadow:
     0 24px 48px -28px rgba(18, 27, 40, 0.32),
     0 4px 12px -8px rgba(18, 27, 40, 0.12);
@@ -46,9 +46,7 @@
 }
 
 .prototype-frame__poster--empty {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgba(28, 52, 72, 0.65), transparent 60%),
-    #05070a;
+  background: #dceaf2 url('/island-backdrop.svg') center / cover no-repeat;
 }
 
 .prototype-frame__iframe {
@@ -77,7 +75,7 @@
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.38);
+  background: rgba(39, 67, 85, 0.5);
   animation: frame-pulse 1s ease-in-out infinite;
 }
 

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 连环</title>
+  <rect width="128" height="128" rx="34" fill="#F1EFEA"/>
+  <path d="M64 64C49 40 29 40 29 64C29 88 49 88 64 64C79 40 99 40 99 64C99 88 79 88 64 64Z" stroke="#3B4045" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

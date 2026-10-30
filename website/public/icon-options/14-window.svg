@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 窗口</title>
+  <rect width="128" height="128" rx="34" fill="#E8EDF1"/>
+  <rect x="29" y="34" width="70" height="60" rx="13" stroke="#263A4B" stroke-width="6"/><path d="M31 51H97" stroke="#263A4B" stroke-width="5"/><rect x="45" y="66" width="38" height="12" rx="6" fill="#263A4B"/>
+</svg>

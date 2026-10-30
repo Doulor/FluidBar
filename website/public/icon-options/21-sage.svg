@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 鼠尾草</title>
+  <rect width="128" height="128" rx="34" fill="#DDE8DF"/>
+  <path d="M42 52H85C103 52 103 77 85 77H42C26 77 26 52 42 52Z" fill="#365749"/><path d="M76 52V63" stroke="#DDE8DF" stroke-width="6" stroke-linecap="round"/>
+</svg>

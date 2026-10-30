@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 合字 FB</title>
+  <rect width="128" height="128" rx="34" fill="#F0F2F4"/>
+  <path d="M28 35H64V48H41V58H60V71H41V93H28V35Z" fill="#182027"/><path d="M70 35H83C105 35 108 58 94 63C111 70 105 93 83 93H70V35ZM82 47V58H86C94 58 94 47 86 47H82ZM82 70V81H86C96 81 96 70 86 70H82Z" fill="#182027"/>
+</svg>

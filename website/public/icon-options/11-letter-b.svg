@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <title>FluidBar · 圆角 b</title>
+  <rect width="128" height="128" rx="34" fill="#23384A"/>
+  <path d="M38 30H52V57C57 51 64 48 72 48C89 48 100 60 100 77C100 94 89 105 72 105C53 105 38 94 38 75V30ZM52 77C52 87 59 93 70 93C80 93 86 87 86 77C86 67 80 61 70 61C59 61 52 67 52 77Z" fill="#F0F4F6"/>
+</svg>

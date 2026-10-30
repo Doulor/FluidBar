@@ -131,8 +131,8 @@ export function IslandLab() {
       : `${compact.label} · ${state.width} × ${state.height}`;
   const poster =
     state.expanded
-      ? `${import.meta.env.BASE_URL}posters/lab-expanded.png`
-      : `${import.meta.env.BASE_URL}posters/hero-idle.png`;
+      ? `${import.meta.env.BASE_URL}posters/lab-expanded-daylight.png`
+      : `${import.meta.env.BASE_URL}posters/hero-idle-daylight.png`;
 
   return (
     <section id="story" className="lab" aria-labelledby="lab-title">
