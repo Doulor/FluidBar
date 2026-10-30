@@ -60,7 +60,7 @@ export function SiteNav() {
               items={ITEMS}
               activeHref={`#${active === 'story' ? 'experience' : active}`}
               theme="light"
-              size="sm"
+              size="md"
               layout="split"
               surface="glass"
               itemStyle="pill"

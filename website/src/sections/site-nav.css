@@ -22,7 +22,8 @@
 }
 
 .nav-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 24px;
   height: var(--nav-h);
@@ -33,6 +34,7 @@
   align-items: center;
   gap: 11px;
   flex: none;
+  justify-self: start;
 }
 
 .brand-name {
@@ -56,14 +58,23 @@
 }
 
 .nav-desktop {
-  margin-inline: auto;
+  justify-self: center;
+}
+
+.nav-desktop .pill-nav {
+  font-size: 15px;
+}
+
+.nav-desktop .pill-nav__item {
+  min-width: clamp(84px, 8vw, 116px);
+  letter-spacing: 0.04em;
 }
 
 .nav-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
+  justify-self: end;
 }
 
 .nav-icon-link {
@@ -150,6 +161,10 @@
 }
 
 @media (max-width: 900px) {
+  .nav-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .nav-desktop,
   .nav-icon-link {
     display: none;
