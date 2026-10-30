@@ -180,36 +180,54 @@ internal sealed partial class PageRenderer : IDisposable
 
 
     /// <summary>Draws the in-card six-page rail that replaces the detached preview islands.</summary>
+    private static SKColor LerpColor(SKColor from, SKColor to, float amount)
+    {
+        amount = Math.Clamp(amount, 0, 1);
+        return new SKColor(
+            (byte)(from.Red + ((to.Red - from.Red) * amount)),
+            (byte)(from.Green + ((to.Green - from.Green) * amount)),
+            (byte)(from.Blue + ((to.Blue - from.Blue) * amount)),
+            (byte)(from.Alpha + ((to.Alpha - from.Alpha) * amount)));
+    }
+
     private void DrawSideRail(SKCanvas canvas, in IslandRenderState state, SKRect content)
     {
         var count = Math.Max(1, state.Pages.PageCount);
         var scroll = SideRailLayout.ClampScroll(state.Pages.RailScrollOffset, count, content);
+        var selection = double.IsFinite(state.RailSelectionPosition)
+            ? Math.Clamp(state.RailSelectionPosition, 0, count - 1)
+            : state.PageIndex;
         canvas.Save();
         // Clip to the card body: a long rail must never paint past the bottom edge.
         canvas.ClipRect(SideRailLayout.VisibleRect(content, count));
+        var railLeft = content.Left - SideRailLayout.LeftOffset;
+        var activeTop = content.Top + ((float)selection * SideRailLayout.TabPitch) - scroll;
+        var activeRect = new SKRect(railLeft, activeTop, railLeft + SideRailLayout.TabWidth,
+            activeTop + SideRailLayout.TabHeight);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.Color = Alpha(_theme.Accent, 0.14f * _opacity);
+        canvas.DrawRoundRect(activeRect, 12, 12, _fill);
+        _fill.Color = Alpha(_theme.Accent, 0.82f * _opacity);
+        canvas.DrawRoundRect(new SKRect(activeRect.Left - 5, activeRect.MidY - 9, activeRect.Left - 3,
+            activeRect.MidY + 9), 1, 1, _fill);
         for (var i = 0; i < count; i++)
         {
             var rect = SideRailLayout.TabRect(content, i, scroll, count);
-            var active = i == state.PageIndex;
             var hovered = _hasPointer && _hoverControl == IslandPageControl.PageTab && _hoverPage == i;
             var pressed = _pressedControl == IslandPageControl.PageTab && _pressedPage == i;
             _fill.Style = SKPaintStyle.Fill;
             _fill.Shader = null;
-            if (active)
-            {
-                _fill.Color = Alpha(_theme.Accent, 0.14f * _opacity);
-                canvas.DrawRoundRect(rect, 12, 12, _fill);
-                _fill.Color = Alpha(_theme.Accent, 0.82f * _opacity);
-                canvas.DrawRoundRect(new SKRect(rect.Left - 5, rect.MidY - 9, rect.Left - 3, rect.MidY + 9), 1, 1, _fill);
-            }
-            else if (hovered || pressed)
+            if (hovered || pressed)
             {
                 _fill.Color = Alpha(_theme.Foreground, (pressed ? 0.12f : 0.07f) * _opacity);
                 canvas.DrawRoundRect(rect, 12, 12, _fill);
             }
 
             var kind = state.Pages.PageSlotAt(i)?.Kind ?? PageSlotKind.Plugin;
-            var iconColor = active ? _theme.Accent : hovered || pressed ? _theme.Foreground : _theme.ForegroundTertiary;
+            var activeWeight = Math.Clamp(1 - Math.Abs(i - selection), 0, 1);
+            var baseColor = hovered || pressed ? _theme.Foreground : _theme.ForegroundTertiary;
+            var iconColor = LerpColor(baseColor, _theme.Accent, (float)activeWeight);
             IconSet.Draw(canvas, SideRailLayout.IconFor(kind), rect.Deflate(11.5f), Alpha(iconColor, _opacity), _icon);
 
             if (hovered)

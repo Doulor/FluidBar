@@ -62,6 +62,8 @@ public sealed class SkiaIslandController : IDisposable
     private long _lastRailWheelStepMs;
     private readonly Spring _railFollowSpring = new(new SpringParameters(0.26, 0.92));
     private double _railFollowTarget;
+    private readonly Spring _railSelectionSpring = new(new SpringParameters(0.24, 0.90));
+    private double _railSelectionTarget;
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
@@ -271,6 +273,7 @@ public sealed class SkiaIslandController : IDisposable
         _pendingRestoredPage = restoredPage ?? PageSelectionStore.Load();
         _pager = new SkiaPager(IndexOfPage(State.Page), Math.Max(1, _pages.PageCount));
         _pager.PageChanged += OnPagerPageChanged;
+        SnapRailSelectionTo(_pager.SelectedIndex);
         ApplyRestoredPage();
 
         _settings.Changed += OnSettingsChanged;
@@ -358,7 +361,7 @@ public sealed class SkiaIslandController : IDisposable
         || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating
         || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationDismissRequested
-        || !_railFollowSpring.IsAtRest;
+        || !_railFollowSpring.IsAtRest || !_railSelectionSpring.IsAtRest;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
     public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
@@ -887,6 +890,7 @@ public sealed class SkiaIslandController : IDisposable
         UpdateArchipelago(now);
         var railWasRunning = SyncRailMotion(dt);
         StepRailFollow(dt);
+        StepRailSelection(dt);
         var mediaProgressChanged = ApplyMediaProgress();
         BuildRenderState();
 
@@ -3012,6 +3016,7 @@ public sealed class SkiaIslandController : IDisposable
 
         var page = Math.Clamp(_pendingRestoredPage, 0, _pages.PageCount - 1);
         _pendingRestoredPage = -1;
+        SnapRailSelectionTo(page);
         if (page != _pager.SelectedIndex)
         {
             _pager.SelectPage(page);
@@ -3525,6 +3530,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
         RailScrollOffset = Math.Clamp(RailScrollOffset, 0, railMax);
         SetRailFollowTarget(Math.Clamp(_railFollowTarget, 0, railMax));
+        SetRailSelectionTarget(Math.Clamp(_railSelectionTarget, 0, Math.Max(0, pages.PageCount - 1)));
 
         return pages with
         {
@@ -3546,6 +3552,7 @@ private void HandlePageControl(in IslandHitTarget hit)
     {
         if (page < 0 || _pages.PageCount <= 1)
         {
+            SetRailSelectionTarget(0);
             SetRailFollowTarget(0);
             _pages = _pages with { RailScrollOffset = RailScrollOffset };
             return;
@@ -3555,6 +3562,7 @@ private void HandlePageControl(in IslandHitTarget hit)
         var max = SideRailLayout.MaxScroll(_pages.PageCount, content);
         if (max <= 0.5)
         {
+            SetRailSelectionTarget(page);
             SetRailFollowTarget(0);
             _pages = _pages with { RailScrollOffset = RailScrollOffset };
             return;
@@ -3573,8 +3581,53 @@ private void HandlePageControl(in IslandHitTarget hit)
             target = Math.Min(max, tab.Bottom - content.Bottom);
         }
 
+        SetRailSelectionTarget(page);
         SetRailFollowTarget(Math.Clamp(target, 0, max));
         _pages = _pages with { RailScrollOffset = RailScrollOffset };
+    }
+
+    /// <summary>Places the selected-tab indicator immediately (startup/restore/mode switch).</summary>
+    private void SnapRailSelectionTo(double page)
+    {
+        _railSelectionTarget = page;
+        _railSelectionSpring.SnapTo(page);
+    }
+
+    /// <summary>Retargets the selected-tab indicator spring (page index units).</summary>
+    private void SetRailSelectionTarget(double target)
+    {
+        if (Math.Abs(target - _railSelectionTarget) < 0.001)
+        {
+            return;
+        }
+
+        _railSelectionTarget = target;
+        if (_motion.ReducedMotion)
+        {
+            _railSelectionSpring.SnapTo(target);
+            return;
+        }
+
+        _railSelectionSpring.Retarget(target, 1.0 / 120.0);
+    }
+
+    /// <summary>Steps the selected-tab indicator spring.</summary>
+    private bool StepRailSelection(double deltaSeconds)
+    {
+        var wasRunning = !_railSelectionSpring.IsAtRest;
+        if (wasRunning)
+        {
+            _railSelectionSpring.Step(deltaSeconds);
+        }
+
+        var max = Math.Max(0, _pages.PageCount - 1);
+        var value = Math.Clamp(_railSelectionSpring.Value, 0, max);
+        if (Math.Abs(value - _railSelectionSpring.Value) > 0.001)
+        {
+            _railSelectionSpring.SnapTo(value);
+        }
+
+        return wasRunning || !_railSelectionSpring.IsAtRest;
     }
 
     /// <summary>Retargets the rail follow spring; reduced motion snaps instead.</summary>
@@ -4101,6 +4154,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             Compact = _compact,
             SecondaryCompact = null,
             Pages = _pages,
+            RailSelectionPosition = _railSelectionSpring.Value,
             Theme = _theme,
             PreviousTheme = _materialSwapStartedMs < 0 ? null : _materialSwapFrom,
             MaterialBlend = _materialSwapStartedMs < 0

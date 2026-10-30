@@ -277,6 +277,9 @@ public readonly record struct IslandRenderState
     /// <summary>Committed page index (rounded pager position).</summary>
     public int PageIndex => Pager.PageIndex;
 
+    /// <summary>Continuous selected-tab position for the side rail (NaN falls back to PageIndex).</summary>
+    public double RailSelectionPosition { get; init; } = double.NaN;
+
     /// <summary>Continuous page position (0..5).</summary>
     public double PageOffset => Pager.PagePosition;
 

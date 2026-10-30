@@ -83,10 +83,12 @@ public sealed class SkiaSideRailNavigationTests
         fixture.Time.Advance(TimeSpan.FromMilliseconds(16));
         fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
         Assert.InRange(fixture.Controller.RenderState.Pages.RailScrollOffset, 0.1, 43.9);
+        Assert.InRange(fixture.Controller.RenderState.RailSelectionPosition, 0.01, 5.99);
         fixture.RunToRest();
         var state = fixture.Controller.RenderState;
         var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
         Assert.Equal(SideRailLayout.MaxScroll(7, content), state.Pages.RailScrollOffset, 0.001);
+        Assert.Equal(6.0, state.RailSelectionPosition, 0.001);
         var tab = SideRailLayout.TabRect(content, 6, state.Pages.RailScrollOffset, 7);
         Assert.Equal(content.Bottom, tab.Bottom, 0.001);
         Assert.Equal(IslandHitKind.PageTab, SkiaIslandHitTest.Hit(state, tab.MidX, tab.MidY).Kind);
