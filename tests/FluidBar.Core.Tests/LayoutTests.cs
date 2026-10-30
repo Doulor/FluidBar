@@ -70,7 +70,8 @@ public class LayoutTests
         double offsetY = double.NaN,
         ActivityKind? compactKind = ActivityKind.Notification,
         double pagePosition = 0,
-        bool archipelagoVisible = true)
+        bool archipelagoVisible = true,
+        TabBarStyle tabBarStyle = TabBarStyle.SideRail)
         => new()
         {
             Form = form,
@@ -83,6 +84,7 @@ public class LayoutTests
             OffsetY = offsetY,
             PagePosition = pagePosition,
             ArchipelagoVisible = archipelagoVisible,
+            TabBarStyle = tabBarStyle,
         };
 
     private static bool IsBottom(IslandAnchor anchor)
@@ -326,6 +328,21 @@ else
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Expanded_BottomPreview_CreatesTheDetachedStrip()
+    {
+        var result = IslandLayout.Calculate(
+            Request(ShellForm.Expanded, IslandMode.Float, IslandAnchor.TopCenter,
+                tabBarStyle: TabBarStyle.BottomPreview),
+            Monitor(96));
+
+        Assert.NotNull(result.Archipelago);
+        Assert.False(result.Placement.ArchipelagoStrip.IsEmpty);
+        var slot = result.Archipelago!.Slots[0];
+        Assert.Equal(LayoutHitKind.ArchipelagoSlot,
+            result.HitTest(slot.Rect.CenterX, slot.Rect.CenterY).Kind);
     }
 
     [Fact]

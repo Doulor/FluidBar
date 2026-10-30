@@ -70,6 +70,9 @@ public sealed record IslandLayoutRequest
     /// </summary>
     public double PagePosition { get; init; }
 
+    /// <summary>Expanded page tab style (side rail default, bottom preview optional).</summary>
+    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
+
     /// <summary>Whether the detached archipelago is revealed; when false its pills are not hit-testable.</summary>
     public bool ArchipelagoVisible { get; init; } = true;
 
@@ -92,7 +95,8 @@ public sealed record IslandLayoutRequest
         Activities.StackingStrategy stacking = Activities.StackingStrategy.Stacked,
         bool hiddenHoverStrip = true,
         double pagePosition = 0,
-        bool archipelagoVisible = true)
+        bool archipelagoVisible = true,
+        TabBarStyle tabBarStyle = TabBarStyle.SideRail)
     {
         ArgumentNullException.ThrowIfNull(state);
         var form = state.Kind switch
@@ -119,6 +123,7 @@ public sealed record IslandLayoutRequest
             IsPinned = state.IsPinned,
             PagePosition = pagePosition,
             ArchipelagoVisible = archipelagoVisible,
+            TabBarStyle = tabBarStyle,
         };
     }
 }
@@ -350,9 +355,21 @@ public static class IslandLayout
         var radii = LayoutTokens.RadiiFor(request.Form, request.Mode, shell.Height, kind: request.CompactKind);
         var (content, rail) = MeasureContent(request.Form, shell);
         var geometry = ShellGeometry.ForShell(shell, radii);
-        // Detached preview islands were replaced by the in-card SideRailLayout. Keep the legacy
-        // result null so old hit-test/placement consumers cannot retain invisible page buttons.
+        // Bottom-preview style restores the detached strip; the side-rail style keeps it absent so
+        // no invisible page buttons remain in the transparent band.
         ArchipelagoLayoutResult? archipelago = null;
+        if (request.Form == ShellForm.Expanded
+            && request.TabBarStyle == TabBarStyle.BottomPreview
+            && request.ArchipelagoVisible)
+        {
+            var strip = new VisualRect(
+                shell.X + ((shell.Width - LayoutTokens.ArchipelagoTrackWidth) / 2),
+                placement.WindowVisual.Y + hostSurface.ArchipelagoTopLocal,
+                LayoutTokens.ArchipelagoTrackWidth,
+                hostSurface.ArchipelagoStripHeight);
+            placement = placement with { ArchipelagoStrip = strip };
+            archipelago = ArchipelagoLayout.Calculate(request.PagePosition, placement, isVisible: true);
+        }
 
         return new IslandLayoutResult
         {

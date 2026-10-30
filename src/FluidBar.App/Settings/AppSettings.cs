@@ -215,6 +215,9 @@ public sealed record AppSettings
     /// <summary>Motion strength (0.5–1.5).</summary>
     public double MotionStrength { get; init; } = 1.0;
 
+    /// <summary>Page tab style (side rail default, bottom preview optional).</summary>
+    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
+
     /// <summary>Page tab rail side (left default, right optional).</summary>
     public PageRailSide RailSide { get; init; } = PageRailSide.Left;
 
@@ -425,6 +428,7 @@ public sealed record AppSettings
             LyricOffsetMs = Math.Clamp(double.IsFinite(LyricOffsetMs) ? LyricOffsetMs : 0, -800, 800),
         ReducedMotion = Enum.IsDefined(ReducedMotion) ? ReducedMotion : ReducedMotionPreference.System,
         MotionStrength = Math.Clamp(MotionStrength, MotionProfile.MinStrength, MotionProfile.MaxStrength),
+        TabBarStyle = Enum.IsDefined(TabBarStyle) ? TabBarStyle : TabBarStyle.SideRail,
         RailSide = Enum.IsDefined(RailSide) ? RailSide : PageRailSide.Left,
         Mode = Mode is "float" or "flush" or "dock" ? Mode : "float",
         Anchor = Anchor is "top-left" or "top-center" or "top-right" or "bottom-left" or "bottom-center" or "bottom-right"
@@ -488,6 +492,7 @@ public sealed record AppSettings
                 Accent = new AccentJson { Mode = AccentMode, Fallback = AccentFallback },
                 FillOpacity = FillOpacity,
                 PanelRadius = PanelRadius,
+                TabBarStyle = TabBarStyle == TabBarStyle.BottomPreview ? "bottom-preview" : "side-rail",
                 RailSide = RailSide == PageRailSide.Right ? "right" : "left",
                 FontScale = FontScale,
             LyricOffsetMs = LyricOffsetMs,
@@ -569,6 +574,7 @@ public sealed record AppSettings
                 AccentFallback = document.Appearance?.Accent?.Fallback ?? defaults.AccentFallback,
                 FillOpacity = document.Appearance?.FillOpacity ?? defaults.FillOpacity,
                 PanelRadius = document.Appearance?.PanelRadius ?? defaults.PanelRadius,
+                TabBarStyle = ParseTabBarStyle(document.Appearance?.TabBarStyle, defaults.TabBarStyle),
                 RailSide = ParseRailSide(document.Appearance?.RailSide, defaults.RailSide),
                 FontScale = document.Appearance?.FontScale ?? defaults.FontScale,
             LyricOffsetMs = document.Appearance?.LyricOffsetMs ?? defaults.LyricOffsetMs,
@@ -648,6 +654,14 @@ public sealed record AppSettings
         "liquid-glass" or "liquidglass" or "liquid" or "glass" => IslandMaterial.LiquidGlass,
         _ => IslandMaterial.Obsidian,
     };
+
+    private static TabBarStyle ParseTabBarStyle(string? style, TabBarStyle fallback)
+        => style?.Trim().ToLowerInvariant() switch
+        {
+            "bottom-preview" => TabBarStyle.BottomPreview,
+            "side-rail" => TabBarStyle.SideRail,
+            _ => fallback,
+        };
 
     private static PageRailSide ParseRailSide(string? side, PageRailSide fallback)
         => side?.Trim().ToLowerInvariant() switch
@@ -794,6 +808,7 @@ internal sealed class AppearanceJson
     public AccentJson? Accent { get; set; }
     public double? FillOpacity { get; set; }
     public double? PanelRadius { get; set; }
+    public string? TabBarStyle { get; set; }
     public string? RailSide { get; set; }
     public double? FontScale { get; set; }
 

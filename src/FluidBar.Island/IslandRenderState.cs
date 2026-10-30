@@ -42,6 +42,9 @@ public readonly record struct IslandRenderState
         Theme = IslandTheme.Dark;
     }
 
+    /// <summary>Expanded page tab style (side rail or detached bottom preview).</summary>
+    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
+
     /// <summary>Presentation mode (float/flush/dock); selects the fixed host surface and radii.</summary>
     public IslandMode Mode { get; init; }
 

@@ -1435,7 +1435,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             },
             hiddenHoverStrip: false,
             pagePosition: _controller.Pager.PagePosition,
-            archipelagoVisible: _controller.Archipelago.IsVisible);
+            archipelagoVisible: _controller.Archipelago.IsVisible,
+            tabBarStyle: settings.TabBarStyle);
         var layout = IslandLayout.Calculate(request, entry.Monitor);
 
         // Core's WindowPlacement is the single placement product for float, flush and dock: the host

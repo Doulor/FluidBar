@@ -346,7 +346,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
 
     private List<UiaElementSnapshot> BuildExpanded(in IslandRenderState state)
     {
-        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide);
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle);
         var page = Math.Clamp(state.PageIndex, 0, state.Pages.PageCount - 1);
         var children = new List<UiaElementSnapshot>(5)
         {
@@ -740,7 +740,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 "island.page.2.clear",
                 UiaElementRole.Button,
                 model.ClearLabel,
-                ToRect(PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide))),
+                ToRect(PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle))),
                 UiaPatternKind.Invoke,
                 new UiaElementState { IsFocusable = true }));
         }
@@ -814,7 +814,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 "island.page.3.search",
                 UiaElementRole.Button,
                 model.SearchLabel,
-                ToRect(PageLayout.ClipboardSearchRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide))),
+                ToRect(PageLayout.ClipboardSearchRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle))),
                 UiaPatternKind.Invoke,
                 new UiaElementState { IsFocusable = true }));
         }
@@ -825,7 +825,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 "island.page.3.filter",
                 UiaElementRole.Button,
                 model.FilterLabel,
-                ToRect(PageLayout.ClipboardFilterRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide))),
+                ToRect(PageLayout.ClipboardFilterRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle))),
                 UiaPatternKind.Invoke,
                 new UiaElementState { IsFocusable = true }));
         }

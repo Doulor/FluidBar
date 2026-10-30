@@ -7,9 +7,10 @@ namespace FluidBar.Ui.Tests;
 public sealed class RailSideSettingsTests
 {
     [Fact]
-    public void Default_is_left()
+    public void Defaults_are_left_and_side_rail()
     {
         Assert.Equal(PageRailSide.Left, AppSettings.Default.RailSide);
+        Assert.Equal(TabBarStyle.SideRail, AppSettings.Default.TabBarStyle);
     }
 
     [Fact]
@@ -21,5 +22,17 @@ public sealed class RailSideSettingsTests
         Assert.Null(error);
         Assert.NotNull(parsed);
         Assert.Equal(PageRailSide.Right, parsed!.RailSide);
+        Assert.Equal(TabBarStyle.SideRail, parsed.TabBarStyle);
+    }
+
+    [Fact]
+    public void Json_round_trips_the_bottom_preview_style()
+    {
+        var json = (AppSettings.Default with { TabBarStyle = TabBarStyle.BottomPreview }).ToJson();
+        var parsed = AppSettings.TryParse(json, out var error);
+
+        Assert.Null(error);
+        Assert.NotNull(parsed);
+        Assert.Equal(TabBarStyle.BottomPreview, parsed!.TabBarStyle);
     }
 }

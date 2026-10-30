@@ -29,9 +29,15 @@ public static class IslandMetrics
     /// <summary>Expanded content left inset inside the shell (60 DIP: 10 + 40 rail + 10 gap).</summary>
     public const double ContentLeft = LayoutTokens.ContentHorizontalInset;
 
-    /// <summary>Left inset of the content rect for a rail side.</summary>
+    /// <summary>Left inset of the content rect for a tab style/side.</summary>
     public static double ContentLeftForSide(PageRailSide side)
         => side == PageRailSide.Right ? LayoutTokens.ContentRightInset : ContentLeft;
+
+    /// <summary>Left inset of the content rect for a tab style/side.</summary>
+    public static double ContentLeftFor(TabBarStyle style, PageRailSide side)
+        => style == TabBarStyle.BottomPreview
+            ? (LayoutTokens.ExpandedWidth - ContentWidth) / 2
+            : ContentLeftForSide(side);
 
     /// <summary>Expanded content top inset inside the shell (12 DIP, prototype expanded layer).</summary>
     public const double ContentTop = 12;
@@ -380,9 +386,10 @@ public static class IslandMetrics
     }
 
     /// <summary>Expanded content rectangle (host-local DIP) for a shell rectangle.</summary>
-    public static SKRect ContentRect(SKRect shell, PageRailSide side = PageRailSide.Left)
+    public static SKRect ContentRect(SKRect shell, PageRailSide side = PageRailSide.Left,
+        TabBarStyle style = TabBarStyle.SideRail)
     {
-        var left = shell.Left + (float)ContentLeftForSide(side);
+        var left = shell.Left + (float)ContentLeftFor(style, side);
         return new SKRect(left, shell.Top + (float)ContentTop,
             left + (float)ContentWidth, shell.Top + (float)ContentTop + (float)ContentHeight);
     }

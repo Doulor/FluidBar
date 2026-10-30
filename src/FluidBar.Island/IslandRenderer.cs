@@ -298,7 +298,7 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var shell = IslandMetrics.ShellRect(state);
-        var content = IslandMetrics.ContentRect(shell, state.RailSide);
+        var content = IslandMetrics.ContentRect(shell, state.RailSide, state.TabBarStyle);
 
         var secondary = IslandMetrics.SecondaryShellRect(state);
         if (!secondary.IsEmpty && secondary.Contains(x, y))
@@ -318,10 +318,22 @@ public sealed class IslandRenderer : IDisposable
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
-            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset, state.RailSide);
-            if (tab >= 0)
+            if (state.TabBarStyle == TabBarStyle.SideRail)
             {
-                return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+                var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y,
+                    state.Pages.RailScrollOffset, state.RailSide);
+                if (tab >= 0)
+                {
+                    return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+                }
+            }
+            else
+            {
+                var stripHit = MeasureStrip(state).HitTest(x, y);
+                if (stripHit.Kind != IslandHitKind.None)
+                {
+                    return stripHit;
+                }
             }
 
             if (ContainsShell(state, shell, x, y))
@@ -626,8 +638,12 @@ public sealed class IslandRenderer : IDisposable
             canvas.Restore();
         }
 
+        if (state.Form == ShellForm.Expanded && state.TabBarStyle == TabBarStyle.BottomPreview)
+        {
+            _strip.Draw(canvas, state, shell);
+        }
+
         DrawSecondaryCompact(canvas, state, opacity, dpiScale);
-        // The detached preview rail has been replaced by the in-card side rail.
         DrawFocusRing(canvas, state);
     }
 
@@ -1418,7 +1434,7 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawExpanded(SKCanvas canvas, in IslandRenderState state, float layerOpacity, float chromeOpacity)
     {
-        var contentLeft = (float)IslandMetrics.ContentLeftForSide(state.RailSide);
+        var contentLeft = (float)IslandMetrics.ContentLeftFor(state.TabBarStyle, state.RailSide);
         var content = new SKRect(contentLeft, (float)IslandMetrics.ContentTop,
             contentLeft + (float)IslandMetrics.ContentWidth,
             (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));

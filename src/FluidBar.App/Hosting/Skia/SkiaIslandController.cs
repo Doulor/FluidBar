@@ -3527,7 +3527,7 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var railMax = SideRailLayout.MaxScroll(
             pages.PageCount,
-            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide));
+            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide, _renderState.TabBarStyle));
         RailScrollOffset = Math.Clamp(RailScrollOffset, 0, railMax);
         SetRailFollowTarget(Math.Clamp(_railFollowTarget, 0, railMax));
         SetRailSelectionTarget(Math.Clamp(_railSelectionTarget, 0, Math.Max(0, pages.PageCount - 1)));
@@ -3550,6 +3550,14 @@ private void HandlePageControl(in IslandHitTarget hit)
     /// <summary>Scrolls just enough to keep the selected tab visible in the clipped rail.</summary>
     private void EnsureRailPageVisible(int page)
     {
+        if (_settings.Current.TabBarStyle != TabBarStyle.SideRail)
+        {
+            SetRailSelectionTarget(page);
+            SetRailFollowTarget(0);
+            _pages = _pages with { RailScrollOffset = 0 };
+            return;
+        }
+
         if (page < 0 || _pages.PageCount <= 1)
         {
             SetRailSelectionTarget(0);
@@ -3558,7 +3566,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             return;
         }
 
-        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide);
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide, _renderState.TabBarStyle);
         var max = SideRailLayout.MaxScroll(_pages.PageCount, content);
         if (max <= 0.5)
         {
@@ -3659,7 +3667,7 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var max = SideRailLayout.MaxScroll(
             _pages.PageCount,
-            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide));
+            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide, _renderState.TabBarStyle));
         var value = Math.Clamp(_railFollowSpring.Value, 0, max);
         if (Math.Abs(value - _railFollowSpring.Value) > 0.001)
         {
@@ -4155,13 +4163,14 @@ private void HandlePageControl(in IslandHitTarget hit)
             SecondaryCompact = null,
             Pages = _pages,
             RailSide = _settings.Current.RailSide,
+            TabBarStyle = _settings.Current.TabBarStyle,
             RailSelectionPosition = _railSelectionSpring.Value,
             Theme = _theme,
             PreviousTheme = _materialSwapStartedMs < 0 ? null : _materialSwapFrom,
             MaterialBlend = _materialSwapStartedMs < 0
                 ? 1
                 : Math.Clamp((NowMs() - _materialSwapStartedMs) / (double)MaterialSwapMs, 0, 1),
-            Archipelago = _options.EnableArchipelago
+            Archipelago = _options.EnableArchipelago && _settings.Current.TabBarStyle == TabBarStyle.BottomPreview
                 ? _archipelago.ToState(_pager.PagePosition, _pages.PageCount) with
                 {
                     Rail = _railMotion.Values,
@@ -4385,7 +4394,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             return VisualRect.Empty;
         }
 
-        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide);
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide, _renderState.TabBarStyle);
         return new VisualRect(content.Left, content.Top, content.Width, content.Height).Inflate(2);
     }
 
@@ -4516,7 +4525,7 @@ private void HandlePageControl(in IslandHitTarget hit)
 
     private void UpdateArchipelago(DateTimeOffset now)
     {
-        if (!_options.EnableArchipelago)
+        if (!_options.EnableArchipelago || _settings.Current.TabBarStyle != TabBarStyle.BottomPreview)
         {
             _archipelago.Hide();
             return;

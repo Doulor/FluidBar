@@ -104,6 +104,21 @@ public sealed class IslandRenderTests
     }
 
     [Fact]
+    public void BottomPreviewStyle_DrawsTheDetachedStripOutsideTheShell()
+    {
+        var state = IslandTestFixtures.Expanded(0) with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+            Archipelago = ArchipelagoState.Shown(0),
+        };
+
+        using var renderer = new IslandRenderer(IslandTestFixtures.Theme);
+        using var bitmap = renderer.RenderToBitmap(state, IslandTestFixtures.Scale);
+        Assert.True(IslandTestFixtures.CountOpaqueOutside(bitmap, IslandMetrics.ShellRect(state),
+            IslandTestFixtures.Scale, alphaThreshold: 200) > 0, "the detached strip should paint below the card");
+    }
+
+    [Fact]
     public void Expanded_rail_with_seven_pages_stays_inside_the_shell()
     {
         var baseState = IslandTestFixtures.Expanded(0);

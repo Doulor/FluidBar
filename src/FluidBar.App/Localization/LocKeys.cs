@@ -779,6 +779,15 @@ public static partial class LocKeys
         /// <summary><c>Settings.Appearance.Subtitle</c></summary>
         public const string Subtitle = "Settings.Appearance.Subtitle";
 
+            /// <summary><c>Settings.Appearance.TabBarStyle.Title</c></summary>
+            public const string TabBarStyleTitle = "Settings.Appearance.TabBarStyle.Title";
+            /// <summary><c>Settings.Appearance.TabBarStyle.Desc</c></summary>
+            public const string TabBarStyleDesc = "Settings.Appearance.TabBarStyle.Desc";
+            /// <summary><c>Settings.Appearance.TabBarStyle.SideRail</c></summary>
+            public const string TabBarStyleSideRail = "Settings.Appearance.TabBarStyle.SideRail";
+            /// <summary><c>Settings.Appearance.TabBarStyle.BottomPreview</c></summary>
+            public const string TabBarStyleBottomPreview = "Settings.Appearance.TabBarStyle.BottomPreview";
+
             /// <summary><c>Settings.Appearance.RailSide.Title</c></summary>
             public const string RailSideTitle = "Settings.Appearance.RailSide.Title";
             /// <summary><c>Settings.Appearance.RailSide.Desc</c></summary>

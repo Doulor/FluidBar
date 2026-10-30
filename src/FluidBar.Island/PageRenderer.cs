@@ -110,7 +110,10 @@ internal sealed partial class PageRenderer : IDisposable
             return;
         }
 
-        DrawSideRail(canvas, state, content);
+        if (state.TabBarStyle == TabBarStyle.SideRail)
+        {
+            DrawSideRail(canvas, state, content);
+        }
 
         // Prototype2 `.pager-title`: page number 8.5 DIP @ 32 % white, title 10 DIP @ 72 % white, both
         // left aligned at the content inset (left 20 / top 11).

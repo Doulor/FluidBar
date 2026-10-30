@@ -1,5 +1,15 @@
 namespace FluidBar.Core.Layout;
 
+/// <summary>Presentation style of the expanded page tabs.</summary>
+public enum TabBarStyle
+{
+    /// <summary>In-card left/right rail (default).</summary>
+    SideRail = 0,
+
+    /// <summary>Detached preview islands below the card.</summary>
+    BottomPreview = 1,
+}
+
 /// <summary>Side of the expanded card that hosts the page tab rail.</summary>
 public enum PageRailSide
 {

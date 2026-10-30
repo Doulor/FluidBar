@@ -64,6 +64,28 @@ public sealed class SkiaSideRailNavigationTests
     }
 
     [Fact]
+    public void BottomPreviewStyle_UsesTheDetachedStripInsteadOfSideRailTabs()
+    {
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
+        fixture.ExpandAndSettle();
+        fixture.Controller.Archipelago.Reveal(fixture.Time.GetLocalNow());
+        fixture.RunToRest();
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(TabBarStyle.BottomPreview, state.TabBarStyle);
+        Assert.True(state.Archipelago.Visible);
+
+        var strip = SkiaIslandHitTest.MeasureStrip(state);
+        Assert.False(strip.Current.IsEmpty);
+        Assert.Equal(IslandHitKind.RailSlot,
+            SkiaIslandHitTest.Hit(state, strip.Current.MidX, strip.Current.MidY).Kind);
+    }
+
+    [Fact]
     public void RightRailSide_PlacesTheRailAndContentOnTheRight()
     {
         using var fixture = ControllerFixture.Create(settings: AppSettings.Default with

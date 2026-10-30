@@ -1,5 +1,6 @@
 using FluidBar.App.Hosting.Skia;
 using FluidBar.App.Settings;
+using FluidBar.Core.Layout;
 using FluidBar.Island;
 
 namespace FluidBar.Ui.Tests;
@@ -138,7 +139,12 @@ public sealed class SkiaApproachRevealTests
 
     private static ControllerFixture ExpandedFixture()
     {
-        var fixture = ControllerFixture.Create(AppSettings.Default with { AutoCollapseMs = 0, AutoHideMs = 0 });
+        var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
         return fixture;
     }

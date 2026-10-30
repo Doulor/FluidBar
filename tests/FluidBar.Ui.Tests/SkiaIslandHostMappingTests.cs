@@ -267,7 +267,10 @@ public sealed class SkiaIslandHostMappingTests
     [Fact]
     public void Archipelago_RevealsOnDrag_ShowsPagerDots_AndAutoHides()
     {
-        using var fixture = ControllerFixture.Create();
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
 
         fixture.Controller.HandleDragStarted(IslandMetrics.ShellRect(fixture.Controller.RenderState).Left + 276, IslandMetrics.ShellRect(fixture.Controller.RenderState).Top + 66, timestampMs: 0);
@@ -290,7 +293,10 @@ public sealed class SkiaIslandHostMappingTests
     [Fact]
     public void Archipelago_RevealsAfterHotZoneDwell_ThenHidesWhenThePointerLeaves()
     {
-        using var fixture = ControllerFixture.Create();
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
 
         var shell = IslandMetrics.ShellRect(fixture.Controller.RenderState);

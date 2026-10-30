@@ -1,4 +1,5 @@
 using FluidBar.App.Hosting.Skia;
+using FluidBar.App.Settings;
 using FluidBar.Core.Activities;
 using FluidBar.Core.Interaction;
 using FluidBar.Core.Layout;
@@ -14,10 +15,12 @@ namespace FluidBar.Ui.Tests;
 /// </summary>
 public sealed class SkiaIslandUiaTests
 {
-    private static (ControllerFixture Fixture, SkiaIslandUiaSource Source, RecordingIslandPlatformActions Actions) Create()
+    private static (ControllerFixture Fixture, SkiaIslandUiaSource Source, RecordingIslandPlatformActions Actions) Create(bool bottomPreview = false)
     {
         var actions = new RecordingIslandPlatformActions();
-        var fixture = ControllerFixture.Create(actions: actions);
+        var fixture = ControllerFixture.Create(
+            settings: bottomPreview ? AppSettings.Default with { TabBarStyle = TabBarStyle.BottomPreview } : null,
+            actions: actions);
         var source = new SkiaIslandUiaSource(fixture.Controller, new FakeLocalizer(), new SkiaHostDispatcher());
         return (fixture, source, actions);
     }
@@ -371,7 +374,7 @@ public sealed class SkiaIslandUiaTests
     [Fact]
     public void VisibleStrip_ExposesMiniIslandsAndDotsAsButtons()
     {
-        var (fixture, source, _) = Create();
+        var (fixture, source, _) = Create(bottomPreview: true);
         using var _fixture = fixture;
         using var _source = source;
         fixture.ExpandAndSettle();
@@ -394,7 +397,7 @@ public sealed class SkiaIslandUiaTests
     [Fact]
     public void RevealedStrip_GivesEveryPageTabOnScreenBoundsAndKeepsThemSelectable()
     {
-        var (fixture, source, _) = Create();
+        var (fixture, source, _) = Create(bottomPreview: true);
         using var _fixture = fixture;
         using var _source = source;
         fixture.ExpandAndSettle();
@@ -443,7 +446,7 @@ public sealed class SkiaIslandUiaTests
     [Fact]
     public void OverflowingCluster_ClampsFarTabsIntoTheOutermostDot()
     {
-        var (fixture, source, _) = Create();
+        var (fixture, source, _) = Create(bottomPreview: true);
         using var _fixture = fixture;
         using var _source = source;
         fixture.ExpandAndSettle();

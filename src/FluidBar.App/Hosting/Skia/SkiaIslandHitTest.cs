@@ -67,7 +67,7 @@ public static class SkiaIslandHitTest
         }
 
         var shell = IslandMetrics.ShellRect(state);
-        var content = IslandMetrics.ContentRect(shell, state.RailSide);
+        var content = IslandMetrics.ContentRect(shell, state.RailSide, state.TabBarStyle);
 
         if (state.Form != ShellForm.Expanded && state.SplitIslets.Length > 0)
         {
@@ -107,10 +107,22 @@ public static class SkiaIslandHitTest
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
-            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset, state.RailSide);
-            if (tab >= 0)
+            if (state.TabBarStyle == TabBarStyle.SideRail)
             {
-                return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+                var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y,
+                    state.Pages.RailScrollOffset, state.RailSide);
+                if (tab >= 0)
+                {
+                    return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
+                }
+            }
+            else
+            {
+                var stripHit = HitStrip(state, shell, x, y);
+                if (stripHit.Kind != IslandHitKind.None)
+                {
+                    return stripHit;
+                }
             }
 
             if (ContainsShell(state, shell, x, y))
@@ -228,7 +240,7 @@ public static class SkiaIslandHitTest
             PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
-        var contentRect = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide);
+        var contentRect = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle);
         if (kind == PageSlotKind.Clipboard
             && !string.IsNullOrWhiteSpace(pages.Clipboard.SearchLabel)
             && PageLayout.ClipboardSearchRect(contentRect).Contains(x, y))

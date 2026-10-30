@@ -514,6 +514,18 @@ public static class SettingsSectionBuilder
                     }),
                     // Three segments need more room than the two-segment default.
                     width: 216),
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.TabBarStyleTitle),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.TabBarStyleDesc),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.TabBarStyleSideRail), "side-rail"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.TabBarStyleBottomPreview), "bottom-preview"),
+                    ],
+                    settings.TabBarStyle == TabBarStyle.BottomPreview ? "bottom-preview" : "side-rail",
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        TabBarStyle = value == "bottom-preview" ? TabBarStyle.BottomPreview : TabBarStyle.SideRail,
+                    }),
+                    width: 180),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideTitle),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideDesc),
                     [
