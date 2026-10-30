@@ -132,3 +132,6 @@ python website/scripts/generate-marketplace.py
 
 - 生成脚本只读取 `marketplace/index.json`；签名、URL 替换和 `generatedAt` 单调性由市场签名流程负责。
 - `/market/*` 与 `/schemas/*` 的实际文件会返回真实 content-type；不存在的路径返回 404。
+
+部署后执行 `node scripts/verify-marketplace.mjs https://fluidbar.doulor.cn`，检查线上静态文件字节、JSON content-type、CORS、ETag / 304、体积与缺失路径 404。
+也可设置 `$env:PLAYWRIGHT_BASE_URL='https://fluidbar.doulor.cn'` 后运行 `pnpm test:e2e`，直接验证线上交互（不启动本地服务器）。

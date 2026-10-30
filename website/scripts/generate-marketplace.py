@@ -86,7 +86,7 @@ def listing_html(plugin: dict, shot_path: str) -> str:
     latest = plugin["latest"]
     screenshot = f"{SITE}/market/assets/{plugin['id']}/{shot_path}"
     page_url = f"{SITE}/market/listings/{plugin['id']}/"
-    changelog = html.escape(latest.get("changelog", ""))
+    changelog = html.escape(latest.get("changelog") or "")
     capabilities = "".join(f"<li><code>{html.escape(item)}</code></li>" for item in latest["capabilities"])
     locales = ", ".join(html.escape(item) for item in latest.get("locales", []))
     title = html.escape(name)

@@ -13,12 +13,12 @@ const STEPS = [
   {
     id: 'rest',
     title: '常驻',
-    copy: '默认只有 132 × 36。不抢窗口，不打断输入。',
+    copy: '132 × 36，留下时间和日期。',
   },
   {
     id: 'activity',
     title: '活动态',
-    copy: '媒体 / 音乐、通知、剪贴板、Agent 到来时，岛会按真实活动态变长。',
+    copy: '有新活动时，显示封面、歌词或消息摘要。',
   },
   {
     id: 'expand',
@@ -28,7 +28,7 @@ const STEPS = [
   {
     id: 'switch',
     title: '切换',
-    copy: '六个页面。拖动、滚轮，或者按 1 到 6。',
+    copy: '六页内容，支持拖动、滚轮和数字键 1–6。',
   },
   {
     id: 'collapse',
@@ -97,6 +97,7 @@ export function IslandLab() {
   }, [material, send]);
 
   const chooseStep = (index: number) => {
+    frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
     setActiveStep(index);
     if (index === 0) send({ state: 'idle' });
@@ -107,6 +108,7 @@ export function IslandLab() {
   };
 
   const chooseActivity = (view: CompactView) => {
+    frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
     setActivity(view);
     setActiveStep(1);
@@ -114,6 +116,7 @@ export function IslandLab() {
   };
 
   const choosePage = (index: number) => {
+    frameRef.current?.load();
     manualUntilRef.current = performance.now() + 1600;
     setPage(index);
     setActiveStep(3);
@@ -134,15 +137,15 @@ export function IslandLab() {
   return (
     <section id="story" className="lab" aria-labelledby="lab-title">
       <div className="site-shell">
-        <div className="section-heading lab-heading" data-ghost="ISLAND">
+        <div className="section-heading lab-heading">
           <p className="section-kicker">01 / THE ISLAND</p>
           <h2 id="lab-title">
-            不是窗口，
+            从一眼即知，
             <br />
-            是桌面的一部分。
+            到展开处理。
           </h2>
           <p>
-            同一枚岛，从常驻到展开，再到收起。下面的每一步都直接驱动真实原型，不在网页里重画一份。
+            收起时看活动摘要，展开后看完整内容。选择状态，或直接操作预览中的小岛。
           </p>
         </div>
 
@@ -218,11 +221,9 @@ export function IslandLab() {
               <div className="config-heading">
                 <p className="section-kicker">02 / APPEARANCE</p>
                 <h3>
-                  让它，
-                  <br />
-                  长成你的样子。
+                  形态与材质
                 </h3>
-                <p>形态和材质会直接写进真实原型。Dock 模式来自 prototype2 自己的 Dock，不是另画的。</p>
+                <p>选择停靠方式，再展开比较三种材质。</p>
               </div>
 
               <div className="control-group">
@@ -239,6 +240,7 @@ export function IslandLab() {
                       className={mode === value ? 'is-selected' : ''}
                       aria-pressed={mode === value}
                       onClick={() => {
+                        frameRef.current?.load();
                         setMode(value as IslandMode);
                         send({ mode: value as IslandMode });
                       }}
@@ -263,6 +265,7 @@ export function IslandLab() {
                       className={material === value ? 'is-selected' : ''}
                       aria-pressed={material === value}
                       onClick={() => {
+                        frameRef.current?.load();
                         setMaterial(value as IslandMaterial);
                         send({
                           material: value as IslandMaterial,

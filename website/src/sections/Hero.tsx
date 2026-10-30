@@ -75,14 +75,13 @@ export function Hero() {
         </div>
 
         <div className="hero-stage">
-          <div className="stage-light" aria-hidden="true" />
           <div className="stage-frame">
             <div className="stage-meta stage-meta--top">
               <span className="live-label">
                 <span className="live-dot" aria-hidden="true" />
-                LIVE PROTOTYPE
+                交互预览
               </span>
-              <span className="mono">488 × 444</span>
+              <span className="mono">主页 · 媒体 · 系统控制</span>
             </div>
 
             <PrototypeFrame
@@ -96,14 +95,12 @@ export function Hero() {
             />
 
             <div className="stage-meta stage-meta--bottom">
-              <span className="mono">132 × 36 · IDLE</span>
-              <span className="mono stage-demo-label">真实控制中心 · 示例数据</span>
-              <span className="mono">440 × 284 · EXPANDED</span>
+              <span className="mono">展开 440 × 284</span>
+              <span className="mono stage-demo-label">示例数据 · 点击右上角收起</span>
             </div>
           </div>
 
           <nav className="hero-page-rail" aria-label="原型页面">
-            <span className="hero-page-rail__label">PAGES</span>
             {PAGES.map((page, index) => (
               <button
                 key={page}

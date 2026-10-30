@@ -5,21 +5,21 @@
       "apiVersion": "2.0.0",
       "minAppVersion": "2.0.0",
       "maxAppVersion": null,
-      "publishedAt": "2026-10-18T08:05:00+00:00",
+      "publishedAt": "2026-10-30T06:36:42.4126319+00:00",
       "channel": "stable",
       "yanked": false,
       "yankReason": null,
       "artifact": {
-        "url": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-rich-v1.0.0/fluidbar-plugin-sample-rich-1.0.0.fbp",
-        "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-        "size": 25600,
-        "signatureUrl": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-rich-v1.0.0/signature.json",
-        "keyId": "fluidbar-marketplace-sample",
+        "url": "https://github.com/Doulor/FluidBar/releases/download/plugin-sample-rich-v1.0.0/sample-rich-1.0.0.fbp",
+        "sha256": "4ccc5fae2d22e6f4c8ed38edaff0ebc8436941a407c0965434e57bae98d49536",
+        "size": 12128,
+        "signatureUrl": "https://github.com/Doulor/FluidBar/releases/download/plugin-sample-rich-v1.0.0/sample-rich-1.0.0.fbp.sig.json",
+        "keyId": "fluidbar-marketplace-2026",
         "algorithm": "ECDSA-P256-SHA256"
       },
       "capabilities": [
-        "ui",
-        "background"
+        "background",
+        "ui"
       ],
       "locales": [
         "en-US",
@@ -27,9 +27,9 @@
       ],
       "localeCoverage": {
         "en-US": 100,
-        "zh-Hans": 100
+        "zh-Hans": 0
       },
-      "changelog": "### 1.0.0\n- First rich sample release.",
+      "changelog": null,
       "license": "MIT"
     }
   ]

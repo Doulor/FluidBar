@@ -17,6 +17,7 @@ const FRAME_HEIGHT = 444;
 
 export interface PrototypeFrameHandle {
   send: (command: Omit<PrototypeCommand, 'type'>) => void;
+  load: () => void;
   reload: () => void;
 }
 
@@ -74,6 +75,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
       forwardedRef,
       () => ({
         send,
+        load: () => setShouldLoad(true),
         reload: () => setAttempt((value) => value + 1),
       }),
       [send],
@@ -142,12 +144,12 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
     }, [onReady, onState]);
 
     useEffect(() => {
-      if (ready) return;
+      if (!shouldLoad || ready) return;
       const timeout = window.setTimeout(() => {
         if (!ready) setFailed(true);
       }, 9000);
       return () => window.clearTimeout(timeout);
-    }, [ready, attempt]);
+    }, [shouldLoad, ready, attempt]);
 
 
 

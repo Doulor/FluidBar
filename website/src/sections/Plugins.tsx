@@ -34,7 +34,7 @@ export function Plugins() {
   return (
     <section id="plugins" className="plugins" aria-labelledby="plugins-title">
       <div className="site-shell">
-        <div className="section-heading plugins-heading" data-ghost="PLUGINS">
+        <div className="section-heading plugins-heading">
           <p className="section-kicker">03 / PLUGINS</p>
           <h2 id="plugins-title">
             小岛不大，

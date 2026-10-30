@@ -1714,6 +1714,7 @@
     if (idx !== P.uiIndex) {
       P.uiIndex = idx;
       S.tab = PAGES[idx].id;
+      ensureLyricClock();
       syncTitle(idx);
       updatePageA11y(idx);
       updateDockActive();

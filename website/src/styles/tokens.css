@@ -37,7 +37,7 @@
   --container: 1320px;
   --gutter: 24px;
   --page-inline: 48px;
-  --section-space: 144px;
+  --section-space: 104px;
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
   --ease-spring: cubic-bezier(0.3, 0.8, 0.25, 1);
@@ -47,6 +47,6 @@
 @media (max-width: 900px) {
   :root {
     --page-inline: 24px;
-    --section-space: 88px;
+    --section-space: 64px;
   }
 }

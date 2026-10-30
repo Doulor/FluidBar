@@ -1,5 +1,6 @@
 .optics {
   padding-block: var(--section-space);
+  margin-top: var(--section-space);
   border-top: 1px solid var(--line);
 }
 
@@ -11,245 +12,57 @@
 }
 
 .optics-copy h2 {
-  margin-top: 0;
-  font-size: clamp(42px, 4.8vw, 66px);
-  letter-spacing: -0.055em;
+  font-size: clamp(30px, 3vw, 40px);
+  letter-spacing: -0.04em;
+  line-height: 1.2;
 }
 
-.optics-copy > p:last-of-type {
-  max-width: 34em;
-  margin-top: 24px;
+.optics-copy > p:not(.section-kicker) {
+  max-width: 32em;
+  margin-top: 20px;
   color: var(--muted);
   font-size: 15px;
 }
 
-.optics-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 30px;
-  font-size: 12px;
-  color: var(--muted);
-}
+.optics-copy .optics-note { font-size: 12px; }
+.optics-copy .text-link { margin-top: 20px; font-size: 13px; }
 
-.optics-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
+.optics-samples { display: grid; gap: 20px; }
+.optics-sample { display: grid; grid-template-columns: 128px minmax(0, 1fr); align-items: center; gap: 24px; }
 
-.legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-}
-
-.legend-dot--obsidian {
-  background: #08080a;
-}
-
-.legend-dot--acrylic {
-  background: rgba(28, 34, 40, 0.38);
-}
-
-.legend-dot--liquid {
-  background: linear-gradient(135deg, #fff, rgba(76, 201, 240, 0.55), rgba(255, 255, 255, 0.2));
-}
-
-.optics-stage {
-  --mx: 50%;
-  --my: 40%;
+/* Flat samples, not substitute product UI. A shared backdrop makes opacity visible. */
+.optics-swatch {
   position: relative;
-  min-height: 430px;
+  height: 92px;
   overflow: hidden;
-  border-radius: 28px;
-  background:
-    radial-gradient(90% 100% at 12% 0%, rgba(255, 255, 255, 0.96), transparent 60%),
-    #e5e9ec;
-  box-shadow: var(--shadow-soft);
-  perspective: 900px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(110deg, #adc0cc 0% 33%, #e9eef1 33% 67%, #718a9c 67%);
 }
 
-.optics-stage::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    240px circle at var(--mx) var(--my),
-    rgba(255, 255, 255, 0.7),
-    transparent 60%
-  );
-  pointer-events: none;
+.optics-swatch__surface { position: absolute; inset: 12px; border-radius: 12px; }
+.optics-swatch__surface--obsidian { background: #08080a; border: 1px solid rgba(255, 255, 255, 0.1); }
+.optics-swatch__surface--acrylic {
+  background: rgba(22, 27, 34, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(12px);
 }
-
-.optics-wordmark {
-  position: absolute;
-  left: 52px;
-  top: 58px;
-  font-family: var(--font-display);
-  font-size: clamp(80px, 9.4vw, 132px);
-  font-weight: 700;
-  line-height: 0.76;
-  letter-spacing: -0.09em;
-  color: rgba(11, 13, 16, 0.9);
-  user-select: none;
-}
-
-.optics-horizon {
-  position: absolute;
-  left: -10%;
-  right: -10%;
-  bottom: 17%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(11, 13, 16, 0.18), transparent);
-  transform: rotate(-7deg);
-}
-
-.optics-glass {
-  position: absolute;
-  right: 8%;
-  top: 28%;
-  width: min(58%, 360px);
-  aspect-ratio: 1.55;
-  border-radius: 26px;
+.optics-swatch__surface--liquid {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent), rgba(22, 27, 34, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.8);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
-    rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
-  backdrop-filter: blur(22px) saturate(1.35) brightness(1.04);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
-    0 34px 70px -30px rgba(20, 30, 44, 0.42);
-  transform: rotate(7deg);
-  transition: transform 0.6s var(--ease-out);
+  backdrop-filter: blur(4px) saturate(1.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.25);
 }
 
-.optics-glass__sheen {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    115deg,
-    transparent 18%,
-    rgba(255, 255, 255, 0.48) 36%,
-    transparent 53%
-  );
-  transform: translateX(-30%);
-  animation: glass-sheen 9s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.optics-glass__label {
-  position: absolute;
-  left: 20px;
-  bottom: 18px;
-  color: rgba(11, 13, 16, 0.48);
-}
-
-.optics-glass__pill {
-  position: absolute;
-  left: 24px;
-  top: 24px;
-  width: 82px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(8, 8, 10, 0.82);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 6px 16px -8px rgba(8, 8, 10, 0.6);
-}
-
-.optics-obsidian {
-  position: absolute;
-  left: 17%;
-  bottom: 10%;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  width: 190px;
-  height: 74px;
-  padding: 14px;
-  border-radius: 22px;
-  background: #08080a;
-  color: rgba(255, 255, 255, 0.34);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 28px 50px -26px rgba(0, 0, 0, 0.55);
-  transform: rotate(-5deg);
-}
-
-.optics-obsidian__edge {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-}
-
-.optics-rule {
-  position: absolute;
-  background: rgba(11, 13, 16, 0.16);
-  pointer-events: none;
-}
-
-.optics-rule--h {
-  left: 8%;
-  right: 8%;
-  top: 22%;
-  height: 1px;
-}
-
-.optics-rule--v {
-  top: 8%;
-  bottom: 8%;
-  left: 10%;
-  width: 1px;
-}
-
-@keyframes glass-sheen {
-  0%,
-  18% {
-    transform: translateX(-34%);
-  }
-  48%,
-  100% {
-    transform: translateX(36%);
-  }
-}
+.optics-sample figcaption { display: grid; gap: 6px; }
+.optics-sample strong { font-size: 15px; font-weight: 500; }
+.optics-sample figcaption span { color: var(--muted); font-size: 13px; }
 
 @media (max-width: 900px) {
-  .optics-grid {
-    grid-template-columns: 1fr;
-    gap: 34px;
-  }
-
-  .optics-stage {
-    min-height: 360px;
-  }
-
-  .optics-wordmark {
-    left: 28px;
-    top: 48px;
-    font-size: clamp(70px, 18vw, 108px);
-  }
-
-  .optics-glass {
-    right: 5%;
-    top: 31%;
-    width: 64%;
-  }
-
-  .optics-obsidian {
-    left: 9%;
-    bottom: 8%;
-  }
+  .optics-grid { grid-template-columns: 1fr; gap: 32px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .optics-glass__sheen {
-    animation: none;
-    transform: translateX(0);
-  }
+@media (max-width: 480px) {
+  .optics-sample { grid-template-columns: 100px minmax(0, 1fr); gap: 18px; }
+  .optics-swatch { height: 80px; }
 }

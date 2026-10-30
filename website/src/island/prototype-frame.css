@@ -4,12 +4,12 @@
   max-width: 488px;
   margin-inline: auto;
   overflow: hidden;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 24px;
+  border: 1px solid rgba(11, 13, 16, 0.18);
   background: #05070a;
   box-shadow:
-    0 56px 110px -36px rgba(18, 27, 40, 0.34),
-    0 14px 34px -18px rgba(18, 27, 40, 0.18);
+    0 24px 48px -28px rgba(18, 27, 40, 0.32),
+    0 4px 12px -8px rgba(18, 27, 40, 0.12);
   isolation: isolate;
 }
 

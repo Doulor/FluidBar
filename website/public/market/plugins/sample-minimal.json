@@ -5,16 +5,16 @@
       "apiVersion": "2.0.0",
       "minAppVersion": "2.0.0",
       "maxAppVersion": null,
-      "publishedAt": "2026-10-18T08:00:00+00:00",
+      "publishedAt": "2026-10-30T06:36:42.4126319+00:00",
       "channel": "stable",
       "yanked": false,
       "yankReason": null,
       "artifact": {
-        "url": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-minimal-v1.0.0/fluidbar-plugin-sample-minimal-1.0.0.fbp",
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "size": 18432,
-        "signatureUrl": "https://github.com/fluidbar/plugins/releases/download/plugin-sample-minimal-v1.0.0/signature.json",
-        "keyId": "fluidbar-marketplace-sample",
+        "url": "https://github.com/Doulor/FluidBar/releases/download/plugin-sample-minimal-v1.0.0/sample-minimal-1.0.0.fbp",
+        "sha256": "571988851a7799a6cc50acdd916afa1923592a941569b3d4445097e433977c84",
+        "size": 7278,
+        "signatureUrl": "https://github.com/Doulor/FluidBar/releases/download/plugin-sample-minimal-v1.0.0/sample-minimal-1.0.0.fbp.sig.json",
+        "keyId": "fluidbar-marketplace-2026",
         "algorithm": "ECDSA-P256-SHA256"
       },
       "capabilities": [
@@ -26,9 +26,9 @@
       ],
       "localeCoverage": {
         "en-US": 100,
-        "zh-Hans": 100
+        "zh-Hans": 0
       },
-      "changelog": "### 1.0.0\n- First sample release.",
+      "changelog": null,
       "license": "MIT"
     }
   ]
