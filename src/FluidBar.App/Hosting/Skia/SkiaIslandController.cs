@@ -60,6 +60,8 @@ public sealed class SkiaIslandController : IDisposable
     private DateTimeOffset _lastPageStepAt = DateTimeOffset.MinValue;
     private double _railWheelAccumulatedDip;
     private long _lastRailWheelStepMs;
+    private readonly Spring _railFollowSpring = new(new SpringParameters(0.26, 0.92));
+    private double _railFollowTarget;
     private readonly SkiaIslandMotion _motion;
     private readonly SkiaPager _pager;
     private readonly SkiaArchipelago _archipelago;
@@ -355,7 +357,8 @@ public sealed class SkiaIslandController : IDisposable
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
         || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating
-        || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationDismissRequested;
+        || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationDismissRequested
+        || !_railFollowSpring.IsAtRest;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
     public bool IsTrackTransitionAnimating => _trackTransitionStartedMs >= 0;
@@ -883,6 +886,7 @@ public sealed class SkiaIslandController : IDisposable
         UpdatePointerZones();
         UpdateArchipelago(now);
         var railWasRunning = SyncRailMotion(dt);
+        StepRailFollow(dt);
         var mediaProgressChanged = ApplyMediaProgress();
         BuildRenderState();
 
@@ -3516,10 +3520,11 @@ private void HandlePageControl(in IslandHitTarget hit)
             _pageScroll[page] = Math.Clamp(_pageScroll[page], 0, MaxScrollForPage(page, pages));
         }
 
-        RailScrollOffset = SideRailLayout.ClampScroll(
-            RailScrollOffset,
+        var railMax = SideRailLayout.MaxScroll(
             pages.PageCount,
             IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
+        RailScrollOffset = Math.Clamp(RailScrollOffset, 0, railMax);
+        SetRailFollowTarget(Math.Clamp(_railFollowTarget, 0, railMax));
 
         return pages with
         {
@@ -3541,8 +3546,8 @@ private void HandlePageControl(in IslandHitTarget hit)
     {
         if (page < 0 || _pages.PageCount <= 1)
         {
-            RailScrollOffset = 0;
-            _pages = _pages with { RailScrollOffset = 0 };
+            SetRailFollowTarget(0);
+            _pages = _pages with { RailScrollOffset = RailScrollOffset };
             return;
         }
 
@@ -3550,26 +3555,71 @@ private void HandlePageControl(in IslandHitTarget hit)
         var max = SideRailLayout.MaxScroll(_pages.PageCount, content);
         if (max <= 0.5)
         {
-            RailScrollOffset = 0;
-            _pages = _pages with { RailScrollOffset = 0 };
+            SetRailFollowTarget(0);
+            _pages = _pages with { RailScrollOffset = RailScrollOffset };
             return;
         }
 
         var tab = SideRailLayout.TabRect(content, page);
-        var top = tab.Top - RailScrollOffset;
-        var bottom = tab.Bottom - RailScrollOffset;
+        var top = tab.Top - _railFollowTarget;
+        var bottom = tab.Bottom - _railFollowTarget;
+        var target = _railFollowTarget;
         if (top < content.Top)
         {
-            RailScrollOffset = Math.Max(0, tab.Top - content.Top);
+            target = Math.Max(0, tab.Top - content.Top);
         }
         else if (bottom > content.Bottom)
         {
-            RailScrollOffset = Math.Min(max, tab.Bottom - content.Bottom);
+            target = Math.Min(max, tab.Bottom - content.Bottom);
         }
 
-        RailScrollOffset = Math.Clamp(RailScrollOffset, 0, max);
-        // BuildRenderState reads _pages directly, so publish the new offset in the same tick.
+        SetRailFollowTarget(Math.Clamp(target, 0, max));
         _pages = _pages with { RailScrollOffset = RailScrollOffset };
+    }
+
+    /// <summary>Retargets the rail follow spring; reduced motion snaps instead.</summary>
+    private void SetRailFollowTarget(double target)
+    {
+        if (Math.Abs(target - _railFollowTarget) < 0.01)
+        {
+            return;
+        }
+
+        _railFollowTarget = target;
+        if (_motion.ReducedMotion)
+        {
+            _railFollowSpring.SnapTo(target);
+            return;
+        }
+
+        _railFollowSpring.Retarget(target, 1.0 / 120.0);
+    }
+
+    /// <summary>Steps the rail follow spring and publishes its current value to the render model.</summary>
+    private bool StepRailFollow(double deltaSeconds)
+    {
+        var wasRunning = !_railFollowSpring.IsAtRest;
+        if (wasRunning)
+        {
+            _railFollowSpring.Step(deltaSeconds);
+        }
+
+        var max = SideRailLayout.MaxScroll(
+            _pages.PageCount,
+            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
+        var value = Math.Clamp(_railFollowSpring.Value, 0, max);
+        if (Math.Abs(value - _railFollowSpring.Value) > 0.001)
+        {
+            _railFollowSpring.SnapTo(value);
+        }
+
+        RailScrollOffset = value;
+        if (Math.Abs(_pages.RailScrollOffset - value) > 0.001)
+        {
+            _pages = _pages with { RailScrollOffset = value };
+        }
+
+        return wasRunning || !_railFollowSpring.IsAtRest;
     }
 
     private double ScrollForKind(PageSlotKind kind)

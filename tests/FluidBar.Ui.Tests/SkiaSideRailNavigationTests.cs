@@ -79,7 +79,11 @@ public sealed class SkiaSideRailNavigationTests
         fixture.ExpandAndSettle();
         Assert.Equal(7, fixture.Controller.RenderState.Pages.PageCount);
 
-        fixture.GoToPage(6);
+        fixture.Controller.Pager.SelectPage(6);
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(16));
+        fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.InRange(fixture.Controller.RenderState.Pages.RailScrollOffset, 0.1, 43.9);
+        fixture.RunToRest();
         var state = fixture.Controller.RenderState;
         var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
         Assert.Equal(SideRailLayout.MaxScroll(7, content), state.Pages.RailScrollOffset, 0.001);
