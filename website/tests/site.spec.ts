@@ -43,32 +43,23 @@ test.describe('FluidBar official site', () => {
     expect(errors).toEqual([]);
   });
 
-  test('lab drives real compact states, expansion and pages', async ({ page }) => {
+  test('experience selector drives real compact states, expansion and pages', async ({ page }) => {
     await page.goto('/');
-    await page.locator('#story').scrollIntoViewIfNeeded();
-    const frame = await waitForFrame(page, LAB_FRAME);
+    const frame = await waitForFrame(page, HERO_FRAME);
     const island = frame.locator('#island');
-
-    await page.locator('.lab-step').nth(1).locator('.lab-step__head').click();
+    const selector = page.getByRole('combobox', { name: '预览状态' });
+    await selector.selectOption('media');
     await expect(island).toHaveAttribute('data-view', 'media');
-    await expect(page.getByRole('button', { name: /媒体.*226/ })).toBeVisible();
-    await expect(page.locator('.music-study')).toHaveCount(0);
     await expect(frame.locator('.media-lyric .lyric-word')).toHaveCount(3);
     await expect(frame.locator('.mini-play, .play-btn, .transport')).toHaveCount(0);
-    await page.waitForTimeout(500);
-    const mediaWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
-    expect(mediaWidth).toBeGreaterThan(220);
-
-    await page.getByRole('button', { name: /通知 248/ }).click();
+    await expect.poll(() => island.evaluate(element => element.clientWidth)).toBe(226);
+    await selector.selectOption('notifications');
     await expect(island).toHaveAttribute('data-view', 'notifications');
-
-    await page.locator('.lab-step').nth(2).locator('.lab-step__head').click();
+    await selector.selectOption('expanded');
     await expect(island).toHaveAttribute('data-expanded', 'true');
-
-    await page.locator('.step-options--pages button').nth(2).click();
+    await page.getByRole('navigation', { name: '原型页面' }).getByRole('button', { name: /通知/ }).click();
     await expect(frame.locator('.pager-title')).toContainText('通知');
-
-    await page.locator('.lab-step').nth(4).locator('.lab-step__head').click();
+    await selector.selectOption('idle');
     await expect(island).toHaveAttribute('data-expanded', 'false');
     await expect(island).toHaveAttribute('data-view', 'idle');
   });

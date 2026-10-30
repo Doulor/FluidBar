@@ -1,5 +1,4 @@
 .hero {
-  padding-block: 64px 80px;
   min-height: min(760px, calc(100dvh - var(--nav-h)));
   display: flex;
   align-items: center;
@@ -8,7 +7,7 @@
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 64px;
+  gap: 48px;
   align-items: center;
 }
 
@@ -133,7 +132,7 @@
 }
 
 @media (max-width: 900px) {
-  .hero { min-height: 0; padding-block: 36px 56px; }
+  .hero { min-height: 0; }
   .hero-grid { grid-template-columns: 1fr; gap: 32px; }
   .hero-copy { max-width: 620px; }
   .hero h1 { font-size: clamp(42px, 8vw, 64px); }
@@ -147,3 +146,8 @@
   .stage-meta .mono { font-size: 9px; }
   .hero-page-rail button { min-height: 44px; }
 }
+
+.hero-preview-control { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px 16px; width: min(100%,540px); margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.hero-preview-control label { color: var(--muted); font-size: 12px; }
+.hero-preview-control select { min-width: 0; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.hero-preview-control p { grid-column: 1/-1; color: var(--muted-2); font-size: 11px; line-height: 1.8; }

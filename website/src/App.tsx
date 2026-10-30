@@ -1,7 +1,6 @@
 import { SiteNav } from './sections/SiteNav';
 import { Hero } from './sections/Hero';
 import { IslandLab } from './sections/IslandLab';
-import { MaterialOptics } from './sections/MaterialOptics';
 import { Plugins } from './sections/Plugins';
 import { Performance } from './sections/Performance';
 import { Download } from './sections/Download';
@@ -17,7 +16,6 @@ export default function App() {
       <main id="main">
         <Hero />
         <IslandLab />
-        <MaterialOptics />
         <Plugins />
         <Performance />
         <Download />

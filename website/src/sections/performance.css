@@ -1,26 +1,7 @@
-.performance {
-  padding-block: var(--section-space);
-  border-top: 1px solid var(--line);
-}
-
-.performance-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 48px;
-}
-
-.performance-head > p {
-  max-width: 30em;
-  padding-bottom: 8px;
-  color: var(--muted);
-  font-size: 15px;
-}
-
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin-top: 62px;
+  margin-top: 0;
   padding: 8px 18px;
   border: 1px solid var(--glass-border);
   border-radius: 24px;
@@ -91,14 +72,14 @@
 .architecture {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 72px;
+  gap: 48px;
   align-items: center;
-  margin-top: 96px;
+  margin-top: 40px;
 }
 
 .architecture-copy h3 {
   margin-top: 4px;
-  font-size: clamp(30px, 3.2vw, 44px);
+  font-size: clamp(28px, 2.4vw, 34px);
   letter-spacing: -0.05em;
 }
 
@@ -162,14 +143,6 @@
 }
 
 @media (max-width: 1100px) {
-  .performance-head {
-    display: block;
-  }
-
-  .performance-head > p {
-    margin-top: 18px;
-  }
-
   .architecture {
     gap: 40px;
   }
@@ -205,14 +178,14 @@
 
   .architecture {
     grid-template-columns: 1fr;
-    margin-top: 64px;
+    margin-top: 32px;
   }
 
 }
 
 @media (max-width: 480px) {
   .stat-grid {
-    margin-top: 42px;
+    margin-top: 0;
   }
 
   .stat__value {

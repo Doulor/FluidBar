@@ -9,10 +9,10 @@ export function Performance() {
   const active = ARCHITECTURE.find((layer) => layer.id === activeLayer) ?? ARCHITECTURE[0];
 
   return (
-    <section id="performance" className="performance" aria-labelledby="performance-title">
+    <section id="performance" className="performance chapter" aria-labelledby="performance-title">
       <div className="site-shell">
-        <div className="performance-head">
-          <div className="section-heading">
+        <header className="chapter-heading">
+          <div>
             <p className="section-kicker">04 / PERFORMANCE</p>
             <h2 id="performance-title">
               丝滑不是形容词，
@@ -23,7 +23,7 @@ export function Performance() {
           <p>
             固定窗口、合成层动画、有界缓存。每一帧都有明确预算，每一个数字都来自实测。
           </p>
-        </div>
+        </header>
 
         <div className="stat-grid" aria-label="实测性能数字">
           {PERFORMANCE_STATS.map((stat) => (

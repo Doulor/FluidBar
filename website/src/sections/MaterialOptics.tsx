@@ -48,11 +48,11 @@ export function MaterialOptics() {
   };
 
   return (
-    <section className="optics" aria-labelledby="optics-title">
-      <div className="site-shell optics-grid">
+    <section id="material-study" className="optics" aria-labelledby="optics-title">
+      <div className="optics-grid">
         <div className="optics-copy">
           <p className="section-kicker">MATERIAL STUDY</p>
-          <h2 id="optics-title">深色有层次，<br />透明有边界。</h2>
+          <h3 id="optics-title">深色有层次，<br />透明有边界。</h3>
           <p className="optics-intro">
             黑曜石的深、亚克力的柔、液态玻璃的透。三种表面，让同一枚岛与桌面自然相融。
           </p>

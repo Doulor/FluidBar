@@ -8,7 +8,7 @@ html {
   background: var(--bg);
   color: var(--ink);
   scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--nav-h) + 32px);
+  scroll-padding-top: calc(var(--nav-h) + 24px);
 }
 
 body {
@@ -96,7 +96,7 @@ h3 {
 }
 
 main > section {
-  scroll-margin-top: calc(var(--nav-h) + 22px);
+  scroll-margin-top: 0;
 }
 
 main > section + section {

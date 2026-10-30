@@ -1,0 +1,38 @@
+/* Five chapters share one boundary, heading grid and spacing scale. */
+.chapter {
+  padding-block: var(--section-space);
+  border-top: 1px solid var(--line);
+}
+.chapter--intro { border-top: 0; }
+.section-kicker {
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--muted-2);
+}
+.chapter-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: end;
+  gap: 48px;
+  margin-bottom: 36px;
+}
+.chapter-heading h2 {
+  font-size: clamp(32px, 3.1vw, 44px);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+.chapter-heading > p {
+  max-width: 38em;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+#story, #material-study { scroll-margin-top: 0; }
+@media (max-width: 900px) {
+  .chapter-heading { grid-template-columns: 1fr; gap: 16px; margin-bottom: 28px; }
+  .chapter-heading h2 { font-size: 34px; }
+}

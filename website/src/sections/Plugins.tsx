@@ -32,19 +32,21 @@ export function Plugins() {
   const [showManifest, setShowManifest] = useState(false);
 
   return (
-    <section id="plugins" className="plugins" aria-labelledby="plugins-title">
+    <section id="plugins" className="plugins chapter" aria-labelledby="plugins-title">
       <div className="site-shell">
-        <div className="section-heading plugins-heading">
+        <header className="chapter-heading">
+          <div>
           <p className="section-kicker">03 / PLUGINS</p>
           <h2 id="plugins-title">
             小岛不大，
             <br />
             装得下生态。
           </h2>
+          </div>
           <p>
             内置插件开箱可用，社区插件通过签名包和声明式页面接入。安装、更新与回滚都不必离开 FluidBar。
           </p>
-        </div>
+        </header>
 
         <div className="plugins-grid">
           <div className="plugins-left">

@@ -4,14 +4,10 @@ import { PillNav } from '../ui/reactbits';
 import { BrandMark } from '../ui/BrandMark';
 import { useActiveSection } from '../lib/useActiveSection';
 import { GITHUB } from '../lib/links';
+import { SITE_SECTIONS } from '../lib/sections';
 import './site-nav.css';
 
-const ITEMS = [
-  { label: '体验', href: '#experience' },
-  { label: '外观', href: '#appearance' },
-  { label: '插件', href: '#plugins' },
-  { label: '下载', href: '#download' },
-];
+const ITEMS = [...SITE_SECTIONS];
 
 export function SiteNav() {
   const active = useActiveSection();
@@ -58,7 +54,7 @@ export function SiteNav() {
           <div className="nav-desktop">
             <PillNav
               items={ITEMS}
-              activeHref={`#${active === 'story' ? 'experience' : active}`}
+              activeHref={`#${active}`}
               theme="light"
               size="md"
               layout="split"
@@ -102,7 +98,7 @@ export function SiteNav() {
           <div className="mobile-nav-wrap">
             <nav id="mobile-nav" className="site-shell mobile-nav" aria-label="移动导航">
               {ITEMS.map((item) => (
-                <a key={item.href} href={item.href} onClick={() => setOpen(false)}>
+                <a key={item.href} href={item.href} aria-current={active === item.id ? 'page' : undefined} onClick={() => setOpen(false)}>
                   {item.label}
                 </a>
               ))}

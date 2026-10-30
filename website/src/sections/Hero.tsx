@@ -2,6 +2,8 @@ import { ArrowDown, ArrowUpRight } from '@phosphor-icons/react';
 import { SpecularButton } from '../ui/reactbits';
 import { PrototypeFrame } from '../island/PrototypeFrame';
 import { usePrototype } from '../island/usePrototype';
+import { COMPACT_STATE_META } from '../island/compactStates';
+import type { CompactView } from '../island/protocol';
 import './hero.css';
 
 const PAGES = ['主页', '媒体', '通知', '剪贴板', 'Agent', '小组件'];
@@ -10,7 +12,7 @@ export function Hero() {
   const { frameRef, state, setState, send } = usePrototype();
 
   const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.location.hash = id;
   };
 
   const activePage = state.expanded
@@ -26,12 +28,12 @@ export function Hero() {
             : 0;
 
   return (
-    <section id="experience" className="hero" aria-labelledby="hero-title">
+    <section id="experience" className="hero chapter chapter--intro" aria-labelledby="hero-title">
       <div className="site-shell hero-grid">
         <div className="hero-copy">
           <p className="kicker">
             <span className="kicker-line" aria-hidden="true" />
-            Windows 10 / 11 · FluidBar 2.0
+            01 / EXPERIENCE · Windows 10 / 11
           </p>
           <h1 id="hero-title">
             <span>桌面之上，</span>
@@ -72,9 +74,10 @@ export function Hero() {
           <p className="hero-note">
             源码开放 · MIT · 开发预览版
           </p>
+
         </div>
 
-        <div className="hero-stage">
+        <div id="story" className="hero-stage">
           <div className="stage-frame">
             <div className="stage-meta stage-meta--top">
               <span className="live-label">
@@ -95,8 +98,8 @@ export function Hero() {
             />
 
             <div className="stage-meta stage-meta--bottom">
-              <span className="mono">展开 440 × 284</span>
-              <span className="mono stage-demo-label">示例数据 · 点击右上角收起</span>
+              <span className="mono">{!state.ready || state.expanded ? '展开 440 × 284' : `${COMPACT_STATE_META.find(item => item.id === state.view)?.label ?? '常驻'} · ${state.width} × ${state.height}`}</span>
+              <span className="mono stage-demo-label">{!state.ready || state.expanded ? '示例数据 · 点击右上角收起' : '示例数据 · 点击小岛展开'}</span>
             </div>
           </div>
 
@@ -114,6 +117,21 @@ export function Hero() {
               </button>
             ))}
           </nav>
+          <div className="hero-preview-control">
+            <label htmlFor="preview-state">预览状态</label>
+            <select
+              id="preview-state"
+              value={!state.ready || state.expanded ? 'expanded' : state.view}
+              onChange={event => {
+                frameRef.current?.load();
+                send({ state: event.target.value as CompactView | 'expanded' });
+              }}
+            >
+              <option value="expanded">展开控制中心</option>
+              {COMPACT_STATE_META.filter(item => ['idle', 'media', 'notifications', 'clipboard', 'agent'].includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.label} · {item.size}</option>)}
+            </select>
+            <p>收起看活动摘要，展开处理完整内容。预览中可拖动、滚轮或按 1–6 切页。</p>
+          </div>
         </div>
       </div>
     </section>

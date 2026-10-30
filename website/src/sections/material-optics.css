@@ -1,13 +1,13 @@
 .optics {
-  padding-block: var(--section-space);
-  margin-top: var(--section-space);
+  padding-top: 40px;
+  margin-top: 40px;
   border-top: 1px solid var(--line);
 }
 
 .optics-grid {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 64px;
+  gap: 48px;
   align-items: center;
 }
 
@@ -16,8 +16,8 @@
   padding-bottom: 32px;
 }
 
-.optics-copy h2 {
-  font-size: clamp(36px, 3.3vw, 48px);
+.optics-copy h3 {
+  font-size: 28px;
   letter-spacing: -0.045em;
   line-height: 1.22;
 }
@@ -354,7 +354,7 @@
   .optics-copy { max-width: 560px; padding-bottom: 0; }
   .optics-figure { width: 100%; max-width: 660px; justify-self: center; }
   .optics-stage { height: 450px; }
-  .optics-copy h2 { font-size: 40px; }
+  .optics-copy h3 { font-size: 28px; }
   .optics-properties { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
   .optics-properties > div { grid-template-columns: 8px auto; gap: 6px 8px; }
   .optics-properties > div > span:last-child { grid-column: 2; font-size: 11px; }
@@ -362,7 +362,7 @@
 }
 
 @media (max-width: 480px) {
-  .optics-copy h2 { font-size: 36px; }
+  .optics-copy h3 { font-size: 28px; }
   .optics-intro { margin-top: 18px; font-size: 14px; }
   .optics-properties { margin-top: 24px; gap: 8px; font-size: 12px; }
   .optics-note { margin-top: 14px; }

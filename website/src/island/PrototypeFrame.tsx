@@ -56,6 +56,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
     const wrapperRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const pendingRef = useRef<Omit<PrototypeCommand, 'type'>[]>([]);
+    const readyRef = useRef(false);
     const [scale, setScale] = useState(1);
     const [ready, setReady] = useState(false);
     const [failed, setFailed] = useState(false);
@@ -64,11 +65,16 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
 
     const send = useCallback((command: Omit<PrototypeCommand, 'type'>) => {
       const target = iframeRef.current?.contentWindow;
-      if (!target) {
+      if (!target || !readyRef.current) {
         pendingRef.current.push(command);
         return;
       }
       target.postMessage(makeCommand(command), window.location.origin);
+    }, []);
+
+    const attachFrame = useCallback((node: HTMLIFrameElement | null) => {
+      iframeRef.current = node;
+      readyRef.current = false;
     }, []);
 
     useImperativeHandle(
@@ -123,6 +129,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
         if (!isPrototypeStateMessage(event.data)) return;
 
         const next = event.data.state;
+        readyRef.current = next.ready;
         setReady(next.ready);
         setFailed(false);
         onState?.(next);
@@ -180,7 +187,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
         {shouldLoad && !failed ? (
           <iframe
             key={attempt}
-            ref={iframeRef}
+            ref={attachFrame}
             className="prototype-frame__iframe"
             title={title}
             name={name}

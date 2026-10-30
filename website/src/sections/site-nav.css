@@ -66,7 +66,7 @@
 }
 
 .nav-desktop .pill-nav__item {
-  min-width: clamp(84px, 8vw, 116px);
+  min-width: clamp(70px, 7vw, 104px);
   letter-spacing: 0.04em;
 }
 
@@ -153,6 +153,11 @@
 
 .mobile-nav a:hover {
   background: var(--accent-soft);
+}
+
+.mobile-nav a[aria-current='page'] {
+  background: var(--surface-2);
+  font-weight: 600;
 }
 
 .mobile-nav .nav-cta {

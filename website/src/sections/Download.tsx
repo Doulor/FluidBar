@@ -7,23 +7,21 @@ import './download.css';
 
 export function Download() {
   return (
-    <section id="download" className="download" aria-labelledby="download-title">
+    <section id="download" className="download chapter" aria-labelledby="download-title">
       <div className="site-shell">
+        <header className="chapter-heading">
+          <div><p className="section-kicker">05 / DOWNLOAD</p><h2 id="download-title">现在，<br />把岛带走。</h2></div>
+          <p>Windows 10 / 11 x64。免费、开源，当前为开发预览版。下载、安装和常见问题都在这里。</p>
+        </header>
         <div className="download-panel">
           <div className="download-mark" aria-hidden="true">
             <BrandMark size={74} />
-            <span className="download-mark__orbit" />
           </div>
 
           <div className="download-copy">
-            <p className="section-kicker">05 / DOWNLOAD</p>
-            <h2 id="download-title">
-              现在，
-              <br />
-              把岛带走。
-            </h2>
+            <h3>FluidBar 开发预览版</h3>
             <p>
-              Windows 10 / 11 x64。免费、开源。当前为开发预览版，网页交互为示例，最新界面以软件为准。
+              发布包已包含运行时，完整解压后启动。网页交互为示例，最新界面以软件为准。
             </p>
           </div>
 
