@@ -59,6 +59,23 @@ public sealed class SkiaSideRailNavigationTests
     }
 
     [Fact]
+    public void WheelChangesPage_AndRailFollowsSelectionInsteadOfScrollingOnWheel()
+    {
+        using var fixture = ControllerFixture.Create();
+        fixture.GoToPage(0);
+        fixture.ExpandAndSettle();
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(fixture.Controller.RenderState));
+        var tab = SideRailLayout.TabRect(content, 0);
+        fixture.Controller.HandlePointerMoved(content.MidX, content.MidY);
+        fixture.Controller.HandlePointerMoved(tab.MidX, tab.MidY);
+        fixture.Time.Advance(TimeSpan.FromMilliseconds(1000));
+        var outcome = fixture.Controller.HandleWheel(60, horizontal: false, shift: false);
+        Assert.True(outcome.Consumed || outcome.Paged);
+        Assert.Equal(1, fixture.Controller.Pager.SelectedIndex);
+        Assert.Equal(0, fixture.Controller.RenderState.Pages.RailScrollOffset, 0.001);
+    }
+
+    [Fact]
     public void WheelOverRail_PagesInsteadOfHittingRemovedMiniIslands()
     {
         using var fixture = ControllerFixture.Create();

@@ -2048,26 +2048,6 @@ public sealed class SkiaIslandController : IDisposable
         // clipboard or notification list scrolls natively and only then flips. Short pages flip at once.
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
-            var railPage = SideRailLayout.HitTest(
-                IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)),
-                _pages.PageCount,
-                (float)_pointerX,
-                (float)_pointerY,
-                _renderState.Pages.RailScrollOffset);
-            if (_pointerInside && railPage >= 0)
-            {
-                var railMax = SideRailLayout.MaxScroll(_pages.PageCount,
-                    IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
-                if (railMax > 0.5)
-                {
-                    RailScrollOffset = Math.Clamp(RailScrollOffset + deltaDip, 0, railMax);
-                    _pages = _pages with { RailScrollOffset = RailScrollOffset };
-                    BuildRenderState();
-                    InvalidateFull();
-                    return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
-                }
-            }
-
             var page = _pager.SelectedIndex;
             var max = MaxScrollForPage(page);
             var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
@@ -3001,6 +2981,7 @@ public sealed class SkiaIslandController : IDisposable
             return;
         }
 
+        EnsureRailPageVisible(page);
         ApplyInput(IslandInput.PageRequested(PageAt(page)));
         // The pager owns wheel/tab navigation. Rebuild immediately so State.Page, hit-testing and the
         // next animation frame all see the same committed page; otherwise the next state sync snaps

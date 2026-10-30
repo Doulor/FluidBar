@@ -58,6 +58,18 @@ public sealed class SideRailLayoutTests
     }
 
     [Fact]
+    public void LastTab_CanBeFollowedIntoTheVisibleRail()
+    {
+        var content = new SKRect(60, 12, 460, 272);
+        const int pages = 10;
+        var max = SideRailLayout.MaxScroll(pages, content);
+        var tab = SideRailLayout.TabRect(content, pages - 1, max, pages);
+        Assert.Equal(content.Bottom, tab.Bottom, 0.001);
+        Assert.True(tab.Top >= content.Top);
+        Assert.Equal(pages - 1, SideRailLayout.HitTest(content, pages, tab.MidX, tab.MidY, max));
+    }
+
+    [Fact]
     public void HitTest_ReturnsPageTab_AndNotDetachedRail()
     {
         var state = IslandRenderState.Expanded(IslandMode.Float, default, ExpandedPageContent.Empty, IslandTheme.Dark);
