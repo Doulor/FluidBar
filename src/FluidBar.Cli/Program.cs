@@ -43,6 +43,12 @@ internal static class FluidBarCli
                 _ => Unknown(args[0]),
             };
         }
+        catch (PluginManifestException exception)
+        {
+            // Invalid input is a normal CLI failure (exit 2), not an unhandled crash.
+            Console.Error.WriteLine($"error: {exception.Message}");
+            return 2;
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or CryptographicException or FormatException)
         {
             Console.Error.WriteLine($"error: {exception.Message}");

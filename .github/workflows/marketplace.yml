@@ -186,6 +186,7 @@ jobs:
           $manifest | ConvertTo-Json -Depth 64 | Set-Content $manifestPath
           dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- validate --plugin $bad
           if ($LASTEXITCODE -eq 0) { throw "validator accepted a manifest with an unknown property" }
+          $global:LASTEXITCODE = 0
           Write-Host "strict manifest validation confirmed."
 
       - name: Upload validation artifacts
