@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FluidBar.Core.Layout;
 using SkiaSharp;
 
 namespace FluidBar.Island;
@@ -193,14 +194,15 @@ internal sealed partial class PageRenderer : IDisposable
     private void DrawSideRail(SKCanvas canvas, in IslandRenderState state, SKRect content)
     {
         var count = Math.Max(1, state.Pages.PageCount);
+        var side = state.RailSide;
         var scroll = SideRailLayout.ClampScroll(state.Pages.RailScrollOffset, count, content);
         var selection = double.IsFinite(state.RailSelectionPosition)
             ? Math.Clamp(state.RailSelectionPosition, 0, count - 1)
             : state.PageIndex;
         canvas.Save();
         // Clip to the card body: a long rail must never paint past the bottom edge.
-        canvas.ClipRect(SideRailLayout.VisibleRect(content, count));
-        var railLeft = content.Left - SideRailLayout.LeftOffset;
+        canvas.ClipRect(SideRailLayout.VisibleRect(content, count, side));
+        var railLeft = SideRailLayout.RailLeft(content, side);
         var activeTop = content.Top + ((float)selection * SideRailLayout.TabPitch) - scroll;
         var activeRect = new SKRect(railLeft, activeTop, railLeft + SideRailLayout.TabWidth,
             activeTop + SideRailLayout.TabHeight);
@@ -209,11 +211,12 @@ internal sealed partial class PageRenderer : IDisposable
         _fill.Color = Alpha(_theme.Accent, 0.14f * _opacity);
         canvas.DrawRoundRect(activeRect, 12, 12, _fill);
         _fill.Color = Alpha(_theme.Accent, 0.82f * _opacity);
-        canvas.DrawRoundRect(new SKRect(activeRect.Left - 5, activeRect.MidY - 9, activeRect.Left - 3,
+        var markerX = side == PageRailSide.Right ? activeRect.Right + 3 : activeRect.Left - 5;
+        canvas.DrawRoundRect(new SKRect(markerX, activeRect.MidY - 9, markerX + 2,
             activeRect.MidY + 9), 1, 1, _fill);
         for (var i = 0; i < count; i++)
         {
-            var rect = SideRailLayout.TabRect(content, i, scroll, count);
+            var rect = SideRailLayout.TabRect(content, i, scroll, count, side);
             var hovered = _hasPointer && _hoverControl == IslandPageControl.PageTab && _hoverPage == i;
             var pressed = _pressedControl == IslandPageControl.PageTab && _pressedPage == i;
             _fill.Style = SKPaintStyle.Fill;
@@ -236,7 +239,8 @@ internal sealed partial class PageRenderer : IDisposable
                 // from every page. It is painted only while the pointer is actually over a tab.
                 var label = state.Pages.Title(i);
                 var width = Math.Min(100, _text.Measure(label, IslandType.RowMeta) + 16);
-                var tip = new SKRect(rect.Right + 6, rect.MidY - 9, rect.Right + 6 + width, rect.MidY + 9);
+                var tipLeft = side == PageRailSide.Right ? rect.Left - 6 - width : rect.Right + 6;
+                var tip = new SKRect(tipLeft, rect.MidY - 9, tipLeft + width, rect.MidY + 9);
                 _fill.Color = Alpha(_theme.Background, 0.96f * _opacity);
                 canvas.DrawRoundRect(tip, 7, 7, _fill);
                 _text.Draw(canvas, label, IslandType.RowMeta, tip, _theme.Foreground, TextAlign.Center, _opacity);

@@ -45,6 +45,9 @@ public readonly record struct IslandRenderState
     /// <summary>Presentation mode (float/flush/dock); selects the fixed host surface and radii.</summary>
     public IslandMode Mode { get; init; }
 
+    /// <summary>Side of the expanded card that hosts the page tab rail.</summary>
+    public PageRailSide RailSide { get; init; } = PageRailSide.Left;
+
     /// <summary>Visual form. <see cref="ShellForm.Peek"/> and <see cref="ShellForm.Closing"/> render
     /// the compact content; <see cref="ShellForm.Hidden"/> paints nothing.</summary>
     public ShellForm Form { get; init; }

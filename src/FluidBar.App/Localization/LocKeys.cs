@@ -778,6 +778,15 @@ public static partial class LocKeys
             public const string PreviewHint = "Settings.Appearance.PreviewHint";
         /// <summary><c>Settings.Appearance.Subtitle</c></summary>
         public const string Subtitle = "Settings.Appearance.Subtitle";
+
+            /// <summary><c>Settings.Appearance.RailSide.Title</c></summary>
+            public const string RailSideTitle = "Settings.Appearance.RailSide.Title";
+            /// <summary><c>Settings.Appearance.RailSide.Desc</c></summary>
+            public const string RailSideDesc = "Settings.Appearance.RailSide.Desc";
+            /// <summary><c>Settings.Appearance.RailSide.Left</c></summary>
+            public const string RailSideLeft = "Settings.Appearance.RailSide.Left";
+            /// <summary><c>Settings.Appearance.RailSide.Right</c></summary>
+            public const string RailSideRight = "Settings.Appearance.RailSide.Right";
             /// <summary><c>Settings.Appearance.PanelRadius</c></summary>
             public const string PanelRadius = "Settings.Appearance.PanelRadius";
             /// <summary><c>Settings.Appearance.PanelRadiusHint</c></summary>

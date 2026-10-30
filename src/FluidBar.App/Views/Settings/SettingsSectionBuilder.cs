@@ -514,6 +514,18 @@ public static class SettingsSectionBuilder
                     }),
                     // Three segments need more room than the two-segment default.
                     width: 216),
+                SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideTitle),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideDesc),
+                    [
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideLeft), "left"),
+                        (ctx.Localizer.Get(LocKeys.Settings.Appearance.RailSideRight), "right"),
+                    ],
+                    settings.RailSide == PageRailSide.Right ? "right" : "left",
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        RailSide = value == "right" ? PageRailSide.Right : PageRailSide.Left,
+                    }),
+                    width: 160),
                 // Palette moved here from the advanced pane: it is a 1:1 island token (the preview
                 // repaints on every switch) and belongs next to the material.
                 SegmentedRow(ctx, ctx.Localizer.Get("Settings.Appearance.PowerMode.Title"),

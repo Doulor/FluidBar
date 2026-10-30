@@ -1,5 +1,15 @@
 namespace FluidBar.Core.Layout;
 
+/// <summary>Side of the expanded card that hosts the page tab rail.</summary>
+public enum PageRailSide
+{
+    /// <summary>Rail on the left edge (default).</summary>
+    Left = 0,
+
+    /// <summary>Rail on the right edge.</summary>
+    Right = 1,
+}
+
 /// <summary>Size in DIP.</summary>
 /// <param name="Width">Width.</param>
 /// <param name="Height">Height.</param>

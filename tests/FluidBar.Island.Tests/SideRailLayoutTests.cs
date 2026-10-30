@@ -44,6 +44,19 @@ public sealed class SideRailLayoutTests
     }
 
     [Fact]
+    public void RightRail_MirrorsTheTabGeometry()
+    {
+        var content = new SKRect(12, 12, 412, 272);
+        var tab = SideRailLayout.TabRect(content, 0, PageRailSide.Right);
+        Assert.Equal(422, tab.Left, 0.001);
+        Assert.Equal(462, tab.Right, 0.001);
+        Assert.Equal(0, SideRailLayout.HitTest(content, 6, tab.MidX, tab.MidY, 0, PageRailSide.Right));
+        var visible = SideRailLayout.VisibleRect(content, 6, PageRailSide.Right);
+        Assert.Equal(content.Left, visible.Left, 0.001);
+        Assert.True(visible.Right >= tab.Right);
+    }
+
+    [Fact]
     public void OverflowTabs_ScrollAndHitAtTheirScrolledPositions()
     {
         var content = new SKRect(60, 12, 460, 272);

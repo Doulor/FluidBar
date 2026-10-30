@@ -6,7 +6,7 @@ namespace FluidBar.Island;
 
 /// <summary>
 /// Visual metrics for the island MVP. Shell/host/page numbers come from Core <see cref="LayoutTokens"/>;
-/// the expanded page origin follows the approved prototype's 20/12 inset (content 400×252), and the
+/// the expanded page origin follows the configured rail side (content 400×260), and the
 /// detached strip uses the prototype's 3-island sizes inside Core's 30 DIP strip envelope.
 /// </summary>
 public static class IslandMetrics
@@ -28,6 +28,10 @@ public static class IslandMetrics
 
     /// <summary>Expanded content left inset inside the shell (60 DIP: 10 + 40 rail + 10 gap).</summary>
     public const double ContentLeft = LayoutTokens.ContentHorizontalInset;
+
+    /// <summary>Left inset of the content rect for a rail side.</summary>
+    public static double ContentLeftForSide(PageRailSide side)
+        => side == PageRailSide.Right ? LayoutTokens.ContentRightInset : ContentLeft;
 
     /// <summary>Expanded content top inset inside the shell (12 DIP, prototype expanded layer).</summary>
     public const double ContentTop = 12;
@@ -376,16 +380,17 @@ public static class IslandMetrics
     }
 
     /// <summary>Expanded content rectangle (host-local DIP) for a shell rectangle.</summary>
-    public static SKRect ContentRect(SKRect shell) => new(
-        shell.Left + (float)ContentLeft,
-        shell.Top + (float)ContentTop,
-        shell.Left + (float)ContentLeft + (float)ContentWidth,
-        shell.Top + (float)ContentTop + (float)ContentHeight);
+    public static SKRect ContentRect(SKRect shell, PageRailSide side = PageRailSide.Left)
+    {
+        var left = shell.Left + (float)ContentLeftForSide(side);
+        return new SKRect(left, shell.Top + (float)ContentTop,
+            left + (float)ContentWidth, shell.Top + (float)ContentTop + (float)ContentHeight);
+    }
 
     /// <summary>Page rectangle (host-local DIP) at the continuous pager offset.</summary>
     public static SKRect PageRect(in IslandRenderState state, int page)
     {
-        var content = ContentRect(ShellRect(state));
+        var content = ContentRect(ShellRect(state), state.RailSide);
         var offset = (float)(state.Pager.PagePosition * PagerConstants.PagePitchDip);
         var left = content.Left + (page * (float)PagerConstants.PagePitchDip) - offset;
         return new SKRect(left, content.Top, left + (float)PagerConstants.PagePitchDip, content.Bottom);

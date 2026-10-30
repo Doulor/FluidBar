@@ -3527,7 +3527,7 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var railMax = SideRailLayout.MaxScroll(
             pages.PageCount,
-            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
+            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide));
         RailScrollOffset = Math.Clamp(RailScrollOffset, 0, railMax);
         SetRailFollowTarget(Math.Clamp(_railFollowTarget, 0, railMax));
         SetRailSelectionTarget(Math.Clamp(_railSelectionTarget, 0, Math.Max(0, pages.PageCount - 1)));
@@ -3558,7 +3558,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             return;
         }
 
-        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState));
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide);
         var max = SideRailLayout.MaxScroll(_pages.PageCount, content);
         if (max <= 0.5)
         {
@@ -3568,7 +3568,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             return;
         }
 
-        var tab = SideRailLayout.TabRect(content, page);
+        var tab = SideRailLayout.TabRect(content, page, _renderState.RailSide);
         var top = tab.Top - _railFollowTarget;
         var bottom = tab.Bottom - _railFollowTarget;
         var target = _railFollowTarget;
@@ -3659,7 +3659,7 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var max = SideRailLayout.MaxScroll(
             _pages.PageCount,
-            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState)));
+            IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide));
         var value = Math.Clamp(_railFollowSpring.Value, 0, max);
         if (Math.Abs(value - _railFollowSpring.Value) > 0.001)
         {
@@ -3695,7 +3695,7 @@ private void HandlePageControl(in IslandHitTarget hit)
     /// <summary>A page rect with the expanded content size (vertical extents do not depend on x/shell).</summary>
     private static SkiaSharp.SKRect MetricPageRect() => new(
         0, (float)IslandMetrics.ContentTop,
-        (float)(IslandMetrics.ContentLeft + IslandMetrics.ContentWidth),
+        (float)IslandMetrics.ContentWidth,
         (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));
 
     private double MaxScrollForPage(int page, ExpandedPageContent? source = null)
@@ -4154,6 +4154,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             Compact = _compact,
             SecondaryCompact = null,
             Pages = _pages,
+            RailSide = _settings.Current.RailSide,
             RailSelectionPosition = _railSelectionSpring.Value,
             Theme = _theme,
             PreviousTheme = _materialSwapStartedMs < 0 ? null : _materialSwapFrom,
@@ -4384,7 +4385,7 @@ private void HandlePageControl(in IslandHitTarget hit)
             return VisualRect.Empty;
         }
 
-        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState));
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(_renderState), _renderState.RailSide);
         return new VisualRect(content.Left, content.Top, content.Width, content.Height).Inflate(2);
     }
 

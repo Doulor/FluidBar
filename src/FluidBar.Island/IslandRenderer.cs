@@ -298,7 +298,7 @@ public sealed class IslandRenderer : IDisposable
         }
 
         var shell = IslandMetrics.ShellRect(state);
-        var content = IslandMetrics.ContentRect(shell);
+        var content = IslandMetrics.ContentRect(shell, state.RailSide);
 
         var secondary = IslandMetrics.SecondaryShellRect(state);
         if (!secondary.IsEmpty && secondary.Contains(x, y))
@@ -318,7 +318,7 @@ public sealed class IslandRenderer : IDisposable
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
-            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset);
+            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset, state.RailSide);
             if (tab >= 0)
             {
                 return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
@@ -1418,10 +1418,9 @@ public sealed class IslandRenderer : IDisposable
 
     private void DrawExpanded(SKCanvas canvas, in IslandRenderState state, float layerOpacity, float chromeOpacity)
     {
-        var content = new SKRect(
-            (float)IslandMetrics.ContentLeft,
-            (float)IslandMetrics.ContentTop,
-            (float)(IslandMetrics.ContentLeft + IslandMetrics.ContentWidth),
+        var contentLeft = (float)IslandMetrics.ContentLeftForSide(state.RailSide);
+        var content = new SKRect(contentLeft, (float)IslandMetrics.ContentTop,
+            contentLeft + (float)IslandMetrics.ContentWidth,
             (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));
 
         var pagePosition = double.IsFinite(state.Pager.PagePosition)

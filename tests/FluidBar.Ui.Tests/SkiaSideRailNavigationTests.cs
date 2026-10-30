@@ -1,6 +1,8 @@
 using FluidBar.App.Hosting.Pages;
+using FluidBar.App.Settings;
 using FluidBar.App.Hosting.Skia;
 using FluidBar.Core.Interaction;
+using FluidBar.Core.Layout;
 using FluidBar.Island;
 using FluidBar.Sdk.Manifest;
 using FluidBar.Sdk.Pages;
@@ -59,6 +61,27 @@ public sealed class SkiaSideRailNavigationTests
         var collapse = PageLayout.CollapseRect(content);
         fixture.Controller.HandlePointerMoved(collapse.MidX, collapse.MidY);
         Assert.Equal(IslandPageControl.Collapse, fixture.Controller.RenderState.HoverControl);
+    }
+
+    [Fact]
+    public void RightRailSide_PlacesTheRailAndContentOnTheRight()
+    {
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            RailSide = PageRailSide.Right,
+        });
+        fixture.ExpandAndSettle();
+        var state = fixture.Controller.RenderState;
+        Assert.Equal(PageRailSide.Right, state.RailSide);
+
+        var content = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide);
+        Assert.Equal(state.ShellOrigin.X + LayoutTokens.ContentRightInset, content.Left, 0.001);
+        Assert.Equal(content.Left + LayoutTokens.ContentWidth, content.Right, 0.001);
+        var tab = SideRailLayout.TabRect(content, 0, 0, state.Pages.PageCount, PageRailSide.Right);
+        Assert.True(tab.Left > content.Right);
+        Assert.Equal(IslandHitKind.PageTab, SkiaIslandHitTest.Hit(state, tab.MidX, tab.MidY).Kind);
     }
 
     [Fact]

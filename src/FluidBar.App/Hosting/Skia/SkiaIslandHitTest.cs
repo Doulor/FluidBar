@@ -67,7 +67,7 @@ public static class SkiaIslandHitTest
         }
 
         var shell = IslandMetrics.ShellRect(state);
-        var content = IslandMetrics.ContentRect(shell);
+        var content = IslandMetrics.ContentRect(shell, state.RailSide);
 
         if (state.Form != ShellForm.Expanded && state.SplitIslets.Length > 0)
         {
@@ -107,7 +107,7 @@ public static class SkiaIslandHitTest
                 return new IslandHitTarget(IslandHitKind.Settings, state.PageIndex);
             }
 
-            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset);
+            var tab = SideRailLayout.HitTest(content, state.Pages.PageCount, x, y, state.Pages.RailScrollOffset, state.RailSide);
             if (tab >= 0)
             {
                 return new IslandHitTarget(IslandHitKind.PageTab, tab, Index: tab);
@@ -228,7 +228,7 @@ public static class SkiaIslandHitTest
             PageSlotKind.Widgets => (float)pages.Widgets.ScrollOffset,
             _ => 0f,
         };
-        var contentRect = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state));
+        var contentRect = IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide);
         if (kind == PageSlotKind.Clipboard
             && !string.IsNullOrWhiteSpace(pages.Clipboard.SearchLabel)
             && PageLayout.ClipboardSearchRect(contentRect).Contains(x, y))
