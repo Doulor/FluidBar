@@ -1,4 +1,3 @@
-import { Noise } from './ui/reactbits';
 import { SiteNav } from './sections/SiteNav';
 import { Hero } from './sections/Hero';
 import { IslandLab } from './sections/IslandLab';
@@ -24,7 +23,6 @@ export default function App() {
         <Download />
       </main>
       <SiteFooter />
-      <Noise opacity={0.022} size={1.4} fps={6} blendMode="multiply" contrast={0.35} fixed zIndex={90} />
     </div>
   );
 }
