@@ -6,5 +6,5 @@ export const RELEASE = {
   url: 'https://github.com/Doulor/FluidBar/releases/tag/v4.0.0',
   download: 'https://github.com/Doulor/FluidBar/releases/download/v4.0.0/FluidBar-4.0.0-win-x64.zip',
   size: '49.6 MB',
-  sha256: '07c6d379ccbc0f7d0fd97c97c1df1de6961f759aae36d60168bf0fd291c7eb35',
+  sha256: '5cf86ad65565ee84420868cf7789a3cd24b7eb9527e1905c0fb923725da595cd',
 };
