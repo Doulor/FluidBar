@@ -55,6 +55,12 @@ because release builds use `dotnet publish` on the app project graph.
   the first public release they must be pinned to full commit SHAs (Lead review item).
 * **Signing:** intentionally absent in the workflow — see §4. `release.yml` currently publishes
   `UNSIGNED` binaries; the release notes state that explicitly.
+* **Release notes:** for version `X.Y.Z`, the workflow reads `docs/rewrite/RELEASE-X.Y.Z.md` and passes it with
+  `gh release create --notes-file`. Never pass Chinese Markdown through an inline `--notes` argument or a
+  PowerShell pipe: Windows PowerShell can encode that path as ASCII and replace every non-ASCII character
+  with `?` (the v4.0.0 incident). After creation the workflow compares the GitHub-stored body with the file
+  and fails if they differ.
+
 
 ## 4. Signing (deferred for the unsigned 4.0.0 first release)
 

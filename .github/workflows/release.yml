@@ -126,10 +126,30 @@ jobs:
             $prereleaseArgs = @('--prerelease', '--latest=false')
           }
 
+          # Read release notes from a UTF-8 file and hand the file itself to gh. Passing a
+          # Chinese markdown body through a PowerShell native-command argument or pipeline can hit
+          # the Windows ANSI/ASCII boundary and turn every non-ASCII character into "?", which is
+          # what happened to the v4.0.0 body. --notes-file makes gh read the original UTF-8 bytes.
+          $notesFile = Join-Path $PWD "docs/rewrite/RELEASE-$version.md"
+          if (-not (Test-Path $notesFile)) {
+            $notesFile = Join-Path $env:RUNNER_TEMP "release-notes-$version.md"
+            $fallback = "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/rewrite/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker."
+            [System.IO.File]::WriteAllText($notesFile, $fallback, [System.Text.UTF8Encoding]::new($false))
+          }
+
           gh release create "v$version" $zip.FullName $exe.FullName $manifest.FullName `
             --title "FluidBar $version" `
-            --notes "Automated build. Installer is UNSIGNED until Authenticode signing lands (see docs/rewrite/release.md). SHA-256 in publish-$version.json is consumed by the in-app update checker." `
+            --notes-file $notesFile `
             --verify-tag @prereleaseArgs
+
+          # Do not trust the terminal: compare the body GitHub actually stored with the bytes we sent.
+          # This turns a future encoding regression into a red release instead of silent "????".
+          Start-Sleep -Seconds 2
+          $expected = [System.IO.File]::ReadAllText($notesFile, [System.Text.UTF8Encoding]::new($false)).Trim()
+          $actual = (gh release view "v$version" --json body -q '.body').Trim()
+          if ($actual -ne $expected) {
+            throw "GitHub release body does not match $notesFile (possible encoding loss)."
+          }
 
       - name: Release summary
         if: always()
