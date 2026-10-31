@@ -117,7 +117,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
 
     private async Task StartTrayAsync(CancellationToken cancellationToken)
     {
-        var tooltip = _localizer?.Format(LocKeys.Tray.Tooltip, ("status", "FluidBar 2.0")) ?? "FluidBar 2.0";
+        var tooltip = _localizer?.Format(LocKeys.Tray.Tooltip, ("status", "FluidBar")) ?? "FluidBar";
         await _tray.StartAsync(new TrayIconOptions
         {
             ToolTip = tooltip,
