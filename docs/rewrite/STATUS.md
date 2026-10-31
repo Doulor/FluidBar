@@ -6,7 +6,7 @@
 
 - 发布版本 4.0.0；自包含单文件 `FluidBar.exe`，发布包 smoke 退出码 0。
 - 设置页清理“交互原型/非发行版本”和“未签名预览版”措辞；关于页显示正式版。
-- 更新链路本地实测：检查 → 下载 → SHA-256 → 重启替换，进程 PID 变化且下载文件已替换目标 exe；首个无证书版本仍强制 SHA-256 校验。
+- 更新链路本地 feed 与 GitHub Releases 生产通道均实测：检查 → 下载 → SHA-256 → 重启替换，进程 PID 变化且下载文件替换为目标正式 exe 哈希；首个无证书版本仍强制 SHA-256 校验。
 - 全量测试 **2818 通过 / 0 失败**（Core 615、Platform 823、UI 632、Island 448、SDK 172、Architecture 18、Integration 31、PluginHost 40、Builtin 30、OptionalPlugins 9）。官网构建通过，Vitest 12/12。
 > 维护规则：每个检查点由 Lead 更新本文件；数字必须来自实测。
 
