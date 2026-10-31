@@ -11,4 +11,7 @@
     <ProjectReference Include="../../src/FluidBar.PluginHost/FluidBar.PluginHost.csproj" />
     <ProjectReference Include="../../src/FluidBar.Marketplace/FluidBar.Marketplace.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
