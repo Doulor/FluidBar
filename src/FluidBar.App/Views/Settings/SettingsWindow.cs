@@ -1054,7 +1054,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             Margin = new Thickness(SettingsMetrics.VersionPadX, SettingsMetrics.VersionPadTop,
                 SettingsMetrics.VersionPadX, SettingsMetrics.VersionPadBottom),
         };
-        _versionText.Text = "FluidBar 2.0.0";
+        _versionText.Text = $"FluidBar {typeof(AppSettings).Assembly.GetName().Version?.ToString(3) ?? "4.0.0"}";
         _versionText.FontSize = SettingsMetrics.VersionSize;
         _versionText.FontWeight = FontWeight.Medium;
         _versionText.LineHeight = SettingsMetrics.VersionSize * SettingsMetrics.VersionLineHeight;
@@ -1266,7 +1266,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         }
 
         _titleText.Text = _localizer.Get(LocKeys.Settings.Title);
-        _subText.Text = "FLUIDBAR 2.0";
+        _subText.Text = "FLUIDBAR";
         _versionLine.Text = _localizer.Get(LocKeys.Settings.VersionLine);
         UpdateNavSelection();
     }
