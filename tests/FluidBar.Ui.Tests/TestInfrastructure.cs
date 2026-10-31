@@ -46,7 +46,11 @@ public static class AvaloniaTest
     public static Task<T> Run<T>(Func<T> func) => LazySession.Value.Dispatch(func, CancellationToken.None);
 
     /// <summary>Runs an async UI-thread action.</summary>
-    public static Task RunAsync(Func<Task> action) => LazySession.Value.Dispatch(action, CancellationToken.None);
+    public static Task RunAsync(Func<Task> action) => LazySession.Value.Dispatch(async () =>
+    {
+        await action();
+        return true;
+    }, CancellationToken.None);
 
     /// <summary>Runs an async UI-thread function returning a value.</summary>
     public static Task<T> RunAsync<T>(Func<Task<T>> func) => LazySession.Value.Dispatch(func, CancellationToken.None);

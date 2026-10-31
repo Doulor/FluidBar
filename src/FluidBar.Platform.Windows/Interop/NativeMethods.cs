@@ -986,6 +986,12 @@ internal static partial class NativeMethods
         private const string Lib = "shell32.dll";
 
         [DllImport(Lib)]
+        internal static extern void DragAcceptFiles(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool accept);
+
+        [DllImport(Lib)]
+        internal static extern void DragFinish(IntPtr drop);
+
+        [DllImport(Lib)]
         internal static extern int SHQueryUserNotificationState(out int pquns);
 
         [DllImport(Lib, CharSet = CharSet.Unicode)]

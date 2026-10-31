@@ -4,6 +4,7 @@ using FluidBar.Core.Diagnostics;
 using FluidBar.Platform.Windows.Focus;
 using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
+using FluidBar.Platform.Windows.Shell;
 using FluidBar.Platform.Windows.Tasks;
 using FluidBar.Platform.Windows.Threading;
 
@@ -11,7 +12,7 @@ namespace FluidBar.Ui.Tests;
 
 /// <summary>
 /// Headless tests for the production seam adapter. No platform service is started: the tests pin the
-/// unsupported/deferred contract (exact reasons, no fake success), the settings-only theme toggle and
+/// unsupported/deferred contract (exact reasons, no fake success), the Windows theme toggle and
 /// the injected quick-toggle services (Wi-Fi/Bluetooth/Focus) with in-memory fakes.
 /// </summary>
 public sealed class SkiaPlatformActionsTests
@@ -76,22 +77,64 @@ public sealed class SkiaPlatformActionsTests
         settings.Dispose();
     }
 
-    [Fact]
-    public async Task ThemeQuickToggle_FlipsTheAppThemeThroughSettings()
+    [Theory]
+    [InlineData(AppTheme.System)]
+    [InlineData(AppTheme.Dark)]
+    [InlineData(AppTheme.Light)]
+    public async Task ThemeQuickToggle_PreservesTheAppThemePreference(AppTheme preference)
     {
-        var settings = CreateSettings();
-        await using var actions = new SkiaPlatformActions(settings);
-        Assert.Equal(AppTheme.System, settings.Current.Theme);
+        var store = new InMemoryUiSettingsStore(AppSettings.Default with { Theme = preference });
+        using var settings = new SettingsController(store.LastSaved, store, NullAppLogger.Instance);
+        var switcher = new FakeSystemThemeSwitcher();
+        await using var actions = new SkiaPlatformActions(settings, themeSwitcher: switcher);
+        var changes = 0;
+        actions.Changed += (_, _) => Interlocked.Increment(ref changes);
 
         var first = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Theme));
         Assert.Equal(IslandActionOutcome.Handled, first.Outcome);
-        Assert.Equal(AppTheme.Light, settings.Current.Theme);
+        await WaitUntilAsync(() => Volatile.Read(ref changes) == 1);
+        Assert.True(switcher.IsLight);
+        Assert.Equal(preference, settings.Current.Theme);
 
         var second = actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Theme));
         Assert.Equal(IslandActionOutcome.Handled, second.Outcome);
-        Assert.Equal(AppTheme.Dark, settings.Current.Theme);
+        await WaitUntilAsync(() => Volatile.Read(ref changes) == 2);
+        Assert.False(switcher.IsLight);
+        Assert.Equal(preference, settings.Current.Theme);
+    }
 
-        settings.Dispose();
+    private sealed class FakeSystemThemeSwitcher : ISystemThemeSwitcher
+    {
+        public bool IsLight { get; private set; }
+
+        public Task ToggleAsync(CancellationToken cancellationToken = default)
+        {
+            IsLight = !IsLight;
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task ThemeQuickToggle_FailureIsLoggedWithoutChangingTheAppPreference()
+    {
+        using var settings = CreateSettings();
+        var logger = new RecordingAppLogger();
+        await using var actions = new SkiaPlatformActions(settings, logger,
+            themeSwitcher: new FailingSystemThemeSwitcher());
+        var changed = false;
+        actions.Changed += (_, _) => changed = true;
+
+        actions.Invoke(new IslandPlatformAction(IslandPlatformActionKind.QuickToggle, Toggle: IslandQuickToggle.Theme));
+        await WaitUntilAsync(() => logger.HasEvent("island.actions.theme-toggle-failed"));
+
+        Assert.False(changed);
+        Assert.Equal(AppTheme.System, settings.Current.Theme);
+    }
+
+    private sealed class FailingSystemThemeSwitcher : ISystemThemeSwitcher
+    {
+        public Task ToggleAsync(CancellationToken cancellationToken = default)
+            => Task.FromException(new UnauthorizedAccessException("Theme preferences are read-only."));
     }
 
     [Fact]
@@ -229,7 +272,7 @@ public sealed class SkiaPlatformActionsTests
         Assert.Null(content.WeatherHighLow);
         Assert.Empty(content.Tasks);
         Assert.NotNull(content.TasksEmptyHint);
-        Assert.Contains("tasks.json", content.TasksEmptyHint!, StringComparison.Ordinal);
+        Assert.Equal("Add your first task", content.TasksEmptyHint!);
         settings.Dispose();
     }
 

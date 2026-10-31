@@ -128,13 +128,13 @@ public sealed class WidgetContentMapperTests
 
         Assert.Empty(hint.Tasks);
         Assert.NotNull(hint.EmptyHint);
-        Assert.Contains("tasks.json", hint.EmptyHint!, StringComparison.Ordinal);
-        Assert.Equal("No tasks · edit tasks.json", hint.EmptyHint);
+        Assert.DoesNotContain("tasks.json", hint.EmptyHint!, StringComparison.Ordinal);
+        Assert.Equal("Add your first task", hint.EmptyHint);
         Assert.DoesNotContain("Unavailable", hint.EmptyHint!, StringComparison.Ordinal);
 
         var empty = WidgetContentMapper.MapTasks(new TaskListSnapshot([], TaskListStatus.Ok,
             @"C:\Users\me\AppData\Roaming\FluidBar\tasks.json", null));
-        Assert.Equal("No tasks · edit tasks.json", empty.EmptyHint);
+        Assert.Equal("Add your first task", empty.EmptyHint);
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class WidgetContentMapperTests
 
         var view = WidgetContentMapper.MapTasks(invalid);
 
-        Assert.Equal("tasks.json needs a fix", view.EmptyHint);
+        Assert.Equal("Tasks unavailable. Open task management.", view.EmptyHint);
         Assert.DoesNotContain("Unavailable", view.EmptyHint!, StringComparison.Ordinal);
     }
 
@@ -161,8 +161,8 @@ public sealed class WidgetContentMapperTests
                 Invalid: WidgetContentMapper.MapTasks(new TaskListSnapshot([], TaskListStatus.Invalid, path, null), localizer).EmptyHint);
         });
 
-        Assert.Equal("暂无任务 · 编辑 tasks.json", hints.Empty);
-        Assert.Equal("任务文件有误 · 检查 tasks.json", hints.Invalid);
+        Assert.Equal("添加第一项任务", hints.Empty);
+        Assert.Equal("任务暂时不可用，打开管理查看", hints.Invalid);
         await AvaloniaTest.Run(() => TestFixtures.Localizer.SetCulture("en-US"));
     }
 
@@ -173,7 +173,7 @@ public sealed class WidgetContentMapperTests
 
         Assert.Empty(view.Tasks);
         Assert.NotNull(view.EmptyHint);
-        Assert.Equal("No tasks · edit tasks.json", view.EmptyHint);
+        Assert.Equal("Add your first task", view.EmptyHint);
     }
 
     [Fact]

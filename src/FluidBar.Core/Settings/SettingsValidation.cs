@@ -304,6 +304,7 @@ public static partial class SettingsValidator
 
         var normalized = settings with
         {
+            Cards = (settings.Cards ?? new CardPreferences()).Normalize(),
             SchemaVersion = normalizedVersion,
             Appearance = appearance with
             {

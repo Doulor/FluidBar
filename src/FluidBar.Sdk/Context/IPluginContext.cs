@@ -35,6 +35,9 @@ public interface IPluginContext
     /// <summary>Per-plugin file storage rooted at <see cref="DataDirectory"/> with traversal protection.</summary>
     IPluginStorage Storage { get; }
 
+    /// <summary>Optional host-rendered file shelf, available only with Files and Ui consent.</summary>
+    IPluginFileShelf? FileShelf => null;
+
     /// <summary>Structured per-plugin log.</summary>
     IPluginLog Log { get; }
 

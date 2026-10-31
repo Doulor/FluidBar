@@ -98,6 +98,7 @@ public sealed partial class LayeredWindowHost
 
     private IntPtr HandleMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)
     {
+        if (message == 0x0233) return ConsumeFileDrop(wParam); // WM_DROPFILES
         switch (message)
         {
             case NativeMethods.WM_NCHITTEST:

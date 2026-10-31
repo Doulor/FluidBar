@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 2,
+  "id": "fluidbar-timer",
+  "version": "1.0.0",
+  "apiVersion": "2.1.0",
+  "dependencies": { "sdk": "^2.1.0" },
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar",
+    "displayName": "FluidBar",
+    "url": "https://fluidbar.doulor.cn",
+    "keyId": "fluidbar-official"
+  },
+  "author": {
+    "name": "FluidBar contributors"
+  },
+  "name": {
+    "en-US": "Countdown",
+    "zh-Hans": "倒计时"
+  },
+  "summary": {
+    "en-US": "An optional countdown with pause, resume and completion alerts.",
+    "zh-Hans": "可选安装的倒计时，支持暂停、继续与完成提醒。"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Plugins.Timer.dll",
+    "type": "FluidBar.Plugins.Timer.TimerPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": [
+    "win-x64"
+  ],
+  "locales": {
+    "default": "en-US",
+    "available": [
+      "en-US",
+      "zh-Hans"
+    ],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "settings": true,
+      "commands": true,
+      "xaml": false
+    },
+    "background": {
+      "intervalMinMs": 1000,
+      "reason": "Updates an explicitly started countdown once per second; paused and stopped timers do not poll."
+    },
+    "notifications": {
+      "post": true
+    }
+  },
+  "activation": [
+    "startup"
+  ],
+  "contributes": {
+    "layouts": [
+      {
+        "id": "fluidbar-timer.compact",
+        "surface": "island.compact",
+        "template": "progress.v1",
+        "slots": {
+          "title": {
+            "field": "title",
+            "maxLines": 1
+          },
+          "subtitle": {
+            "field": "subtitle",
+            "maxLines": 1
+          },
+          "progress": {
+            "field": "progress"
+          }
+        }
+      }
+    ],
+    "commands": [
+      {
+        "id": "fluidbar-timer.start",
+        "title": {
+          "en-US": "Start",
+          "zh-Hans": "开始"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      },
+      {
+        "id": "fluidbar-timer.pause",
+        "title": {
+          "en-US": "Pause",
+          "zh-Hans": "暂停"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      },
+      {
+        "id": "fluidbar-timer.resume",
+        "title": {
+          "en-US": "Resume",
+          "zh-Hans": "继续"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      },
+      {
+        "id": "fluidbar-timer.stop",
+        "title": {
+          "en-US": "Stop",
+          "zh-Hans": "结束"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "timer",
+        "title": {
+          "en-US": "Countdown",
+          "zh-Hans": "倒计时"
+        },
+        "controls": [
+          {
+            "type": "number",
+            "key": "minutes",
+            "title": {
+              "en-US": "Duration (minutes)",
+              "zh-Hans": "时长（分钟）"
+            },
+            "default": 25,
+            "min": 1,
+            "max": 180,
+            "step": 1
+          },
+          {
+            "type": "button",
+            "key": "action.start",
+            "command": "fluidbar-timer.start",
+            "title": {
+              "en-US": "Start",
+              "zh-Hans": "开始"
+            }
+          },
+          {
+            "type": "button",
+            "key": "action.pause",
+            "command": "fluidbar-timer.pause",
+            "title": {
+              "en-US": "Pause",
+              "zh-Hans": "暂停"
+            }
+          },
+          {
+            "type": "button",
+            "key": "action.resume",
+            "command": "fluidbar-timer.resume",
+            "title": {
+              "en-US": "Resume",
+              "zh-Hans": "继续"
+            }
+          },
+          {
+            "type": "button",
+            "key": "action.stop",
+            "command": "fluidbar-timer.stop",
+            "title": {
+              "en-US": "Stop",
+              "zh-Hans": "结束"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

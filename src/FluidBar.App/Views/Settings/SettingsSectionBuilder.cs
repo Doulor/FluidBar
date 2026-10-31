@@ -16,6 +16,7 @@ using FluidBar.App.Views.Market;
 using FluidBar.App.Views.Plugins;
 using FluidBar.Core.Configuration;
 using FluidBar.Core.Layout;
+using QuickActionSetting = FluidBar.Core.Settings.QuickActionSetting;
 using FluidBar.Platform.Windows.Agent;
 using FluidBar.Platform.Windows.Update;
 
@@ -24,6 +25,8 @@ namespace FluidBar.App.Views.Settings;
 /// <summary>Dependencies the settings sections need (injected so headless tests can swap fakes).</summary>
 public sealed record SettingsWindowContext
 {
+    /// <summary>Executes an explicitly selected quick action; never called while loading settings.</summary>
+    public Func<FluidBar.Core.Settings.QuickActionSetting, CancellationToken, Task>? ExecuteQuickAction { get; init; }
     /// <summary>Settings controller.</summary>
     public required SettingsController Settings { get; init; }
 
@@ -289,6 +292,7 @@ public static class SettingsSectionBuilder
                 value => ctx.Settings.Update(s => s with { HotkeyHide = value })),
             HotkeyRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Settings), settings.HotkeySettings,
                 value => ctx.Settings.Update(s => s with { HotkeySettings = value }), last: true)));
+        panel.Children.Add(CardSettingsPanel.Build(ctx));
         panel.Children.Add(SettingsControls.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
         return panel;
     }

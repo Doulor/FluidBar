@@ -60,6 +60,7 @@ public sealed record PluginRuntimeOptions
 
     /// <summary>Notification sink factory (App-owned, host-rendered).</summary>
     public Func<PluginManifest, INotificationSink>? NotificationSinkFactory { get; init; }
+    public Func<PluginManifest, IPluginFileShelf>? FileShelfFactory { get; init; }
 
     /// <summary>Platform services for first-party plugins; null/empty skips the affected plugins.</summary>
     public BuiltinPlatformServices? BuiltinServices { get; init; }
@@ -228,6 +229,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
             Dispatcher = options.Dispatcher,
             IslandPublisherFactory = options.IslandPublisherFactory,
             NotificationSinkFactory = options.NotificationSinkFactory,
+            FileShelfFactory = options.FileShelfFactory,
             PluginStopped = options.PluginStopped,
             TimeProvider = options.TimeProvider,
             HostUiLocales = options.HostUiLocales,

@@ -87,6 +87,9 @@ public sealed class IslandMouseHook : IDisposable
     /// </summary>
     public event Action<double>? Wheel;
 
+    /// <summary>Wheel notches plus Shift state captured at the input event.</summary>
+    public event Action<double, bool>? WheelWithModifiers;
+
     /// <summary>A left-button press that started outside every island rectangle (desktop/window click).</summary>
     public event Action? OutsidePressed;
 
@@ -299,7 +302,11 @@ public sealed class IslandMouseHook : IDisposable
 
         if (route.WheelNotches is { } notches)
         {
+            // A wheel message carries its own cursor position, even without a preceding move.
+            PointerMoved?.Invoke(x, y);
             Wheel?.Invoke(notches);
+            WheelWithModifiers?.Invoke(notches,
+                (FluidBar.Platform.Windows.Interop.NativeMethods.User32.GetAsyncKeyState(0x10) & 0x8000) != 0);
         }
 
         if (route.OutsidePressed)
@@ -395,6 +402,12 @@ public sealed class IslandMouseHook : IDisposable
         /// <summary>Routes one hook message; the caller invokes the events the returned route names.</summary>
         public GestureRoute Route(HookRegionKind kind, int message, double wheelNotches = 0)
         {
+            // A press owned by the island acts like capture, including outside its moving hit region.
+            if (_pressed && message == WmMouseMove)
+            {
+                return new GestureRoute(Dragged: true, Moved: true);
+            }
+
             var interactive = kind == HookRegionKind.Interactive;
             var watching = kind == HookRegionKind.Watch;
             if (!interactive && !watching)

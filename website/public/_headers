@@ -15,12 +15,17 @@
 
 /market/index.json
   Content-Type: application/json; charset=utf-8
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=0, must-revalidate
+  Access-Control-Allow-Origin: *
+
+/market/keys.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate
   Access-Control-Allow-Origin: *
 
 /market/plugins/*
   Content-Type: application/json; charset=utf-8
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=0, must-revalidate
   Access-Control-Allow-Origin: *
 
 /market/assets/*

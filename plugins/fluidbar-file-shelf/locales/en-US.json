@@ -1,0 +1,10 @@
+{
+  "locale": "en-US",
+  "version": 1,
+  "messages": {
+    "title": "File shelf",
+    "open": "Open file shelf",
+    "hint": "Add or drag files. Only references are stored.",
+    "empty": "No files yet."
+  }
+}

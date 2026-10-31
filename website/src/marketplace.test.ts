@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const publicDir = resolve('public');
-const signedBytes = readFileSync(resolve('../marketplace/index.json'));
+const signedBytes = readFileSync(resolve(process.env.FLUIDBAR_MARKETPLACE_SOURCE_DIR || 'public/market', 'index.json'));
 const source = JSON.parse(signedBytes.toString('utf8'));
 
 describe('marketplace static contract', () => {

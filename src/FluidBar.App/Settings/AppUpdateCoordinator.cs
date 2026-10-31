@@ -70,6 +70,11 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
     /// <summary>Environment variable forcing the Authenticode requirement on (<c>1</c>) or off (<c>0</c>).</summary>
     public const string RequireSignatureEnvironmentVariable = "FLUIDBAR_UPDATE_REQUIRE_SIGNATURE";
 
+    // The first public release is unsigned: no Authenticode certificate is available yet. The updater
+    // still verifies the GitHub asset SHA-256 digest before exposing Install. Set this to false once a
+    // trusted signing certificate is wired into build/publish.ps1 and release.yml.
+    private const bool AllowUnsignedStableRelease = true;
+
     /// <summary>Default production feed (GitHub Releases API, stable/beta channels).</summary>
     public static Uri DefaultFeedUrl { get; } = new("https://api.github.com/repos/Doulor/FluidBar/releases");
 
@@ -99,10 +104,9 @@ public sealed class AppUpdateCoordinator : IUpdateUiService, IAsyncDisposable
             Environment.GetEnvironmentVariable(UnsignedEnvironmentVariable), "1", StringComparison.Ordinal);
         var assetPattern = Environment.GetEnvironmentVariable(AssetPatternEnvironmentVariable);
 
-        // A preview build (semver with a prerelease label) ships unsigned, so an installer that matches the
-        // feed SHA-256 is accepted with a "unsigned" label instead of being discarded. Stable builds keep
-        // the Authenticode requirement. The environment override exists for acceptance runs.
-        var requireSignature = !IsPreviewBuild(InformationalVersion());
+        // The unsigned first release still requires the feed SHA-256 digest; Authenticode is enforced
+        // again automatically once AllowUnsignedStableRelease is turned off and the certificate is wired.
+        var requireSignature = !AllowUnsignedStableRelease && !IsPreviewBuild(InformationalVersion());
         var signatureOverride = Environment.GetEnvironmentVariable(RequireSignatureEnvironmentVariable);
         if (signatureOverride is "1" or "0")
         {

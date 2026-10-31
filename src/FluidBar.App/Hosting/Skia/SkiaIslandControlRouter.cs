@@ -73,6 +73,10 @@ public static class SkiaIslandControlRouter
                 return new IslandPlatformAction(IslandPlatformActionKind.ClipboardCycleFilter);
             case IslandPageControl.ClipboardSearch:
                 return new IslandPlatformAction(IslandPlatformActionKind.ClipboardSearch);
+            case IslandPageControl.ClipboardPreview:
+                return HasRow(state.Pages.Clipboard.Items, hit.Index)
+                    ? new IslandPlatformAction(IslandPlatformActionKind.ClipboardPreview, hit.Index)
+                    : null;
             case IslandPageControl.Dismiss:
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, hit.Index)
@@ -95,6 +99,8 @@ public static class SkiaIslandControlRouter
                 return HasRow(state.Pages.Widgets.Tasks, hit.Index)
                     ? new IslandPlatformAction(IslandPlatformActionKind.TaskToggle, hit.Index)
                     : null;
+            case IslandPageControl.TaskManage:
+                return new IslandPlatformAction(IslandPlatformActionKind.TaskManage);
             case IslandPageControl.CalendarPrevious:
                 return new IslandPlatformAction(IslandPlatformActionKind.CalendarNavigate, Value: -1);
             case IslandPageControl.CalendarNext:

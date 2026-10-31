@@ -102,7 +102,7 @@ public sealed class IslandHostTests
     }
 
     [Fact]
-    public async Task HiddenState_BecomesClickThrough_AndStopsTheFrameLoop()
+    public async Task HiddenState_BecomesNonInteractive_AndStopsTheFrameLoop()
     {
         await AvaloniaTest.RunAsync(async () =>
         {
@@ -110,13 +110,15 @@ public sealed class IslandHostTests
             await fixture.Host.StartAsync().WaitAsync(TimeSpan.FromSeconds(10));
             fixture.PumpFramesToRest();
 
+            Assert.True(fixture.Host.PrimaryWindow!.Shell.IsInteractive);
+
             fixture.Host.ApplyInput(IslandInput.HideHotkey());
             fixture.PumpFramesToRest();
             Assert.Equal(IslandStateKind.Hidden, fixture.Host.State.Kind);
             Assert.True(fixture.Host.Motion!.Frame.IsHidden);
             Assert.False(fixture.Clock.IsRunning, "hidden island must stop the frame loop");
-            Assert.Contains(true, fixture.Backend.ClickThroughTransitions);
-            Assert.NotEmpty(fixture.Backend.Regions);
+            // Headless has no HWND: native click-through/region calls are covered by the platform tests.
+            Assert.False(fixture.Host.PrimaryWindow.Shell.IsInteractive);
         });
     }
 

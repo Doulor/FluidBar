@@ -74,7 +74,7 @@ public sealed class CompositeUpdateVerifier : IUpdatePackageVerifier
     /// <param name="requireSignature">
     /// When false, an <em>unsigned</em> binary with a matching SHA-256 is accepted as
     /// <see cref="UpdateVerificationStatus.VerifiedByHashOnly"/>. Invalid or untrusted signatures are
-    /// still rejected: an unsigned preview is a policy choice, a broken signature is an attack. Preview
+    /// still rejected: an unsigned release is a policy choice, a broken signature is an attack. Preview
     /// builds turn this off; stable releases keep it on.
     /// </param>
     public CompositeUpdateVerifier(IBinarySignatureVerifier signatureVerifier, IPlatformLogger logger,

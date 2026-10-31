@@ -433,7 +433,7 @@ internal sealed partial class PageRenderer
             canvas,
             item.Preview,
             item.IsMonospace ? IslandType.RowMono : IslandType.RowTitle,
-            new SKRect(row.Left + 44, row.Top + 7, row.Right - 88, row.Top + 25),
+            new SKRect(row.Left + 44, row.Top + 7, row.Right - 132, row.Top + 25),
             _theme.Foreground,
             TextAlign.Left,
             _opacity);
@@ -484,10 +484,16 @@ internal sealed partial class PageRenderer
             canvas,
             item.TimeText,
             IslandType.RowMeta,
-            new SKRect(x, subTop, row.Right - 90, subBottom),
+            new SKRect(x, subTop, row.Right - 132, subBottom),
             _theme.ForegroundTertiary,
             TextAlign.Left,
             _opacity);
+
+        var preview = new SKRect(row.Right - 126, row.Top + 13, row.Right - 86, row.Top + 35);
+        _fill.Color = Alpha(_theme.Accent, (IsHovered(IslandPageControl.ClipboardPreview, index) ? 0.15f : 0.07f) * _opacity);
+        canvas.DrawRoundRect(preview, 6, 6, _fill);
+        _text.Draw(canvas, model.PreviewLabel ?? "View", IslandType.RowMeta, preview,
+            _theme.Accent, TextAlign.Center, _opacity);
 
         var delete = new SKRect(row.Right - 82, row.Top + 13, row.Right - 60, row.Top + 35);
         var pin = new SKRect(row.Right - 58, row.Top + 13, row.Right - 36, row.Top + 35);
@@ -495,7 +501,7 @@ internal sealed partial class PageRenderer
         if (hovered || IsHovered(IslandPageControl.ClipboardDelete, index)
             || IsHovered(IslandPageControl.Pin, index) || IsHovered(IslandPageControl.Copy, index))
         {
-            _fill.Color = Alpha(SKColors.White, 0.06f * _opacity);
+            _fill.Color = Alpha(_theme.Foreground, 0.10f * _opacity);
             if (hovered && !IsHovered(IslandPageControl.Pin, index) && !IsHovered(IslandPageControl.Copy, index)
                 && !IsHovered(IslandPageControl.ClipboardDelete, index))
             {
@@ -1025,11 +1031,16 @@ internal sealed partial class PageRenderer
             canvas,
             model.TasksProgressText,
             IslandType.WidgetMeta,
-            new SKRect(card.Right - 78, card.Top + 8, card.Right - 10,
+            new SKRect(card.Right - 78, card.Top + 8, card.Right - 29,
                 card.Top + 8 + 12 + _metrics.LineGrow(IslandType.WidgetMeta)),
             _theme.ForegroundTertiary,
             TextAlign.Right,
             _opacity);
+
+        _text.Draw(canvas, "+", IslandType.NotesHead,
+            new SKRect(card.Right - 25, card.Top + 5, card.Right - 7, card.Top + 23),
+            IsHovered(IslandPageControl.TaskManage) ? _theme.Foreground : _theme.ForegroundSecondary,
+            TextAlign.Center, _opacity);
 
         if (painted == 0)
         {

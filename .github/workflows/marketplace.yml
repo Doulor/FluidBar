@@ -12,7 +12,7 @@ name: marketplace
 #     MARKETPLACE_ARTIFACT_BASE_URL           = https://github.com/<org>/<repo>/releases/download
 #     MARKETPLACE_BASE_URL                    = https://fluidbar.doulor.cn/market
 #     MARKETPLACE_SIGNING_KEY_ID              = fluidbar-marketplace-2026
-#     MARKETPLACE_PLUGINS_ROOT                = optional, default `plugins/samples` in this repo
+#     MARKETPLACE_PLUGINS_ROOT                = optional, default `plugins`; sample-only legacy value is migrated
 #     MARKETPLACE_DEPLOY_PAGES                = set `false` for explicit artifact-only publishing
 #   environment `marketplace-deploy`
 #     secret CLOUDFLARE_API_TOKEN             = Pages:Edit token for the FluidBar Cloudflare account
@@ -113,6 +113,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "SDK tests failed" }
           dotnet test tests/FluidBar.PluginHost.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=host-tests.trx" --results-directory artifacts/test-results
           if ($LASTEXITCODE -ne 0) { throw "PluginHost tests failed" }
+          dotnet test tests/FluidBar.OptionalPlugins.Tests -c $env:CONFIGURATION --logger "trx;LogFileName=optional-tests.trx" --results-directory artifacts/test-results
+          if ($LASTEXITCODE -ne 0) { throw "Optional plugin tests failed" }
 
       - name: Validate JSON Schemas parse
         run: |
@@ -244,7 +246,9 @@ jobs:
             if (-not $value.StartsWith('https://')) { throw "$name must be an absolute https:// URL (got '$value')." }
           }
           $pluginsRoot = $env:MARKETPLACE_PLUGINS_ROOT
-          if ([string]::IsNullOrWhiteSpace($pluginsRoot)) { $pluginsRoot = 'plugins/samples' }
+          if ([string]::IsNullOrWhiteSpace($pluginsRoot) -or $pluginsRoot.TrimEnd('/', '\') -eq 'plugins/samples') {
+            $pluginsRoot = 'plugins'
+          }
           if (-not (Test-Path $pluginsRoot)) { throw "MARKETPLACE_PLUGINS_ROOT '$pluginsRoot' does not exist." }
           "MARKETPLACE_PLUGINS_ROOT=$pluginsRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Publish configuration present (artifact host: $([Uri]$env:MARKETPLACE_ARTIFACT_BASE_URL).Host; plugin root: $pluginsRoot)."
@@ -262,6 +266,30 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $($project.FullName)" }
           }
 
+      - name: Download existing immutable plugin releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path artifacts/released | Out-Null
+          $manifests = Get-ChildItem $env:MARKETPLACE_PLUGINS_ROOT -Recurse -Filter manifest.json -File |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' }
+          foreach ($manifestPath in $manifests) {
+            $manifest = Get-Content $manifestPath.FullName -Raw | ConvertFrom-Json
+            $tag = "plugin-$($manifest.id)-v$($manifest.version)"
+            $releaseText = gh release view $tag --json assets 2>$null
+            if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0; continue }
+            $assets = ($releaseText | ConvertFrom-Json).assets.name
+            $file = "$($manifest.id)-$($manifest.version).fbp"
+            if ($assets -contains $file -or $assets -contains "$file.sig.json") {
+              if ($assets -notcontains $file -or $assets -notcontains "$file.sig.json") {
+                throw "Incomplete existing release $tag; repair it explicitly instead of replacing its assets."
+              }
+              gh release download $tag --pattern $file --pattern "$file.sig.json" --dir artifacts/released
+              if ($LASTEXITCODE -ne 0) { throw "Could not download existing release $tag" }
+            }
+          }
+
       - name: Pack, sign, regenerate index + shards + keys
         timeout-minutes: 10
         env:
@@ -277,6 +305,8 @@ jobs:
 
           dotnet run --project src/FluidBar.Cli -c $env:CONFIGURATION --no-build -- publish-prepare `
             --plugins-root $env:MARKETPLACE_PLUGINS_ROOT `
+            --catalog marketplace/catalog.json `
+            --released-artifacts artifacts/released `
             --artifacts artifacts/plugins `
             --marketplace marketplace-site `
             --key-env MARKETPLACE_SIGNING_KEY_PEM `
@@ -315,12 +345,26 @@ jobs:
 
             # One release per plugin version keeps the index's documented URL template
             # (<artifact-base>/plugin-<id>-v<version>/<file>) working with flat GitHub release assets.
-            gh release view $tag 2>$null | Out-Null
+            $releaseText = gh release view $tag --json assets 2>$null
             if ($LASTEXITCODE -ne 0) {
-              gh release create $tag --title "$($plugin.id) v$version" --latest=false --notes "Signed FluidBar marketplace package for $($plugin.id) v$version. The hash and signature are pinned in marketplace/index.json."
+              gh release create $tag --target $env:GITHUB_SHA --title "$($plugin.id) v$version" --latest=false --notes "Signed FluidBar marketplace package for $($plugin.id) v$version. Package bytes are immutable; changes require a new version."
               if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
+            } else {
+              $assets = ($releaseText | ConvertFrom-Json).assets.name
+              $file = [IO.Path]::GetFileName($package)
+              if ($assets -contains $file -or $assets -contains "$file.sig.json") {
+                if ($assets -notcontains $file -or $assets -notcontains "$file.sig.json") { throw "Incomplete existing release $tag" }
+                $existing = Join-Path artifacts/release-check $tag
+                New-Item -ItemType Directory -Force -Path $existing | Out-Null
+                gh release download $tag --pattern $file --pattern "$file.sig.json" --dir $existing
+                if ($LASTEXITCODE -ne 0) { throw "Could not verify existing release $tag" }
+                node website/scripts/verify-plugin-package.mjs marketplace-site/index.json $plugin.id (Join-Path $existing $file) (Join-Path $existing "$file.sig.json")
+                if ($LASTEXITCODE -ne 0) { throw "Published bytes differ for $tag; bump the version instead of overwriting." }
+                Write-Host "preserved immutable release $tag"
+                continue
+              }
             }
-            gh release upload $tag $package $signature --clobber
+            gh release upload $tag $package $signature
             if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag" }
             Write-Host "release ${tag}: $([IO.Path]::GetFileName($package)) + signature"
           }
@@ -351,7 +395,7 @@ jobs:
             "- Signed site: ``marketplace-site`` artifact (retained 30 days) — also the input for the Pages deploy job.",
             "- Index signature verified by ``fluidbar-plugin verify-index``.",
             "- Signing key id: ``${{ vars.MARKETPLACE_SIGNING_KEY_ID }}`` (secret value never printed).",
-            "- Plugin root: ``$env:MARKETPLACE_PLUGINS_ROOT`` (samples are demo-only in this repository; the real monorepo publishes ``plugins/``).",
+            "- Plugin root: ``$env:MARKETPLACE_PLUGINS_ROOT``; required ids are checked against ``marketplace/catalog.json``.",
             "",
             "Pages deployment runs in the ``deploy`` job; if ``MARKETPLACE_DEPLOY_PAGES=false``, the site artifact is the published output."
           )
@@ -384,12 +428,16 @@ jobs:
       - name: Build official website
         timeout-minutes: 15
         working-directory: website
+        env:
+          FLUIDBAR_MARKETPLACE_SOURCE_DIR: ${{ github.workspace }}/marketplace-site
         run: |
           $ErrorActionPreference = "Stop"
           npm install --global pnpm@10.17.0
           if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { throw "website dependency install failed" }
+          pnpm test:marketplace
+          if ($LASTEXITCODE -ne 0) { throw "marketplace website regression tests failed" }
           pnpm build
           if ($LASTEXITCODE -ne 0) { throw "website build failed" }
 
@@ -398,9 +446,11 @@ jobs:
           $ErrorActionPreference = "Stop"
           $target = "website/dist/market"
           New-Item -ItemType Directory -Force -Path $target | Out-Null
-          Copy-Item "marketplace-site/*" $target -Recurse -Force
           foreach ($name in @('index.json', 'keys.json')) {
             if (-not (Test-Path (Join-Path $target $name))) { throw "Signed marketplace output is missing $name" }
+          }
+          if ((Get-FileHash marketplace-site/index.json).Hash -ne (Get-FileHash "$target/index.json").Hash) {
+            throw "Website build changed or replaced the signed marketplace index."
           }
           Write-Host "merged signed index: $((Get-Item (Join-Path $target 'index.json')).Length) bytes"
 
@@ -413,6 +463,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:CLOUDFLARE_ACCOUNT_ID)) { throw "Missing CLOUDFLARE_ACCOUNT_ID repository variable." }
           npx --yes wrangler@4.152.0 pages deploy website/dist --project-name fluidbar --branch main --commit-hash $env:GITHUB_SHA --commit-dirty=true
           if ($LASTEXITCODE -ne 0) { throw "Cloudflare Pages deployment failed" }
+
+      - name: Verify live catalog, listings, package hashes and signatures
+        run: |
+          node website/scripts/verify-marketplace.mjs https://fluidbar.doulor.cn website/dist/market
+          if ($LASTEXITCODE -ne 0) { throw "Live marketplace verification failed; deployment is not complete." }
 
       - name: Deployment summary
         if: always()

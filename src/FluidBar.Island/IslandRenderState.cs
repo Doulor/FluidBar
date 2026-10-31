@@ -35,6 +35,12 @@ public sealed record IslandSplitIslet(
 /// </summary>
 public readonly record struct IslandRenderState
 {
+    /// <summary>Temporary, localized action feedback painted within the existing expanded card.</summary>
+    public string? ActionFeedbackText { get; init; }
+
+    /// <summary>Whether the temporary feedback uses the error tone.</summary>
+    public bool ActionFeedbackIsError { get; init; }
+
     /// <summary>Creates a default (hidden/empty) state; use the factories for real frames.</summary>
     public IslandRenderState()
     {
@@ -42,11 +48,11 @@ public readonly record struct IslandRenderState
         Theme = IslandTheme.Dark;
     }
 
-    /// <summary>Expanded page tab style (side rail or detached bottom preview).</summary>
-    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
-
     /// <summary>Presentation mode (float/flush/dock); selects the fixed host surface and radii.</summary>
     public IslandMode Mode { get; init; }
+
+    /// <summary>Expanded page tab style (side rail or detached bottom preview).</summary>
+    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
 
     /// <summary>Side of the expanded card that hosts the page tab rail.</summary>
     public PageRailSide RailSide { get; init; } = PageRailSide.Left;
@@ -1129,6 +1135,9 @@ public sealed record ClipboardPageModel
 
     /// <summary>Localized "Pinned" label (defaults to English).</summary>
     public string? PinnedLabel { get; init; }
+
+    /// <summary>Localized label for the explicit row-preview button.</summary>
+    public string? PreviewLabel { get; init; }
 
     /// <summary>Empty-state title override.</summary>
     public string? EmptyTitle { get; init; }

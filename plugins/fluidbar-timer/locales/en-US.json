@@ -1,0 +1,15 @@
+{
+  "locale": "en-US",
+  "version": 1,
+  "messages": {
+    "title": "Countdown",
+    "idle": "Choose a duration in plugin settings, then start.",
+    "running": "Running",
+    "paused": "Paused",
+    "complete": "Time is up",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop"
+  }
+}

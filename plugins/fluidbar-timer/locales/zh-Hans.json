@@ -1,0 +1,15 @@
+{
+  "locale": "zh-Hans",
+  "version": 1,
+  "messages": {
+    "title": "倒计时",
+    "idle": "在插件设置中选择时长，然后开始。",
+    "running": "计时中",
+    "paused": "已暂停",
+    "complete": "时间到了",
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "继续",
+    "stop": "结束"
+  }
+}

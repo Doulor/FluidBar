@@ -22,6 +22,7 @@ using FluidBar.Platform.Windows.Media.Lyrics;
 using FluidBar.Platform.Windows.Monitors;
 using FluidBar.Platform.Windows.Notifications;
 using FluidBar.Platform.Windows.Radios;
+using FluidBar.Platform.Windows.Shell;
 using FluidBar.Platform.Windows.Tasks;
 using FluidBar.Platform.Windows.Threading;
 using FluidBar.Platform.Windows.Weather;
@@ -44,9 +45,10 @@ namespace FluidBar.App.Hosting.Skia;
 /// failures, and <see cref="Invoke"/> only reads a snapshot or dispatches a task.
 /// </para>
 /// </summary>
-public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSource, IAsyncDisposable
+public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSource, IAsyncDisposable
 {
     private readonly SettingsController _settings;
+    private readonly ISystemThemeSwitcher _themeSwitcher;
     private readonly ILocalizer? _localizer;
     private readonly TimeProvider _time;
     private readonly IAppLogger _logger;
@@ -109,12 +111,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private const int PageNotificationLimit = NotificationContentMapper.DefaultMaxItems;
 
     /// <summary>Creates the adapter; call <see cref="StartAsync"/> or <see cref="StartInBackground"/> once.</summary>
-    /// <param name="settings">Live App settings (theme quick toggle + persistence).</param>
+    /// <param name="settings">Live App settings and persistence.</param>
     /// <param name="logger">App logger for control/service failures.</param>
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
+    /// <param name="themeSwitcher">Windows theme switcher, or null for the current-user registry implementation.</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger = null, TimeProvider? timeProvider = null,
-        ILocalizer? localizer = null, string? weatherCity = null)
-        : this(settings, logger, timeProvider, quickToggles: null, localizer, weatherCity: weatherCity)
+        ILocalizer? localizer = null, string? weatherCity = null, ISystemThemeSwitcher? themeSwitcher = null)
+        : this(settings, logger, timeProvider, quickToggles: null, localizer, weatherCity: weatherCity,
+            themeSwitcher: themeSwitcher)
     {
     }
 
@@ -122,17 +126,18 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// Composition/test overload: inject the three platform quick-toggle services. The adapter owns
     /// them and disposes them with the rest of the seam; tests pass fakes so no hardware is touched.
     /// </summary>
-    /// <param name="settings">Live App settings (theme quick toggle + persistence).</param>
+    /// <param name="settings">Live App settings and persistence.</param>
     /// <param name="logger">App logger for control/service failures.</param>
     /// <param name="timeProvider">Injected clock (tests/diagnostics).</param>
     /// <param name="quickToggles">Quick-toggle services, or null to build the production ones.</param>
     /// <param name="weatherOptions">Weather monitor options (env seams by default; tests inject a fake handler/cache).</param>
     /// <param name="taskOptions">Task file options (env seam by default; tests point at a temp file).</param>
     /// <param name="weatherCity">Settings-persisted weather city (empty = automatic); the environment variable still wins.</param>
+    /// <param name="themeSwitcher">Windows theme switcher, or null for the production implementation.</param>
     public SkiaPlatformActions(SettingsController settings, IAppLogger? logger, TimeProvider? timeProvider,
         IslandQuickToggleServices? quickToggles, ILocalizer? localizer = null,
         WeatherServiceOptions? weatherOptions = null, TaskListOptions? taskOptions = null,
-        string? weatherCity = null, string? clipboardPinsPath = null)
+        string? weatherCity = null, string? clipboardPinsPath = null, ISystemThemeSwitcher? themeSwitcher = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer;
@@ -141,6 +146,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _logger = logger ?? NullAppLogger.Instance;
         LoadClipboardPins();
         _platformLogger = new AppLoggerPlatformAdapter(_logger);
+        _themeSwitcher = themeSwitcher ?? new WindowsThemeSwitcher(_platformLogger);
         _counters = new PlatformCounters();
         var time = timeProvider ?? TimeProvider.System;
         _time = time;
@@ -158,6 +164,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _media = new GsmtcMediaSessionService(_platformLogger, _counters, _artworkCache, time,
             powerModeProvider: () => _settings.Current.PowerMode);
         _clipboard = new ClipboardService(_messageHost, _platformLogger, _counters, null, time);
+        _clipboard.SetPaused(_settings.Current.ClipboardPaused);
         _usbDevices = new UsbDeviceMonitor(_messageHost, _platformLogger, _counters, time);
         _bluetoothDevices = new BluetoothDeviceMonitor(_platformLogger, _counters, time);
 
@@ -349,6 +356,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// <summary>Raised when the user asks for the clipboard search window.</summary>
     public event EventHandler? ClipboardSearchRequested;
 
+    /// <summary>Raised with the original immutable payload when a row preview is requested.</summary>
+    public event Action<ClipboardEntry>? ClipboardPreviewRequested;
+
+    /// <summary>Raised when the user opens the task management window.</summary>
+    public event EventHandler? TaskManagementRequested;
+
     /// <inheritdoc />
     public IslandContent Snapshot()
     {
@@ -452,6 +465,17 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     /// </summary>
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
+        if (previous.ClipboardPaused != current.ClipboardPaused)
+        {
+            _clipboard.SetPaused(current.ClipboardPaused);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        if (previous.ClipboardHidePreviews != current.ClipboardHidePreviews)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
         if (previous.PowerMode != current.PowerMode)
         {
             EnsureMediaTick();
@@ -1149,7 +1173,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
     private ClipboardItemData MapClipboard(ClipboardEntry entry)
     {
-        var preview = ClipboardPreview(entry);
+        var hide = _settings.Current.ClipboardHidePreviews;
+        var preview = hide ? _localizer?.Get("Clipboard.Preview.Hidden") ?? "Preview hidden" : ClipboardPreview(entry);
         return new ClipboardItemData
         {
             Preview = preview,
@@ -1159,8 +1184,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             Pinned = _pinnedClipboard.Contains(PinKey(entry)),
             IsImage = entry.Kind == ClipboardContentKind.Image,
             IsFiles = entry.Kind == ClipboardContentKind.Files,
-            ImagePng = entry.ImagePng,
-            ImageKey = entry.ImagePng is { Length: > 0 } ? $"clip:{entry.Sequence}" : null,
+            ImagePng = hide ? null : entry.ImagePng,
+            ImageKey = !hide && entry.ImagePng is { Length: > 0 } ? $"clip:{entry.Sequence}" : null,
         };
     }
 
@@ -1178,7 +1203,8 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         var payload = entry.Kind switch
         {
-            ClipboardContentKind.Text => entry.Text ?? string.Empty,
+            ClipboardContentKind.Text => entry.CompleteText ?? (entry.TextDigest is { } digest
+                ? "sha256:" + digest : entry.IsTextTruncated ? "incomplete:" + entry.Sequence : entry.Text ?? string.Empty),
             ClipboardContentKind.Files => string.Join('\u001F', entry.FilePaths),
             ClipboardContentKind.Image => entry.ImageDib is { Length: > 0 } dib
                 ? $"{dib.Length}:{Convert.ToHexString(SHA256.HashData(dib))}"
@@ -1249,11 +1275,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     {
         var preview = entry.Kind switch
         {
-            ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(entry.Text) => entry.Text!,
+            ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(entry.CompleteText ?? entry.Text)
+                => (entry.CompleteText ?? entry.Text!).TrimStart(),
             ClipboardContentKind.Files => string.Join(", ", entry.FilePaths.Take(3)),
             ClipboardContentKind.Image => "Image",
             _ => "(empty)",
         };
+        if (preview.Length > 16_384) preview = preview[..16_384];
         return preview.ReplaceLineEndings(" ").Trim();
     }
 
@@ -1282,10 +1310,10 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private string RelativeTime(DateTimeOffset captured)
     {
         var delta = _time.GetUtcNow() - captured;
-        if (delta.TotalSeconds < 60) return "now";
-        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes} min";
-        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours} h";
-        return $"{(int)delta.TotalDays} d";
+        if (delta.TotalSeconds < 60) return _localizer?.Get("Clipboard.Time.JustNow") ?? "now";
+        if (delta.TotalMinutes < 60) return _localizer?.Format("Clipboard.Time.MinutesAgo", ("count", (int)delta.TotalMinutes)) ?? $"{(int)delta.TotalMinutes} min";
+        if (delta.TotalHours < 24) return _localizer?.Format("Clipboard.Time.HoursAgo", ("count", (int)delta.TotalHours)) ?? $"{(int)delta.TotalHours} h";
+        return _localizer?.Format("Clipboard.Time.DaysAgo", ("count", (int)delta.TotalDays)) ?? $"{(int)delta.TotalDays} d";
     }
 
     /// <summary>Moves the widgets calendar by one month and republishes the island content.</summary>
@@ -1436,7 +1464,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
     private bool _publishedPlaying;
 
     /// <inheritdoc />
-    public IslandActionResult Invoke(in IslandPlatformAction action)
+    private IslandActionResult InvokeCore(in IslandPlatformAction action)
     {
         if (Volatile.Read(ref _disposed) != 0)
         {
@@ -1467,11 +1495,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
             IslandPlatformActionKind.ClipboardPin => ToggleClipboardPin(action.Index),
             IslandPlatformActionKind.ClipboardClearAll => ClearClipboard(),
+            IslandPlatformActionKind.ClipboardClearIncludingPinned => ClearClipboard(includePinned: true),
+            IslandPlatformActionKind.ClipboardPreview => RequestClipboardPreview(action.Index),
             IslandPlatformActionKind.ClipboardRemove => RemoveClipboard(action.Index),
             IslandPlatformActionKind.ClipboardCycleFilter => CycleClipboardFilter(),
             IslandPlatformActionKind.ClipboardSearch => RequestClipboardSearch(),
             IslandPlatformActionKind.AgentActivate => ActivateAgent(action.Index),
             IslandPlatformActionKind.TaskToggle => ToggleTask(action.Index),
+            IslandPlatformActionKind.TaskManage => RequestTaskManagement(),
             IslandPlatformActionKind.CalendarNavigate => NavigateCalendar(action.Value < 0 ? -1 : 1),
             _ => Unsupported($"unknown island action {action.Kind}"),
         };
@@ -1494,9 +1525,14 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         _ = RunAsync(async () =>
         {
             var ok = await command().ConfigureAwait(false);
-            if (ok || optimisticPlaying is null)
+            if (ok)
             {
-                return;
+                return true;
+            }
+
+            if (optimisticPlaying is null)
+            {
+                return false;
             }
 
             if (_media.CurrentTransportRoute.Route == TransportRoute.MediaKey)
@@ -1506,12 +1542,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
                 // intent and let the two-consistent-reads rule (or the hold window) settle it.
                 _logger.Information(LogCategories.Platform, "media.play-state",
                     "Media-key transport could not confirm the command; keeping the optimistic flip.");
-                return;
+                return false;
             }
 
             ClearOptimisticPlaying();
             _logger.Warning(LogCategories.Platform, eventId,
                 "The media transport command was refused; the optimistic play state was rolled back.");
+            return false;
         }, eventId);
         return IslandActionResult.Handled;
     }
@@ -1636,16 +1673,15 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             case IslandQuickToggle.Bluetooth:
                 return ToggleRadio(_bluetooth, "Bluetooth", "island.actions.bluetooth-toggle");
             case IslandQuickToggle.Theme:
-                try
+                _ = RunAsync(async () =>
                 {
-                    var next = _settings.Current.Theme == AppTheme.Light ? AppTheme.Dark : AppTheme.Light;
-                    _settings.Update(settings => settings with { Theme = next });
-                    return IslandActionResult.Handled;
-                }
-                catch (ObjectDisposedException)
-                {
-                    return Unsupported("SettingsController is disposed; the theme cannot be toggled");
-                }
+                    await _themeSwitcher.ToggleAsync().ConfigureAwait(false);
+                    if (Volatile.Read(ref _disposed) == 0)
+                    {
+                        Changed?.Invoke(this, EventArgs.Empty);
+                    }
+                }, "island.actions.theme-toggle");
+                return IslandActionResult.Handled;
 
             default:
                 return Unsupported($"unknown quick toggle {toggle}");
@@ -1856,7 +1892,7 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
 
         var text = entry.Kind switch
         {
-            ClipboardContentKind.Text => entry.Text,
+            ClipboardContentKind.Text => entry.CompleteText ?? entry.Text,
             ClipboardContentKind.Files => string.Join(' ', entry.FilePaths),
             _ => null,
         };
@@ -1887,15 +1923,32 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             : Unsupported("the clipboard row no longer exists");
     }
 
-    private IslandActionResult ClearClipboard()
+    private IslandActionResult ClearClipboard(bool includePinned = false)
     {
-        // Clearing history also clears its pins; otherwise a pinned row would come back the next
-        // time the same content is copied, which makes "clear" feel ineffective.
-        _pinnedClipboard.Clear();
-        _pinKeyCache.Clear();
         _clipboardFilter = ClipboardFilter.All;
-        SaveClipboardPins();
-        _clipboard.ClearHistory();
+        if (includePinned)
+        {
+            _pinnedClipboard.Clear();
+            _pinKeyCache.Clear();
+            SaveClipboardPins();
+            _clipboard.ClearHistory();
+        }
+        else
+        {
+            foreach (var entry in _clipboard.GetHistory())
+            {
+                if (!_pinnedClipboard.Contains(PinKey(entry))) _clipboard.Remove(entry.Sequence);
+            }
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult RequestClipboardPreview(int index)
+    {
+        var entries = DisplayedClipboard();
+        if (index < 0 || index >= entries.Count) return Unsupported("the clipboard row no longer exists");
+        ClipboardPreviewRequested?.Invoke(entries[index]);
         return IslandActionResult.Handled;
     }
 
@@ -1998,7 +2051,13 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return Unsupported("tasks.json has no toggleable row at that index (missing or invalid file)");
         }
 
-        _ = RunAsync(() => _tasks.ToggleAsync(index), "island.actions.task-toggle");
+        _ = RunAsync(() => _tasks.ToggleAsync(index, snapshot), "island.actions.task-toggle");
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult RequestTaskManagement()
+    {
+        TaskManagementRequested?.Invoke(this, EventArgs.Empty);
         return IslandActionResult.Handled;
     }
 
@@ -2022,16 +2081,30 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
             return Unsupported("the clipboard row no longer exists");
         }
 
-        var entry = history[action.Index];
+        return CopyClipboardEntry(history[action.Index]);
+    }
+
+    /// <summary>Copies the captured payload even if the history changed while its preview was open.</summary>
+    public IslandActionResult CopyClipboardEntry(ClipboardEntry entry)
+    {
+        if (_feedbackInvocation.Value is null)
+            return InvokeWithFeedback(new IslandPlatformAction(IslandPlatformActionKind.ClipboardCopy), out _,
+                () => CopyClipboardEntryCore(entry));
+        return CopyClipboardEntryCore(entry);
+    }
+
+    private IslandActionResult CopyClipboardEntryCore(ClipboardEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
         switch (entry.Kind)
         {
             case ClipboardContentKind.Text:
-                if (string.IsNullOrWhiteSpace(entry.Text))
+                if (string.IsNullOrWhiteSpace(entry.CompleteText))
                 {
                     return Unsupported("the clipboard row has no text to copy");
                 }
 
-                _ = RunAsync(() => _clipboard.SetTextAsync(entry.Text), "island.actions.clipboard-copy");
+                _ = RunAsync(() => _clipboard.SetTextAsync(entry.CompleteText!), "island.actions.clipboard-copy");
                 return IslandActionResult.Handled;
 
             case ClipboardContentKind.Files:
@@ -2110,20 +2183,12 @@ public sealed class SkiaPlatformActions : IIslandPlatformActions, IIslandDataSou
         }
     }
 
-    private async Task RunAsync(Func<Task> work, string eventId)
-    {
-        try
+    private Task RunAsync(Func<Task> work, string eventId)
+        => RunWithFeedbackAsync(async () =>
         {
-            // Invoke runs on the UI thread; every service call is dispatched to the thread pool so no
-            // COM/WinRT/registry work can ever happen on the UI thread (contract §1).
-            await Task.Run(work).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(LogCategories.Platform, eventId + "-failed",
-                "A page-control platform call failed; the island stays responsive.", ex);
-        }
-    }
+            await work().ConfigureAwait(false);
+            return true;
+        }, eventId);
 
     /// <summary>Disposes in the background (App exit is synchronous); failures are logged.</summary>
     public void DisposeInBackground() => _ = DisposeSafelyAsync();

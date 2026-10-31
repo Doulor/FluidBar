@@ -212,7 +212,10 @@ public sealed class SkiaIslandHostMappingTests
     [Fact]
     public void PagerDrag_SmallMovement_SnapsBackWithoutChangingPage()
     {
-        using var fixture = ControllerFixture.Create();
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
 
         fixture.Controller.HandleDragStarted(200, 200, timestampMs: 0);
@@ -226,7 +229,10 @@ public sealed class SkiaIslandHostMappingTests
     [Fact]
     public void Wheel_TwoNotchesOnePage_WithCooldownAndLocking()
     {
-        using var fixture = ControllerFixture.Create();
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
 
         // One physical notch is one 140 DIP page step now.
@@ -248,7 +254,10 @@ public sealed class SkiaIslandHostMappingTests
     [Fact]
     public void Wheel_RepeatsArePacedByTheCooldownWindow()
     {
-        using var fixture = ControllerFixture.Create();
+        using var fixture = ControllerFixture.Create(settings: AppSettings.Default with
+        {
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.ExpandAndSettle();
 
         var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);

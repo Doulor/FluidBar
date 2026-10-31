@@ -68,6 +68,9 @@ public sealed record PluginHostOptions
     /// <summary>Creates the notification sink for a plugin. The App wires this to the notification service.</summary>
     public Func<PluginManifest, INotificationSink>? NotificationSinkFactory { get; init; }
 
+    /// <summary>Optional host UI for user-selected file references; capability-gated by the context.</summary>
+    public Func<PluginManifest, IPluginFileShelf>? FileShelfFactory { get; init; }
+
     /// <summary>Manifest validation policy (marketplace installs use stricter options).</summary>
     public ManifestValidationOptions ValidationOptions { get; init; } = ManifestValidationOptions.Default;
 

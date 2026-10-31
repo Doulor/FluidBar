@@ -86,6 +86,7 @@ public sealed record IslandLayoutRequest
     /// <param name="hiddenHoverStrip">Whether the hidden hover strip is enabled.</param>
     /// <param name="pagePosition">Fractional pager page position for the archipelago (0..5).</param>
     /// <param name="archipelagoVisible">Whether the detached archipelago is revealed.</param>
+    /// <param name="tabBarStyle">Expanded page tab style (side rail or bottom preview).</param>
     public static IslandLayoutRequest FromState(
         Activities.IslandState state,
         IslandMode mode = IslandMode.Float,

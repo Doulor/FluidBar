@@ -202,6 +202,7 @@ internal static class SettingsControls
         button.Content = icon is null
             ? label
             : IconRow(icon.Value, label, foreground, size == SettingsButtonSize.Icon ? 0 : 5);
+        Avalonia.Automation.AutomationProperties.SetName(button, label);
 
         // Fluent paints its own hover/pressed fills; override them for every variant (one code path).
         if (hover is not null)

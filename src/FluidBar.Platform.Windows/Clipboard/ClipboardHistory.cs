@@ -26,10 +26,14 @@ public sealed record ClipboardEntry(
     int OriginalTextLength,
     ImmutableArray<string> FilePaths,
     byte[]? ImageDib = null,
-    byte[]? ImagePng = null)
+    byte[]? ImagePng = null,
+    string? FullText = null,
+    string? TextDigest = null)
 {
     /// <summary>True when the captured text was truncated for storage.</summary>
     public bool IsTextTruncated => Text is not null && Text.Length < OriginalTextLength;
+    /// <summary>Complete copy payload, or null when the capture exceeded the retention budget.</summary>
+    public string? CompleteText => FullText ?? (IsTextTruncated ? null : Text);
 }
 
 /// <summary>Immutable clipboard snapshot published by <see cref="ClipboardService"/>.</summary>
@@ -65,20 +69,22 @@ public sealed class ClipboardServiceOptions
 }
 
 /// <summary>
-/// Pure clipboard history: bounded ring with consecutive-duplicate suppression.
+/// Pure clipboard history: bounded newest-first list with full-history payload deduplication.
 /// </summary>
 public sealed class ClipboardHistory
 {
     private readonly LinkedList<ClipboardEntry> _entries = new();
     private readonly object _gate = new();
     private readonly int _maxImageEntries;
+    private readonly int _maxTextCharacters;
 
-    public ClipboardHistory(int maxEntries = 50, int maxImageEntries = 5)
+    public ClipboardHistory(int maxEntries = 50, int maxImageEntries = 5, int maxTextCharacters = 4_194_304)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxEntries);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxImageEntries);
         MaxEntries = maxEntries;
         _maxImageEntries = maxImageEntries;
+        _maxTextCharacters = Math.Max(1, maxTextCharacters);
     }
 
     public int MaxEntries { get; }
@@ -97,19 +103,37 @@ public sealed class ClipboardHistory
     public long Evictions { get; private set; }
 
     /// <summary>
-    /// Adds an entry unless it duplicates the most recent one (same kind + same payload). Returns
-    /// <c>true</c> when the entry was added.
+    /// Rejects empty text and consecutive duplicates. Older matching payloads move to the front with
+    /// fresh capture metadata. Returns <c>true</c> when the published history changes.
     /// </summary>
     public bool TryAdd(ClipboardEntry entry, out ClipboardSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(entry);
         lock (_gate)
         {
+            if (entry.Kind == ClipboardContentKind.Text && string.IsNullOrWhiteSpace(entry.CompleteText ?? entry.Text)
+                && entry.TextDigest is null)
+            {
+                snapshot = BuildSnapshotLocked();
+                return false;
+            }
+
             var latest = _entries.First?.Value;
             if (latest is not null && IsDuplicate(latest, entry))
             {
                 snapshot = BuildSnapshotLocked();
                 return false;
+            }
+
+            var duplicate = _entries.First?.Next;
+            while (duplicate is not null)
+            {
+                var next = duplicate.Next;
+                if (IsDuplicate(duplicate.Value, entry))
+                {
+                    _entries.Remove(duplicate);
+                }
+                duplicate = next;
             }
 
             _entries.AddFirst(entry);
@@ -120,6 +144,7 @@ public sealed class ClipboardHistory
             }
 
             TrimImagesLocked();
+            TrimTextBudgetLocked();
 
             snapshot = BuildSnapshotLocked();
             return true;
@@ -136,8 +161,12 @@ public sealed class ClipboardHistory
 
         return left.Kind switch
         {
-            ClipboardContentKind.Text => string.Equals(left.Text, right.Text, StringComparison.Ordinal),
+            ClipboardContentKind.Text => left.CompleteText is { } leftText && right.CompleteText is { } rightText
+                ? string.Equals(leftText, rightText, StringComparison.Ordinal)
+                : left.TextDigest is not null && string.Equals(left.TextDigest, right.TextDigest, StringComparison.Ordinal),
             ClipboardContentKind.Files => left.FilePaths.SequenceEqual(right.FilePaths, StringComparer.OrdinalIgnoreCase),
+            ClipboardContentKind.Image => left.ImageDib is { Length: > 0 } leftDib
+                && right.ImageDib is { Length: > 0 } rightDib && leftDib.AsSpan().SequenceEqual(rightDib),
             _ => false,
         };
     }
@@ -213,5 +242,19 @@ public sealed class ClipboardHistory
         }
 
         return new ClipboardSnapshot(_entries.First!.Value, builder.MoveToImmutable());
+    }
+
+    private void TrimTextBudgetLocked()
+    {
+        var total = _entries.Sum(entry => (long)(entry.Text?.Length ?? 0) + (entry.FullText?.Length ?? 0));
+        var node = _entries.Last;
+        while (total > _maxTextCharacters && node is not null)
+        {
+            var previous = node.Previous;
+            total -= (long)(node.Value.Text?.Length ?? 0) + (node.Value.FullText?.Length ?? 0);
+            _entries.Remove(node);
+            Evictions++;
+            node = previous;
+        }
     }
 }

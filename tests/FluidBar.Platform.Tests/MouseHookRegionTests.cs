@@ -8,6 +8,19 @@ namespace FluidBar.Platform.Tests;
 /// </summary>
 public sealed class MouseHookRegionTests
 {
+    [Fact]
+    public void Captured_drag_continues_outside_the_card_until_release()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+        var move = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmMouseMove);
+        Assert.True(move.Dragged);
+        Assert.False(move.Left);
+        var release = gestures.Route(IslandMouseHook.HookRegionKind.Outside, IslandMouseHook.WmLButtonUp);
+        Assert.True(release.Released);
+        Assert.True(release.Left);
+    }
+
     private static readonly IslandMouseHook.Rect Shell = new(100, 100, 300, 200);
     private static readonly IslandMouseHook.Rect Band = new(80, 200, 320, 260);
 

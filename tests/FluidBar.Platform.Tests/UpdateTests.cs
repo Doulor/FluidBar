@@ -471,8 +471,8 @@ public sealed class UpdateTests
     [Fact]
     public async Task CompositeVerifier_AcceptsUnsignedWhenTheSignatureIsNotRequired()
     {
-        // Preview policy: an unsigned binary that matches the feed hash is installable, but is reported as
-        // VerifiedByHashOnly so the About pane can say "unsigned preview" instead of a false "verified".
+        // Unsigned release policy: a binary that matches the feed hash is installable, but is reported as
+        // VerifiedByHashOnly so the About pane never claims publisher identity was verified.
         var path = await WriteTempAsync(new byte[] { 4, 5, 6 });
         try
         {
@@ -498,7 +498,7 @@ public sealed class UpdateTests
     public async Task CompositeVerifier_StillRejectsBrokenSignaturesWhenTheSignatureIsNotRequired(
         AuthenticodeStatus signature, UpdateVerificationStatus expected)
     {
-        // Relaxing "unsigned is fine" must never relax "tampered is fine": an unsigned preview is a policy
+        // Relaxing "unsigned is fine" must never relax "tampered is fine": an unsigned release is a policy
         // choice, a broken signature is an attack.
         var path = await WriteTempAsync(new byte[] { 7, 8, 9 });
         try

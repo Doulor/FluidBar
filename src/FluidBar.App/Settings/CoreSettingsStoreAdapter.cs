@@ -223,6 +223,9 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
         ArgumentNullException.ThrowIfNull(core);
         return new AppSettings
         {
+            ClipboardPaused = core.Cards?.ClipboardPaused ?? false,
+            ClipboardHidePreviews = core.Cards?.ClipboardHidePreviews ?? false,
+            QuickActions = core.Cards is { QuickActions.IsDefault: false } cards ? cards.QuickActions : [],
             SchemaVersion = core.SchemaVersion,
             Language = core.General.Language,
             StartWithWindows = core.General.StartWithWindows,
@@ -327,6 +330,12 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
         ArgumentNullException.ThrowIfNull(app);
         return core with
         {
+            Cards = new FluidBar.Core.Settings.CardPreferences
+            {
+                ClipboardPaused = app.ClipboardPaused,
+                ClipboardHidePreviews = app.ClipboardHidePreviews,
+                QuickActions = [.. app.QuickActions],
+            }.Normalize(),
             SchemaVersion = FluidBarSettings.CurrentSchemaVersion,
             General = core.General with
             {

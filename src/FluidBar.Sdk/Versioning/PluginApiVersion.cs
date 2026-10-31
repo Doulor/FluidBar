@@ -8,7 +8,7 @@ namespace FluidBar.Sdk.Versioning;
 public static class PluginApiVersion
 {
     /// <summary>The SDK ABI version implemented by this build of <c>FluidBar.Sdk</c>.</summary>
-    public static SemanticVersion Current { get; } = new(2, 0, 0);
+    public static SemanticVersion Current { get; } = new(2, 1, 0);
 
     /// <summary>The SDK major version accepted by this host major.</summary>
     public const int SupportedMajor = 2;

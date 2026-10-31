@@ -767,8 +767,15 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         {
             var item = model.Items[i];
             var row = PageLayout.ClipboardRow(page, i, scroll);
-            var children = new List<UiaElementSnapshot>(3)
+            var children = new List<UiaElementSnapshot>(4)
             {
+                Node(
+                    $"island.page.3.row.{i}.preview",
+                    UiaElementRole.Button,
+                    model.PreviewLabel ?? L("Clipboard.Preview.Open", "View"),
+                    ToRect(PageLayout.ClipboardPreview(page, i, scroll)),
+                    UiaPatternKind.Invoke,
+                    new UiaElementState { IsFocusable = true }),
                 Node(
                     $"island.page.3.row.{i}.delete",
                     UiaElementRole.Button,
@@ -939,6 +946,14 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 ToRect(statRect),
                 state: new UiaElementState { IsOffscreen = false }));
         }
+
+        children.Add(Node(
+            "island.page.5.taskmanage",
+            UiaElementRole.Button,
+            L("Tasks.Manage.Open", "Manage tasks"),
+            ToRect(PageMetricsLayout.WidgetsTaskManage(page, FontScaleMetrics.From(state.FontScale))),
+            UiaPatternKind.Invoke,
+            new UiaElementState { IsFocusable = true }));
 
         var paintedTasks = Math.Min(PageMetricsLayout.MaxPaintedTaskRows, model.Tasks.Count);
         for (var i = 0; i < paintedTasks; i++)
@@ -1332,6 +1347,9 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
             case "task":
                 _controller.ActivateAccessibleControl(IslandPageControl.TaskToggle, page, index);
                 return;
+            case "taskmanage":
+                _controller.ActivateAccessibleControl(IslandPageControl.TaskManage, page);
+                return;
             case "calendar" when parts.Length > 4:
                 _controller.ActivateAccessibleControl(
                     parts[4] == "prev" ? IslandPageControl.CalendarPrevious : IslandPageControl.CalendarNext, page);
@@ -1356,6 +1374,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         {
             "dismiss" => IslandPageControl.Dismiss,
             "delete" => IslandPageControl.ClipboardDelete,
+            "preview" => IslandPageControl.ClipboardPreview,
             "pin" => IslandPageControl.Pin,
             "copy" => IslandPageControl.Copy,
             _ => IslandPageControl.Row,

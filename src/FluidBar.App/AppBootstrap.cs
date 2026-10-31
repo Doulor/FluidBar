@@ -33,7 +33,7 @@ namespace FluidBar.App;
 /// host is used as a logged fallback when the layered window cannot be created.
 /// </para>
 /// </summary>
-internal sealed class AppBootstrap
+internal sealed partial class AppBootstrap
 {
     private readonly IClassicDesktopStyleApplicationLifetime _lifetime;
     private readonly SettingsAwareLogger _logger;
@@ -392,6 +392,21 @@ internal sealed class AppBootstrap
             var actions = new SkiaPlatformActions(_settings, _logger, timeProvider: null,
                 quickToggles: null, localizer: _localizer, weatherCity: _settings.Current.WeatherCity);
             actions.ClipboardSearchRequested += (_, _) => Dispatcher.UIThread.Post(ShowClipboardSearch);
+            actions.ClipboardPreviewRequested += entry => Dispatcher.UIThread.Post(() =>
+            {
+                _clipboardPreviewWindow?.Close();
+                var window = new ClipboardPreviewWindow(entry, () => actions.CopyClipboardEntry(entry),
+                    _localizer?.Get("Clipboard.Preview.Title") ?? "Clipboard preview",
+                    _localizer?.Get(LocKeys.Common.Copy) ?? "Copy",
+                    _localizer?.Get(LocKeys.Common.Close) ?? "Close",
+                    _localizer?.Get("Clipboard.Preview.ImageUnavailable") ?? "Image preview is unavailable. You can still copy the image.",
+                    _localizer?.Get("Clipboard.Preview.Incomplete"));
+                _clipboardPreviewWindow = window;
+                window.Closed += (_, _) => { if (ReferenceEquals(_clipboardPreviewWindow, window)) _clipboardPreviewWindow = null; };
+                window.Show();
+                BringToFront(window);
+            });
+            actions.TaskManagementRequested += (_, _) => Dispatcher.UIThread.Post(ShowTaskManager);
             actions.StartInBackground();
             return actions;
         }
@@ -1064,6 +1079,8 @@ internal sealed class AppBootstrap
                     PublishPluginEvent,
                     _pageRegistry),
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
+                FileShelfFactory = _ => new FileShelfPresenter(_localizer,
+                    _skiaHost is { } fileDropHost ? fileDropHost.RegisterFileDropHandler : null),
                 BuiltinServices = services,
                 // Safe mode disables every community plugin (spec §8.4); first-party ones still load.
                 LoadCommunity = !SafeModeActive,
@@ -1174,10 +1191,10 @@ internal sealed class AppBootstrap
         var keyId = Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_KEY_ID");
         if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(keyId))
         {
-            if (ResolveMarketplaceIndexUrl() is not null)
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FLUIDBAR_MARKET_URL")))
             {
                 _logger.Warning(LogCategories.Plugin, "plugin.market.trust-missing",
-                    "FLUIDBAR_MARKET_URL is set without FLUIDBAR_MARKET_KEY/FLUIDBAR_MARKET_KEY_ID; the signed index cannot be verified and the demo catalog is used.");
+                    "FLUIDBAR_MARKET_URL is set without a complete key override; the configured catalog will be verified with the compiled-in production marketplace key.");
             }
 
             return MarketplaceReleaseConfiguration.Trust;
@@ -1224,6 +1241,24 @@ internal sealed class AppBootstrap
         BringToFront(window);
     }
 
+    private TaskManagerWindow? _taskManagerWindow;
+
+    private void ShowTaskManager()
+    {
+        if (_taskManagerWindow is { } existing)
+        {
+            BringToFront(existing);
+            existing.FocusInput();
+            return;
+        }
+        if (_platformActions is null || _localizer is null) return;
+        var window = new TaskManagerWindow(_platformActions.TaskSource, _localizer);
+        _taskManagerWindow = window;
+        window.Closed += (_, _) => _taskManagerWindow = null;
+        window.Show();
+        BringToFront(window);
+    }
+
     private void OpenSettings() => ShowSettingsWindow(SettingsWindowSection.General);
     private void OpenMarket() => ShowSettingsWindow(SettingsWindowSection.Marketplace);
 
@@ -1252,7 +1287,8 @@ internal sealed class AppBootstrap
             updates: _updates,
             frameStats: _skiaHost,
             restartToInstall: RestartToInstall,
-            pages: _pageRegistry);
+            pages: _pageRegistry,
+            executeQuickAction: ExecuteQuickActionAsync);
         window.EnableCenterFade();
 
         window.Closed += (_, _) => _settingsWindow = null;
@@ -1287,6 +1323,7 @@ internal sealed class AppBootstrap
 
     private SettingsWindow? _settingsWindow;
     private ClipboardSearchWindow? _clipboardSearchWindow;
+    private ClipboardPreviewWindow? _clipboardPreviewWindow;
 
     private void OnClipboardSearchHostStateChanged(object? sender, EventArgs e)
     {
@@ -1318,6 +1355,7 @@ internal sealed class AppBootstrap
         // services they bind to are disposed so their Closed handlers can restore the pin safely.
         try
         {
+            _taskManagerWindow?.Close();
             _clipboardSearchWindow?.Close();
         }
         catch (InvalidOperationException)

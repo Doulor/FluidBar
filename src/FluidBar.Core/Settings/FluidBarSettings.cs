@@ -511,6 +511,8 @@ public sealed record AdvancedSettings
 /// </summary>
 public sealed record FluidBarSettings
 {
+    /// <summary>Card privacy and user-configured actions.</summary>
+    public CardPreferences Cards { get; init; } = new();
     /// <summary>Current schema version.</summary>
     public const int CurrentSchemaVersion = 3;
 

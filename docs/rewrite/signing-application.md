@@ -5,7 +5,7 @@
 1. **Windows / SmartScreen**：首次运行弹「未知发布者」。与"是不是单文件"无关，只看 exe 里有没有受信任的
    Authenticode 签名。用户点"仍要运行"即可，功能不受影响。
 2. **应用内自动安装**：`CompositeUpdateVerifier` 默认要求 SHA-256 + 签名双通过。**这是本项目自己的策略**，
-   不是 Windows 强制。预览版构建已经放宽为"仅 SHA-256"（见 `UpdateServiceOptions.RequireSignature`），
+   不是 Windows 强制。首版 4.0.0 已按"仅 SHA-256"发布（见 `AppUpdateCoordinator.AllowUnsignedStableRelease`），
    所以**没有证书也能自动更新**，只是不会消除 SmartScreen 警告。
 
 ## 1. 三条可选路径
@@ -64,4 +64,4 @@ git push origin v3.0.0-preview.1
 `release.yml` 会用 tag 当版本号跑 `build/publish.ps1`，然后 `gh release create` 上传
 `FluidBar.exe` + `publish-3.0.0-preview.1.json`；经 API 上传的资产 GitHub 会自动填 `digest: sha256:…`，
 正是更新器校验所需的字段。发布后客户端点「检查更新」即可看到"发现新版本 + 打开发布页"，
-预览版构建还能直接"重启并安装"。
+首版 4.0.0 也能直接"重启并安装"。

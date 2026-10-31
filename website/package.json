@@ -1,17 +1,18 @@
 {
   "name": "fluidbar-website",
   "private": true,
-  "version": "2.0.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 4173",
-    "prebuild": "node scripts/sync-island.mjs",
+    "prebuild": "node scripts/sync-island.mjs && node scripts/sync-marketplace.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "sync:island": "node scripts/sync-island.mjs",
-    "check": "pnpm build && pnpm test && pnpm test:e2e"
+    "test:marketplace": "node --test scripts/tests/*.spec-node.mjs",
+    "check": "pnpm build && pnpm test && pnpm test:marketplace && pnpm test:e2e"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

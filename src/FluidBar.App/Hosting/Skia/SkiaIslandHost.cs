@@ -120,7 +120,7 @@ internal static class IslandFrameProbe
 
 
 /// </summary>
-public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
+public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 {
     private readonly SkiaIslandHostOptions _options;
     private readonly SkiaFrameStatsRecorder _frameStats = new();
@@ -604,6 +604,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         _disposed = true;
+        _fileDropHandlers = null;
         _logger.Information(LogCategories.Lifecycle, "island.skia.stop", "Stopping Skia island host.");
         _frameClock.Stop();
         CancelIdleTrim();
@@ -757,7 +758,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHook.PointerMoved += OnHookPointerMoved;
         _mouseHook.PointerDragged += OnHookPointerDragged;
         _mouseHook.PointerLeft += OnHookPointerLeft;
-        _mouseHook.Wheel += OnHookWheel;
+        _mouseHook.WheelWithModifiers += OnHookWheel;
         _mouseHook.OutsidePressed += OnHookOutsidePressed;
         StartSoftYield();
         // Started at the end of StartAsync, after the controller has a render state and the first
@@ -926,6 +927,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             "Liquid-glass backdrop capture needs the window excluded from screen captures.",
             data: new Dictionary<string, object?> { ["excludedFromCapture"] = host.ExcludeFromCapture });
         host.AttachAccessibility(_uiaSource, _uiaSource);
+        host.SetFileDropEnabled(_fileDropHandlers is not null);
+        host.FilesDropped += paths => _fileDropHandlers?.Invoke(paths);
 
         // Second launch of the exe: SingleInstanceGuard.TryAcquire() fails and it posts ActivateMessage to
         // this window class. Nothing subscribed to the resulting event, so the documented "nudge the running
@@ -975,7 +978,9 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             // Wheel-down advances a page.
             var deltaDip = -(wheel.Delta / 120.0) * FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch;
             var shift = (wheel.Pointer.Modifiers & LayeredKeyModifiers.Shift) != 0;
+            _controller.HandlePointerMoved(wheel.Pointer.ClientXDip, wheel.Pointer.ClientYDip);
             _controller.HandleWheel(deltaDip, wheel.IsHorizontal, shift);
+            EnsureDeadlineTicker();
             EnsureFrameLoop();
         };
         host.Dragged += drag =>
@@ -1043,7 +1048,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
                             }
                             else
                             {
-                                _controller.HandleNotificationDragEnded(y, timestamp);
+                                _controller.HandleNotificationDragEnded(y, timestamp,
+                                    drag.Pointer.ScreenY <= entry.Monitor.Bounds.Y + 2);
                             }
                         }
                         else
@@ -1867,83 +1873,6 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
     }
 
-    private void OnHookPointerPressed(float screenX, float screenY)
-        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerPressed(x, y));
-
-    private void OnHookPointerReleased(float screenX, float screenY)
-    {
-        if (!_hookDragActive)
-        {
-            PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerReleased(x, y));
-            return;
-        }
-
-        _dispatcher.Post(() =>
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _hookDragActive = false;
-            _hookDragWindow = null;
-            _controller.HandleDragEnded(_hookDragX, _hookDragY, NowMs());
-            EnsureFrameLoop();
-        });
-    }
-
-    private void OnHookPointerMoved(float screenX, float screenY)
-        => PostHookPointer(screenX, screenY, static (controller, x, y) => controller.HandlePointerMoved(x, y));
-
-    /// <summary>
-    /// Rebuilds the expanded panel's pager drag from hook moves (the hook consumes the press, so the
-    /// layered window never gets the capture it would need to report <c>Dragged</c> itself).
-    /// </summary>
-    private void OnHookPointerDragged(float screenX, float screenY)
-    {
-        _dispatcher.Post(() =>
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            // A pager drag keeps its originating window: once the pointer leaves the shell (labels,
-            // panel edges, even the transparent host bleed) the gesture must continue in screen space
-            // instead of ending at the shell boundary. That was why a full-page drag from the middle
-            // of the panel could never reach the page threshold.
-            WindowEntry? entry;
-            if (_hookDragActive && _hookDragWindow is not null)
-            {
-                entry = _hookDragWindow;
-            }
-            else
-            {
-                entry = FindHookWindow(screenX, screenY);
-                if (entry is null)
-                {
-                    return;
-                }
-            }
-
-            MapHookPoint(entry, screenX, screenY, out var x, out var y);
-
-            _hookDragX = x;
-            _hookDragY = y;
-            if (!_hookDragActive)
-            {
-                _hookDragActive = _controller.HandleDragStarted(x, y, NowMs()) == SkiaDragKind.Pager;
-                _hookDragWindow = _hookDragActive ? entry : null;
-            }
-
-            if (_hookDragActive)
-            {
-                _controller.HandleDragMoved(x, y, NowMs());
-                EnsureFrameLoop();
-            }
-        });
-    }
-
     private WindowEntry? FindHookWindow(float screenX, float screenY)
     {
         foreach (var entry in _windows)
@@ -1983,7 +1912,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         });
     }
 
-    private void OnHookWheel(double notches)
+    private void OnHookWheel(double notches, bool shift)
     {
         if (Math.Abs(notches) < 0.0001)
         {
@@ -2002,7 +1931,8 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
             _controller.HandleWheel(
                 -notches * FluidBar.Core.Interaction.PagerConstants.WheelDipPerNotch,
                 horizontal: false,
-                shift: false);
+                shift: shift);
+            EnsureDeadlineTicker();
             EnsureFrameLoop();
         });
     }
@@ -2047,6 +1977,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             // Leaving the shell ends any pager drag inside the controller; clear the host-side flag
             // too so a later release cannot be misread as the end of a still-active drag.
+            if (_hookPressed) return; // Captured gesture owns leave until release.
             _hookDragActive = false;
             _hookDragWindow = null;
             _controller.HandlePointerLeft();
@@ -2805,7 +2736,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         if (state.IsVisible)
         {
             const double slackDip = 2;
-            var shell = IslandMetrics.ShellRect(state);
+            var shell = _controller.NotificationInputEnvelope;
             var stripVisible = state.Archipelago.Visible && state.Archipelago.Opacity > 0.01;
             var strip = stripVisible ? SkiaIslandHitTest.MeasureStrip(state) : default;
             var hoverBand = ArchipelagoHoverBand.For(state);
@@ -2911,7 +2842,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHook?.SetWatchRegions(_watchRects);
     }
 
-    private static void ApplyHitRegion(LayeredWindowHost host, in IslandRenderState state)
+    private void ApplyHitRegion(LayeredWindowHost host, in IslandRenderState state)
     {
         var region = host.HitRegion;
         if (!state.IsVisible)
@@ -2922,7 +2853,7 @@ public sealed class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         region.HasInteractiveContent = true;
-        var shell = IslandMetrics.ShellRect(state);
+        var shell = _controller.NotificationInputEnvelope;
         region.SetShell(new VisualRect(shell.Left, shell.Top, shell.Width, shell.Height), state.ShellRadii);
 
         Span<VisualRect> rects = stackalloc VisualRect[LayeredHitRegion.MaxInteractiveRects];

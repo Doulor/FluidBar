@@ -15,7 +15,7 @@ return FluidBarCli.Run(args);
 
 internal static class FluidBarCli
 {
-    private const string Version = "2.0.0";
+    private const string Version = "4.0.0";
 
     public static int Run(string[] args)
     {
@@ -49,7 +49,7 @@ internal static class FluidBarCli
             Console.Error.WriteLine($"error: {exception.Message}");
             return 2;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or CryptographicException or FormatException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or CryptographicException or FormatException or MarketplaceIndexException or IndexSignatureException)
         {
             Console.Error.WriteLine($"error: {exception.Message}");
             return 1;
@@ -203,34 +203,43 @@ internal static class FluidBarCli
             ? (DateTimeOffset?)null
             : DateTimeOffset.Parse(generatedAtText, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
         var assetBaseUrl = Option(options, "asset-base-url");
+        var releasedDirectory = Option(options, "released-artifacts");
 
         using var signingKey = LoadKeyFromOptions(options);
         Directory.CreateDirectory(artifactsDirectory);
         var artifactList = new List<MarketplacePluginArtifact>();
-        var pluginDirectories = Directory.EnumerateDirectories(Path.GetFullPath(pluginsRoot))
-            .Where(static directory =>
-            {
-                var name = Path.GetFileName(directory);
-                return !name.StartsWith('.') &&
-                       !name.StartsWith('_') &&
-                       File.Exists(Path.Combine(directory, "manifest.json"));
-            })
-            .OrderBy(static directory => directory, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (pluginDirectories.Length == 0)
+        var pluginDirectories = MarketplacePluginDiscovery.Discover(pluginsRoot);
+        if (pluginDirectories.Count == 0)
         {
             Console.Error.WriteLine($"error: no plugin directories found under '{pluginsRoot}'.");
             return 2;
         }
 
+        var catalogPath = Option(options, "catalog");
+        var requiredPlugins = catalogPath is null ? [] : JsonSerializer.Deserialize<string[]>(File.ReadAllText(catalogPath))
+            ?? throw new FormatException("The publish catalog must be a JSON array of plugin ids.");
+        MarketplacePluginDiscovery.RequirePlugins(pluginDirectories.Select(directory => ReadManifest(directory).Id), requiredPlugins);
+
         foreach (var pluginDirectory in pluginDirectories)
         {
+            var sourceManifest = ReadManifest(pluginDirectory);
+            var baseName = $"{sourceManifest.Id}-{sourceManifest.Version}";
+            var packagePath = Path.Combine(Path.GetFullPath(artifactsDirectory), baseName + ".fbp");
+            var releasedPath = releasedDirectory is null ? null : Path.Combine(releasedDirectory, baseName + ".fbp");
+            if (releasedPath is not null && File.Exists(releasedPath))
+            {
+                var released = MarketplaceReleasedArtifact.Load(releasedPath, sourceManifest.Id, sourceManifest.Version,
+                    MarketplaceTrustOptions.ForMarketplaceKeys(TrustedKey.FromPublicKey(signingKey, keyId, SignatureRole.Marketplace)));
+                File.Copy(released.PackagePath, packagePath, overwrite: true);
+                File.Copy(released.SignaturePath, packagePath + ".sig.json", overwrite: true);
+                artifactList.Add(released with { PackagePath = packagePath, SignaturePath = packagePath + ".sig.json" });
+                Console.WriteLine($"reused {sourceManifest.Id} v{sourceManifest.Version}: original published bytes; bump version to release changes.");
+                continue;
+            }
             _ = ResolvePackageLayout(pluginDirectory, configuration, out var staging, out var resolvedDirectory);
             using (staging)
             {
                 var manifest = ReadManifest(resolvedDirectory);
-                var baseName = $"{manifest.Id}-{manifest.Version}";
-                var packagePath = Path.Combine(Path.GetFullPath(artifactsDirectory), baseName + ".fbp");
                 var build = FbpPackager.PackDirectory(
                     resolvedDirectory,
                     packagePath,

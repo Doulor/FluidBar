@@ -15,6 +15,14 @@ the default path; the Avalonia `IslandHost` stays compiled and selectable as the
 
 ## 1. Feature flag and startup
 
+### 2026-10-31 — 卡片交互补充
+
+- 任务页提供 `TaskManage`，UIA ID `island.page.5.taskmanage`，打开单实例轻量任务管理窗口；增删改与勾选共用平台服务。
+- `ClipboardPreview` 与行点击复制保持独立，单实例 Avalonia 窗口展示可选取全文或等比图片。隐私遮罩仅作用于列表展示，搜索/复制仍使用原始捕获；全文缺失时显示警告并禁用复制。
+- `IIslandActionFeedbackSource` 发布带请求 ID 的处理中/成功/失败/不可用状态；`IIslandAsyncPlatformActions.InvokeAndWaitAsync` 等待真实完成结果。过期请求不能覆盖新请求；后台刷新不冒充用户操作。展开卡片内短暂显示提示，使用已有截止计时器；滑块抑制逐次成功提示。
+- 通用设置中保存 `Cards` 的隐私开关与快捷动作；支持内置动作、绝对路径和已安装插件命令。插件不存在时返回不可用，不代为安装。
+- 可选文件暂存通过宿主 `IPluginFileShelf` 显示窗口并接收岛内文件拖入；未注册时不接收文件，插件停止会撤销注册并关闭其窗口。参见 [可选卡片插件](../../plugin/optional-cards.md)。
+
 | `FLUIDBAR_HOST` | Behaviour |
 |---|---|
 | unset / anything else | Try the Skia layered host first; on any failure log `app.skia-host-failed` and fall back to the Avalonia `IslandHost`. |
@@ -265,7 +273,14 @@ public readonly record struct IslandActionResult(IslandActionOutcome Outcome, st
 |---|---|---|---|
 | Home (0) | volume track | `VolumeSet` (0..1) | `VolumeMonitor.SetVolumeAsync(percent)` |
 | Home (0) | brightness track | `BrightnessSet` (0..1) | `BrightnessMonitor.SetPercentAsync(percent)` |
-| Home (0) | quick toggle 0..3 | `QuickToggle` (`Wifi`/`Bluetooth`/`Focus`/`Theme`) | Wi-Fi/Bluetooth → `RadioToggleService.SetEnabledAsync(!IsEnabled)`; Focus → `FocusAssistService.SetActiveAsync(!IsActive)`; theme → `SettingsController.Theme` toggle |
+| Home (0) | quick toggle 0..2 | `QuickToggle` (`Wifi`/`Bluetooth`/`Theme`) | Wi-Fi/Bluetooth → `RadioToggleService.SetEnabledAsync(!IsEnabled)`; theme → `ISystemThemeSwitcher.ToggleAsync()` (Windows app + system colour modes) |
+
+**2026-10-30 theme correction:** The home theme tile reflects the observed Windows app mode,
+independently of `AppSettings.Theme`. `WindowsThemeSwitcher` serializes background writes to both
+`AppsUseLightTheme` and `SystemUsesLightTheme`, refreshes `SystemAppearanceProbe`, then broadcasts
+`WM_SETTINGCHANGE("ImmersiveColorSet")`. It never persists an App theme override. The controller's
+structural signature includes the system mode; external system changes rebuild page models through
+`RefreshSystemAppearance()` so the tile icon, localized label and highlight stay current.
 | Home (0) | now-playing card | navigation only | opens the media page (no platform action) |
 | Home (0) | now-playing play | `MediaTogglePlay` | `GsmtcMediaSessionService.TogglePlayPauseAsync` |
 | Media (1) | previous / play / next | `MediaPrevious` / `MediaTogglePlay` / `MediaNext` | `PreviousAsync` / `TogglePlayPauseAsync` / `NextAsync` |

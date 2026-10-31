@@ -397,7 +397,7 @@ public static class IslandMetrics
     /// <summary>Page rectangle (host-local DIP) at the continuous pager offset.</summary>
     public static SKRect PageRect(in IslandRenderState state, int page)
     {
-        var content = ContentRect(ShellRect(state), state.RailSide);
+        var content = ContentRect(ShellRect(state), state.RailSide, state.TabBarStyle);
         var offset = (float)(state.Pager.PagePosition * PagerConstants.PagePitchDip);
         var left = content.Left + (page * (float)PagerConstants.PagePitchDip) - offset;
         return new SKRect(left, content.Top, left + (float)PagerConstants.PagePitchDip, content.Bottom);
@@ -780,6 +780,13 @@ public static class PageLayout
         return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight);
     }
 
+    /// <summary>Explicit clipboard preview button rectangle.</summary>
+    public static SKRect ClipboardPreview(SKRect page, int index, float scrollOffset = 0)
+    {
+        var row = ClipboardRow(page, index, scrollOffset);
+        return new SKRect(row.Right - 126, row.Top + 13, row.Right - 86, row.Top + 35);
+    }
+
     /// <summary>Clipboard delete button rectangle.</summary>
     public static SKRect ClipboardDelete(SKRect page, int index, float scrollOffset = 0)
     {
@@ -848,6 +855,13 @@ public static class PageLayout
 
     /// <summary>Task card rectangle (76 DIP high).</summary>
     public static SKRect WidgetsNotes(SKRect page) => new(page.Left + 224, page.Top + 168, page.Right - 16, page.Top + 260);
+
+    /// <summary>Task card title and add affordance open task management.</summary>
+    public static SKRect WidgetsTaskManage(SKRect page)
+    {
+        var card = WidgetsNotes(page);
+        return new SKRect(card.Left, card.Top, card.Right, card.Top + 24);
+    }
 
     /// <summary>Calendar month navigation button rectangle (18 DIP square).</summary>
     public static SKRect WidgetsCalendarNav(SKRect page, bool previous)
@@ -964,6 +978,18 @@ public static class PageLayout
                     var scroll = ClampScroll(scrollOffset, count, ClipboardRowHeight, ClipboardRowGap);
                     for (var i = 0; i < count; i++)
                     {
+                        if (ClipboardPreview(pageRect, i, scroll).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.ClipboardPreview;
+                        }
+
+                        if (ClipboardDelete(pageRect, i, scroll).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.ClipboardDelete;
+                        }
+
                         if (ClipboardPin(pageRect, i, scroll).Contains(x, y))
                         {
                             index = i;
@@ -1012,6 +1038,10 @@ public static class PageLayout
                 }
 
             case PageSlotKind.Widgets:
+                if (WidgetsTaskManage(pageRect).Contains(x, y))
+                {
+                    return IslandPageControl.TaskManage;
+                }
                 if (WidgetsCalendarNav(pageRect, previous: true).Contains(x, y))
                 {
                     return IslandPageControl.CalendarPrevious;

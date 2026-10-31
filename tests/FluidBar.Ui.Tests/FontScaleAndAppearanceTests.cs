@@ -124,6 +124,7 @@ public sealed class FontScaleAndAppearanceTests
         fixture.Settle();
 
         Assert.Equal(IslandThemeMode.Dark, fixture.Controller.RenderState.Theme.Mode);
+        Assert.Equal(FluidBar.Island.IconKind.Moon, fixture.Controller.RenderState.Pages.Home.Toggles[2].Icon);
         Assert.False(fixture.Controller.Motion.ReducedMotion);
         AssertAccent(0x4C, 0xC9, 0xF0, fixture.Controller.RenderState.Theme.Accent, fixture);
 
@@ -134,6 +135,7 @@ public sealed class FontScaleAndAppearanceTests
 
         // "System" follows Windows: a light Windows theme now flips the island to porcelain as well.
         Assert.Equal(IslandThemeMode.Light, fixture.Controller.RenderState.Theme.Mode);
+        Assert.Equal(FluidBar.Island.IconKind.Sun, fixture.Controller.RenderState.Pages.Home.Toggles[2].Icon);
         Assert.True(fixture.Controller.Motion.ReducedMotion);
         AssertAccent(0xFF, 0x5A, 0x00, fixture.Controller.RenderState.Theme.Accent, fixture);
     }
@@ -159,6 +161,7 @@ public sealed class FontScaleAndAppearanceTests
 
         Assert.Equal(IslandThemeMode.Dark, fixture.Controller.RenderState.Theme.Mode);
         Assert.False(fixture.Controller.Motion.ReducedMotion);
+        Assert.Equal(FluidBar.Island.IconKind.Sun, fixture.Controller.RenderState.Pages.Home.Toggles[2].Icon);
         AssertAccent(0x22, 0xCC, 0x88, fixture.Controller.RenderState.Theme.Accent, fixture);
     }
 

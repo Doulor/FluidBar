@@ -127,6 +127,9 @@ public enum IslandPageControl
     /// <summary>Toggle a widget task; <see cref="IslandHitTarget.Index"/> is the task index.</summary>
     TaskToggle,
 
+    /// <summary>Open the task manager from the task card header.</summary>
+    TaskManage,
+
     /// <summary>Calendar previous-month button.</summary>
     CalendarPrevious,
 
@@ -141,6 +144,9 @@ public enum IslandPageControl
 
     /// <summary>Plugin list row's trailing button; <see cref="IslandHitTarget.Index"/> is the row.</summary>
     PluginRowButton,
+
+    /// <summary>Open the clipboard row's selectable preview.</summary>
+    ClipboardPreview,
 }
 
 /// <summary>One hit-test result: region kind, page, control and row/toggle index.</summary>

@@ -2,7 +2,7 @@
 
 - 单文件可执行：`FluidBar.exe`（58.7 MB，win-x64，SelfContained=false，需 .NET 10 桌面运行时）
 - SHA-256：`b0a7f375028367ec50270db4b944c2d72aa57b86c0e17a0025910fbca9af5a63`
-- 构建：430a29c docs(readme): 首页补充官方网站入口
+- 构建：430a29c
 - 测试：2679 全绿（Core / Island / Platform / Ui / Integration / Soak）
 
 ## 本版新增

@@ -98,12 +98,10 @@ public static class WidgetContentMapper
     {
         if (snapshot is null || snapshot.Count == 0)
         {
-            var path = string.IsNullOrEmpty(snapshot?.FilePath) ? filePath : snapshot!.FilePath;
-            var name = string.IsNullOrEmpty(path) ? "tasks.json" : Path.GetFileName(path);
             var invalid = snapshot?.Status == TaskListStatus.Invalid;
-            var key = invalid ? LocKeys.Page.Widgets.TasksInvalid : LocKeys.Page.Widgets.TasksEmpty;
-            var hint = localizer?.Format(key, ("file", name))
-                ?? (invalid ? $"{name} needs a fix" : $"No tasks · edit {name}");
+            var key = invalid ? "Tasks.Manage.CardInvalid" : "Tasks.Manage.CardEmpty";
+            var hint = localizer?.Get(key)
+                ?? (invalid ? "Tasks unavailable. Open task management." : "Add your first task");
             return new WidgetTaskView([], hint, 0);
         }
 

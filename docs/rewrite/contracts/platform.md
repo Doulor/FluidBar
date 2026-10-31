@@ -9,6 +9,15 @@ App owns the island HWND and the composition surface, and calls the interop help
 
 ---
 
+## 2026-10-31 — 卡片服务补充契约
+
+- `TaskListService.AddAsync/RenameAsync/RemoveAsync/ToggleAsync` 在线程池通过同一个写入门串行修改 JSON，原子替换并保留未知字段和未展示行；索引操作可携带预期快照，外部编辑造成冲突时返回失败与最新快照。无效文件拒绝覆盖；首次添加可以创建文件。
+- `ClipboardCaptureGate` 使暂停立即覆盖原生读取；恢复以当前序列号作为基线，不补录暂停期间的内容。历史按完整内容去重、移到顶部，忽略空白文本。
+- `ClipboardEntry.Text` 是最多 16,384 字符的预览；`CompleteText` 仅在捕获完整时可用。最多保留 1,048,576 字符全文，总文本预算 4,194,304 字符，超限淘汰最旧项。超大文本保留内容摘要区分相同前缀，缺失全文时不得把预览作为全文复制。
+- `LayeredWindowHost.SetFileDropEnabled` 默认关闭；只在可选文件暂存插件注册期间启用 `WM_DROPFILES`，每次最多 32 条、每路径最多 2,048 字符，始终释放 HDROP。只传递引用，不修改原文件。
+
+---
+
 ## 1. Dependency position and threading model
 
 ```
@@ -165,6 +174,16 @@ All are `PlatformMonitor<TSnapshot>`, i.e. `await using` + `StartAsync`/`StopAsy
 | `LockKeyMonitor` | `LockKeysSnapshot(CapsLockOn, NumLockOn, ScrollLockOn)` | `WH_KEYBOARD_LL` state tracking (installed while running); 1 s change-only polling fallback if the hook fails (`IsUsingPollingFallback`). Pure: `LockKeyTracker`. |
 | `NetworkMonitor` | `NetworkSnapshot(IsConnected, AdapterName, Kind, Ssid, SignalQuality)` | `NetworkChange.NetworkAvailabilityChanged/NetworkAddressChanged` → debounced off-thread refresh; real SSID via native WLAN API. Pure: `NetworkAdapterSelector`, `WlanSsidParser`. |
 | `SystemThemeMonitor` | `SystemThemeSnapshot(AppTheme, SystemTheme, IsHighContrast, AccentColorArgb)` | `RegNotifyChangeKeyValue` watchers on Personalize/DWM keys + `WM_SETTINGCHANGE`. Pure: `ThemeValueMapper`. |
+
+**2026-10-30 — Windows theme control:** `Shell.ISystemThemeSwitcher.ToggleAsync()` is implemented by
+`WindowsThemeSwitcher`. It reads the current user's `AppsUseLightTheme` (falling back to
+`SystemUsesLightTheme`, then Windows' default light mode), inverts it and writes both values as DWORDs
+under `ThemeValueMapper.PersonalizeKey`. Calls serialize on a background thread, refresh the cached
+appearance probe and broadcast `WM_SETTINGCHANGE("ImmersiveColorSet")` with `SendMessageTimeoutW`.
+Registry failures propagate to the App's action logger; unresponsive desktop windows produce a warning
+after preferences have been saved. No App settings are written. `WindowsThemeSwitcherTests` exercises
+the production writer with isolated HKCU test keys and intercepted broadcasts, covering mixed/missing
+values, repeated clicks, cancellation and write denial without changing personal theme preferences.
 
 ### 3.5 Media (`FluidBar.Platform.Windows.Media`)
 

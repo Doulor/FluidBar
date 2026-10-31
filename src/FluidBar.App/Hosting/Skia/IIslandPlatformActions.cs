@@ -76,8 +76,17 @@ public enum IslandPlatformActionKind
     /// <summary>Toggle a widget task; <see cref="IslandPlatformAction.Index"/> is the task row.</summary>
     TaskToggle,
 
+    /// <summary>Open the keyboard-capable task manager.</summary>
+    TaskManage,
+
     /// <summary>Navigate the widgets calendar; <see cref="IslandPlatformAction.Value"/> is -1 or +1.</summary>
     CalendarNavigate,
+
+    /// <summary>Open a selectable text/image preview for a clipboard row.</summary>
+    ClipboardPreview,
+
+    /// <summary>Explicitly clear clipboard history including pinned entries.</summary>
+    ClipboardClearIncludingPinned,
 }
 
 /// <summary>Home quick-toggle identity (order matches the renderer's four toggle slots).</summary>
@@ -89,7 +98,7 @@ public enum IslandQuickToggle
     /// <summary>Bluetooth toggle (slot 1).</summary>
     Bluetooth = 1,
 
-    /// <summary>App/island theme toggle (slot 2, sun/moon).</summary>
+    /// <summary>Windows app and system theme toggle (slot 2, sun/moon).</summary>
     Theme = 2,
 }
 

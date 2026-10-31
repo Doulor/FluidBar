@@ -112,12 +112,14 @@ public static class SkiaIslandStateBuilder
     /// <param name="content">Non-activity content snapshot.</param>
     /// <param name="island">Activity view model from the Core presenter.</param>
     /// <param name="localizer">Localizer for page titles and labels.</param>
-    /// <param name="settings">Live settings (drives the theme quick toggle state); optional for callers without settings.</param>
+    /// <param name="settings">Optional live App settings.</param>
+    /// <param name="systemIsLight">Observed Windows app colour mode, independent of the App theme setting.</param>
     public static ExpandedPageContent BuildPages(
         IslandContent content,
         IslandViewModel island,
         ILocalizer localizer,
-        AppSettings? settings = null)
+        AppSettings? settings = null,
+        bool systemIsLight = false)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(island);
@@ -147,11 +149,11 @@ public static class SkiaIslandStateBuilder
                     content.IsWifiEnabled ?? content.IsOnline),
                 new HomeToggleModel(IslandIcon.Bluetooth, localizer.Get(LocKeys.Activity.Bluetooth),
                     content.IsBluetoothEnabled ?? false),
-                // Theme (user request 2026-10-24): one tap flips dark/light and persists it.
+                // This controls Windows colour modes, independently of the App's theme override.
                 new HomeToggleModel(
-                    settings?.Theme == AppTheme.Light ? IslandIcon.Sun : IslandIcon.Moon,
-                    settings?.Theme == AppTheme.Light ? "浅色" : "深色",
-                    settings?.Theme == AppTheme.Light),
+                    systemIsLight ? IslandIcon.Sun : IslandIcon.Moon,
+                    localizer.Get(systemIsLight ? LocKeys.Settings.Appearance.Theme.Light : LocKeys.Settings.Appearance.Theme.Dark),
+                    systemIsLight),
             ],
             NowPlaying = new MediaSummaryModel
             {
@@ -232,6 +234,7 @@ public static class SkiaIslandStateBuilder
         {
             Items = BuildClipboard(content.Clipboard, localizer),
             PinnedLabel = localizer.Get(LocKeys.Clipboard.Pinned),
+            PreviewLabel = localizer.Get("Clipboard.Preview.Open"),
             FilterLabel = content.ClipboardFilterLabel,
             SearchLabel = content.ClipboardFilterLabel is null
                 ? null
@@ -439,11 +442,13 @@ public static class SkiaIslandStateBuilder
     /// <param name="island">Activity view model.</param>
     /// <param name="localizer">Localizer (culture identity).</param>
     /// <param name="settings">Live settings (mode/anchor/palette signature).</param>
+    /// <param name="systemIsLight">Observed Windows app colour mode (rebuilds the home theme tile on change).</param>
     public static string StructuralSignature(
         IslandContent content,
         IslandViewModel island,
         ILocalizer localizer,
-        AppSettings settings)
+        AppSettings settings,
+        bool systemIsLight = false)
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(island);
@@ -481,6 +486,7 @@ public static class SkiaIslandStateBuilder
             .Append(content.NetworkName).Append('|').Append(content.IsOnline).Append('|').Append(content.FocusOn).Append('|')
             .Append(content.FocusAvailable).Append('|')
             .Append(settings?.Theme).Append('|')
+            .Append(systemIsLight).Append('|')
             .Append(content.UnreadCount).Append('|')
             .Append(content.CalendarMonthTitle).Append('|').Append(content.CalendarDays.Length).Append('|')
             // Widgets weather/task text: a new temperature or a task hint must repaint the page.

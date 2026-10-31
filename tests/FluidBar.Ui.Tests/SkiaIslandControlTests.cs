@@ -266,7 +266,8 @@ public sealed class SkiaIslandControlTests
     [Fact]
     public void Home_shows_the_three_requested_live_quick_toggles()
     {
-        using var fixture = ControllerFixture.Create(AppSettings.Default with { Theme = AppTheme.Light });
+        using var fixture = ControllerFixture.Create(AppSettings.Default with { Theme = AppTheme.Dark },
+            appearance: () => new SystemAppearanceSnapshot(true, false, null));
         fixture.ExpandAndSettle();
 
         var toggles = fixture.Controller.RenderState.Pages.Home.Toggles;

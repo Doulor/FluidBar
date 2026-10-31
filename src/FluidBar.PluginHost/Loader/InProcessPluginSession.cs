@@ -376,7 +376,7 @@ public sealed class InProcessPluginSession : IAsyncDisposable
             new PluginNotificationSink(manifest.Id, notifications, _logger),
             PluginCapabilityGrants.Resolve(manifest, _options.GrantedCapabilities),
             _options.TimeProvider,
-            _logger);
+            _logger, _options.FileShelfFactory?.Invoke(manifest));
 
         return new PluginRuntimeRoot(context, settings, leases, commands, manifest.Id, _logger);
     }

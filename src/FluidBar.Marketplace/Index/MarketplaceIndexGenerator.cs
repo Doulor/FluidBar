@@ -67,7 +67,7 @@ public sealed record MarketplaceIndexGeneratorOptions
     public SemanticVersion MinimumAppVersion { get; init; } = new(2, 0, 0);
 
     /// <summary>Supported SDK ABI minor versions advertised by the index.</summary>
-    public IReadOnlyList<string> SupportedApiVersions { get; init; } = ["2.0"];
+    public IReadOnlyList<string> SupportedApiVersions { get; init; } = ["2.0", "2.1"];
 
     public string DefaultLocale { get; init; } = "en-US";
 }

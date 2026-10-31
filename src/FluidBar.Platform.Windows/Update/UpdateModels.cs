@@ -43,7 +43,7 @@ public enum UpdateVerificationStatus
 
     /// <summary>
     /// The SHA-256 matches the feed but the binary carries no Authenticode signature. Allowed while the
-    /// product ships unsigned previews (see <see cref="UpdateServiceOptions.RequireSignature"/>); the UI
+    /// product ships unsigned releases (see <see cref="UpdateServiceOptions.RequireSignature"/>); the UI
     /// must say so instead of claiming a verified signature.
     /// </summary>
     VerifiedByHashOnly,

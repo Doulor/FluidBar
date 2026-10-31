@@ -1504,6 +1504,26 @@ public sealed class IslandRenderer : IDisposable
 
         canvas.Restore();
         _pages.DrawChrome(canvas, state, content, chromeOpacity);
+        DrawActionFeedback(canvas, state, content, layerOpacity);
+    }
+
+    private void DrawActionFeedback(SKCanvas canvas, in IslandRenderState state, SKRect content, float opacity)
+    {
+        if (string.IsNullOrWhiteSpace(state.ActionFeedbackText))
+        {
+            return;
+        }
+
+        var metrics = FontScaleMetrics.From(state.FontScale);
+        var height = Math.Max(26f, 26f * (float)metrics.Scale);
+        var rect = new SKRect(content.Left + 4, content.Bottom - height - 4, content.Right - 4, content.Bottom - 4);
+        _fill.Style = SKPaintStyle.Fill;
+        _fill.Shader = null;
+        _fill.Color = Alpha(_theme.BackgroundRaised, Math.Clamp(opacity, 0, 1));
+        canvas.DrawRoundRect(rect, 8, 8, _fill);
+        rect.Inflate(-10, 0);
+        _text.Draw(canvas, state.ActionFeedbackText, metrics.Style(IslandType.CompactCaption), rect,
+            state.ActionFeedbackIsError ? _theme.Danger : _theme.Foreground, TextAlign.Center, opacity);
     }
 
     // ------------------------------------------------------------------ hit-test helpers

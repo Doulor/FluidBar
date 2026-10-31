@@ -210,20 +210,20 @@ internal sealed class PluginLease : IPluginLease
     private IDisposable AddSchedule(Func<CancellationToken, ValueTask> body)
     {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
-        var scheduleCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        var task = RunAsync(body, scheduleCancellation);
         lock (_gate)
         {
+            ObjectDisposedException.ThrowIf(IsDisposed, this);
+            _tasks.RemoveAll(static task => task.IsCompleted);
             if (_tasks.Count >= MaxSchedules)
             {
-                scheduleCancellation.Dispose();
                 throw new InvalidOperationException($"Plugin '{_pluginId}' exceeded the {MaxSchedules}-schedule lease limit.");
             }
 
+            var scheduleCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            var task = RunAsync(body, scheduleCancellation);
             _tasks.Add(task);
+            return new ScheduleHandle(scheduleCancellation);
         }
-
-        return new ScheduleHandle(scheduleCancellation);
     }
 
     private async Task RunAsync(Func<CancellationToken, ValueTask> body, CancellationTokenSource scheduleCancellation)

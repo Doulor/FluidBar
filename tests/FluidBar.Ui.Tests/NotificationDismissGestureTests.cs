@@ -79,14 +79,14 @@ public sealed class NotificationDismissGestureTests
         fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
         Assert.True(fixture.Controller.RenderState.NotificationDragOffsetY < 0);
 
-        for (var i = 0; i < 160 && actions.Calls.All(call => call.Kind != IslandPlatformActionKind.NotificationDismiss); i++)
+        for (var i = 0; i < 160 && fixture.Controller.RenderState.Compact?.Kind == ActivityKind.Notification; i++)
         {
             fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
         }
 
-        var dismiss = Assert.Single(actions.Calls.Where(call => call.Kind == IslandPlatformActionKind.NotificationDismiss));
-        Assert.Equal(0, dismiss.Index);
-        Assert.True(fixture.Controller.RenderState.NotificationDragOffsetY <= NotificationDismissGesture.DismissAtDip);
+        Assert.Empty(actions.Calls); // Banner dismissal must not delete notification history.
+        Assert.NotEqual(ActivityKind.Notification, fixture.Controller.RenderState.Compact?.Kind);
+        Assert.Equal(0, fixture.Controller.RenderState.NotificationDragOffsetY, 3);
     }
 
     [Fact]

@@ -355,7 +355,7 @@ public sealed class SkiaIslandUiaTests
     [Fact]
     public void FocusRing_IsPublishedOnlyWhileTheWindowHasFocus()
     {
-        var (fixture, source, _) = Create();
+        var (fixture, source, _) = Create(bottomPreview: true);
         using var _fixture = fixture;
         using var _source = source;
         fixture.ExpandAndSettle();

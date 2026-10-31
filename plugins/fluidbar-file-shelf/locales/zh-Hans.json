@@ -1,0 +1,10 @@
+{
+  "locale": "zh-Hans",
+  "version": 1,
+  "messages": {
+    "title": "文件暂存",
+    "open": "打开文件暂存",
+    "hint": "添加或拖入文件，仅保存引用。",
+    "empty": "还没有暂存文件。"
+  }
+}

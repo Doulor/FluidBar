@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Collections.Immutable;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
@@ -88,6 +89,9 @@ public sealed class TaskListOptions
     /// <summary>Safety cap on parsed tasks (the card paints three).</summary>
     public int MaxTasks { get; init; } = 100;
 
+    /// <summary>Maximum title length accepted for a new title; existing titles remain untouched.</summary>
+    public int MaxTitleLength { get; init; } = 500;
+
     /// <summary>Reads the <c>FLUIDBAR_TASKS_PATH</c> diagnostics override (used by the evidence run).</summary>
     public static TaskListOptions FromEnvironment() => new()
     {
@@ -134,7 +138,12 @@ public sealed class TaskListService : PlatformMonitor<TaskListSnapshot>
         return ValueTask.CompletedTask;
     }
 
-    private void PollTick() => PublishIfChanged(Load());
+    private void PollTick()
+    {
+        if (!_writeGate.Wait(0)) return;
+        try { PublishIfChanged(Load()); }
+        finally { _writeGate.Release(); }
+    }
 
     /// <summary>Reads the file right now (no publishing).</summary>
     public TaskListSnapshot Load()
@@ -177,33 +186,87 @@ public sealed class TaskListService : PlatformMonitor<TaskListSnapshot>
     /// </summary>
     /// <param name="index">Zero-based task index (file order).</param>
     /// <param name="cancellationToken">Cancellation.</param>
-    public async Task<ToggleTaskResult> ToggleAsync(int index, CancellationToken cancellationToken = default)
+    public Task<ToggleTaskResult> ToggleAsync(int index, CancellationToken cancellationToken = default)
+        => MutateAsync("toggle", index, null, null, cancellationToken);
+
+    /// <summary>Toggles a row only while its displayed snapshot is current.</summary>
+    public Task<ToggleTaskResult> ToggleAsync(int index, TaskListSnapshot expectedSnapshot, CancellationToken cancellationToken = default)
+        => MutateAsync("toggle", index, null, expectedSnapshot, cancellationToken);
+
+    /// <summary>Adds a task, creating a missing file. Existing invalid files are never overwritten.</summary>
+    public Task<ToggleTaskResult> AddAsync(string title, CancellationToken cancellationToken = default)
+        => MutateAsync("add", -1, title, null, cancellationToken);
+
+    /// <summary>Changes one title without modifying the remaining task data.</summary>
+    public Task<ToggleTaskResult> RenameAsync(int index, string title, CancellationToken cancellationToken = default,
+        TaskListSnapshot? expectedSnapshot = null)
+        => MutateAsync("rename", index, title, expectedSnapshot, cancellationToken);
+
+    /// <summary>Removes one task, rejecting stale displayed indices when a snapshot is supplied.</summary>
+    public Task<ToggleTaskResult> RemoveAsync(int index, CancellationToken cancellationToken = default,
+        TaskListSnapshot? expectedSnapshot = null)
+        => MutateAsync("remove", index, null, expectedSnapshot, cancellationToken);
+
+    private Task<ToggleTaskResult> MutateAsync(string operation, int index, string? title,
+        TaskListSnapshot? expectedSnapshot, CancellationToken cancellationToken)
+        => Task.Run(async () =>
     {
         await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var snapshot = Load();
-            if (!snapshot.IsAvailable)
+            if (!snapshot.IsAvailable && !(operation == "add" && snapshot.Status == TaskListStatus.Missing))
             {
                 return new ToggleTaskResult(false,
                     snapshot.Status == TaskListStatus.Missing ? "tasks.json does not exist" : "tasks.json is not valid",
                     snapshot);
             }
 
-            if (index < 0 || index >= snapshot.Items.Length)
+            if (expectedSnapshot is not null && (expectedSnapshot.Status != snapshot.Status
+                || !SequenceEqual(expectedSnapshot.Items, snapshot.Items)))
+                return new ToggleTaskResult(false, "tasks changed; refresh and retry", snapshot);
+
+            if (operation != "add" && (index < 0 || index >= snapshot.Items.Length))
             {
                 return new ToggleTaskResult(false, "task index out of range", snapshot);
             }
 
-            var items = snapshot.Items.ToBuilder();
-            var current = items[index];
-            items[index] = current with { Done = !current.Done };
+            if (operation is "add" or "rename"
+                && (string.IsNullOrWhiteSpace(title) || title.Length > Math.Max(1, _options.MaxTitleLength)))
+                return new ToggleTaskResult(false, "invalid task title", snapshot);
 
             string json;
             try
             {
-                json = Serialize(items);
+                // Preserve unknown fields and skipped legacy rows. Re-serializing the rendered snapshot
+                // would silently drop content past the display cap and trim unedited titles.
+                var original = snapshot.Status == TaskListStatus.Missing ? null : File.ReadAllText(_options.FilePath, Encoding.UTF8);
+                var document = string.IsNullOrWhiteSpace(original) ? new JsonArray() : JsonNode.Parse(original) as JsonArray;
+                if (document is null) return new ToggleTaskResult(false, "tasks.json is not valid", snapshot);
+                var rows = document.OfType<JsonObject>()
+                    .Where(row => row["title"] is JsonValue value && value.TryGetValue<string>(out var text)
+                        && !string.IsNullOrWhiteSpace(text)).ToArray();
+                // Detect external edits between the initial snapshot read and the mutable document read.
+                var currentDocument = Parse(original, original is not null, _options.FilePath, _options.MaxTasks);
+                if (snapshot.Status != currentDocument.Status || !SequenceEqual(snapshot.Items, currentDocument.Items))
+                    return new ToggleTaskResult(false, "tasks changed; refresh and retry", currentDocument);
+                if (operation == "add")
+                {
+                    if (rows.Length >= Math.Max(1, _options.MaxTasks))
+                        return new ToggleTaskResult(false, "task limit reached", snapshot);
+                    document.Add(new JsonObject { ["title"] = title, ["done"] = false });
+                }
+                else if (operation == "remove") document.Remove(rows[index]);
+                else if (operation == "rename") rows[index]["title"] = title;
+                else rows[index]["done"] = !snapshot.Items[index].Done;
+                json = document.ToJsonString(JsonSerializerOptions) + Environment.NewLine;
+
+                cancellationToken.ThrowIfCancellationRequested();
+                var latest = File.Exists(_options.FilePath) ? File.ReadAllText(_options.FilePath, Encoding.UTF8) : null;
+                if (!string.Equals(original, latest, StringComparison.Ordinal))
+                    return new ToggleTaskResult(false, "tasks changed; refresh and retry", Load());
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Logger.LogWarning(PlatformLogCategory.Platform, "tasks.serialize-failed",
@@ -224,12 +287,11 @@ public sealed class TaskListService : PlatformMonitor<TaskListSnapshot>
 
             var updated = Parse(json, fileExists: true, _options.FilePath, _options.MaxTasks);
             PublishIfChanged(updated);
-            Logger.LogInfo(PlatformLogCategory.Platform, "tasks.toggled",
-                "Task checkbox written back to tasks.json.", new Dictionary<string, object?>
+            Logger.LogInfo(PlatformLogCategory.Platform, "tasks.updated",
+                "Task list written back to tasks.json.", new Dictionary<string, object?>
                 {
                     ["index"] = index,
-                    ["title"] = current.Title,
-                    ["done"] = items[index].Done,
+                    ["operation"] = operation,
                 });
             return new ToggleTaskResult(true, null, updated);
         }
@@ -237,7 +299,7 @@ public sealed class TaskListService : PlatformMonitor<TaskListSnapshot>
         {
             _writeGate.Release();
         }
-    }
+    }, cancellationToken);
 
     /// <summary>Parses the task file content; public so the tolerance rules are testable.</summary>
     /// <param name="json">File content.</param>
@@ -284,7 +346,7 @@ public sealed class TaskListService : PlatformMonitor<TaskListSnapshot>
 
                 var done = element.TryGetProperty("done", out var doneElement)
                            && doneElement.ValueKind == JsonValueKind.True;
-                builder.Add(new TaskItemData(titleElement.GetString()!.Trim(), done));
+                builder.Add(new TaskItemData(titleElement.GetString()!, done));
             }
 
             return new TaskListSnapshot(builder.ToImmutable(), TaskListStatus.Ok, path, null);

@@ -4,8 +4,9 @@ name: release
 # Triggers:
 #   * workflow_dispatch — manual release with an explicit version.
 #   * push tag v*      — publishes that tag as a GitHub Release.
-# Signing status: UNSIGNED for now. The future Authenticode step is documented in
-# docs/rewrite/release.md (§ Signing). Do not publish a public release until that section is implemented.
+# Signing status: the first public 4.0.0 release is intentionally unsigned (no certificate yet).
+# The in-app updater still requires the GitHub asset SHA-256 digest. Authenticode signing is
+# documented in docs/rewrite/release.md (§ Signing) and should be enabled for the next release.
 
 on:
   workflow_dispatch:

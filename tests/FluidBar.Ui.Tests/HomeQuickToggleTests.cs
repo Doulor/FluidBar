@@ -10,13 +10,12 @@ using Xunit;
 namespace FluidBar.Ui.Tests;
 
 /// <summary>
-/// The home page shows four quick tiles: Wi-Fi, Bluetooth, pomodoro (focus timer) and the dark/light
-/// theme switch (user request 2026-10-24). These tests pin the tile order, labels and the pomodoro states.
+/// The home page shows three quick tiles: Wi-Fi, Bluetooth and the Windows dark/light switch.
 /// </summary>
 public class HomeQuickToggleTests
 {
     [Fact]
-    public Task Home_page_has_the_four_requested_tiles_in_order() => AvaloniaTest.Run(() =>
+    public Task Home_page_has_the_three_requested_tiles_in_order() => AvaloniaTest.Run(() =>
     {
         var localizer = TestFixtures.CreateLocalizer("zh-CN");
         var pages = SkiaIslandStateBuilder.BuildPages(
@@ -34,21 +33,23 @@ public class HomeQuickToggleTests
     });
 
     [Fact]
-    public Task Theme_tile_follows_the_live_theme_setting() => AvaloniaTest.Run(() =>
+    public Task Theme_tile_follows_Windows_independently_of_the_app_setting() => AvaloniaTest.Run(() =>
     {
         var localizer = TestFixtures.CreateLocalizer("zh-CN");
         var content = new IslandContent();
         var island = EmptyIsland();
 
         var dark = SkiaIslandStateBuilder.BuildPages(content, island, localizer,
-            new AppSettings { Theme = AppTheme.Dark });
+            new AppSettings { Theme = AppTheme.Light }, systemIsLight: false);
         var light = SkiaIslandStateBuilder.BuildPages(content, island, localizer,
-            new AppSettings { Theme = AppTheme.Light });
+            new AppSettings { Theme = AppTheme.Dark }, systemIsLight: true);
 
         Assert.Equal(IconKind.Moon, dark.Home.Toggles[2].Icon);
         Assert.False(dark.Home.Toggles[2].IsOn);
+        Assert.Equal("深色", dark.Home.Toggles[2].Label);
         Assert.Equal(IconKind.Sun, light.Home.Toggles[2].Icon);
         Assert.True(light.Home.Toggles[2].IsOn);
+        Assert.Equal("浅色", light.Home.Toggles[2].Label);
     });
 
     private static IslandViewModel EmptyIsland() => new()

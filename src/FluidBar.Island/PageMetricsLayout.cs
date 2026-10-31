@@ -358,6 +358,13 @@ public static class PageMetricsLayout
         return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight(metrics));
     }
 
+    /// <summary>Explicit clipboard preview button, before the row's icon actions.</summary>
+    public static SKRect ClipboardPreview(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
+    {
+        var row = ClipboardRow(page, index, scrollOffset, metrics);
+        return new SKRect(row.Right - 126, row.MidY - 11, row.Right - 86, row.MidY + 11);
+    }
+
     /// <summary>Clipboard delete button (left of the pin button).</summary>
     public static SKRect ClipboardDelete(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
@@ -439,6 +446,13 @@ public static class PageMetricsLayout
         var pitch = WidgetsTaskPitch(metrics);
         var top = card.Top + 24 + (index * pitch);
         return new SKRect(card.Left + 10, top, card.Right - 10, top + pitch);
+    }
+
+    /// <summary>Task card title and add button hit area, shared with rendering and accessibility.</summary>
+    public static SKRect WidgetsTaskManage(SKRect page, in FontScaleMetrics metrics)
+    {
+        var card = WidgetsNotes(page, metrics);
+        return new SKRect(card.Left, card.Top, card.Right, card.Top + 24);
     }
 
     /// <summary>Height of the taller widgets column (the calendar stays 232 DIP; the right column grows).</summary>
@@ -637,6 +651,12 @@ public static class PageMetricsLayout
                     var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), 6, scrollOffset);
                     for (var i = 0; i < count; i++)
                     {
+                        if (ClipboardPreview(pageRect, i, scroll, metrics).Contains(x, y))
+                        {
+                            index = i;
+                            return IslandPageControl.ClipboardPreview;
+                        }
+
                         if (ClipboardDelete(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;
@@ -691,6 +711,10 @@ public static class PageMetricsLayout
                 }
 
             case PageSlotKind.Widgets:
+                if (WidgetsTaskManage(scrolled, metrics).Contains(x, y))
+                {
+                    return IslandPageControl.TaskManage;
+                }
                 if (PageLayout.WidgetsCalendarNav(scrolled, previous: true).Contains(x, y))
                 {
                     return IslandPageControl.CalendarPrevious;

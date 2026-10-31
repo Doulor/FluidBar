@@ -113,7 +113,12 @@ public sealed class SkiaApproachRevealTests
     [Fact]
     public void CompactIsland_NeverShowsTheApproachBand()
     {
-        using var fixture = ControllerFixture.Create(AppSettings.Default with { AutoCollapseMs = 0, AutoHideMs = 0 });
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            AutoCollapseMs = 0,
+            AutoHideMs = 0,
+            TabBarStyle = TabBarStyle.BottomPreview,
+        });
         fixture.Settle();
 
         var band = ArchipelagoHoverBand.For(fixture.Controller.RenderState);

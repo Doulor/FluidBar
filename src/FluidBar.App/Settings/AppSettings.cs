@@ -148,6 +148,14 @@ public sealed record AdvancedSettings
 /// </summary>
 public sealed record AppSettings
 {
+    /// <summary>Stops recording new clipboard content without clearing existing history.</summary>
+    public bool ClipboardPaused { get; init; }
+
+    /// <summary>Masks clipboard previews; explicit copying and previewing still use the original content.</summary>
+    public bool ClipboardHidePreviews { get; init; }
+
+    /// <summary>Explicit quick actions configured in the settings window.</summary>
+    public IReadOnlyList<FluidBar.Core.Settings.QuickActionSetting> QuickActions { get; init; } = [];
     /// <summary>Settings schema version (2).</summary>
     public int SchemaVersion { get; init; } = 2;
 
@@ -439,6 +447,7 @@ public sealed record AppSettings
         AutoCollapseMs = Math.Clamp(AutoCollapseMs, 0, 60000),
         AutoHideMs = Math.Clamp(AutoHideMs, 0, 3_600_000),
         WeatherCity = NormalizeWeatherCity(WeatherCity),
+        QuickActions = NormalizeQuickActions(QuickActions),
         DisplayOn = Enum.IsDefined(DisplayOn) ? DisplayOn : DisplayTarget.Primary,
         Plugins = Plugins with
         {
@@ -500,6 +509,12 @@ public sealed record AppSettings
                 MotionStrength = MotionStrength,
             },
             PowerMode = PowerMode.ToString().ToLowerInvariant(),
+            Cards = new FluidBar.Core.Settings.CardPreferences
+            {
+                ClipboardPaused = ClipboardPaused,
+                ClipboardHidePreviews = ClipboardHidePreviews,
+                QuickActions = [.. QuickActions],
+            },
             Island = new IslandJson
             {
                 Mode = Mode,
@@ -581,6 +596,10 @@ public sealed record AppSettings
                 ReducedMotion = ParseReducedMotion(document.Appearance?.ReducedMotion),
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
                 PowerMode = ParsePowerMode(document.PowerMode, defaults.PowerMode),
+                ClipboardPaused = document.Cards?.ClipboardPaused ?? false,
+                ClipboardHidePreviews = document.Cards?.ClipboardHidePreviews ?? false,
+                QuickActions = document.Cards is { QuickActions.IsDefault: false } cards
+                    ? cards.QuickActions : defaults.QuickActions,
                 Mode = document.Island?.Mode ?? defaults.Mode,
                 Anchor = document.Island?.Anchor ?? defaults.Anchor,
                 Stacking = document.Island?.Stacking switch
@@ -633,6 +652,16 @@ public sealed record AppSettings
     {
         var text = value?.Trim() ?? string.Empty;
         return text.Length <= MaxWeatherCityLength ? text : text[..MaxWeatherCityLength];
+    }
+
+    private static IReadOnlyList<FluidBar.Core.Settings.QuickActionSetting> NormalizeQuickActions(
+        IReadOnlyList<FluidBar.Core.Settings.QuickActionSetting>? actions)
+    {
+        var normalized = new FluidBar.Core.Settings.CardPreferences
+        {
+            QuickActions = actions is null ? [] : [.. actions],
+        }.Normalize().QuickActions;
+        return actions is not null && actions.SequenceEqual(normalized) ? actions : normalized;
     }
 
     /// <summary>Safety cap for the weather-city setting (a place name, not free text).</summary>
@@ -768,6 +797,7 @@ public sealed record AppSettings
 
 internal sealed class SettingsJson
 {
+    public FluidBar.Core.Settings.CardPreferences? Cards { get; set; }
     public int SchemaVersion { get; set; }
     public GeneralJson? General { get; set; }
     public AppearanceJson? Appearance { get; set; }

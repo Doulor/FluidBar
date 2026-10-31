@@ -215,7 +215,7 @@ public sealed class UpdateService : IAsyncDisposable
         else if (!options.RequireSignature)
         {
             _logger.LogWarning(PlatformLogCategory.Update, "update.unsigned-preview-mode",
-                "Update service accepts unsigned installers that match the feed SHA-256 (preview policy). Stable releases must enforce signatures.");
+                "Update service accepts unsigned installers that match the feed SHA-256 (first-release policy). Authenticode remains enforced when the certificate is available.");
         }
 
         _httpClient = UpdateCheckClient.CreateHttpClient(new UpdateClientOptions

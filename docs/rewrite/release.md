@@ -56,7 +56,7 @@ because release builds use `dotnet publish` on the app project graph.
 * **Signing:** intentionally absent in the workflow — see §4. `release.yml` currently publishes
   `UNSIGNED` binaries; the release notes state that explicitly.
 
-## 4. Signing (future step, required before public release)
+## 4. Signing (deferred for the unsigned 4.0.0 first release)
 
 Current state: `signature: unsigned` in the publish manifest. Planned:
 
@@ -69,8 +69,9 @@ Current state: `signature: unsigned` in the publish manifest. Planned:
    and the install action is never exposed (`UpdateDownloadResult.CanInstall == false`).
 4. Document the offline-key/HSM ceremony and annual rotation in the signing runbook (Lead-owned).
 
-Until signing exists, release notes must say the build is unsigned and the update checker will refuse the
-install action on unsigned artifacts (by design: never execute unverified downloads).
+For the 4.0.0 first release the updater uses the GitHub asset SHA-256 digest as the integrity gate
+and accepts unsigned artifacts; invalid or untrusted signatures are still rejected. Signing remains
+the next release gate.
 
 ## 5. Update feed relationship (GitHub Releases API)
 

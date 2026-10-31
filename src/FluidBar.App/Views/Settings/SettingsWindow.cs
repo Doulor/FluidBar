@@ -51,6 +51,7 @@ public sealed class SettingsWindow : Window, ILocalizable
     private readonly IFrameStatsSource? _frameStats;
     private readonly Action? _restartToInstall;
     private readonly FluidBar.App.Hosting.Pages.PageRegistry? _pages;
+    private readonly Func<FluidBar.Core.Settings.QuickActionSetting, CancellationToken, Task>? _executeQuickAction;
     private readonly StackPanel _nav = new() { Spacing = SettingsMetrics.NavGap };
     private readonly ScrollViewer _content = new();
     private readonly TextBlock _titleText = new();
@@ -133,7 +134,8 @@ public sealed class SettingsWindow : Window, ILocalizable
         IUpdateUiService? updates = null,
         IFrameStatsSource? frameStats = null,
         Action? restartToInstall = null,
-        FluidBar.App.Hosting.Pages.PageRegistry? pages = null)
+        FluidBar.App.Hosting.Pages.PageRegistry? pages = null,
+        Func<FluidBar.Core.Settings.QuickActionSetting, CancellationToken, Task>? executeQuickAction = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _localizer = localizer ?? throw new ArgumentNullException(nameof(localizer));
@@ -141,6 +143,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         _frameStats = frameStats;
         _restartToInstall = restartToInstall;
         _pages = pages;
+        _executeQuickAction = executeQuickAction;
         _marketplace = marketplace ?? CreateDefaultMarketplace(localizer);
         _plugins = plugins ?? new FluidBar.App.Views.Plugins.BuiltinPluginContributionUiService(settings, localizer);
         _openPath = openPath ?? (static path =>
@@ -1358,6 +1361,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             FrameStats = _frameStats,
             RestartToInstall = _restartToInstall,
             Pages = _pages,
+            ExecuteQuickAction = _executeQuickAction,
         };
         var content = SettingsSectionBuilder.Build(_section, context);
         if (_section == SettingsWindowSection.Appearance)

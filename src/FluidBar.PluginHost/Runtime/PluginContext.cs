@@ -34,7 +34,8 @@ internal sealed class PluginContext : IPluginContext, IDisposable
         INotificationSink notifications,
         IReadOnlySet<PluginCapability> grantedCapabilities,
         TimeProvider timeProvider,
-        IPluginHostLogger hostLogger)
+        IPluginHostLogger hostLogger,
+        IPluginFileShelf? fileShelf = null)
     {
         _pluginId = manifest.Id;
         _hostLogger = hostLogger;
@@ -51,6 +52,8 @@ internal sealed class PluginContext : IPluginContext, IDisposable
         Commands = commands;
         Notifications = notifications;
         GrantedCapabilities = grantedCapabilities;
+        FileShelf = grantedCapabilities.Contains(PluginCapability.Files) && grantedCapabilities.Contains(PluginCapability.Ui)
+            ? fileShelf : null;
         Time = timeProvider;
     }
 
@@ -69,6 +72,7 @@ internal sealed class PluginContext : IPluginContext, IDisposable
     public IPluginSettings Settings { get; }
 
     public IPluginStorage Storage { get; }
+    public IPluginFileShelf? FileShelf { get; }
 
     public IPluginLog Log { get; }
 

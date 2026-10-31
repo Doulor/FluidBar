@@ -14,7 +14,7 @@ FluidBar 2.0 是一次完全重写（v1 代码已从本分支移除，历史保�
 
 ## 当前状态
 
-**开发中（M0–M5 已完成，M4 UI 收尾 / M6 硬化中）** — 分支 `v2/rebuild`。
+**正式版 4.0.0（2026-10-31）** — 自包含单文件发布，之后进入 4.x 维护。
 
 | 里程碑 | 状态 |
 |---|---|
@@ -58,6 +58,7 @@ src/
   FluidBar.App/                Avalonia 外壳：岛窗口、六页控制中心、设置、插件市场、i18n
   FluidBar.Cli/                fluidbar-plugin 工具（validate/pack/sign/index）
 plugins/samples/               插件示例（minimal / rich）
+plugins/fluidbar-*/             可选倒计时、文件暂存插件（默认不安装）
 marketplace/                   签名市场索引与发布产物
 schemas/                       plugin / index / locale / signature JSON Schema
 tests/                         Core / Sdk / PluginHost / Platform / Builtin / Integration / Ui / Architecture / Soak
@@ -84,6 +85,8 @@ dotnet publish src/FluidBar.App/FluidBar.App.csproj -c Release -r win-x64 --self
 ## 贡献
 
 目前项目维护者为 **Doulor**。插件贡献流程（脚手架 → validate → pack → PR → CI 签名发布）见 [docs/plugin/quickstart.md](docs/plugin/quickstart.md) 与 [docs/plugin/review-checklist.md](docs/plugin/review-checklist.md)。
+
+2026-10-31：倒计时与文件暂存的功能、构建和手动安装方式见 [可选卡片插件](docs/plugin/optional-cards.md)。快捷动作在「设置 → 通用」配置。
 
 ## 许可证
 

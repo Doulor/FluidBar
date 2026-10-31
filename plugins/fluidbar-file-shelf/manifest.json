@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 2,
+  "id": "fluidbar-file-shelf",
+  "version": "1.0.0",
+  "apiVersion": "2.1.0",
+  "dependencies": { "sdk": "^2.1.0" },
+  "minAppVersion": "2.0.0",
+  "publisher": {
+    "id": "fluidbar",
+    "displayName": "FluidBar",
+    "url": "https://fluidbar.doulor.cn",
+    "keyId": "fluidbar-official"
+  },
+  "author": {
+    "name": "FluidBar contributors"
+  },
+  "name": {
+    "en-US": "File shelf",
+    "zh-Hans": "文件暂存"
+  },
+  "summary": {
+    "en-US": "An optional reference-only file shelf with copy-only dragging.",
+    "zh-Hans": "可选安装的文件暂存，仅保留引用，拖出时复制。"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/Doulor/FluidBar",
+  "entry": {
+    "runtime": "inproc",
+    "assembly": "plugin/FluidBar.Plugins.FileShelf.dll",
+    "type": "FluidBar.Plugins.FileShelf.FileShelfPlugin",
+    "targetFramework": "net10.0"
+  },
+  "platforms": [
+    "win-x64"
+  ],
+  "locales": {
+    "default": "en-US",
+    "available": [
+      "en-US",
+      "zh-Hans"
+    ],
+    "path": "locales",
+    "fallback": "en-US"
+  },
+  "capabilities": {
+    "ui": {
+      "island": true,
+      "settings": true,
+      "commands": true,
+      "xaml": false
+    },
+    "files": {
+      "read": [
+        "$PLUGIN_DATA"
+      ],
+      "write": [
+        "$PLUGIN_DATA"
+      ],
+      "reason": "Stores only explicitly selected file paths in plugin data. The host provides user-selected file pick/drop and copy-only drag UI. Original files are never moved or deleted."
+    }
+  },
+  "activation": [
+    "startup"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "fluidbar-file-shelf.open",
+        "title": {
+          "en-US": "Open file shelf",
+          "zh-Hans": "打开文件暂存"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      },
+      {
+        "id": "fluidbar-file-shelf.clear",
+        "title": {
+          "en-US": "Clear references",
+          "zh-Hans": "清空引用"
+        },
+        "contexts": [
+          "global",
+          "island",
+          "settings"
+        ]
+      }
+    ],
+    "settingsPages": [
+      {
+        "id": "shelf",
+        "title": {
+          "en-US": "File shelf",
+          "zh-Hans": "文件暂存"
+        },
+        "controls": [
+          {
+            "type": "button",
+            "key": "action.open",
+            "command": "fluidbar-file-shelf.open",
+            "title": {
+              "en-US": "Open file shelf",
+              "zh-Hans": "打开文件暂存"
+            }
+          },
+          {
+            "type": "button",
+            "key": "action.clear",
+            "command": "fluidbar-file-shelf.clear",
+            "title": {
+              "en-US": "Clear references",
+              "zh-Hans": "清空引用"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

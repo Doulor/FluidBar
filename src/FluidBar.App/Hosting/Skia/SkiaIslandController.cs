@@ -37,7 +37,7 @@ public readonly record struct SkiaIslandRenderChange(bool FullFrame, VisualRect 
 /// <see cref="RenderState"/> into every monitor's layered surface.
 /// </para>
 /// </summary>
-public sealed class SkiaIslandController : IDisposable
+public sealed partial class SkiaIslandController : IDisposable
 {
     private readonly SkiaIslandHostOptions _options;
     private readonly IAppLogger _logger;
@@ -167,6 +167,9 @@ public sealed class SkiaIslandController : IDisposable
     private string _visibleStackSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
+    private IslandActionFeedback? _actionFeedback;
+    private DateTimeOffset _actionFeedbackExpiresAt;
+    private long _latestFeedbackRequestId;
     private VisualRect? _accessibilityFocus;
 
     private bool _pendingFull = true;
@@ -226,8 +229,7 @@ public sealed class SkiaIslandController : IDisposable
     private double _notificationDragVelocityY;
     private bool _notificationDragActive;
     private bool _notificationDismissing;
-    private bool _notificationDismissRequested;
-    private long _notificationDismissRequestedAtMs;
+
 
     // Press/hover feedback: the control held down and the control under the pointer. Both are resolved
     // by the same hit test the clicks use, so the highlight can never sit on a different rectangle.
@@ -278,6 +280,10 @@ public sealed class SkiaIslandController : IDisposable
 
         _settings.Changed += OnSettingsChanged;
         _data.Changed += OnDataChanged;
+        if (_platformActions is IIslandActionFeedbackSource feedbackSource)
+        {
+            feedbackSource.ActionFeedback += OnActionFeedback;
+        }
         if (_pageRegistry is not null)
         {
             _pageRegistry.Changed += OnPageRegistryChanged;
@@ -360,7 +366,7 @@ public sealed class SkiaIslandController : IDisposable
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
         || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating
-        || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationDismissRequested
+        || _notificationDragActive || !_notificationDismissSpring.IsAtRest || _notificationWheelActive
         || !_railFollowSpring.IsAtRest || !_railSelectionSpring.IsAtRest;
 
     /// <summary>Whether the track-change shrink/fade/reappear transition is running.</summary>
@@ -520,6 +526,8 @@ public sealed class SkiaIslandController : IDisposable
                 || state.AutoHideDeadline is not null
                 || _syntheticPeek != SyntheticPeekPhase.None
                 || _copiedClipboard is not null
+                || _actionFeedback is not null
+                || _notificationWheelActive
                 || _archipelago.IsVisible;
         }
     }
@@ -601,6 +609,15 @@ public sealed class SkiaIslandController : IDisposable
         }
 
         PumpSyntheticPeek(now);
+        StepNotificationWheelTimeout();
+
+        if (_actionFeedback is not null && now >= _actionFeedbackExpiresAt)
+        {
+            _actionFeedback = null;
+            BuildRenderState();
+            InvalidateFull();
+            StateChanged?.Invoke();
+        }
 
         if (_copiedClipboard is { } copied && now - copied.At > CopyFeedbackDuration)
         {
@@ -1301,7 +1318,7 @@ public sealed class SkiaIslandController : IDisposable
         // The card is moving away from the pointer during the dismiss gesture. Re-running hover and
         // zone hit tests against the painted (offset) shell would make the notification leave Peek
         // mid-drag and fight the gesture, so pointer bookkeeping stays frozen until it settles.
-        if (_notificationDragActive || _notificationDismissing || _notificationDismissRequested)
+        if (_notificationDragActive || _notificationDismissing || _notificationWheelActive)
         {
             return;
         }
@@ -1700,6 +1717,8 @@ public sealed class SkiaIslandController : IDisposable
             && hit.Kind is IslandHitKind.Compact or IslandHitKind.SecondaryCompact)
         {
             _notificationDragStartY = yDip;
+            _notificationCandidatePending = true;
+            _notificationCandidateActivity = _presentedNotification;
             return SkiaDragKind.NotificationCandidate;
         }
 
@@ -1761,11 +1780,19 @@ public sealed class SkiaIslandController : IDisposable
             return false;
         }
 
+        if (_notificationCandidatePending
+            && !ReferenceEquals(_notificationCandidateActivity, _presentedNotification))
+        {
+            CancelPendingClick();
+            return false;
+        }
+
+        _notificationCandidatePending = false;
         CancelPendingClick();
         _notificationDragActive = true;
         _notificationDismissing = false;
-        _notificationDismissRequested = false;
         _notificationDragKey = NotificationKey(_compact.Model);
+        _notificationGestureActivity = _presentedNotification;
         _notificationDragOffsetY = 0;
         _notificationDragLastOffsetY = 0;
         _notificationDragVelocityY = 0;
@@ -1792,7 +1819,7 @@ public sealed class SkiaIslandController : IDisposable
     }
 
     /// <summary>Releases the card: dismiss past the two-row threshold/flick, otherwise spring it back.</summary>
-    public void HandleNotificationDragEnded(double yDip, long timestampMs)
+    public void HandleNotificationDragEnded(double yDip, long timestampMs, bool atScreenTop = false)
     {
         if (!_notificationDragActive)
         {
@@ -1801,10 +1828,10 @@ public sealed class SkiaIslandController : IDisposable
 
         UpdateNotificationDragOffset(yDip, timestampMs);
         var raw = _notificationDragStartY - yDip;
-        var dismiss = NotificationDismissGesture.ShouldDismiss(raw, _notificationDragVelocityY);
+        var dismiss = NotificationDismissGesture.ShouldDismiss(raw, _notificationDragVelocityY)
+            || (atScreenTop && raw >= SkiaDragThreshold.ThresholdDip);
         _notificationDragActive = false;
         _notificationDismissing = dismiss;
-        _notificationDismissRequested = false;
         _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismiss));
         _notificationDismissSpring.Reset(_notificationDragOffsetY, _notificationDragVelocityY);
         _notificationDismissSpring.Retarget(
@@ -1832,7 +1859,6 @@ public sealed class SkiaIslandController : IDisposable
 
         _notificationDragActive = false;
         _notificationDismissing = false;
-        _notificationDismissRequested = false;
         _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismissing: false));
         _notificationDismissSpring.Reset(_notificationDragOffsetY, 0);
         _notificationDismissSpring.Retarget(0, 0.016);
@@ -1842,6 +1868,8 @@ public sealed class SkiaIslandController : IDisposable
     /// <summary>Clears a notification candidate that never crossed the drag threshold (a click).</summary>
     public void CancelNotificationDragCandidate()
     {
+        _notificationCandidatePending = false;
+        _notificationCandidateActivity = null;
         if (!_notificationDragActive)
         {
             _notificationDragKey = null;
@@ -1862,17 +1890,15 @@ public sealed class SkiaIslandController : IDisposable
 
     private void StepNotificationDismiss(double deltaSeconds)
     {
+        if (State.Kind is not (IslandStateKind.Compact or IslandStateKind.Peek))
+        {
+            ResetNotificationDrag();
+            return;
+        }
+
+        StepNotificationWheelTimeout();
         if (_notificationDismissSpring.IsAtRest)
         {
-            if (_notificationDismissRequested && NowMs() - _notificationDismissRequestedAtMs > 1200)
-            {
-                // The platform seam reported success but the row never left the list: give the card
-                // back rather than leaving an invisible, permanently hidden notification.
-                _logger.Warning(LogCategories.Render, "island.notification.dismiss-timeout",
-                    "The notification row did not disappear after the dismiss gesture; restoring the card.");
-                ResetNotificationDrag();
-            }
-
             return;
         }
 
@@ -1888,17 +1914,14 @@ public sealed class SkiaIslandController : IDisposable
         _notificationDismissing = false;
         if (TryDismissCurrentNotification())
         {
-            _notificationDismissRequested = true;
-            _notificationDismissRequestedAtMs = NowMs();
             _logger.Information(LogCategories.Render, "island.notification.dismissed",
-                "Notification card dismissed by an upward drag.");
-            InvalidateFull();
+                "Notification banner retracted by an upward gesture; history preserved.");
+            ResetNotificationDrag();
             return;
         }
 
         _logger.Warning(LogCategories.Render, "island.notification.dismiss-failed",
             "The platform seam rejected the notification dismissal; restoring the card.");
-        _notificationDismissRequested = false;
         _notificationDismissSpring.SetParameters(NotificationSpringParameters(dismissing: false));
         _notificationDismissSpring.Reset(_notificationDragOffsetY, 0);
         _notificationDismissSpring.Retarget(0, 0.016);
@@ -1906,23 +1929,16 @@ public sealed class SkiaIslandController : IDisposable
 
     private bool TryDismissCurrentNotification()
     {
-        var action = new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, 0);
-        if (_platformActions is null)
+        var captured = _notificationGestureActivity;
+        if (captured is null || !ReferenceEquals(_schedulerState.Find(captured.Key), captured))
         {
-            LogControlOutcome(action, 0, "island.skia.control-unsupported",
-                "no IIslandPlatformActions seam is configured for this host");
             return false;
         }
 
-        var result = _platformActions.Invoke(action);
-        if (result.Outcome == IslandActionOutcome.Handled)
-        {
-            return true;
-        }
-
-        LogControlOutcome(action, 0, "island.skia.control-unsupported",
-            result.Reason ?? "the notification row no longer exists");
-        return false;
+        // UI-thread compare + synchronous retract: never enqueue an unguarded retract after a
+        // newer producer event, and never delete a history row merely to hide its banner.
+        OnIslandEvent(IslandEvent.Retract(captured.Key, 0, TimeSpan.Zero));
+        return true;
     }
 
     private SpringParameters NotificationSpringParameters(bool dismissing)
@@ -1942,15 +1958,17 @@ public sealed class SkiaIslandController : IDisposable
     private void ResetNotificationDrag()
     {
         if (_notificationDragKey is null && !_notificationDragActive && !_notificationDismissing
-            && !_notificationDismissRequested && _notificationDragOffsetY == 0)
+            && !_notificationWheelActive && _notificationDragOffsetY == 0)
         {
             return;
         }
 
         _notificationDragKey = null;
+        _notificationGestureActivity = null;
+        _notificationWheelActive = false;
+        _notificationWheelNotches = 0;
         _notificationDragActive = false;
         _notificationDismissing = false;
-        _notificationDismissRequested = false;
         _notificationDragOffsetY = 0;
         _notificationDragVelocityY = 0;
         _notificationDismissSpring.Reset(0);
@@ -2009,6 +2027,11 @@ public sealed class SkiaIslandController : IDisposable
         if (!_hasRenderState)
         {
             return SkiaWheelOutcome.None;
+        }
+
+        if (TryHandleNotificationWheel(deltaDip, horizontal, shift))
+        {
+            return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
         }
 
         var now = _time.GetLocalNow();
@@ -2188,7 +2211,7 @@ public sealed class SkiaIslandController : IDisposable
             var profile = settings.BuildMotionProfile(
                 SkiaIslandThemeMapper.ReducedMotion(settings, appearance));
             _motion.UpdateProfile(profile);
-            BuildRenderState();
+            SyncContent(full: true);
             InvalidateFull();
             StateChanged?.Invoke();
         }
@@ -2239,6 +2262,12 @@ public sealed class SkiaIslandController : IDisposable
         _disposed = true;
         _settings.Changed -= OnSettingsChanged;
         _data.Changed -= OnDataChanged;
+        if (_platformActions is IIslandActionFeedbackSource feedbackSource)
+        {
+            feedbackSource.ActionFeedback -= OnActionFeedback;
+        }
+
+        _actionFeedback = null;
         _data.Stop();
         _pager.PageChanged -= OnPagerPageChanged;
         if (_pageRegistry is not null)
@@ -2396,6 +2425,8 @@ public sealed class SkiaIslandController : IDisposable
         // Notification uses the normal island position; it is no longer demoted to a second pill.
 
         var presentation = PreferNotificationPrimary(viewModel);
+        ObservePresentedNotification(presentation.Primary?.Kind == ActivityKind.Notification
+            ? _schedulerState.Find(presentation.Primary.Key) : null);
         PinDiagnostics.Log(
             $"sync state={State.Kind} stacking={settings.Stacking} visible=[{string.Join(",", _schedulerState.Visible.Select(r => r.Kind + ":" + r.Key.Source + (r.IsPinned ? "*" : "")))}] " +
             $"ghosts={viewModel.Ghosts.Length} previews={_splitPreviews.Length} splitProgress={_motion.SplitProgress:0.00} " +
@@ -2415,7 +2446,9 @@ public sealed class SkiaIslandController : IDisposable
         var stackChanged = !string.Equals(stackSignature, _visibleStackSignature, StringComparison.Ordinal);
         _visibleStackSignature = stackSignature;
 
-        var structural = SkiaIslandStateBuilder.StructuralSignature(content, presentation, _localizer, settings);
+        var appearance = _appearance();
+        var structural = SkiaIslandStateBuilder.StructuralSignature(content, presentation, _localizer, settings,
+            appearance.LightTheme);
         var dynamicSignature = SkiaIslandStateBuilder.DynamicSignature(content, presentation);
         var timingSignature = SkiaIslandStateBuilder.AgentTimingSignature(content, presentation);
         var structuralChanged = !string.Equals(structural, _structuralSignature, StringComparison.Ordinal);
@@ -2460,13 +2493,14 @@ public sealed class SkiaIslandController : IDisposable
         _pluginPages = _pageRegistry?.BuildPluginPages() ?? [];
         // Build the complete page table first: ApplyPageScroll clamps the rail follow offset against
         // PageCount, so doing it before plugin/extra slots are attached would reset the rail to zero.
-        var pageContent = SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings) with
+        var pageContent = SkiaIslandStateBuilder.BuildPages(content, presentation, _localizer, settings,
+            appearance.LightTheme) with
         {
             PluginPages = _pluginPages,
             PageSlots = BuildPageSlots(),
         };
         _pages = ApplyPageScroll(ApplyCopyFeedback(pageContent, _time.GetLocalNow()));
-        _theme = SkiaIslandThemeMapper.Map(settings, _appearance());
+        _theme = SkiaIslandThemeMapper.Map(settings, appearance);
         UpdateSplitPreviews(presentation, settings);
         _motion.SetTarget(BuildTarget(presentation));
         BuildRenderState();
@@ -3067,6 +3101,34 @@ public sealed class SkiaIslandController : IDisposable
             }
         });
     }
+
+    private void OnActionFeedback(IslandActionFeedback feedback)
+    {
+        // Platform completions arrive on workers. Keep render state and deadlines on the host thread.
+        _dispatcher.Post(() =>
+        {
+            if (_disposed || feedback.RequestId < _latestFeedbackRequestId)
+            {
+                return;
+            }
+
+            _latestFeedbackRequestId = feedback.RequestId;
+            _actionFeedback = feedback;
+            _actionFeedbackExpiresAt = _time.GetLocalNow() + TimeSpan.FromSeconds(3);
+            BuildRenderState();
+            InvalidateFull();
+            StateChanged?.Invoke();
+        });
+    }
+
+    private string? ActionFeedbackText() => _actionFeedback?.Status switch
+    {
+        IslandActionFeedbackStatus.Processing => _localizer.Get("Feedback.Processing"),
+        IslandActionFeedbackStatus.Succeeded => _localizer.Get("Feedback.Success"),
+        IslandActionFeedbackStatus.Failed => _localizer.Get("Feedback.Failed"),
+        IslandActionFeedbackStatus.Unavailable => _localizer.Get("Feedback.Unavailable"),
+        _ => null,
+    };
 
     /// <summary>First three seconds of a track show the title/artist instead of the live lyric.</summary>
     private const long TrackIntroMs = 3000;
@@ -4103,17 +4165,6 @@ private void HandlePageControl(in IslandHitTarget hit)
 
         var mode = _settings.Current.IslandMode;
         _motion.PanelRadius = _settings.Current.PanelRadius;
-        var currentNotificationKey = _compact.Kind == ActivityKind.Notification
-            ? NotificationKey(_compact.Model)
-            : null;
-        if (_notificationDragKey is { } dragKey
-            && !string.Equals(dragKey, currentNotificationKey, StringComparison.Ordinal))
-        {
-            // The dragged notification left the presentation (dismissed, replaced or expired): the
-            // offset belongs to that card only and must never hide the next activity.
-            ResetNotificationDrag();
-        }
-
         var form = ResolveVisualForm();
         var expanded = form == ShellForm.Expanded;
         var shellRadii = !expanded && _compact.Kind == ActivityKind.Notification
@@ -4165,8 +4216,11 @@ private void HandlePageControl(in IslandHitTarget hit)
             Compact = _compact,
             SecondaryCompact = null,
             Pages = _pages,
-            RailSide = _settings.Current.RailSide,
+            ActionFeedbackText = ActionFeedbackText(),
+            ActionFeedbackIsError = _actionFeedback?.Status is IslandActionFeedbackStatus.Failed
+                or IslandActionFeedbackStatus.Unavailable,
             TabBarStyle = _settings.Current.TabBarStyle,
+            RailSide = _settings.Current.RailSide,
             RailSelectionPosition = _railSelectionSpring.Value,
             Theme = _theme,
             PreviousTheme = _materialSwapStartedMs < 0 ? null : _materialSwapFrom,
@@ -4535,6 +4589,7 @@ private void HandlePageControl(in IslandHitTarget hit)
         }
 
         var expanded = State.Kind is IslandStateKind.Expanded or IslandStateKind.Closing;
+
         var dwell = _hotZoneEnteredAt is { } start ? now - start : TimeSpan.Zero;
         _archipelago.Update(now, expanded, _pointerInHotZone, _pointerOnStrip, dwell, _pager.IsDragging, _pointerInHoverBand);
     }

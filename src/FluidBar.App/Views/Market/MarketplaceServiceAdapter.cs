@@ -77,7 +77,7 @@ public sealed class MarketplaceServiceAdapter : IMarketplaceUiService, IDisposab
     /// <inheritdoc />
     public async Task<IReadOnlyList<MarketPlugin>> BrowseAsync(MarketplaceQuery query, CancellationToken cancellationToken)
     {
-        var index = await GetIndexAsync(cancellationToken).ConfigureAwait(false);
+        var index = await GetIndexAsync(cancellationToken, refresh: true).ConfigureAwait(false);
         var entries = index.Plugins ?? [];
         var channel = query.Channel is "beta" ? PluginChannel.Beta : PluginChannel.Stable;
         var items = entries
@@ -221,7 +221,7 @@ public sealed class MarketplaceServiceAdapter : IMarketplaceUiService, IDisposab
         return MarketplaceIndexValidator.IsCompatible(entry, appVersion.Value, hostApiVersion.Value);
     }
 
-    private async Task<MarketplaceIndexDocument> GetIndexAsync(CancellationToken cancellationToken)
+    private async Task<MarketplaceIndexDocument> GetIndexAsync(CancellationToken cancellationToken, bool refresh = false)
     {
         if (_indexProvider is not null)
         {
@@ -233,7 +233,7 @@ public sealed class MarketplaceServiceAdapter : IMarketplaceUiService, IDisposab
             throw new InvalidOperationException(_localizer.Get(LocKeys.Error.Network.Offline));
         }
 
-        if (_cachedIndex is not null)
+        if (!refresh && _cachedIndex is not null)
         {
             return _cachedIndex;
         }
@@ -246,6 +246,7 @@ public sealed class MarketplaceServiceAdapter : IMarketplaceUiService, IDisposab
         }
 
         _cachedIndex = result.Index;
+        LastError = null;
         return _cachedIndex;
     }
 

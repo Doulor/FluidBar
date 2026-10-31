@@ -251,7 +251,7 @@ public sealed class VolumeMonitor : PlatformMonitor<VolumeSnapshot>
         {
             if (_volume is null)
             {
-                return Current ?? new VolumeSnapshot(0, false, false, 0);
+                throw new InvalidOperationException("No default audio endpoint is available.");
             }
 
             var hr = _volume.SetMasterVolumeLevelScalar(scalar, IntPtr.Zero);
@@ -260,6 +260,7 @@ public sealed class VolumeMonitor : PlatformMonitor<VolumeSnapshot>
                 Counters.IncrementComFailures();
                 Logger.LogWarning(PlatformLogCategory.Monitor, "volume.set-failed",
                     $"SetMasterVolumeLevelScalar failed with 0x{hr:X8}.");
+                System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(hr);
             }
 
             return ReadSnapshotCore();
@@ -279,7 +280,7 @@ public sealed class VolumeMonitor : PlatformMonitor<VolumeSnapshot>
         {
             if (_volume is null)
             {
-                return Current ?? new VolumeSnapshot(0, false, false, 0);
+                throw new InvalidOperationException("No default audio endpoint is available.");
             }
 
             var hr = _volume.SetMute(muted, IntPtr.Zero);
@@ -288,6 +289,7 @@ public sealed class VolumeMonitor : PlatformMonitor<VolumeSnapshot>
                 Counters.IncrementComFailures();
                 Logger.LogWarning(PlatformLogCategory.Monitor, "volume.mute-failed",
                     $"SetMute failed with 0x{hr:X8}.");
+                System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(hr);
             }
 
             return ReadSnapshotCore();

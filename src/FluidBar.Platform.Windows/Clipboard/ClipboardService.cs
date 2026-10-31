@@ -31,7 +31,7 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
     private PlatformWindow? _window;
     private ClipboardHistory? _history;
     private ITimer? _debounceTimer;
-    private uint _lastSequence;
+    private readonly ClipboardCaptureGate _captureGate = new();
     private int _readInFlight;
 
     public ClipboardService(PlatformMessageHost host, IPlatformLogger logger, PlatformCounters counters,
@@ -48,10 +48,26 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
     /// <summary>Bounded history (newest first) from the latest snapshot.</summary>
     public IReadOnlyList<ClipboardEntry> GetHistory() => Current?.History ?? ImmutableArray<ClipboardEntry>.Empty;
 
+    /// <summary>Whether content capture is paused. History and explicit copy actions remain available.</summary>
+    public bool IsPaused => _captureGate.IsPaused;
+
+    /// <summary>Pauses reads; resuming skips the current clipboard sequence instead of backfilling it.</summary>
+    public void SetPaused(bool paused)
+    {
+        _captureGate.SetPaused(paused, NativeMethods.User32.GetClipboardSequenceNumber);
+        if (paused)
+        {
+            lock (_debounceGate)
+            {
+                _debounceTimer?.Dispose();
+                _debounceTimer = null;
+            }
+        }
+    }
+
     protected override async ValueTask OnStartAsync(CancellationToken cancellationToken)
     {
         _history = new ClipboardHistory(_options.MaxHistoryEntries, _options.MaxImageEntries);
-        _lastSequence = 0;
         _window = await _host.CreateWindowAsync("clipboard", PlatformWindowKind.MessageOnly,
             OnWindowMessage, cancellationToken).ConfigureAwait(false);
         var handle = _window.Handle;
@@ -82,6 +98,7 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
 
     private void ScheduleRead()
     {
+        if (IsPaused) return;
         lock (_debounceGate)
         {
             _debounceTimer?.Dispose();
@@ -157,39 +174,34 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
             return (true, isInitial ? ClipboardSnapshot.Empty : null);
         }
 
-        if (!isInitial && sequence == _lastSequence)
+        var opened = true;
+        ClipboardSnapshot? result = null;
+        _captureGate.TryRead(sequence, isInitial, () =>
         {
-            return (true, null);
-        }
-
-        if (!NativeMethods.User32.OpenClipboard(IntPtr.Zero))
-        {
-            return (false, null);
-        }
-
-        try
-        {
-            var entry = CaptureEntry(sequence);
-            _lastSequence = sequence;
-            if (entry is null)
+            opened = NativeMethods.User32.OpenClipboard(IntPtr.Zero);
+            if (!opened) return false;
+            try
             {
-                return (true, isInitial ? ClipboardSnapshot.Empty : null);
-            }
+                var entry = CaptureEntry(sequence);
+                if (entry is null)
+                {
+                    result = isInitial ? ClipboardSnapshot.Empty : null;
+                    return true;
+                }
 
-            var history = _history;
-            if (history is null)
+                var history = _history;
+                if (history is not null)
+                {
+                    result = history.TryAdd(entry, out var snapshot) ? snapshot : DedupeAndReturnNull();
+                }
+                return true;
+            }
+            finally
             {
-                return (true, null);
+                NativeMethods.User32.CloseClipboard();
             }
-
-            return history.TryAdd(entry, out var snapshot)
-                ? (true, snapshot)
-                : (true, DedupeAndReturnNull());
-        }
-        finally
-        {
-            NativeMethods.User32.CloseClipboard();
-        }
+        });
+        return (opened, result);
     }
 
     private ClipboardSnapshot? DedupeAndReturnNull()
@@ -207,10 +219,7 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
             var text = ReadUnicodeText();
             if (text is not null)
             {
-                var originalLength = text.Length;
-                var stored = originalLength > maxText ? text[..maxText] : text;
-                return new ClipboardEntry(sequence, timestamp, ClipboardContentKind.Text, stored, originalLength,
-                    ImmutableArray<string>.Empty);
+                return ClipboardTextCapture.Create(sequence, timestamp, text, maxText);
             }
         }
 
@@ -353,7 +362,7 @@ public sealed class ClipboardService : PlatformMonitor<ClipboardSnapshot>, IClip
         }
         finally
         {
-            NativeMethods.Kernel32.GlobalUnlock(pointer);
+            NativeMethods.Kernel32.GlobalUnlock(handle);
         }
     }
 
