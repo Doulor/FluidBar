@@ -8,7 +8,7 @@
 
 | 文件 | 大小 | SHA-256 |
 |---|---:|---|
-| FluidBar-4.0.0-win-x64.zip | 51,990,912 bytes | `5cf86ad65565ee84420868cf7789a3cd24b7eb9527e1905c0fb923725da595cd` |
-| FluidBar.exe | 57,659,889 bytes | `fba29b7ba97f7d0e2511069b26fb777cf1e1d92e7e29e39463eebe82a8b05cef` |
+| FluidBar-4.0.0-win-x64.zip | 51,990,839 bytes | `8d58457cdb32325e19cfb08d7abb6a355ec55a8138ad7461ff7c252746bec186` |
+| FluidBar.exe | 57,659,878 bytes | `2f6818f4e6acd10ecc32dcc961e1d91ca063ffce067f88d70c8d91ab5b36733d` |
 
 首个正式版未使用 Authenticode 证书；应用内更新仍强制校验 GitHub Release 资产的 SHA-256。

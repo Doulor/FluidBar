@@ -8,7 +8,7 @@
 - 自动更新链路完成实测：本地 Releases feed → 检查 → 下载 → SHA-256 校验 → 重启替换 exe；首版按无证书策略仍强制校验发布资产 SHA-256。
 - 完成液态玻璃白底对比度、ChatGPT 最大化误判、标签栏样式/侧边、卡片交互和可选插件等发布前修复。
 - 全量测试 2818 通过，0 失败；官网构建与 12 项前端测试通过。
-- 发布资产：`FluidBar-4.0.0-win-x64.zip`（51,990,912 bytes，SHA-256 `5cf86ad65565ee84420868cf7789a3cd24b7eb9527e1905c0fb923725da595cd`）；`FluidBar.exe`（57,659,889 bytes，SHA-256 `fba29b7ba97f7d0e2511069b26fb777cf1e1d92e7e29e39463eebe82a8b05cef`）。
+- 发布资产：`FluidBar-4.0.0-win-x64.zip`（51,990,839 bytes，SHA-256 `8d58457cdb32325e19cfb08d7abb6a355ec55a8138ad7461ff7c252746bec186`）；`FluidBar.exe`（57,659,878 bytes，SHA-256 `2f6818f4e6acd10ecc32dcc961e1d91ca063ffce067f88d70c8d91ab5b36733d`）。
 
 ## 2026-10-31 — 卡片交互完善与可选插件
 
