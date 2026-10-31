@@ -64,4 +64,20 @@ public sealed class FullscreenDetectorTests
     {
         Assert.True(FullscreenDetector.IsFullscreenStyle(0x00000000L));
     }
+
+    [Fact]
+    public void CaptionlessMaximizedWindowStyle_IsNotFullscreen()
+    {
+        // ChatGPT desktop (Chromium Chrome_WidgetWin_1) draws its own title bar: no WS_CAPTION,
+        // but a maximized window still carries WS_MAXIMIZE. It covers the monitor but is not a
+        // fullscreen game/video, so the island must stay visible (user report 2026-10-31).
+        const long style = 0x15070000L;
+        Assert.False(FullscreenDetector.IsFullscreenStyle(style));
+    }
+
+    [Fact]
+    public void PopupMaximizedWindowStyle_IsStillFullscreen()
+    {
+        Assert.True(FullscreenDetector.IsFullscreenStyle(0x80000000L | 0x01000000L));
+    }
 }

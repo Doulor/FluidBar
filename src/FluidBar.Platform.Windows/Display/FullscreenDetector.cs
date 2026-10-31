@@ -14,6 +14,7 @@ public static class FullscreenDetector
     private const int TolerancePx = 2;
     private const long WsPopup = 0x80000000L;
     private const long WsCaption = 0x00C00000L;
+    private const long WsMaximize = 0x01000000L;
 
     /// <summary>Returns true when the foreground window occupies its whole monitor.</summary>
     public static bool IsForegroundFullscreen()
@@ -77,14 +78,17 @@ public static class FullscreenDetector
 
     /// <summary>
     /// True for borderless/popup windows. A normal maximized window keeps WS_CAPTION and no WS_POPUP,
-    /// so maximizing a browser or Explorer must not hide the island.
+    /// so maximizing a browser or Explorer must not hide the island. A WS_MAXIMIZE captionless window
+    /// is a custom-chrome app (ChatGPT/Electron) that is merely maximized: treat it like a normal
+    /// maximized window instead of a fullscreen game.
     /// </summary>
     /// <summary>True when the foreground window belongs to this process (island/search/settings).</summary>
     internal static bool ShouldIgnoreProcess(uint foregroundProcessId, uint currentProcessId)
         => foregroundProcessId != 0 && foregroundProcessId == currentProcessId;
 
     internal static bool IsFullscreenStyle(long style)
-        => (style & WsPopup) != 0 || (style & WsCaption) == 0;
+        => (style & WsPopup) != 0
+            || ((style & WsCaption) == 0 && (style & WsMaximize) == 0);
 
     /// <summary>Pure rectangle check used by the detector and its tests.</summary>
     internal static bool CoversMonitor(NativeMethods.RECT window, NativeMethods.RECT monitor, int tolerance = TolerancePx)
