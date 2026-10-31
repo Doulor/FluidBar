@@ -1,8 +1,8 @@
-# FluidBar 2.0
+# FluidBar 4.0
 
 > Windows 上的灵动岛 — 常驻、可交互、可扩展的桌面信息与控制中心。
 
-FluidBar 2.0 是一次完全重写（v1 代码已从本分支移除，历史保留在 `main` 与 git 记录中）。目标是做出一个真正顺滑、低占用、可长期常驻的 Windows 灵动岛：
+FluidBar 是一次完全重写（v1 代码已从本分支移除，历史保留在 `main` 与 git 记录中）。目标是做出一个真正顺滑、低占用、可长期常驻的 Windows 灵动岛：
 
 - **默认小岛**：低打扰的 Live Activity 小药丸，悬停预览、点击展开控制中心
 - **三种形态**：浮岛 / 贴顶（flush）/ Dock 桌面底栏（可一定程度替代 Windows 任务栏）
@@ -23,11 +23,11 @@ FluidBar 2.0 是一次完全重写（v1 代码已从本分支移除，历史保�
 | M2 插件 SDK / ALC 宿主 / 市场打包签名（188 tests） | ✅ |
 | M3 Windows 平台（显示器/媒体/剪贴板/通知/托盘/热键，347 tests） | ✅ |
 | M5 内置插件 + 市场 CI/文档（23 + 31 集成 tests） | ✅ |
-| M4 Avalonia 外壳（岛/设置/插件市场/i18n，70 tests） | 🚧 桌面验收中 |
+| M4 Avalonia 外壳（岛/设置/插件市场/i18n，70 tests） | ✅ |
 
 - **官方网站**：[website/](website/)（Vite + React，真实 prototype2 嵌入 + 日光光学视觉）
 - 交互与视觉原型：[docs/rewrite/prototype2/index.html](docs/rewrite/prototype2/index.html)（浏览器打开即可；旧 prototype 已归档）
-- **MVP 发布说明**：[docs/rewrite/RELEASE-v2-mvp.md](docs/rewrite/RELEASE-v2-mvp.md)
+- **4.0.0 发布说明**：[docs/rewrite/RELEASE-4.0.0.md](docs/rewrite/RELEASE-4.0.0.md)
 - **当前状态 / 文档索引 / 变更记录**：[STATUS](docs/rewrite/STATUS.md) · [docs/rewrite/README.md](docs/rewrite/README.md) · [CHANGELOG.md](CHANGELOG.md)
 - 设计规范 / 实施计划 / 决策记录：[docs/rewrite](docs/rewrite/)
 - **项目方向与注意事项（后续 AI 必读）**：[PROJECT-NOTES.md](PROJECT-NOTES.md)
