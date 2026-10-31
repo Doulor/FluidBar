@@ -77,6 +77,37 @@ public sealed class FontScaleAndAppearanceTests
     }
 
     [Fact]
+    public void Liquid_glass_adapts_ink_even_when_dark_is_the_fallback_shell()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            Theme = AppTheme.Dark,
+            Material = App.Settings.IslandMaterial.LiquidGlass,
+            AutoCollapseMs = 0,
+        });
+        fixture.Settle();
+
+        Assert.True(fixture.Controller.RenderState.FollowBackdropPalette,
+            "liquid glass must follow the captured backdrop, not freeze grey ink on white glass");
+        Assert.Equal(IslandThemeMode.Dark, fixture.Controller.RenderState.Theme.Mode);
+    }
+
+    [Fact]
+    public void Explicit_dark_obsidian_keeps_the_dark_palette_regardless_of_the_backdrop()
+    {
+        using var fixture = ControllerFixture.Create(AppSettings.Default with
+        {
+            Theme = AppTheme.Dark,
+            Material = App.Settings.IslandMaterial.Obsidian,
+            AutoCollapseMs = 0,
+        });
+        fixture.Settle();
+
+        Assert.False(fixture.Controller.RenderState.FollowBackdropPalette);
+        Assert.Equal(IslandThemeMode.Dark, fixture.Controller.RenderState.Theme.Mode);
+    }
+
+    [Fact]
     public void Live_system_appearance_refresh_updates_theme_accent_and_motion()
     {
         var appearance = new SystemAppearanceSnapshot(false, false, null);

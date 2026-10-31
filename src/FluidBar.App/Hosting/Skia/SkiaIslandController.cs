@@ -4122,8 +4122,11 @@ private void HandlePageControl(in IslandHitTarget hit)
         _renderState = new IslandRenderState
         {
             Mode = mode,
-            // An explicit dark/light pick outranks the glass' own "follow the desktop" palette.
-            FollowBackdropPalette = _settings.Current.Theme == AppTheme.System,
+            // Liquid glass adapts its ink to the real backdrop even when the fallback shell is
+            // explicitly dark: otherwise a dark Obsidian shell over a white page keeps light-grey ink
+            // on an almost-white glass surface. Non-liquid materials retain the explicit dark/light pick.
+            FollowBackdropPalette = _settings.Current.Material == App.Settings.IslandMaterial.LiquidGlass
+                || _settings.Current.Theme == AppTheme.System,
             Form = form,
             ShellWidth = _motion.Width,
             ShellHeight = _motion.Height,

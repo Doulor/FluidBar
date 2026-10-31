@@ -158,7 +158,7 @@ internal sealed class CompactRenderer : IDisposable
         {
             // 6 % white wash: visible press feedback without changing the pill's own colours.
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(SKColors.White.WithAlpha(16), _opacity);
+            _fill.Color = Alpha(_theme.Foreground, 0.09f * _opacity);
             canvas.DrawRoundRect(new SKRect(0, 0, width, height), height / 2, height / 2, _fill);
         }
 

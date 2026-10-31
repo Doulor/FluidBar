@@ -978,7 +978,7 @@ internal sealed partial class PageRenderer
 
             var track = new SKRect(card.Left + 14 + labelWidth, top + 5, card.Right - 42, top + 8);
             _fill.Style = SKPaintStyle.Fill;
-            _fill.Color = Alpha(SKColors.White, 0.09f * _opacity);
+            _fill.Color = Alpha(_theme.Foreground, 0.13f * _opacity);
             canvas.DrawRoundRect(track, 1.5f, 1.5f, _fill);
             var fraction = (float)Math.Clamp(stat.Value / 100.0, 0, 1);
             if (fraction > 0)

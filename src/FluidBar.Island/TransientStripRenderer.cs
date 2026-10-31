@@ -56,6 +56,8 @@ internal sealed class TransientStripRenderer : IDisposable
     /// </summary>
     private SKColor Ink => _hasState ? _state.Theme.Foreground : SKColors.White;
 
+    private SKColor DotInk => _hasState ? _state.Theme.ForegroundSecondary : SKColors.White;
+
     // Satellite hover: one progress drives the hover alpha and the 6 % grow, so entering and leaving
     // are monotonic instead of a one-frame colour swap (the old path jumped straight to HoverGlass).
     private readonly CssTransition _hoverFade = new(0);
@@ -300,7 +302,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var leftAlpha = alpha * _frame.LeftAlpha;
         if (leftAlpha > 0.01f)
         {
-            _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * leftAlpha);
+            _fill.Color = Alpha(DotInk, (float)IslandMetrics.DotAlpha * leftAlpha);
             for (var i = 0; i < _frame.LeftDots; i++)
             {
                 DrawDot(canvas, _dotsLeft[i]);
@@ -310,7 +312,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var rightAlpha = alpha * _frame.RightAlpha;
         if (rightAlpha > 0.01f)
         {
-            _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * rightAlpha);
+            _fill.Color = Alpha(DotInk, (float)IslandMetrics.DotAlpha * rightAlpha);
             for (var i = 0; i < _frame.RightDots; i++)
             {
                 DrawDot(canvas, _dotsRight[i]);
@@ -329,7 +331,7 @@ internal sealed class TransientStripRenderer : IDisposable
         }
 
         _fill.Style = SKPaintStyle.Fill;
-        _fill.Color = Alpha(SKColors.White, (float)IslandMetrics.DotAlpha * alpha);
+        _fill.Color = Alpha(DotInk, (float)IslandMetrics.DotAlpha * alpha);
         var size = Math.Min(3.0f, rect.Width / 4f);
         var gap = size * 1.6f;
         var start = rect.MidX - (gap * 2f);
@@ -382,7 +384,7 @@ internal sealed class TransientStripRenderer : IDisposable
         // `.mini-content` colour rgba(255,255,255,.56) with the 0.9 icon opacity and the 150 ms
         // content pulse (0.35 → 1) the prototype plays when the icon changes.
         var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(pulse));
-        IconSet.Draw(canvas, IconFor(page), icon, Alpha(Ink, 0.504f * content), _icon);
+        IconSet.Draw(canvas, IconFor(page), icon, Alpha(Ink, 0.78f * content), _icon);
     }
 
     private void DrawCurrent(SKCanvas canvas, float alpha)
@@ -400,7 +402,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var content = alpha * MiniRailMotionValues.PulseOpacity(Ease(_frame.PulseCurrent));
 
         var icon = new SKRect(left, rect.MidY - (iconSize / 2f), left + iconSize, rect.MidY + (iconSize / 2f));
-        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(Ink, 0.576f * content), _icon);
+        IconSet.Draw(canvas, IconFor(_frame.Page), icon, Alpha(Ink, 0.84f * content), _icon);
 
         var labelRect = new SKRect(
             left + iconSize + gap,
@@ -421,7 +423,7 @@ internal sealed class TransientStripRenderer : IDisposable
         var oldLayout = _text.GetLayout(_labelFrom, IslandType.MiniLabel, float.PositiveInfinity);
         var oldRect = new SKRect(labelRect.Left, labelRect.Top - (3f * eased), labelRect.Right, labelRect.Bottom - (3f * eased));
         var newRect = new SKRect(labelRect.Left, labelRect.Top + (3f * (1f - eased)), labelRect.Right, labelRect.Bottom + (3f * (1f - eased)));
-        _text.DrawLayout(canvas, oldLayout, oldRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content * (1f - eased));
+        _text.DrawLayout(canvas, oldLayout, oldRect, Alpha(Ink, 0.8f * content), TextAlign.Left, content * (1f - eased));
         _text.DrawLayout(canvas, layout, newRect, Alpha(SKColors.White, 0.8f * content), TextAlign.Left, content * eased);
     }
 

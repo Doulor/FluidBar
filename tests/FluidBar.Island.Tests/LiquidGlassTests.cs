@@ -286,6 +286,37 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
+    public void Explicit_dark_liquid_glass_still_switches_to_dark_ink_on_white()
+    {
+        // The user's setting is explicitly Dark + Liquid Glass. The fallback palette stays dark,
+        // but the captured white desktop must never leave light-grey labels over pale glass.
+        var theme = IslandTheme.Dark.WithMaterial(IslandMaterial.LiquidGlass);
+        var state = IslandTestFixtures.Expanded(1) with
+        {
+            Theme = theme,
+            FollowBackdropPalette = true,
+        };
+        using var renderer = new IslandRenderer(theme);
+        using var panel = RenderOnWhite(renderer, state);
+        var shell = IslandMetrics.ShellRect(state);
+        var minInk = 1.0;
+        for (var x = shell.Left + 70.0; x < shell.Right - 8; x += 1.5)
+        {
+            for (var y = shell.Top + 60.0; y < shell.Top + 130; y += 1.5)
+            {
+                var pixel = panel.GetPixel((int)Math.Round(x * IslandTestFixtures.Scale),
+                    (int)Math.Round(y * IslandTestFixtures.Scale));
+                if (pixel.Alpha >= 120)
+                {
+                    minInk = Math.Min(minInk, Luma(pixel) / 255.0);
+                }
+            }
+        }
+
+        Assert.True(minInk < 0.35, $"explicit dark glass must paint dark ink on white (min={minInk:0.00})");
+    }
+
+    [Fact]
     public void Expanded_media_panel_on_white_flips_to_light_glass()
     {
         var theme = Liquid;
