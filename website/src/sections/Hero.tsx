@@ -56,7 +56,7 @@ export function Hero() {
               glow={0.3}
               onClick={() => scrollTo('download')}
             >
-              下载预览版
+              下载正式版
               <ArrowUpRight size={16} aria-hidden="true" />
             </SpecularButton>
             <a
@@ -72,7 +72,7 @@ export function Hero() {
             </a>
           </div>
           <p className="hero-note">
-            源码开放 · MIT · 开发预览版
+            源码开放 · MIT · 正式版
           </p>
 
         </div>

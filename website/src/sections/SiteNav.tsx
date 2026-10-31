@@ -79,7 +79,7 @@ export function SiteNav() {
               <GithubLogo size={19} weight="regular" aria-hidden="true" />
             </a>
             <a className="nav-cta" href="#download">
-              下载预览版
+              下载正式版
             </a>
             <button
               className="nav-menu-button"
@@ -106,7 +106,7 @@ export function SiteNav() {
                 GitHub
               </a>
               <a className="nav-cta" href="#download" onClick={() => setOpen(false)}>
-                下载预览版
+                下载正式版
               </a>
             </nav>
           </div>
