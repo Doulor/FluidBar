@@ -81,8 +81,18 @@ public sealed class TimerPlugin : IFluidBarPlugin
                 lock (_gate)
                 {
                     if (!_started) return ValueTask.CompletedTask;
+                    var state = _timer.Read();
+                    // A tick already queued when Pause() runs must not publish a paused snapshot: the
+                    // pause command already published it, and a late event made pause observably racy.
+                    if (!state.Running && !state.Completed)
+                    {
+                        _tick?.Dispose();
+                        _tick = null;
+                        return ValueTask.CompletedTask;
+                    }
+
                     Publish();
-                    if (!_timer.Read().Running) { _tick?.Dispose(); _tick = null; }
+                    if (!state.Running) { _tick?.Dispose(); _tick = null; }
                 }
                 return ValueTask.CompletedTask;
             });
