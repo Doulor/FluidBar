@@ -163,7 +163,7 @@ public sealed class QuickToggleServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(new[] { true }, backend.Requests);
-        await TestWait.UntilAsync(() => service.Current?.IsActive == true && service.IsActive);
+        await TestWait.UntilAsync(() => service.Current?.IsActive == true && service.IsActive == true);
     }
 
     [Fact]
