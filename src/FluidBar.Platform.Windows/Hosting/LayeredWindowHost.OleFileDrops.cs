@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Interop;
 
 namespace FluidBar.Platform.Windows.Hosting;
@@ -40,13 +41,19 @@ public sealed partial class LayeredWindowHost
         var hr = NativeMethods.Ole32.OleInitialize(IntPtr.Zero);
         if (hr < 0 && hr != unchecked((int)0x00000001)) // S_FALSE (already initialized) is fine
         {
+            _logger.LogWarning(PlatformLogCategory.Platform,
+                "layered-host.ole-init-failed", $"OLE initialization failed: 0x{hr:X8}.");
             return;
         }
 
         var target = new OleFileDropTarget(this);
-        if (NativeMethods.Ole32.RegisterDragDrop(_hwnd, Marshal.GetComInterfaceForObject(
-                target, typeof(IDropTarget))) != 0)
+        var targetPointer = Marshal.GetComInterfaceForObject(target, typeof(IDropTarget));
+        var registerHr = NativeMethods.Ole32.RegisterDragDrop(_hwnd, targetPointer);
+        Marshal.Release(targetPointer);
+        if (registerHr != 0)
         {
+            _logger.LogWarning(FluidBar.Platform.Windows.Diagnostics.PlatformLogCategory.Platform,
+                "layered-host.ole-drop-failed", $"OLE RegisterDragDrop failed: 0x{registerHr:X8}.");
             return;
         }
 
