@@ -93,19 +93,30 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
     {
         var context = _context!;
         string L(string key) => context.Localization.Get(key);
-        List<PageListRow> rows =
-        [
-            new() { RowId = "open", Title = L("open"), Subtitle = L("hint"), RowCommandId = context.PluginId + ".open" },
-        ];
-        rows.AddRange(_paths.Select((path, index) => new PageListRow
+        List<PageListRow> rows = [];
+        if (_paths.Length > 0)
         {
-            RowId = "file-" + index, Title = Path.GetFileName(path), Subtitle = path,
-            RowCommandId = context.PluginId + ".open", IconToken = "file",
-        }));
+            rows.Add(new PageListRow
+            {
+                RowId = "open", Title = L("open"), Subtitle = L("hint"),
+                RowCommandId = context.PluginId + ".open",
+            });
+            rows.AddRange(_paths.Select((path, index) => new PageListRow
+            {
+                RowId = "file-" + index, Title = Path.GetFileName(path), Subtitle = path,
+                RowCommandId = context.PluginId + ".open", IconToken = "file",
+            }));
+        }
+
         context.Islands.PublishPage(new PageData
         {
             PageId = PageId, TemplateId = PageTemplates.List, Revision = ++_revision,
-            BadgeCount = _paths.Length, List = new PageListData { Rows = rows, EmptyTitle = L("empty") },
+            BadgeCount = _paths.Length, List = new PageListData
+            {
+                Rows = rows,
+                EmptyTitle = L("empty"),
+                EmptyHint = L("hint"),
+            },
         });
     }
 
