@@ -2,6 +2,14 @@
 
 > 最后更新：2026-11-01（Asia/Shanghai）
 
+## 2026-11-01 官网插件市场重构
+
+- 重做市场目录及四个详情页：统一官网品牌、字体、导航，增加搜索/用途筛选、空结果、安装指引、权限、版本记录和校验值复制；静态页无 JS 仍可用。
+- `website/marketplace/` 是展示层源，`sync-marketplace.mjs` 生成 HTML 和同源 UI 资源；签名索引、keys、插件 JSON 与图标字节不变。专属用法依据插件 README，未知插件仍自动获得通用详情页。
+- 补齐 Vite 开发与预览的静态目录路由：市场和 schema 的缺失路径返回 404，不回退官网。Cloudflare 的既有 `_headers` 和顶层 404 保持。
+- 本地 `pnpm check`：构建通过，Vitest **12/12**、市场 Node **9/9**、Playwright **30/30**。覆盖 320/390/768/1440px、全部详情页可访问性、无 JS、复制成功/失败、未知条目与不可下载状态。
+- 已部署：Pages `6696a9fc`，正式地址 `https://fluidbar.doulor.cn/market/`。线上市场 Playwright **5/5**，静态资源/条件缓存/插件包签名 **24/24**。索引 SHA-256 仍为 `712a7f8b7c01ddfc0b79abf7d6de9cdf5b140444b413928c54de1367013afda0`，无签名源变更。
+
 ## 2026-11-01 官网展开卡片侧栏同步
 
 - 以 `LayoutTokens.ExpandedWidth = 472`、`SideRailLayout` 与 `PageRenderer.DrawSideRail` 为准，同源 prototype2 现在默认显示卡片内左侧六图标栏。40×40 按钮、4px 间距、17px 图标、12px 圆角、强调底色与 2×18 指示线跟随原 pager。

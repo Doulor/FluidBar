@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { syncMarketplace } from '../sync-marketplace.mjs';
+import { renderCatalog, renderListing } from '../../marketplace/render.mjs';
 
 const plugin = id => ({ id, name: { 'zh-Hans': id }, summary: { 'en-US': 'Optional plugin' }, publisher: { displayName: 'FluidBar' }, latest: { version: '2.0.0', artifact: { url: `https://example.com/${id}.fbp`, sha256: 'a'.repeat(64) } } });
 async function fixture(action) {
@@ -58,3 +59,35 @@ test('Only obsolete generated plugin output is removed when the catalog changes'
   await assert.rejects(readFile(path.join(options.targetDirectory, 'assets/obsolete-plugin/icon.png')), { code: 'ENOENT' });
   assert.equal((await readFile(path.join(options.targetDirectory, 'assets/fluidbar-timer/icon.png'))).toString(), 'icon-fixture');
 }));
+
+test('Static pages escape catalog text and preserve exact downloads without inventing unknown plugin details', () => {
+  const entry = plugin('unknown-tool');
+  entry.name = '<script>alert("name")</script>';
+  entry.summary = 'A "quoted" <img src=x onerror=alert(1)> summary';
+  entry.publisher.displayName = '<svg onload=alert(1)>';
+  const assets = { css: '/market/ui/market.css', js: '/market/ui/market.js' };
+  for (const html of [renderCatalog({ plugins: [entry] }, assets), renderListing(entry, { versions: [entry.latest] }, assets)]) {
+    assert.ok(!html.includes('<script>alert'));
+    assert.ok(!html.includes('<img src=x'));
+    assert.ok(!html.includes('<svg onload'));
+    assert.ok(html.includes('&lt;script&gt;'));
+    assert.ok(!html.includes('undefined'));
+    assert.ok(!html.includes('1–180'));
+  }
+  const html = renderListing(entry, { versions: [entry.latest] }, assets);
+  assert.ok(html.includes('https://example.com/unknown-tool.fbp'));
+  assert.ok(html.includes('a'.repeat(64)));
+});
+
+test('Withdrawn or blocked catalog entries have no install download action', () => {
+  const assets = { css: '/market/ui/market.css', js: '/market/ui/market.js' };
+  for (const state of ['yanked', 'blocked', 'inactive']) {
+    const entry = plugin('unavailable-tool');
+    if (state === 'yanked') entry.latest.yanked = true;
+    if (state === 'blocked') entry.blocked = { reason: 'test' };
+    if (state === 'inactive') entry.status = 'removed';
+    const html = renderListing(entry, { versions: [entry.latest] }, assets);
+    assert.ok(!html.includes('class="download-button"'));
+    assert.ok(html.includes('此版本暂不可下载'));
+  }
+});
