@@ -1320,8 +1320,15 @@
   }
 
   function renderPages() {
+    E.sideRail.setAttribute('aria-label', S.lang === 'en' ? 'Pages' : '页面');
+    E.sideRail.innerHTML = '<span class="side-rail-selection" aria-hidden="true"></span>' + PAGES.map(function (page, i) {
+      var label = esc(t('tab.' + page.id));
+      return '<button class="side-tab" id="side-tab-' + page.id + '" type="button" role="tab" ' +
+        'data-page-index="' + i + '" aria-controls="page-' + page.id + '" aria-label="' + label + '">' +
+        icon(page.icon, 17) + '<span class="side-tab-label" aria-hidden="true">' + label + '</span></button>';
+    }).join('');
     E.pagerTrack.innerHTML = PAGES.map(function (page, i) {
-      return '<section class="page" data-page="' + page.id + '" role="group" aria-roledescription="slide" ' +
+      return '<section class="page" id="page-' + page.id + '" data-page="' + page.id + '" role="tabpanel" aria-labelledby="side-tab-' + page.id + '" ' +
         'aria-label="' + (i + 1) + ' / ' + PAGES.length + ' · ' + esc(t('tab.' + page.id)) + '">' + pageHTML(page) + '</section>';
     }).join('');
     applyPagerTransform();
@@ -1564,6 +1571,7 @@
   }
 
   function kickRail() {
+    if (E.miniRail.hidden) return;
     if (RAIL.raf) return;
     RAIL.last = performance.now();
     RAIL.raf = requestAnimationFrame(railTick);
@@ -1658,6 +1666,9 @@
   }
 
   function showRail(index) {
+    // The released app defaults to the in-card rail; retain legacy strip math
+    // without displaying or scheduling its detached preview animation.
+    if (E.miniRail.hidden) return;
     if (!S.expanded) return;
     var wasVisible = E.miniRail.classList.contains('is-visible');
     var target = index === undefined ? clamp(Math.round(P.offset), 0, MAX_PAGE) : index;
@@ -1690,6 +1701,7 @@
      ========================================================================== */
   function applyPagerTransform() {
     E.pagerTrack.style.transform = 'translate3d(' + (-P.offset * PAGE_W).toFixed(3) + 'px, 0, 0)';
+    E.sideRail.style.setProperty('--rail-y', (clamp(P.offset, 0, MAX_PAGE) * 44).toFixed(3) + 'px');
   }
 
   function syncTitle(index) {
@@ -1704,6 +1716,9 @@
     for (var i = 0; i < pages.length; i++) {
       var active = i === index;
       pages[i].setAttribute('aria-hidden', active ? 'false' : 'true');
+      var tab = E.sideRail.querySelector('[data-page-index="' + i + '"]');
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.tabIndex = active ? 0 : -1;
       if (active) pages[i].removeAttribute('inert');
       else pages[i].setAttribute('inert', '');
     }
@@ -1978,6 +1993,24 @@
   }
 
   function bindPager() {
+    E.sideRail.addEventListener('click', function (e) {
+      var tab = e.target.closest('[data-page-index]');
+      if (tab && S.expanded) jumpToPage(Number(tab.dataset.pageIndex));
+    });
+    E.sideRail.addEventListener('keydown', function (e) {
+      var tab = e.target.closest('[data-page-index]');
+      if (!tab) return;
+      var target = Number(tab.dataset.pageIndex);
+      if (e.key === 'ArrowDown') target = (target + 1) % PAGES.length;
+      else if (e.key === 'ArrowUp') target = (target + MAX_PAGE) % PAGES.length;
+      else if (e.key === 'Home') target = 0;
+      else if (e.key === 'End') target = MAX_PAGE;
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      jumpToPage(target);
+      E.sideRail.querySelector('[data-page-index="' + target + '"]').focus();
+    });
     E.pagerViewport.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', onPointerUp);
@@ -3095,6 +3128,7 @@
     E.compactLayer = $('compactLayer');
     E.expandedLayer = $('expandedLayer');
     E.pager = $('pager');
+    E.sideRail = $('sideRail');
     E.pagerViewport = $('pagerViewport');
     E.pagerTrack = $('pagerTrack');
     E.pagerTitle = $('pagerTitle');

@@ -12,7 +12,7 @@ import type { PrototypeCommand, PrototypeState } from './protocol';
 import { isPrototypeStateMessage, makeCommand } from './protocol';
 import './prototype-frame.css';
 
-const FRAME_WIDTH = 488;
+const FRAME_WIDTH = 520;
 const FRAME_HEIGHT = 444;
 
 export interface PrototypeFrameHandle {

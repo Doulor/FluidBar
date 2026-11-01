@@ -34,7 +34,7 @@
 
   <!-- =====================================================================
        ISLAND — one morphing shell. Compact states are pixel-tight; the
-       expanded panel is 440×284 with a 20/12 content inset.
+       expanded panel is 472×284: 40px side rail and 400×260 content.
        ===================================================================== -->
   <div class="island-layer" id="islandLayer">
     <div class="island-anchor" id="anchor" data-expanded="false">
@@ -42,6 +42,7 @@
            tabindex="0" role="group" aria-expanded="false" aria-label="FluidBar">
         <div class="compact-layer" id="compactLayer"></div>
         <div class="expanded-layer" id="expandedLayer" aria-hidden="true" inert>
+          <div class="side-rail" id="sideRail" role="tablist" aria-label="页面" aria-orientation="vertical"></div>
           <div class="pager" id="pager">
             <div class="pager-viewport" id="pagerViewport">
               <div class="pager-track" id="pagerTrack"></div>
@@ -57,7 +58,7 @@
       <!-- Transient preview islands: detached, below the shell, never at rest.
            The three pills are decorative; the far-page dots inside are real
            buttons, so the rail itself is not aria-hidden. -->
-      <div class="mini-rail" id="miniRail"></div>
+      <div class="mini-rail" id="miniRail" hidden inert aria-hidden="true"></div>
     </div>
   </div>
 

@@ -35,7 +35,7 @@ export function Hero() {
         <nav className="hero-page-rail" aria-label="原型页面">
           {PAGES.map(({ label, icon: Icon }, index) => <button key={label} type="button" className={activePage === index ? 'is-active' : ''} aria-pressed={activePage === index} onClick={() => { frameRef.current?.load(); send({ state: 'expanded', page: index }); }}><Icon size={20} aria-hidden="true" />{label}</button>)}
         </nav>
-          <PrototypeFrame ref={frameRef} title="FluidBar 真实交互原型：点击、拖动或滚轮体验六个页面" name="fluidbar-hero" wide startState="expanded" startPage={1} onState={setState} />
+          <PrototypeFrame ref={frameRef} title="FluidBar 真实交互原型：侧边栏切换、拖动或滚轮体验六个页面" name="fluidbar-hero" wide startState="expanded" startPage={1} onState={setState} />
           <div className="hero-stage__caption"><span>你的 Windows，多一个顺手的地方。</span><span>交互演示 · 示例数据</span></div>
         </div>
         <div className="hero-detail">
@@ -46,7 +46,7 @@ export function Hero() {
               <option value="expanded">展开控制中心</option>
               {COMPACT_STATE_META.filter(item => ['idle', 'media', 'notifications', 'clipboard', 'agent'].includes(item.id)).map(item => <option key={item.id} value={item.id}>{item.label} · {item.size}</option>)}
             </select>
-            <p>点击展开或收起，拖动、滚轮或按 1–6 切页。</p>
+            <p>点击侧边栏切页，拖动、滚轮或按 1–6 也可以。</p>
           </div>
         </div>
         <div className="daily-rhythm">

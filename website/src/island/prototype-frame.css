@@ -1,7 +1,7 @@
 .prototype-frame {
   position: relative;
   width: 100%;
-  max-width: 488px;
+  max-width: 520px;
   margin-inline: auto;
   overflow: hidden;
   border-radius: 20px;
@@ -29,7 +29,7 @@
 .prototype-frame__iframe {
   position: absolute;
   inset: 0;
-  width: 488px;
+  width: 520px;
   height: 444px;
   transform-origin: top left;
 }

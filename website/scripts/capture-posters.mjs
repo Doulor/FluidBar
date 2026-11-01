@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const origin = process.env.POSTER_BASE_URL || 'http://127.0.0.1:4173';
 const browser = await chromium.launch({ channel: 'msedge' });
 try {
-  const context = await browser.newContext({ viewport: { width: 488, height: 444 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
+  const context = await browser.newContext({ viewport: { width: 520, height: 444 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
   const page = await context.newPage();
   for (const [state, file] of [['idle', 'hero-idle-daylight.png'], ['expanded', 'lab-expanded-daylight.png']]) {
     await page.goto(`${origin}/island/embed.html?state=${state}&tab=home`);

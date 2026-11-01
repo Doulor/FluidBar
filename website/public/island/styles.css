@@ -684,7 +684,7 @@ body[data-theme="light"] .island {
 }
 .island[data-expanded="false"] { cursor: pointer; }
 .island[data-expanded="true"] {
-  width: 440px;
+  width: 472px;
   height: 284px;
   border-radius: var(--panel-radius, 30px);
   cursor: default;
@@ -710,7 +710,7 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
 
 .pager-title {
   position: absolute;
-  left: 20px;
+  left: 60px;
   top: 11px;
   z-index: 6;
   display: flex;
@@ -770,7 +770,7 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
 
 /* Expanded sizing must win over every compact data-view rule above. */
 .island[data-expanded="true"] {
-  width: 440px;
+  width: 472px;
   height: 284px;
   border-radius: var(--panel-radius, 30px);
 }
@@ -1173,7 +1173,7 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
    ========================================================================== */
 .expanded-layer {
   position: absolute;
-  inset: 12px 20px;
+  inset: 12px 12px 12px 60px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease-out);
@@ -1183,6 +1183,74 @@ body[data-mode="dock"] .island[data-expanded="true"] { border-radius: var(--pane
   pointer-events: auto;
   transition: opacity 220ms var(--ease-out) 90ms;
 }
+
+/* Release geometry: SideRailLayout.cs (40×40 tabs, 4px gaps, 17px icons).
+   The rail shares the pager's spring position and never narrows page content. */
+.side-rail {
+  position: absolute;
+  left: -50px;
+  top: 0;
+  width: 40px;
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 8;
+  visibility: hidden;
+}
+.island[data-expanded="true"] .side-rail { visibility: visible; }
+.side-rail-selection {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(var(--rail-y, 0px));
+  pointer-events: none;
+}
+.side-rail-selection::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 11px;
+  width: 2px;
+  height: 18px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: 0.82;
+}
+.side-tab {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--fg-3);
+  transition: color 120ms, background 120ms;
+}
+.side-tab:hover { color: var(--fg); background: rgba(255, 255, 255, 0.07); }
+.side-tab:active { background: rgba(255, 255, 255, 0.12); }
+.side-tab[aria-selected="true"] { color: var(--accent); }
+.side-tab:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
+.side-tab-label {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 11px;
+  padding: 0 8px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: 7px;
+  background: rgba(8, 8, 10, 0.96);
+  color: var(--fg);
+  font-size: 10px;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+.side-tab:hover .side-tab-label,
+.side-tab:focus-visible .side-tab-label { visibility: visible; }
+.mini-rail[hidden] { display: none; }
 
 .pager {
   position: relative;

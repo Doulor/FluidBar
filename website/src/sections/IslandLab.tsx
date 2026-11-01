@@ -27,7 +27,7 @@ export function IslandLab() {
         <div id="material-study" className="lab-grid">
           <div className="lab-stage">
             <PrototypeFrame ref={frameRef} title="FluidBar 真实灵动岛原型" name="fluidbar-lab" startState="expanded" lazy onState={setState} />
-            <div className="lab-stage__foot"><span>{state.ready && !state.expanded ? '已收起 · 点击小岛展开' : '展开预览 · 440 × 284'}</span><a href="/island/embed.html" target="_blank" rel="noreferrer" aria-label="打开独立演示"><ArrowUpRight size={16} aria-hidden="true" /></a></div>
+            <div className="lab-stage__foot"><span>{state.ready && !state.expanded ? '已收起 · 点击小岛展开' : '展开预览 · 472 × 284'}</span><a href="/island/embed.html" target="_blank" rel="noreferrer" aria-label="打开独立演示"><ArrowUpRight size={16} aria-hidden="true" /></a></div>
           </div>
           <div className="lab-config">
             <div className="control-group">

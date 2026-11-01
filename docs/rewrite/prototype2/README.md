@@ -4,7 +4,13 @@ A standalone iteration of the FluidBar dynamic-island prototype: vanilla HTML/CS
 
 This folder is intentionally separate from `docs/rewrite/prototype/` (the archived prototype). Nothing in that folder is read at runtime; the console only links to it.
 
-**Last updated: 2026-10-18.**
+**Website runtime updated: 2026-11-01.**
+
+The current runtime follows the released app's default **left in-card sidebar** (`SideRailLayout.cs`, `LayoutTokens.cs`). The expanded shell is **472 × 284**, with content **400 × 260** at **(60, 12)**. Six **40 × 40** icon tabs sit at x=10 with **4 px** gaps; the selected accent tile and 2 × 18 marker follow the pager spring. Click a tab or use ↑/↓, Home/End while it has focus. Existing drag, wheel, 1–6 and collapse controls still work. Compact media stays **226 × 40**.
+
+The detached preview strip is hidden and inert; its legacy animation loop is disabled. The website frame is **520 × 444**, retaining 24px horizontal clearance. The same-origin embed is regenerated with `node website/scripts/sync-island.mjs`; do not edit generated runtime files.
+
+**Historical design / measurements below (2026-10-18):** these describe the earlier bottom-strip prototype, not the current default sidebar. Screenshots in this folder remain historical references; current browser checks live in `website/tests/preview.spec.ts`.
 
 ---
 

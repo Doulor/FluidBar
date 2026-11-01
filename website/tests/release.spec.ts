@@ -47,7 +47,7 @@ test('wide desktop preview preserves product geometry and fits small screens', a
     await page.goto('/');
     const frame = page.frameLocator('iframe[name="fluidbar-hero"]');
     await expect(frame.locator('body.ready')).toBeAttached();
-    await expect.poll(() => frame.locator('#island').evaluate(el => [el.clientWidth, el.clientHeight])).toEqual([440, 284]);
+    await expect.poll(() => frame.locator('#island').evaluate(el => [el.clientWidth, el.clientHeight])).toEqual([472, 284]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const cta = await page.locator('.hero-actions .button').boundingBox();
     expect(cta!.y + cta!.height).toBeLessThan(700);
