@@ -47,6 +47,7 @@
       "island": true,
       "settings": true,
       "commands": true,
+      "pages": true,
       "xaml": false
     },
     "files": {

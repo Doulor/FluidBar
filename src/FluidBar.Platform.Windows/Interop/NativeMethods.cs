@@ -1263,5 +1263,17 @@ internal static partial class NativeMethods
         [DllImport(Lib)]
         internal static extern int CoCreateInstance(in Guid rclsid, IntPtr pUnkOuter, uint dwClsContext, in Guid riid,
             out IntPtr ppv);
+
+        [DllImport(Lib)]
+        internal static extern int OleInitialize(IntPtr pvReserved);
+
+        [DllImport(Lib)]
+        internal static extern int RegisterDragDrop(IntPtr hwnd, IntPtr pDropTarget);
+
+        [DllImport(Lib)]
+        internal static extern int RevokeDragDrop(IntPtr hwnd);
+
+        [DllImport(Lib)]
+        internal static extern int ReleaseStgMedium(ref System.Runtime.InteropServices.ComTypes.STGMEDIUM pmedium);
     }
 }
