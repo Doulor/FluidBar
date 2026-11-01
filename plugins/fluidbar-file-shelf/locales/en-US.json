@@ -4,7 +4,7 @@
   "messages": {
     "title": "File shelf",
     "open": "Open file shelf",
-    "hint": "Add or drag files. Only references are stored.",
-    "empty": "No files yet."
+    "hint": "References only; your originals stay untouched.",
+    "empty": "Drop files to start your shelf"
   }
 }
