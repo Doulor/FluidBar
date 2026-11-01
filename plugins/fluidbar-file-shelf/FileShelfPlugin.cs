@@ -10,7 +10,6 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
     private readonly object _gate = new();
     private IPluginContext? _context;
     private readonly List<IDisposable> _commands = [];
-    private IDisposable? _view;
     private IDisposable? _dropTarget;
     private string[] _paths = [];
     private Task _save = Task.CompletedTask;
@@ -21,7 +20,7 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
     public async ValueTask InitializeAsync(IPluginContext context, CancellationToken cancellationToken)
     {
         _context = context;
-        context.RegisterForDisposal(() => { _view?.Dispose(); _dropTarget?.Dispose(); });
+        context.RegisterForDisposal(() => { _dropTarget?.Dispose(); });
         var json = await context.Storage.ReadTextAsync("references.json", cancellationToken).ConfigureAwait(false);
         if (json is not null)
         {
@@ -45,22 +44,9 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
                     Changed(_paths.Concat(paths).ToArray());
                 }
             }, context.HostStopping);
-            _commands.Add(context.Commands.Register(context.PluginId + ".open", (_, token) =>
-            {
-                token.ThrowIfCancellationRequested();
-                lock (_gate)
-                {
-                    if (!_started) return ValueTask.CompletedTask;
-                    var shelf = context.FileShelf ?? throw new InvalidOperationException("The host file shelf is unavailable or lacks consent.");
-                    _view?.Dispose();
-                    _view = shelf.Show(_paths, Changed, context.HostStopping);
-                }
-                return ValueTask.CompletedTask;
-            }));
             _commands.Add(context.Commands.Register(context.PluginId + ".clear", (_, _) =>
             {
                 Changed([]);
-                _view?.Dispose(); _view = null;
                 return ValueTask.CompletedTask;
             }));
             context.Islands.RegisterPage(new PageDescriptor
@@ -94,17 +80,20 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
         var context = _context!;
         string L(string key) => context.Localization.Get(key);
         List<PageListRow> rows = [];
-        if (_paths.Length > 0)
+        if (_paths.Length == 0)
         {
             rows.Add(new PageListRow
             {
-                RowId = "open", Title = L("open"), Subtitle = L("hint"),
-                RowCommandId = context.PluginId + ".open",
+                RowId = "drag-hint", Title = L("empty"), Subtitle = L("hint"),
+                IconToken = "file",
             });
+        }
+        else
+        {
             rows.AddRange(_paths.Select((path, index) => new PageListRow
             {
                 RowId = "file-" + index, Title = Path.GetFileName(path), Subtitle = path,
-                RowCommandId = context.PluginId + ".open", IconToken = "file",
+                IconToken = "file",
             }));
         }
 
@@ -127,7 +116,6 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
         {
             _started = false;
             _dropTarget?.Dispose(); _dropTarget = null;
-            _view?.Dispose(); _view = null;
             foreach (var command in _commands) command.Dispose();
             _commands.Clear();
             _context?.Islands.UnregisterPage(PageId);

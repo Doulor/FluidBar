@@ -1089,7 +1089,9 @@ public sealed partial class SkiaIslandController : IDisposable
         }
 
         _fileDragActive = true;
-        HandlePageRequest(new CoreIslandPage("fluidbar-file-shelf.page"));
+        var fileShelfPage = new CoreIslandPage("fluidbar-file-shelf.page");
+        ApplyInput(IslandInput.PageRequested(fileShelfPage));
+        HandlePageRequest(fileShelfPage);
         BuildRenderState();
         InvalidateFull();
     }
@@ -1116,7 +1118,9 @@ public sealed partial class SkiaIslandController : IDisposable
         }
 
         _fileDragActive = false;
-        HandlePageRequest(new CoreIslandPage("fluidbar-file-shelf.page"));
+        var fileShelfPage = new CoreIslandPage("fluidbar-file-shelf.page");
+        ApplyInput(IslandInput.PageRequested(fileShelfPage));
+        HandlePageRequest(fileShelfPage);
         BuildRenderState();
         InvalidateFull();
     }
@@ -1145,14 +1149,30 @@ public sealed partial class SkiaIslandController : IDisposable
             _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationMarkAllRead));
         }
 
+        // Keep the Core state and the pager in lockstep. Selecting only the pager leaves
+        // State.Page on the old page, so the next transition's SyncPagerFromState snaps the
+        // user straight back (the file-shelf drag-enter path hit exactly this).
+        if (State.Kind == IslandStateKind.Expanded)
+        {
+            ApplyInput(IslandInput.PageRequested(page));
+        }
+
         var index = IndexOfPage(page);
-        if (index < 0 || index == _pager.SelectedIndex)
+        if (index < 0)
         {
             return;
         }
 
         EnsureRailPageVisible(index);
-        _pager.SelectPage(index);
+        if (index != _pager.SelectedIndex)
+        {
+            _pager.SelectPage(index);
+        }
+
+        // The pager event normally rebuilds the frame, but a request for the already-selected
+        // page still has to repaint: Core's State.Page may have changed first (drag-enter).
+        BuildRenderState();
+        InvalidateFull();
     }
 
     /// <summary>

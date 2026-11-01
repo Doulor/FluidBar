@@ -3,7 +3,9 @@
   "id": "fluidbar-file-shelf",
   "version": "1.0.0",
   "apiVersion": "2.1.0",
-  "dependencies": { "sdk": "^2.1.0" },
+  "dependencies": {
+    "sdk": "^2.1.0"
+  },
   "minAppVersion": "2.0.0",
   "publisher": {
     "id": "fluidbar",
@@ -66,18 +68,6 @@
   "contributes": {
     "commands": [
       {
-        "id": "fluidbar-file-shelf.open",
-        "title": {
-          "en-US": "Open file shelf",
-          "zh-Hans": "打开文件暂存"
-        },
-        "contexts": [
-          "global",
-          "island",
-          "settings"
-        ]
-      },
-      {
         "id": "fluidbar-file-shelf.clear",
         "title": {
           "en-US": "Clear references",
@@ -98,15 +88,6 @@
           "zh-Hans": "文件暂存"
         },
         "controls": [
-          {
-            "type": "button",
-            "key": "action.open",
-            "command": "fluidbar-file-shelf.open",
-            "title": {
-              "en-US": "Open file shelf",
-              "zh-Hans": "打开文件暂存"
-            }
-          },
           {
             "type": "button",
             "key": "action.clear",

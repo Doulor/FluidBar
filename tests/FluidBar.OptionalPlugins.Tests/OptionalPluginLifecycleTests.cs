@@ -37,7 +37,7 @@ public sealed class OptionalPluginLifecycleTests
     }
 
     [Fact]
-    public async Task Shelf_has_no_window_until_invoked_and_releases_drop_and_window_on_stop()
+    public async Task Shelf_stays_on_the_island_page_and_releases_drop_on_stop()
     {
         var shelf = new FakeShelf();
         var fixture = new PluginFixture("fluidbar-file-shelf", new FileShelfPlugin(), shelf);
@@ -46,11 +46,11 @@ public sealed class OptionalPluginLifecycleTests
             Assert.True((await fixture.Session.StartAsync()).Success);
             Assert.Equal(0, shelf.Shows);
             Assert.True(shelf.DropRegistered);
-            Assert.True((await fixture.Session.ExecuteCommandAsync("fluidbar-file-shelf.open")).Succeeded);
-            Assert.Equal(1, shelf.Shows);
-            shelf.Change!([Path.Combine(Path.GetTempPath(), "reference-only.txt")]);
+            Assert.False((await fixture.Session.ExecuteCommandAsync("fluidbar-file-shelf.open")).Succeeded);
+            Assert.Equal(0, shelf.Shows);
+            shelf.Drop!([Path.Combine(Path.GetTempPath(), "reference-only.txt")]);
             await fixture.Session.StopAsync();
-            Assert.True(shelf.WindowDisposed);
+            Assert.False(shelf.WindowDisposed);
             Assert.False(shelf.DropRegistered);
             Assert.Empty(fixture.Publisher.Pages);
         }
@@ -114,6 +114,7 @@ public sealed class OptionalPluginLifecycleTests
         public bool WindowDisposed { get; private set; }
         public bool DropRegistered { get; private set; }
         public Action<IReadOnlyList<string>>? Change { get; private set; }
+        public Action<IReadOnlyList<string>>? Drop { get; private set; }
         public IDisposable Show(IReadOnlyList<string> paths, Action<IReadOnlyList<string>> changed, CancellationToken lifetime)
         {
             Shows++; Change = changed;
@@ -121,6 +122,7 @@ public sealed class OptionalPluginLifecycleTests
         }
         public IDisposable RegisterIslandDropTarget(Action<IReadOnlyList<string>> dropped, CancellationToken lifetime)
         {
+            Drop = dropped;
             DropRegistered = true;
             return new Cleanup(() => DropRegistered = false);
         }
