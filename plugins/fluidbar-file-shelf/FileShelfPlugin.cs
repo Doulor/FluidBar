@@ -43,8 +43,6 @@ public sealed class FileShelfPlugin : IFluidBarPlugin
                 {
                     if (!_started) return;
                     Changed(_paths.Concat(paths).ToArray());
-                    _view?.Dispose();
-                    _view = context.FileShelf!.Show(_paths, Changed, context.HostStopping);
                 }
             }, context.HostStopping);
             _commands.Add(context.Commands.Register(context.PluginId + ".open", (_, token) =>

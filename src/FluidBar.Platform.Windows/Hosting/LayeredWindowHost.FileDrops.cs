@@ -6,6 +6,12 @@ public sealed partial class LayeredWindowHost
 {
     public event Action<IReadOnlyList<string>>? FilesDropped;
 
+    /// <summary>Raised when a file drag enters this host, before the drop.</summary>
+    public event Action? FileDragEntered;
+
+    /// <summary>Raised when a file drag leaves/cancels this host.</summary>
+    public event Action? FileDragLeft;
+
     /// <summary>Enables legacy shell file drops only while an optional consumer is registered.</summary>
     public void SetFileDropEnabled(bool enabled)
     {

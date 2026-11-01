@@ -167,6 +167,7 @@ public sealed partial class SkiaIslandController : IDisposable
     private string _visibleStackSignature = string.Empty;
     private IslandRenderState _renderState;
     private bool _hasRenderState;
+    private bool _fileDragActive;
     private IslandActionFeedback? _actionFeedback;
     private DateTimeOffset _actionFeedbackExpiresAt;
     private long _latestFeedbackRequestId;
@@ -1070,6 +1071,55 @@ public sealed partial class SkiaIslandController : IDisposable
 
     /// <summary>Raises <see cref="MarketRequested"/> (tray/hotkey seam).</summary>
     public void RequestMarket() => MarketRequested?.Invoke();
+
+    /// <summary>
+    /// A file drag entered the island: expand the card and show the file-shelf page so the pointer has
+    /// a visible target instead of dropping onto the compact pill's opaque hit region.
+    /// </summary>
+    public void HandleFileDragEnter()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+        {
+            ApplyInput(IslandInput.PrimaryClick());
+        }
+
+        _fileDragActive = true;
+        HandlePageRequest(new CoreIslandPage("fluidbar-file-shelf.page"));
+        BuildRenderState();
+        InvalidateFull();
+    }
+
+    /// <summary>A file drag left without dropping; remove the drop hint but keep the card open.</summary>
+    public void HandleFileDragLeave()
+    {
+        if (!_fileDragActive || _disposed)
+        {
+            return;
+        }
+
+        _fileDragActive = false;
+        BuildRenderState();
+        InvalidateFull();
+    }
+
+    /// <summary>A file drop completed: select the file-shelf page so the new references are visible.</summary>
+    public void HandleFileDropCompleted()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _fileDragActive = false;
+        HandlePageRequest(new CoreIslandPage("fluidbar-file-shelf.page"));
+        BuildRenderState();
+        InvalidateFull();
+    }
 
     /// <summary>Requests a page (keyboard/archipelago); the pager animates and the state follows.</summary>
     /// <param name="page">Target page.</param>

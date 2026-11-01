@@ -99,6 +99,10 @@ public sealed partial class LayeredWindowHost
         public int DragEnter(IDataObject data, uint keyState, POINTL pt, ref uint effect)
         {
             _hasFiles = data is not null && HasFileDrop(data);
+            if (_hasFiles)
+            {
+                owner.FileDragEntered?.Invoke();
+            }
             effect = _hasFiles ? DropEffectCopy : 0;
             return 0;
         }
@@ -111,6 +115,10 @@ public sealed partial class LayeredWindowHost
 
         public int DragLeave()
         {
+            if (_hasFiles)
+            {
+                owner.FileDragLeft?.Invoke();
+            }
             _hasFiles = false;
             return 0;
         }

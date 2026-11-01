@@ -928,7 +928,25 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             data: new Dictionary<string, object?> { ["excludedFromCapture"] = host.ExcludeFromCapture });
         host.AttachAccessibility(_uiaSource, _uiaSource);
         host.SetFileDropEnabled(_fileDropHandlers is not null);
-        host.FilesDropped += paths => _fileDropHandlers?.Invoke(paths);
+        host.FileDragEntered += () =>
+        {
+            _controller.HandleFileDragEnter();
+            EnsureFrameLoop();
+            RenderNow(forceFull: true);
+        };
+        host.FileDragLeft += () =>
+        {
+            _controller.HandleFileDragLeave();
+            EnsureFrameLoop();
+            RenderNow(forceFull: true);
+        };
+        host.FilesDropped += paths =>
+        {
+            _fileDropHandlers?.Invoke(paths);
+            _controller.HandleFileDropCompleted();
+            EnsureFrameLoop();
+            RenderNow(forceFull: true);
+        };
 
         // Second launch of the exe: SingleInstanceGuard.TryAcquire() fails and it posts ActivateMessage to
         // this window class. Nothing subscribed to the resulting event, so the documented "nudge the running
