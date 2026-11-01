@@ -13,10 +13,9 @@ public sealed record WeatherServiceOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar", "weather.json");
 
     /// <summary>
-    /// Optional city override ("Shanghai"). Empty keeps the automatic path (IP geolocation). The App has
-    /// no editable settings slot for this yet (the settings window is owned by another workstream), so the
-    /// composition reads the <c>FLUIDBAR_WEATHER_CITY</c> environment variable; a future settings item only
-    /// has to assign this property.
+    /// Optional city override ("Shanghai"). Empty keeps the automatic path (Windows device location,
+    /// then public-IP geolocation as fallback). The App has
+    /// settings page writes this property; <c>FLUIDBAR_WEATHER_CITY</c> remains a diagnostics override.
     /// </summary>
     public string? City { get; init; }
 
@@ -29,8 +28,15 @@ public sealed record WeatherServiceOptions
     /// <summary>Open-Meteo geocoding root (only used when <see cref="City"/> is set).</summary>
     public string GeocodingBaseUrl { get; init; } = "https://geocoding-api.open-meteo.com";
 
-    /// <summary>Public IP-geolocation endpoint (no key) used when no city is configured.</summary>
+    /// <summary>Public IP-geolocation endpoint (no key), used only when Windows device location is unavailable.</summary>
     public string IpLocationUrl { get; init; } = "https://ipwho.is/";
+
+    /// <summary>
+    /// Optional device-location resolver (Windows Wi-Fi/network/GPS). It is preferred over the
+    /// public-IP lookup because VPN/proxy exit nodes can put the machine in another country. Null
+    /// keeps the legacy IP-only path (unit tests and platforms without the provider).
+    /// </summary>
+    public Func<CancellationToken, Task<GeoLocation?>>? SystemLocation { get; init; }
 
     /// <summary>Refresh cadence. The first fetch runs immediately when the service starts.</summary>
     public TimeSpan RefreshInterval { get; init; } = TimeSpan.FromMinutes(15);
@@ -72,6 +78,11 @@ public sealed record WeatherServiceOptions
             IpLocationUrl = Environment.GetEnvironmentVariable("FLUIDBAR_WEATHER_IP_URL") is { Length: > 0 } ip
                 ? ip
                 : "https://ipwho.is/",
+            // Device location is the production default; FLUIDBAR_WEATHER_SYSTEM_LOCATION=0 keeps the
+            // old IP-only path for deterministic smoke runs.
+            SystemLocation = Environment.GetEnvironmentVariable("FLUIDBAR_WEATHER_SYSTEM_LOCATION") == "0"
+                ? null
+                : WindowsLocationProvider.TryGetAsync,
             RefreshInterval = interval,
             GeocodingLanguage = uiCulture?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true ? "zh" : "en",
         };
@@ -82,7 +93,8 @@ public sealed record WeatherServiceOptions
 }
 
 /// <summary>
-/// Real weather monitor: Open-Meteo (no API key) on a background poll, cached to
+/// Real weather monitor: Open-Meteo (no API key) on a background poll, with Windows device location
+/// preferred over public-IP geolocation, cached to
 /// <c>%APPDATA%\\FluidBar\\weather.json</c>. Offline it publishes the last successful reading with its
 /// fetch time (<see cref="WeatherStatus.Cached"/>) or an explicit unavailable snapshot — it never invents
 /// a temperature.
@@ -326,6 +338,21 @@ public sealed class WeatherService : PlatformMonitor<WeatherSnapshot>
             }
 
             return location;
+        }
+
+        // Real device location first: a VPN/proxy changes the public IP but not the Windows location
+        // service's Wi-Fi/network fix. When permission is denied or the service times out, fall back
+        // to the public-IP lookup instead of failing the weather refresh.
+        if (_options.SystemLocation is { } systemLocation)
+        {
+            var device = await systemLocation(cancellationToken).ConfigureAwait(false);
+            if (device is not null)
+            {
+                return device;
+            }
+
+            Logger.LogInfo(PlatformLogCategory.Monitor, "weather.device-location-unavailable",
+                "Windows device location was unavailable; falling back to public-IP geolocation.");
         }
 
         var ipJson = await GetStringAsync(_options.IpLocationUrl, cancellationToken).ConfigureAwait(false);

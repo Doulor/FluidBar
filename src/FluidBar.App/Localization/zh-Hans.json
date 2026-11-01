@@ -396,7 +396,7 @@
     "Settings.Island.AutoHideMsHint": "空闲时隐藏药丸。0 表示保持可见。",
     "Settings.Island.PeekOnTrackChange": "切歌时预览",
     "Settings.Island.WeatherCity": "天气城市",
-    "Settings.Island.WeatherCityHint": "用于小组件页天气；留空表示自动定位。",
+    "Settings.Island.WeatherCityHint": "用于小组件页天气；留空时优先使用 Windows 定位，失败后按公网 IP 估算。",
     "Settings.Island.WeatherCityPlaceholder": "自动",
     "Settings.Island.DisplayOn.Title": "显示于",
     "Settings.Island.DisplayOn.Primary": "主显示器",

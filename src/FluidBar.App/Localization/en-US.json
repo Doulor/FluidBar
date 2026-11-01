@@ -396,7 +396,7 @@
     "Settings.Island.AutoHideMsHint": "Hide the pill when idle. 0 keeps it visible.",
     "Settings.Island.PeekOnTrackChange": "Peek on track change",
     "Settings.Island.WeatherCity": "Weather city",
-    "Settings.Island.WeatherCityHint": "Used by the widgets page. Leave empty to locate automatically.",
+    "Settings.Island.WeatherCityHint": "Used by the widgets page. Empty uses Windows location first, then a public-IP estimate.",
     "Settings.Island.WeatherCityPlaceholder": "Automatic",
     "Settings.Island.DisplayOn.Title": "Show on",
     "Settings.Island.DisplayOn.Primary": "Primary display",

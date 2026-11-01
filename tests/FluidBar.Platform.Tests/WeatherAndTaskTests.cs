@@ -212,6 +212,50 @@ public sealed class WeatherTests
     }
 
     [Fact]
+    public async Task Refresh_PrefersDeviceLocationOverPublicIp()
+    {
+        using var temp = new TempWeatherWorkspace();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("forecast", StringComparison.Ordinal)
+            ? Json(ForecastJson)
+            : Json(IpLocationJson));
+        var options = new WeatherServiceOptions
+        {
+            CachePath = temp.CachePath,
+            Http = handler.CreateClient(),
+            SystemLocation = _ => Task.FromResult<GeoLocation?>(
+                new GeoLocation(30.33765, 112.203199, "Jingzhou, China")),
+        };
+        await using var service = CreateService(temp, handler, options);
+
+        var snapshot = await service.RefreshAsync();
+
+        Assert.Equal(WeatherStatus.Ok, snapshot.Status);
+        Assert.Equal("Jingzhou, China", snapshot.LocationLabel);
+        Assert.DoesNotContain(handler.Requests, url => url.Contains("ipwho.is", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Refresh_FallsBackToPublicIpWhenDeviceLocationIsUnavailable()
+    {
+        using var temp = new TempWeatherWorkspace();
+        var handler = new StubHandler(request => request.RequestUri!.AbsolutePath.Contains("forecast", StringComparison.Ordinal)
+            ? Json(ForecastJson)
+            : Json(IpLocationJson));
+        var options = new WeatherServiceOptions
+        {
+            CachePath = temp.CachePath,
+            Http = handler.CreateClient(),
+            SystemLocation = _ => Task.FromResult<GeoLocation?>(null),
+        };
+        await using var service = CreateService(temp, handler, options);
+
+        var snapshot = await service.RefreshAsync();
+
+        Assert.Equal(WeatherStatus.Ok, snapshot.Status);
+        Assert.Contains(handler.Requests, url => url.Contains("ipwho.is", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Refresh_WithACityOverride_UsesTheGeocodingEndpoint()
     {
         using var temp = new TempWeatherWorkspace();
