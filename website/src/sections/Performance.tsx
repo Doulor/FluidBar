@@ -1,80 +1,19 @@
-import { useState } from 'react';
-import { CountUp } from '../ui/reactbits';
+import { ArrowUpRight } from '@phosphor-icons/react';
 import { MaterialArtwork } from '../ui/MaterialArtwork';
-import { ARCHITECTURE, PERFORMANCE_STATS } from '../data/specs';
+import { GITHUB, LICENSE, RELEASE_NOTES } from '../lib/links';
 import './performance.css';
 
 export function Performance() {
-  const [activeLayer, setActiveLayer] = useState(ARCHITECTURE[0].id);
-  const active = ARCHITECTURE.find((layer) => layer.id === activeLayer) ?? ARCHITECTURE[0];
-
   return (
-    <section id="performance" className="performance chapter" aria-labelledby="performance-title">
+    <section id="performance" className="performance section" aria-labelledby="performance-title">
       <div className="site-shell">
-        <header className="chapter-heading">
-          <div>
-            <p className="section-kicker">04 / PERFORMANCE</p>
-            <h2 id="performance-title">
-              丝滑不是形容词，
-              <br />
-              是预算。
-            </h2>
+        <div className="quality-layout">
+          <div className="quality-copy"><h2 id="performance-title" className="section-title">常驻的东西，<br />更值得认真做。</h2><p className="section-intro">空闲时停止动画回调，缓存有明确上限。<br />从渲染到插件生命周期，为长时间陪伴桌面而设计。</p>
+            <dl className="quality-stats" aria-label="产品质量与开源信息"><div><dt>空闲动画回调</dt><dd>0<span>帧</span></dd></div><div><dt>4.0 发布测试通过</dt><dd>2,818<span>项</span></dd></div><div><dt>开放源代码</dt><dd>MIT</dd></div></dl>
+            <p className="quality-source">测试数据来自 4.0.0 发布验收，空闲回调为渲染设计约束。</p>
+            <div className="quality-links"><a className="text-link" href={GITHUB} target="_blank" rel="noopener noreferrer">看看源代码<ArrowUpRight size={15} aria-hidden="true" /></a><a href={RELEASE_NOTES} target="_blank" rel="noopener noreferrer">发布验收</a><a href={LICENSE} target="_blank" rel="noopener noreferrer">MIT 许可</a></div>
           </div>
-          <p>
-            固定窗口、合成层动画、有界缓存。每一帧都有明确预算，每一个数字都来自实测。
-          </p>
-        </header>
-
-        <div className="stat-grid" aria-label="实测性能数字">
-          {PERFORMANCE_STATS.map((stat) => (
-            <div className="stat" key={stat.label}>
-              <div className="stat__value">
-                <CountUp
-                  to={stat.value}
-                  decimals={stat.decimals ?? 0}
-                  duration={1.5}
-                  easing="easeOut"
-                  trigger="view"
-                />
-                <span className="stat__suffix">{stat.suffix}</span>
-              </div>
-              <div className="stat__label">{stat.label}</div>
-              <div className="stat__note">{stat.note}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="architecture">
           <MaterialArtwork />
-
-          <div className="architecture-copy">
-            <p className="section-kicker">LAYERS</p>
-            <h3>从窗口到插件，只有一条链路。</h3>
-            <div className="layer-list" role="group" aria-label="架构层">
-              {ARCHITECTURE.map((layer, index) => (
-                <button
-                  key={layer.id}
-                  type="button"
-                  className={`layer-row ${activeLayer === layer.id ? 'is-active' : ''}`}
-                  aria-pressed={activeLayer === layer.id}
-                  onMouseEnter={() => setActiveLayer(layer.id)}
-                  onFocus={() => setActiveLayer(layer.id)}
-                  onClick={() => setActiveLayer(layer.id)}
-                >
-                  <span className="layer-row__index">0{index + 1}</span>
-                  <span className="layer-row__name">{layer.name}</span>
-                  <span className="layer-row__short">{layer.short}</span>
-                </button>
-              ))}
-            </div>
-            <p className="layer-detail" aria-live="polite">
-              {active.detail}
-            </p>
-            <p className="source-note">
-              数据来源：docs/rewrite/STATUS.md 与 v2 发布说明。测量环境为 Windows 11、150% DPI，
-              数字随版本和硬件变化。
-            </p>
-          </div>
         </div>
       </div>
     </section>

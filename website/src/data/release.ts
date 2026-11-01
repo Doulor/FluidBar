@@ -1,4 +1,4 @@
-// Verified against GitHub release and its publish manifest on 2026-10-30.
+// Verified against GitHub v4.0.0 and docs/rewrite/RELEASE-4.0.0.md on 2026-11-01.
 // Update these values together when publishing a new website download.
 export const RELEASE = {
   version: '4.0.0',

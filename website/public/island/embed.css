@@ -12,7 +12,7 @@ body {
   height: 100%;
   overflow: hidden;
   /* The website desktop stays light; the prototype keeps its dark island. */
-  background: #dceaf2 !important;
+  background: #e5eff7 !important;
 }
 
 /* Non-product chrome: demo console, transient toast, settings/market overlay,
@@ -36,7 +36,7 @@ body {
 /* Website-only desktop backdrop. Product theme/state/material are untouched.
    This file is hand-written; app.js, styles.css and embed.html are sync outputs. */
 .scene .wallpaper .wallpaper-base {
-  background: #dceaf2 url('../island-backdrop.svg') center / cover no-repeat;
+  background: #e5eff7 url('../images/daylight-desktop.webp') center / cover no-repeat;
 }
 .wallpaper-glow,
 .wallpaper-grain,

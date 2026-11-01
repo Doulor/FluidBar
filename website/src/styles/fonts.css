@@ -5,14 +5,16 @@
   font-weight: 300 700;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF;
 }
 
 @font-face {
   font-family: 'Noto Sans SC';
-  src: url('../assets/fonts/NotoSansSC-Subset.woff2') format('woff2');
+  src: url('../assets/fonts/NotoSansSC-Site.woff2') format('woff2');
   font-weight: 300 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+3000-30FF, U+3400-9FFF, U+FF00-FFEF;
 }
 
 @font-face {

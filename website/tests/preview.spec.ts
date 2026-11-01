@@ -34,7 +34,7 @@ test('mobile material selector keeps the expanded translucent preview in view', 
   await group.scrollIntoViewIfNeeded();
   await expect(frame.locator('body.ready')).toBeAttached();
   for (const [name, value, maxAlpha] of [['黑曜石', 'obsidian', 1], ['亚克力', 'acrylic', 0.7], ['液态玻璃', 'liquid', 0.4]] as const) {
-    await group.getByRole('button', { name, exact: true }).click();
+    await group.getByRole('button', { name: new RegExp(name) }).click();
     await expect(frame.locator('body')).toHaveAttribute('data-material', value);
     await expect(frame.locator('#island')).toHaveAttribute('data-expanded', 'true');
     await expect.poll(() => frame.locator('#island').evaluate(el => [el.clientWidth, el.clientHeight])).toEqual([440, 284]);
@@ -86,38 +86,30 @@ test('landscape phone material controls are not covered by the preview', async (
   // A deferred frame must not fail before the visitor reaches the controls.
   await page.waitForTimeout(9500);
   const group = page.getByRole('group', { name: '岛材质' });
-  await group.getByRole('button', { name: '液态玻璃', exact: true }).click();
+  await group.getByRole('button', { name: /液态玻璃/ }).click();
   const frame = page.frameLocator('iframe[name="fluidbar-lab"]');
   await expect(frame.locator('body')).toHaveAttribute('data-material', 'liquid');
   await expect(frame.locator('#island')).toHaveAttribute('data-expanded', 'true');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('material study supports keyboard selection without changing the real island', async ({ page }) => {
+test('material choices support keyboard selection and leave the hero independent', async ({ page }) => {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto('/');
-    await page.getByRole('group', { name: '岛材质' }).getByRole('button', { name: '黑曜石', exact: true }).click();
     const product = page.frameLocator('iframe[name="fluidbar-lab"]');
-    await expect(product.locator('body')).toHaveAttribute('data-material', 'obsidian');
-
-    const study = page.getByRole('group', { name: '材质研究样本' });
-    for (const [name, description] of [
-      ['黑曜石', '细腻的边缘反光'],
-      ['亚克力', '一层薄雾'],
-      ['液态玻璃', '通透的表面和亮边'],
-    ]) {
-      const button = study.getByRole('button', { name: new RegExp(`${name}.*材质研究`) });
+    const hero = page.frameLocator('iframe[name="fluidbar-hero"]');
+    const choices = page.getByRole('group', { name: '岛材质' });
+    for (const [name, value] of [['黑曜石', 'obsidian'], ['亚克力', 'acrylic'], ['液态玻璃', 'liquid']]) {
+      const button = choices.getByRole('button', { name: new RegExp(name) });
       await button.scrollIntoViewIfNeeded();
       await button.focus();
       await page.keyboard.press('Enter');
       await expect(button).toHaveAttribute('aria-pressed', 'true');
-      await expect(page.locator('.optics-caption')).toContainText(description);
-      await expect(product.locator('body')).toHaveAttribute('data-material', 'obsidian');
+      await expect(product.locator('body')).toHaveAttribute('data-material', value);
+      await expect(product.locator('#island')).toHaveAttribute('data-expanded', 'true');
+      await expect(hero.locator('body')).toHaveAttribute('data-material', 'obsidian');
     }
-    const bounds = await page.locator('.optics-stage').boundingBox();
-    expect(bounds!.x).toBeGreaterThanOrEqual(0);
-    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 });

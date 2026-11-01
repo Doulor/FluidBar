@@ -15,10 +15,9 @@ for (const width of [1440, 390]) {
     await expect(stats).toContainText('不代表实时在线');
     await expect(stats.getByRole('button')).toHaveCount(0);
     await expect(page.locator('.lab-scenes, .market-browser, .plugin-purpose')).toHaveCount(0);
-    await expect(page.locator('.code-panel pre')).toBeAttached();
-    await expect(page.locator('.architecture > .material-artwork')).toHaveCount(1);
+    await expect(page.locator('.quality-layout > .material-artwork')).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await expect(page.locator('.download-primary')).toHaveAttribute('href', /FluidBar-4\.0\.0-preview\.2-win-x64\.zip$/);
+    await expect(page.locator('.download-primary')).toHaveAttribute('href', /FluidBar-4\.0\.0-win-x64\.zip$/);
   });
 }
 

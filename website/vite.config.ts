@@ -5,8 +5,10 @@ function siteUrlPlugin(): Plugin {
   const siteUrl = (process.env.SITE_URL || 'https://fluidbar.doulor.cn').replace(/\/+$/, '');
   return {
     name: 'fluidbar-site-url',
-    transformIndexHtml(html) {
-      return html.replaceAll('__SITE_URL__', siteUrl);
+    transformIndexHtml: {
+      // Substitute before Vite resolves URLs, or it prefixes placeholders with "/".
+      order: 'pre',
+      handler(html) { return html.replaceAll('__SITE_URL__', siteUrl); },
     },
   };
 }

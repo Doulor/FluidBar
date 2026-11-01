@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 const chapters = [
   ['体验', 'experience'], ['外观', 'appearance'], ['插件', 'plugins'],
-  ['性能', 'performance'], ['下载', 'download'],
+  ['品质', 'performance'], ['下载', 'download'],
 ] as const;
 
 async function expectLanding(page: Page, id: string) {
@@ -26,7 +26,7 @@ test('desktop chapters have matching navigation, landing positions and scroll hi
   await page.locator('#appearance').evaluate(el => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 96));
   await expect(nav.getByRole('link', { name: '外观', exact: true })).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#appearance #material-study')).toHaveCount(1);
-  await expect(page.locator('.architecture > .material-artwork')).toHaveCount(1);
+  await expect(page.locator('.quality-layout > .material-artwork')).toHaveCount(1);
 });
 
 test('all five chapters can be reached from the mobile menu', async ({ page }) => {
@@ -52,7 +52,7 @@ test('chapter and subsection deep links survive reload and browser history', asy
     await expect(page.locator(`.nav-desktop a[href="#${chapter}"]`)).toHaveAttribute('aria-current', 'page');
   }
   await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '外观', exact: true }).click();
-  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '性能', exact: true }).click();
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: '品质', exact: true }).click();
   await page.goBack();
   await expectLanding(page, 'appearance');
   await expect(page.locator('.nav-desktop a[href="#appearance"]')).toHaveAttribute('aria-current', 'page');

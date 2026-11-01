@@ -25,7 +25,7 @@ FluidBar 是一次完全重写（v1 代码已从本分支移除，历史保留�
 | M5 内置插件 + 市场 CI/文档（23 + 31 集成 tests） | ✅ |
 | M4 Avalonia 外壳（岛/设置/插件市场/i18n，70 tests） | ✅ |
 
-- **官方网站**：[website/](website/)（Vite + React，真实 prototype2 嵌入 + 日光光学视觉）
+- **官方网站**：[website/](website/)（Vite + React，4.0 正式版发布页、真实 prototype2 交互演示与日光桌面壁纸）
 - 交互与视觉原型：[docs/rewrite/prototype2/index.html](docs/rewrite/prototype2/index.html)（浏览器打开即可；旧 prototype 已归档）
 - **4.0.0 发布说明**：[docs/rewrite/RELEASE-4.0.0.md](docs/rewrite/RELEASE-4.0.0.md)
 - **当前状态 / 文档索引 / 变更记录**：[STATUS](docs/rewrite/STATUS.md) · [docs/rewrite/README.md](docs/rewrite/README.md) · [CHANGELOG.md](CHANGELOG.md)

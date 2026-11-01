@@ -32,6 +32,8 @@ interface PrototypeFrameProps {
   defer?: boolean;
   startState?: 'expanded' | string;
   startPage?: number;
+  /** A full desktop viewport; product dimensions stay owned by prototype2. */
+  wide?: boolean;
 }
 
 function scheduleIdle(callback: () => void) {
@@ -50,7 +52,7 @@ function scheduleIdle(callback: () => void) {
 
 export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFrameProps>(
   function PrototypeFrame(
-    { title, name, poster, className = '', onState, onReady, lazy = false, defer = false, startState, startPage },
+    { title, name, poster, className = '', onState, onReady, lazy = false, defer = false, startState, startPage, wide = false },
     forwardedRef,
   ) {
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -58,6 +60,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
     const pendingRef = useRef<Omit<PrototypeCommand, 'type'>[]>([]);
     const readyRef = useRef(false);
     const [scale, setScale] = useState(1);
+    const [frameWidth, setFrameWidth] = useState(FRAME_WIDTH);
     const [ready, setReady] = useState(false);
     const [failed, setFailed] = useState(false);
     const [shouldLoad, setShouldLoad] = useState(!lazy && !defer);
@@ -92,13 +95,14 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
       if (!element) return;
       const update = () => {
         const width = element.getBoundingClientRect().width;
-        setScale(Math.min(1.2, Math.max(0.4, width / FRAME_WIDTH)));
+        setFrameWidth(wide ? Math.max(FRAME_WIDTH, width) : FRAME_WIDTH);
+        setScale(Math.min(wide ? 1 : 1.2, Math.max(0.4, width / FRAME_WIDTH)));
       };
       update();
       const observer = new ResizeObserver(update);
       observer.observe(element);
       return () => observer.disconnect();
-    }, []);
+    }, [wide]);
 
     useEffect(() => {
       if (!lazy) return;
@@ -161,7 +165,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
 
 
     const frameStyle: CSSProperties = {
-      width: FRAME_WIDTH,
+      width: frameWidth,
       height: FRAME_HEIGHT,
       transform: `scale(${scale})`,
     };
@@ -175,7 +179,7 @@ export const PrototypeFrame = forwardRef<PrototypeFrameHandle, PrototypeFramePro
     return (
       <div
         ref={wrapperRef}
-        className={`prototype-frame ${ready ? 'is-ready' : ''} ${className}`.trim()}
+        className={`prototype-frame ${wide ? 'prototype-frame--wide' : ''} ${ready ? 'is-ready' : ''} ${className}`.trim()}
         style={wrapperStyle}
       >
         {poster ? (

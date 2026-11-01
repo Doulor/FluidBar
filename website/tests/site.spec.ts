@@ -17,13 +17,13 @@ test.describe('FluidBar official site', () => {
     });
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('桌面之上');
-    await expect(page.getByRole('link', { name: '下载预览版' }).last()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('让桌面，轻一点');
+    await expect(page.getByRole('link', { name: '下载 Windows 版' }).last()).toBeVisible();
 
     const frame = await waitForFrame(page, HERO_FRAME);
     const island = frame.locator('#island');
     await expect(island).toHaveAttribute('data-expanded', 'true');
-    await expect(page.locator('.hero-page-rail .is-active')).toContainText('主页');
+    await expect(page.locator('.hero-page-rail .is-active')).toContainText('媒体');
 
     await page.waitForTimeout(600);
     const expandedWidth = await island.evaluate((element) => element.getBoundingClientRect().width);
@@ -50,7 +50,7 @@ test.describe('FluidBar official site', () => {
     const selector = page.getByRole('combobox', { name: '预览状态' });
     await selector.selectOption('media');
     await expect(island).toHaveAttribute('data-view', 'media');
-    await expect(frame.locator('.media-lyric .lyric-word')).toHaveCount(3);
+    await expect(frame.locator('.media-lyric .lyric-word').first()).toBeVisible();
     await expect(frame.locator('.mini-play, .play-btn, .transport')).toHaveCount(0);
     await expect.poll(() => island.evaluate(element => element.clientWidth)).toBe(226);
     await selector.selectOption('notifications');
@@ -74,7 +74,7 @@ test.describe('FluidBar official site', () => {
     await expect(body).toHaveAttribute('data-mode', 'dock');
     await expect(frame.locator('#dock')).toHaveCSS('display', 'flex');
 
-    await page.getByRole('button', { name: '液态玻璃', exact: true }).click();
+    await page.getByRole('button', { name: /液态玻璃/ }).click();
     await expect(body).toHaveAttribute('data-material', 'liquid');
     await expect(page.getByText('强调色')).toHaveCount(0);
   });
