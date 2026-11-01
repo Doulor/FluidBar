@@ -48,7 +48,11 @@ public sealed class OptionalPluginLifecycleTests
             Assert.True(shelf.DropRegistered);
             Assert.False((await fixture.Session.ExecuteCommandAsync("fluidbar-file-shelf.open")).Succeeded);
             Assert.Equal(0, shelf.Shows);
+            var idlePage = Assert.Single(fixture.Publisher.Pages.Values);
+            Assert.Equal("drag-hint", Assert.Single(idlePage.List!.Rows).RowId);
             shelf.Drop!([Path.Combine(Path.GetTempPath(), "reference-only.txt")]);
+            var updatedPage = Assert.Single(fixture.Publisher.Pages.Values);
+            Assert.Contains(updatedPage.List!.Rows, row => row.RowId == "file-0");
             await fixture.Session.StopAsync();
             Assert.False(shelf.WindowDisposed);
             Assert.False(shelf.DropRegistered);
