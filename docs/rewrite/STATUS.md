@@ -7,13 +7,14 @@
 - 用户明确授权提交与发布 4.1；版本采用 4.1.0，沿用 GitHub tag 发布流程，提供自包含单文件 win-x64。
 - 将本轮文件暂存、卡片排版及稳定性修复一起提交；文件暂存 1.0.3 仍为独立可选插件，由现有签名市场流水线发布。
 - 发行兼容性检查改为宿主实际构建 SemVer，文件暂存 1.0.3 最低宿主版本 4.1.0；回归先复现固定 2.0.0 和旧版误判兼容，再修正。
-- 发行执行记录：`plans/2026-11-02-release-4.1.0.md`；说明：`RELEASE-4.1.0.md`。正在执行 Release 回归与发布前核验。
+- 发行已完成。执行记录：`plans/2026-11-02-release-4.1.0.md`；说明：`RELEASE-4.1.0.md`。
 - 本地 Release 十套测试最终 **2892/2892**：Core 615、SDK 172、Island 459、UI 653、BuiltinPlugins 30、PluginHost 40、OptionalPlugins 19、Architecture 18、Integration 31、Platform 855。液态玻璃性能用例初次受负载影响失败，独立复验及完整 Island 最终 459/459 通过，未改变门槛。
 - 首次 GitHub 干净构建发现 COM 枚举计数 null 参数的 CS8625；插件安装测试又因固定 2.0.0 与旧本地输出掩盖问题。已改为显式计数数组、测试 4.1.0，并校验构建 manifest 与源码一致；重新 Rebuild 两项发布门禁零警告/零错误，OptionalPlugins 19、Platform 855、BuiltinPlugins 30 全部通过。初始发布流水线未生成 Release，继续修正发布过程。
 - 用户随后明确授权更新尚未发布的 v4.1.0 标签，已使用旧对象值保护的 force-with-lease 将其移至 c890149。GitHub [4.1.0](https://github.com/Doulor/FluidBar/releases/tag/v4.1.0) 已为 latest stable，包含自包含 EXE、ZIP 和校验清单；构建版本 4.1.0+c8901495bb84。
 - 远端干净构建、测试与打包验证 [41463330093](https://github.com/Doulor/FluidBar/actions/runs/41463330093) 成功；正式标签流水线已发布资产，后置正文比较因 CRLF/LF 和 PowerShell 原生命令多行数组误报失败。已提取 JSON 正文、规范化换行并验证线上中文内容一致，保留真实内容差异的失败检查。
 - 签名市场流水线 [41463336397](https://github.com/Doulor/FluidBar/actions/runs/41463336397) 全部成功，文件暂存 1.0.3 签名包已上架并部署；SHA-256 为 4f064934333c02a7181804d92a189fea329ebfb08eb06d65e509b2f9a350291d，最低宿主 4.1.0。
-- 官网下载元信息已按真实 52,314,195 bytes ZIP 及其 GitHub/清单 SHA-256 更新，本地构建、Vitest 12/12、市场 Node 9/9 通过；正在同步部署并核对线上版本。
+- 官网下载元信息已按真实 52,314,195 bytes ZIP 及其 GitHub/清单 SHA-256 更新，本地构建、Vitest 12/12、市场 Node 9/9 通过。最终官网与签名市场部署 [41466863896](https://github.com/Doulor/FluidBar/actions/runs/41466863896) 全部成功；Playwright 真实浏览器核对线上 4.1.0、两处下载、校验码、首屏文字与文件暂存 1.0.3/最低宿主 4.1.0 均通过，线上签名索引 sourceCommit=17bf171。
+- 发布后手动 CI 验证 [41465768404](https://github.com/Doulor/FluidBar/actions/runs/41465768404) 全部成功。重新下载正式 EXE 与 ZIP 并实际计算 SHA-256，均与清单和 GitHub digest 一致；ZIP 内的 EXE 与单独下载 EXE 相同，文件版本为 4.1.0。没有重启或覆盖用户正在运行的旧实例。
 
 ## 2026-11-02 内置插件、通知与日志稳定性
 
