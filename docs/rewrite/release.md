@@ -64,6 +64,10 @@ because release builds use `dotnet publish` on the app project graph.
   with `?` (the v4.0.0 incident). After creation the workflow compares the GitHub-stored body with the file
   and fails if they differ.
 
+2026-11-02 修正：正文验证使用 `build/verify-release-notes.ps1` 从 `--json body` 提取单个字符串，统一
+CRLF/LF 后逐字符比较，避免 PowerShell 把多行原生命令输出当成数组及 Windows checkout 换行误报。
+手动运行 release 工作流时可传 `verify_published=true`，同时验证指定版本已经发布的正文。
+
 
 ## 4. Signing (deferred for the unsigned 4.0.0 first release)
 

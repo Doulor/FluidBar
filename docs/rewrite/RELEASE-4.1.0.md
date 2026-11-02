@@ -28,3 +28,14 @@
 从托盘退出旧版后运行新版即可。已安装文件暂存的用户可继续使用；文件暂存 1.0.3 通过插件市场单独更新，要求 FluidBar 4.1.0 或更新版本，保留可选安装策略。
 
 延续 4.0 的未签名发行方式，应用内更新强制校验 GitHub Release 资产 SHA-256。旧通知瞬时异常未能在当前通知中复现，本次增加容错与完整诊断，便于继续定位。
+
+## 已发布资产
+
+宿主构建提交：`c8901495bb84`，版本：`4.1.0+c8901495bb84`。
+
+| 文件 | 大小 | SHA-256 |
+|---|---:|---|
+| FluidBar-4.1.0-win-x64.zip | 52,314,195 bytes | `146f45569a04c8f1909387a9a4e390a06ad8da2cc5313022c9624d09991f6be9` |
+| FluidBar.exe | 57,756,561 bytes | `25889eb7e5fd642f6b2fdfc468a430b5be31e9df6460e601b7664905ab6ab3fb` |
+
+[正式版下载](https://github.com/Doulor/FluidBar/releases/tag/v4.1.0) · [文件暂存 1.0.3 签名包](https://github.com/Doulor/FluidBar/releases/tag/plugin-fluidbar-file-shelf-v1.0.3)
