@@ -3,6 +3,7 @@
 export const RELEASE = {
   version: '4.1.0',
   date: '2026-11-02',
+  tests: 2892,
   url: 'https://github.com/Doulor/FluidBar/releases/tag/v4.1.0',
   download: 'https://github.com/Doulor/FluidBar/releases/download/v4.1.0/FluidBar-4.1.0-win-x64.zip',
   size: '49.9 MB',

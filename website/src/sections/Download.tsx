@@ -27,7 +27,7 @@ export function Download() {
           <div className="faq-list" aria-labelledby="faq-title">
             <details><summary>支持哪些系统？需要安装 .NET 吗？</summary><p>支持 Windows 10 / 11 x64。{RELEASE.version} 正式版发布包已包含 .NET 运行时，无需单独安装。</p></details>
             <details><summary>下载后如何启动、设置和退出？</summary><p>完整解压 ZIP 后运行 FluidBar.exe。设置和退出入口位于 Windows 系统托盘；如果没有看到图标，请检查托盘折叠区。</p></details>
-            <details><summary>如何核对下载文件？</summary><p>首个正式版尚未进行 Windows 代码签名。可以使用发布清单中的 SHA-256 核对 ZIP 文件：</p><code className="download-hash">{RELEASE.sha256}</code><a href={`${RELEASE.download.slice(0, RELEASE.download.lastIndexOf('/') + 1)}publish-${RELEASE.version}.json`} target="_blank" rel="noopener noreferrer">查看发布清单 ↗</a></details>
+            <details><summary>如何核对下载文件？</summary><p>当前发布包尚未进行 Windows 代码签名。可以使用发布清单中的 SHA-256 核对 ZIP 文件：</p><code className="download-hash">{RELEASE.sha256}</code><a href={`${RELEASE.download.slice(0, RELEASE.download.lastIndexOf('/') + 1)}publish-${RELEASE.version}.json`} target="_blank" rel="noopener noreferrer">查看发布清单 ↗</a></details>
             <details><summary>网页演示会读取我的电脑数据吗？</summary><p>不会。演示使用同源交互原型和示例数据，不读取你的媒体、通知或剪贴板，也不播放音频。网页材质是 CSS 视觉近似，软件使用 Skia 绘制，最新界面以正式版为准。</p></details>
             <details><summary>插件如何安装？</summary><p>打开「设置 → 插件市场」，选择需要的插件后安装。倒计时与文件暂存属于可选插件，默认不安装；安装、更新和回滚均可在应用内完成。</p></details>
             <details><summary>遇到问题如何反馈？</summary><p>请在 GitHub Issues 附上 FluidBar 版本、Windows 版本、显示缩放比例和复现步骤。截图前请遮住通知、剪贴板等私人内容。</p></details>

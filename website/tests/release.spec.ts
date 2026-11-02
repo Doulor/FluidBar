@@ -10,6 +10,8 @@ test('release metadata and every Windows download point to the verified stable a
   const metadata = JSON.parse(await page.locator('script[type="application/ld+json"]').innerText());
   expect(metadata.softwareVersion).toBe(RELEASE.version);
   expect(metadata.downloadUrl).toBe(RELEASE.download);
+  await expect(page.locator('.release-link')).toContainText(RELEASE.version);
+  await expect(page.locator('.quality-source')).toContainText(RELEASE.version);
   await expect(page.locator('.brand')).toHaveText(['FluidBar', 'FluidBar']);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://fluidbar.doulor.cn/');
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://fluidbar.doulor.cn/og-image.png');

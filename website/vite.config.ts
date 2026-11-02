@@ -2,6 +2,7 @@ import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { RELEASE } from './src/data/release';
 
 // Match Pages' real static directory routes during development and preview.
 // Missing catalog/schema URLs must never become the marketing SPA.
@@ -49,7 +50,11 @@ function siteUrlPlugin(): Plugin {
     transformIndexHtml: {
       // Substitute before Vite resolves URLs, or it prefixes placeholders with "/".
       order: 'pre',
-      handler(html) { return html.replaceAll('__SITE_URL__', siteUrl); },
+      handler(html) {
+        return html.replaceAll('__SITE_URL__', siteUrl)
+          .replaceAll('__RELEASE_VERSION__', RELEASE.version)
+          .replaceAll('__RELEASE_DOWNLOAD__', RELEASE.download);
+      },
     },
   };
 }

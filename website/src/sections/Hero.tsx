@@ -23,7 +23,7 @@ export function Hero() {
     <section id="experience" className="hero" aria-labelledby="hero-title">
       <div className="site-shell">
         <div className="hero-copy intro-reveal">
-          <a className="release-link" href={RELEASE.url} target="_blank" rel="noopener noreferrer">FluidBar 4.0 <span>首个正式版现已发布</span><ArrowUpRight size={14} aria-hidden="true" /></a>
+          <a className="release-link" href={RELEASE.url} target="_blank" rel="noopener noreferrer">FluidBar {RELEASE.version} <span>正式版现已发布</span><ArrowUpRight size={14} aria-hidden="true" /></a>
           <h1 id="hero-title">让桌面，轻一点。</h1>
           <p className="hero-sub">媒体、通知、剪贴板与系统控制。<br className="mobile-break" />常用的小事，抬手就能处理。</p>
           <div className="hero-actions">
