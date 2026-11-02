@@ -5,6 +5,16 @@
     "title": "File shelf",
     "open": "Open file shelf",
     "hint": "References only; your originals stay untouched.",
-    "empty": "Drop files to start your shelf"
+    "empty": "Drop files to start your shelf",
+    "copy-all": "Copy all files",
+    "copy-hint": "Drag to a folder and release to copy.",
+    "copied": "Copied. Paste into your destination folder.",
+    "unavailable": "Copy failed: a file may have moved or been deleted, or the clipboard is busy. Check and retry.",
+    "remove": "Remove",
+    "clear": "Clear",
+    "page": "File pages",
+    "unsupported": "This host cannot accept file drops. Please update FluidBar.",
+    "previous": "Previous page",
+    "next": "Next page"
   }
 }

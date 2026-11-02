@@ -1,8 +1,7 @@
 namespace FluidBar.Core.Activities;
 
 /// <summary>
-/// The 14 activity classes of FluidBar v2 (spec 2.3) plus <c>Agent</c>, which the
-/// lead's priority brief adds between notifications and ambient system status.
+/// FluidBar activity classes, including the optional persistent file-reference shelf.
 /// </summary>
 public enum ActivityKind
 {
@@ -30,7 +29,7 @@ public enum ActivityKind
     /// <summary>Brightness HUD. Rank 8, 1.6 s TTL, single-line 40 DIP tall.</summary>
     Brightness,
 
-    /// <summary>Notification toast summary. Rank 9, 5 s TTL.</summary>
+    /// <summary>Notification toast summary. Rank 0, 5 s TTL.</summary>
     Notification,
 
     /// <summary>Agent (Claude/Codex) completion or failure feedback. Rank 10 (lead brief extension).</summary>
@@ -50,6 +49,9 @@ public enum ActivityKind
 
     /// <summary>Default idle pill (clock + battery + page dots). Rank 15; never scheduled from an event.</summary>
     Idle,
+
+    /// <summary>Optional file-reference shelf. Rank 9, persistent until cleared or the plugin stops.</summary>
+    FileShelf,
 }
 
 /// <summary>
@@ -93,6 +95,7 @@ public static class ActivityKindExtensions
     {
         ActivityKind.Lookup => "lookup",
         ActivityKind.Clipboard => "clipboard",
+        ActivityKind.FileShelf => "fileshelf",
         ActivityKind.LockKeys => "lockkeys",
         ActivityKind.Device => "device",
         ActivityKind.Bluetooth => "bluetooth",
@@ -116,6 +119,7 @@ public static class ActivityKindExtensions
         {
             "lookup" => ActivityKind.Lookup,
             "clipboard" => ActivityKind.Clipboard,
+            "fileshelf" => ActivityKind.FileShelf,
             "lockkeys" => ActivityKind.LockKeys,
             "device" => ActivityKind.Device,
             "bluetooth" => ActivityKind.Bluetooth,
@@ -134,7 +138,7 @@ public static class ActivityKindExtensions
 
         return token is not null && token is "lookup" or "clipboard" or "lockkeys" or "device" or "bluetooth"
             or "focus" or "volume" or "brightness" or "notification" or "agent" or "battery.low" or "battery"
-            or "progress" or "timer" or "media" or "idle";
+            or "progress" or "timer" or "media" or "idle" or "fileshelf";
     }
 
     /// <summary>The expanded page this activity opens when the user clicks the compact pill.</summary>
@@ -143,6 +147,7 @@ public static class ActivityKindExtensions
         ActivityKind.Media => PageRef.Media,
         ActivityKind.Notification => PageRef.Notifications,
         ActivityKind.Clipboard => PageRef.Clipboard,
+        ActivityKind.FileShelf => new PageRef("fluidbar-file-shelf.page"),
         ActivityKind.Agent => PageRef.Agent,
         _ => PageRef.Home,
     };

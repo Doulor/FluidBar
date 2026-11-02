@@ -54,6 +54,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     private readonly IPlatformLogger _logger;
     private readonly PlatformCounters _counters;
     private readonly NotificationHistory _history;
+    private readonly NotificationCandidateReader _candidateReader;
     private readonly object _stateGate = new();
     private UserNotificationListener? _listener;
     private ImmutableArray<NotificationEntry> _recent = ImmutableArray<NotificationEntry>.Empty;
@@ -76,6 +77,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         _counters = counters ?? new PlatformCounters();
         _options = options ?? new NotificationServiceOptions();
         _history = new NotificationHistory(_options.MaxSeenIds, _options.MaxBatch);
+        _candidateReader = new NotificationCandidateReader(_logger, TimeProvider, _options.MaxSeenIds);
     }
 
     /// <summary>
@@ -111,6 +113,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     protected override async ValueTask OnStartAsync(CancellationToken cancellationToken)
     {
+        _candidateReader.Reset();
         _history.Reset();
         lock (_stateGate)
         {
@@ -407,6 +410,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
             var notifications = await listener.GetNotificationsAsync(NotificationKinds.Toast).AsTask()
                 .ConfigureAwait(false);
+            _candidateReader.Prune(notifications.Select(notification => notification.Id).ToHashSet());
             var candidates = notifications.Select(CreateCandidate).Where(candidate => candidate is not null)
                 .Select(candidate => candidate!).ToList();
             for (var i = 0; i < candidates.Count; i++)
@@ -428,17 +432,10 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
             var added = _history.Process(candidates);
 
-            // Always-on provenance: one line per arrival (id + creation time + title). A toast that keeps
-            // re-appearing on the island shows up here either with the same id (consumer-side repeat) or with a
-            // fresh id for identical content (listener id instability) — the two need different fixes.
+            // Optional aggregate diagnostics only. Notification titles, bodies and codes never enter this trace.
             if (added.Count > 0)
             {
-                Media.MediaDiagnostics.LogAlways(
-                    "notifications.added " + string.Join(" | ",
-                        added.Select(entry =>
-                            $"id={entry.Id} created={entry.CreatedAt:HH:mm:ss} app='{entry.AppName}' " +
-                            $"title='{(entry.Title.Length > 40 ? entry.Title[..40] : entry.Title)}' " +
-                            $"body='{(entry.Body.Length > 60 ? entry.Body[..60] : entry.Body)}'")));
+                Media.MediaDiagnostics.Log($"notifications.added count={added.Count}");
             }
 
             // Close sync: toasts the user removed from Action Center are no longer returned by the
@@ -499,7 +496,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             return toastImage;
         }
 
-        var appName = notification.AppInfo?.DisplayInfo?.DisplayName ?? notification.AppInfo?.Id;
+        var appName = NotificationCandidateReader.ReadAppName(
+            () => notification.AppInfo?.DisplayInfo?.DisplayName ?? notification.AppInfo?.Id);
         try
         {
             var display = notification.AppInfo?.DisplayInfo;
@@ -572,38 +570,12 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     }
 
     private NotificationCandidate? CreateCandidate(UserNotification notification)
-    {
-        try
-        {
-            var appName = notification.AppInfo?.DisplayInfo.DisplayName ?? "Windows";
-            var binding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-            var texts = binding?.GetTextElements()
-                .Select(element => element.Text)
-                .Where(text => !string.IsNullOrWhiteSpace(text))
-                .ToArray() ?? Array.Empty<string>();
-            var title = texts.ElementAtOrDefault(0) ?? appName;
-            var body = texts.Length > 1 ? string.Join(Environment.NewLine, texts.Skip(1)) : string.Empty;
-            var max = Math.Max(1, _options.MaxTextCharacters);
-            return new NotificationCandidate(notification.Id, Truncate(appName, max), Truncate(title, max),
-                Truncate(body, max), notification.CreationTime);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(PlatformLogCategory.Notifications, "notifications.parse-failed",
-                "Could not parse a toast notification.", ex);
-            return null;
-        }
-    }
+        => _candidateReader.Read(notification.Id, () => NotificationCandidateReader.Parse(notification.Id,
+            () => notification.AppInfo?.DisplayInfo?.DisplayName,
+            () => notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric)?.GetTextElements()
+                .Select(element => element.Text).ToArray() ?? [],
+            () => notification.CreationTime, _options.MaxTextCharacters));
 
-    private static string Truncate(string? value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value))
-        {
-            return string.Empty;
-        }
-
-        return value.Length <= maxLength ? value : value[..maxLength];
-    }
 
     /// <summary>
     /// Clears the island's local notification page. The Windows Action Center entries are untouched;
@@ -741,6 +713,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
     protected override async ValueTask OnStopAsync(CancellationToken cancellationToken)
     {
+        _candidateReader.Reset();
         StopPolling();
         _pollingFallback = false;
         var listener = _listener;

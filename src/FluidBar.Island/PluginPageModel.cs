@@ -18,6 +18,9 @@ public sealed record PluginPageModel
     public string? EmptyTitle { get; init; }
 
     public string? EmptyHint { get; init; }
+
+    /// <summary>Host-owned vertical offset, shared by drawing, hit-testing and accessibility.</summary>
+    public double ScrollOffset { get; init; }
 }
 
 /// <summary>One row of a plugin list page.</summary>
@@ -42,4 +45,9 @@ public sealed record PluginPageRowModel
     public string? TrailingCommandId { get; init; }
 
     public string? TrailingLabel { get; init; }
+
+    public IReadOnlyList<string>? DragFiles { get; init; }
+
+    /// <summary>Parent directory prepared without filesystem access when the row is published.</summary>
+    public string? FileDirectory { get; init; }
 }

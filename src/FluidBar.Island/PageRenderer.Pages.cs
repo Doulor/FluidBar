@@ -11,6 +11,27 @@ namespace FluidBar.Island;
 internal sealed partial class PageRenderer
 {
     private static readonly string[] ClipboardTypeLabels = ["Text", "Code", "Link", "Image", "File"];
+    private readonly ContentLineEntry?[] _contentLines = new ContentLineEntry?[64];
+    private int _nextContentLine;
+    private sealed record ContentLineEntry(string Source, TextStyle Style, float Width, double Scale, string First, string Second);
+
+    // Bounded display-only text and identity lookup avoid reshaping/copying a 16 KiB clipboard
+    // entry on every frame. Original text and copy payloads are never shortened.
+    private (string First, string Second) SplitContentLines(string? source, TextStyle style, float width)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return (string.Empty, string.Empty);
+        foreach (var cached in _contentLines)
+            if (cached is not null && ReferenceEquals(cached.Source, source) && cached.Style == style
+                && cached.Width == width && cached.Scale == _text.Scale)
+                return (cached.First, cached.Second);
+        var count = Math.Min(source.Length, 512);
+        if (count < source.Length && char.IsLowSurrogate(source[count])) count--;
+        var value = count == source.Length ? source : source[..count] + "…";
+        var lines = SplitTwoLines(value, style, width);
+        _contentLines[_nextContentLine] = new ContentLineEntry(source, style, width, _text.Scale, lines.First, lines.Second);
+        _nextContentLine = (_nextContentLine + 1) % _contentLines.Length;
+        return lines;
+    }
 
     // ------------------------------------------------------------ plugin list (M0)
 
@@ -33,55 +54,101 @@ internal sealed partial class PageRenderer
         canvas.ClipRect(body);
         for (var i = 0; i < model.Rows.Count; i++)
         {
-            var row = PageMetricsLayout.NotificationRow(page, i, 0, m);
-            if (row.Top >= body.Bottom)
+            var row = PluginListLayout.Row(page, model, i, m);
+            if (row.Top >= body.Bottom || (PluginListLayout.IsFileShelf(model) && row.Bottom > body.Bottom))
             {
                 break;
             }
+            if (row.Bottom <= body.Top) continue;
 
-            DrawPluginRow(canvas, model.Rows[i], row, i);
+            if (PluginListLayout.IsFileShelf(model) && PluginListLayout.IsFile(model.Rows[i]))
+                DrawFileShelfRow(canvas, model.Rows[i], row, i);
+            else DrawPluginRow(canvas, model.Rows[i], row, i);
         }
 
         canvas.Restore();
+        DrawContentScrollIndicator(canvas, body, (float)model.ScrollOffset, PluginListLayout.MaxScroll(model, m));
     }
 
     private void DrawPluginRow(SKCanvas canvas, PluginPageRowModel item, SKRect row, int index)
     {
         DrawListRowBackground(canvas, row, IsHovered(IslandPageControl.PluginRow, index) || IsHovered(IslandPageControl.PluginRowButton, index), false);
-        var hasTrailing = !string.IsNullOrWhiteSpace(item.TrailingLabel);
+        var hasTrailing = !string.IsNullOrWhiteSpace(item.TrailingLabel) && !string.IsNullOrWhiteSpace(item.TrailingCommandId);
         var trailingWidth = hasTrailing ? 76f : 0f;
-        var glyph = new SKRect(row.Left + 10, row.Top + 10, row.Left + 30, row.Top + 30);
+        var glyph = new SKRect(row.Left + 10, row.MidY - 10, row.Left + 30, row.MidY + 10);
         _fill.Style = SKPaintStyle.Fill;
         _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
         canvas.DrawRoundRect(glyph, 6, 6, _fill);
-        IconSet.Draw(canvas, IconKind.Check, glyph.Deflate(6), Alpha(_theme.Accent, _opacity), _icon);
+        IconSet.Draw(canvas, item.IconToken == "file" ? IconKind.Document : IconKind.Check,
+            glyph.Deflate(4), Alpha(_theme.Accent, _opacity), _icon);
 
         var titleRight = row.Right - 14 - trailingWidth - 8;
-        var lineTop = row.Top + 5;
-        var lineBottom = row.Top + 21;
+        var titleHeight = _text.LineHeight(IslandType.RowTitle);
+        var detailHeight = _text.LineHeight(IslandType.RowBody);
+        var lineTop = row.MidY - (titleHeight + detailHeight + 2) / 2;
+        var lineBottom = lineTop + titleHeight;
         _text.Draw(canvas, item.Title, IslandType.RowTitle,
             new SKRect(row.Left + 38, lineTop, titleRight, lineBottom),
             _theme.Foreground, TextAlign.Left, _opacity);
         if (!string.IsNullOrWhiteSpace(item.Subtitle))
         {
             _text.Draw(canvas, item.Subtitle, IslandType.RowBody,
-                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
+                new SKRect(row.Left + 38, lineBottom + 2, titleRight, lineBottom + 2 + detailHeight),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
         else if (!string.IsNullOrWhiteSpace(item.Value))
         {
             _text.Draw(canvas, item.Value, IslandType.RowMeta,
-                new SKRect(row.Left + 38, row.Top + 21, titleRight, row.Top + 37),
+                new SKRect(row.Left + 38, lineBottom + 2, titleRight, lineBottom + 2 + detailHeight),
                 _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
 
         if (hasTrailing)
         {
-            var button = new SKRect(row.Right - 96, row.MidY - 12, row.Right - 8, row.MidY + 12);
+            var button = PluginListLayout.TrailingButton(row, item, compactFile: false);
             _fill.Color = Alpha(_theme.Accent, 0.16f * _opacity);
             canvas.DrawRoundRect(button, 7, 7, _fill);
             _text.Draw(canvas, item.TrailingLabel!, IslandType.Chip, button,
                 _theme.Accent, TextAlign.Center, _opacity);
+        }
+    }
+
+    private void DrawFileShelfRow(SKCanvas canvas, PluginPageRowModel item, SKRect row, int index)
+    {
+        var hovered = IsHovered(IslandPageControl.PluginRow, index) || IsHovered(IslandPageControl.PluginRowButton, index);
+        DrawListRowBackground(canvas, row, hovered, false);
+        var glyph = new SKRect(row.Left + 12, row.Top + 13, row.Left + 42, row.Top + 43);
+        _fill.Color = Alpha(_theme.Info, 0.12f * _opacity);
+        canvas.DrawRoundRect(glyph, 8, 8, _fill);
+        IconSet.Draw(canvas, IconKind.Document, glyph.Deflate(6), Alpha(_theme.Info, _opacity), _icon);
+        var titleLeft = row.Left + 54;
+        var titleRight = row.Right - 42;
+        var titleTop = row.Top + 9;
+        var lineHeight = _text.LineHeight(IslandType.ContentTitle);
+        var (first, second) = SplitContentLines(item.Title, IslandType.ContentTitle, titleRight - titleLeft);
+        // Keep a short extension/tail together instead of leaving just "df" on line two.
+        if (second.Length is > 0 and < 8 && first.Length > 16)
+        {
+            var cut = first.Length - 8;
+            if (char.IsLowSurrogate(item.Title[cut])) cut--;
+            first = item.Title[..cut];
+            second = item.Title[cut..];
+        }
+        _text.Draw(canvas, first, IslandType.ContentTitle,
+            new SKRect(titleLeft, titleTop, titleRight, titleTop + lineHeight), _theme.Foreground, opacity: _opacity);
+        if (second.Length > 0)
+            _text.Draw(canvas, second, IslandType.ContentTitle,
+                new SKRect(titleLeft, titleTop + lineHeight, titleRight, titleTop + 2 * lineHeight), _theme.Foreground, opacity: _opacity);
+        var detailHeight = _text.LineHeight(IslandType.RowBody);
+        _text.Draw(canvas, item.FileDirectory ?? item.Subtitle, IslandType.RowBody,
+            new SKRect(titleLeft, row.Bottom - 9 - detailHeight, row.Right - 12, row.Bottom - 9),
+            _theme.ForegroundSecondary, opacity: _opacity);
+        if (!string.IsNullOrWhiteSpace(item.TrailingCommandId))
+        {
+            var remove = PluginListLayout.TrailingButton(row, item);
+            _fill.Color = Alpha(_theme.Foreground, (IsHovered(IslandPageControl.PluginRowButton, index) ? 0.16f : 0.055f) * _opacity);
+            canvas.DrawRoundRect(remove, 7, 7, _fill);
+            IconSet.Draw(canvas, IconKind.Close, remove.Deflate(7), Alpha(_theme.ForegroundSecondary, _opacity), _icon);
         }
     }
 
@@ -383,14 +450,20 @@ internal sealed partial class PageRenderer
         }
 
         canvas.Restore();
+        DrawContentScrollIndicator(canvas, body, scroll, maxScroll);
+    }
+
+    private void DrawContentScrollIndicator(SKCanvas canvas, SKRect body, float scroll, float maxScroll)
+    {
+        if (maxScroll <= 0) return;
+        var height = Math.Max(24, body.Height * body.Height / (body.Height + maxScroll));
+        var top = body.Top + (body.Height - height) * Math.Clamp(scroll / maxScroll, 0, 1);
+        _fill.Color = Alpha(_theme.ForegroundSecondary, 0.35f * _opacity);
+        canvas.DrawRoundRect(new SKRect(body.Right + 5, top, body.Right + 7, top + height), 1, 1, _fill);
     }
 
     private void DrawClipboardRow(
-        SKCanvas canvas,
-        ClipboardItemModel item,
-        SKRect row,
-        int index,
-        ClipboardPageModel model)
+        SKCanvas canvas, ClipboardItemModel item, SKRect row, int index, ClipboardPageModel model)
     {
         var hovered = index == model.HoverIndex;
         var selected = index == model.SelectedIndex;
@@ -402,141 +475,71 @@ internal sealed partial class PageRenderer
             canvas.DrawRoundRect(row, PageLayout.ListRowRadius, PageLayout.ListRowRadius, _fill);
         }
 
-        var dy = (row.Height - 48f) / 2;
-        canvas.Save();
-        canvas.Translate(0, dy);
         var tone = ClipboardTone(item.Kind);
-        var badge = new SKRect(row.Left + 10, row.Top + 12, row.Left + 34, row.Top + 36);
-        var thumbnail = item.ImagePng is { Length: > 0 }
-            ? _artwork.Get(item.ImageKey, item.ImagePng)
-            : null;
+        var badge = new SKRect(row.Left + 10, row.Top + 11, row.Left + 36, row.Top + 37);
+        var thumbnail = item.ImagePng is { Length: > 0 } ? _artwork.Get(item.ImageKey, item.ImagePng) : null;
         if (thumbnail is not null && thumbnail.Width > 0 && thumbnail.Height > 0)
         {
             canvas.Save();
-            canvas.ClipRoundRect(new SKRoundRect(badge, 6, 6), SKClipOperation.Intersect, antialias: true);
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.Color = SKColors.White.WithAlpha((byte)Math.Clamp(_opacity * 255, 0, 255));
+            canvas.ClipRoundRect(new SKRoundRect(badge, 7, 7), SKClipOperation.Intersect, antialias: true);
+            _fill.Color = Alpha(SKColors.White, _opacity);
             canvas.DrawImage(thumbnail, badge, _fill);
             canvas.Restore();
         }
         else
         {
-            _fill.Style = SKPaintStyle.Fill;
-            _fill.Shader = null;
-            _fill.Color = Alpha(tone, 0.14f * _opacity);
-            canvas.DrawRoundRect(badge, 6, 6, _fill);
+            _fill.Color = Alpha(tone, 0.12f * _opacity);
+            canvas.DrawRoundRect(badge, 7, 7, _fill);
             IconSet.Draw(canvas, ClipboardIcon(item.Kind), badge.Deflate(6), Alpha(tone, _opacity), _icon);
         }
 
-        _text.Draw(
-            canvas,
-            item.Preview,
-            item.IsMonospace ? IslandType.RowMono : IslandType.RowTitle,
-            new SKRect(row.Left + 44, row.Top + 7, row.Right - 132, row.Top + 25),
-            _theme.Foreground,
-            TextAlign.Left,
-            _opacity);
+        var summary = ContentCardLayout.ClipboardSummary(row, _metrics);
+        var style = item.IsMonospace ? IslandType.RowMono : IslandType.ContentTitle;
+        var (first, second) = SplitContentLines(item.Preview, style, summary.Width);
+        var lineHeight = _text.LineHeight(style);
+        _text.Draw(canvas, first, style, new SKRect(summary.Left, summary.Top, summary.Right, summary.Top + lineHeight),
+            _theme.Foreground, opacity: _opacity);
+        if (second.Length > 0)
+            _text.Draw(canvas, second, style, new SKRect(summary.Left, summary.Top + lineHeight, summary.Right, summary.Bottom),
+                _theme.Foreground, opacity: _opacity);
 
-        var subTop = row.Top + 28;
-        var subBottom = row.Top + 42;
-        var x = row.Left + 44;
+        var preview = ContentCardLayout.ClipboardPreview(row, _metrics);
+        var delete = ContentCardLayout.ClipboardAction(row, 2, _metrics);
+        var pin = ContentCardLayout.ClipboardAction(row, 1, _metrics);
+        var copy = ContentCardLayout.ClipboardAction(row, 0, _metrics);
+        var typeLabel = item.TypeLabel ?? ClipboardTypeLabels[Math.Clamp((int)item.Kind, 0, 4)];
+        var metaLeft = row.Left + 12;
         if (item.IsPinned)
         {
-            IconSet.Draw(
-                canvas,
-                IconKind.Pin,
-                new SKRect(x, subTop + 1, x + 8, subTop + 9),
-                Alpha(_theme.Accent, _opacity),
-                _icon);
-            x += 10;
-            var pinnedLabel = model.PinnedLabel ?? "Pinned";
-            var pinnedWidth = Math.Min(42, _text.Measure(pinnedLabel, IslandType.RowMeta));
-            _text.Draw(
-                canvas,
-                pinnedLabel,
-                IslandType.RowMeta,
-                new SKRect(x, subTop, x + pinnedWidth, subBottom),
-                _theme.Accent,
-                TextAlign.Left,
-                _opacity);
-            x += pinnedWidth + 4;
-            _text.Draw(canvas, "·", IslandType.RowMeta, new SKRect(x, subTop, x + 6, subBottom),
-                _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-            x += 8;
+            IconSet.Draw(canvas, IconKind.Pin, new SKRect(metaLeft, preview.MidY - 5, metaLeft + 10, preview.MidY + 5),
+                Alpha(_theme.Accent, _opacity), _icon);
+            metaLeft += 14;
         }
+        var typeWidth = Math.Min(_text.Measure(typeLabel, IslandType.RowMeta), 56 * (float)_metrics.Value);
+        var meta = new SKRect(metaLeft, preview.Top, preview.Left - 8, preview.Bottom);
+        _text.Draw(canvas, typeLabel, IslandType.RowMeta,
+            new SKRect(meta.Left, meta.Top, Math.Min(meta.Right, meta.Left + typeWidth), meta.Bottom),
+            tone, opacity: _opacity);
+        var timeLeft = metaLeft + typeWidth + 8;
+        if (timeLeft < meta.Right)
+            _text.Draw(canvas, item.TimeText, IslandType.RowMeta,
+                new SKRect(timeLeft, meta.Top, meta.Right, meta.Bottom), _theme.ForegroundTertiary, opacity: _opacity);
 
-        var typeLabel = item.TypeLabel ?? ClipboardTypeLabels[Math.Clamp((int)item.Kind, 0, 4)];
-        var typeWidth = Math.Min(40, _text.Measure(typeLabel, IslandType.RowMeta));
-        _text.Draw(
-            canvas,
-            typeLabel,
-            IslandType.RowMeta,
-            new SKRect(x, subTop, x + typeWidth, subBottom),
-            _theme.ForegroundTertiary,
-            TextAlign.Left,
-            _opacity);
-        x += typeWidth + 4;
-        _text.Draw(canvas, "·", IslandType.RowMeta, new SKRect(x, subTop, x + 6, subBottom),
-            _theme.ForegroundTertiary, TextAlign.Left, _opacity);
-        x += 8;
-        _text.Draw(
-            canvas,
-            item.TimeText,
-            IslandType.RowMeta,
-            new SKRect(x, subTop, row.Right - 132, subBottom),
-            _theme.ForegroundTertiary,
-            TextAlign.Left,
-            _opacity);
-
-        var preview = new SKRect(row.Right - 126, row.Top + 13, row.Right - 86, row.Top + 35);
-        _fill.Color = Alpha(_theme.Accent, (IsHovered(IslandPageControl.ClipboardPreview, index) ? 0.15f : 0.07f) * _opacity);
+        _fill.Color = Alpha(_theme.Accent, (IsHovered(IslandPageControl.ClipboardPreview, index) ? 0.17f : 0.08f) * _opacity);
         canvas.DrawRoundRect(preview, 6, 6, _fill);
         _text.Draw(canvas, model.PreviewLabel ?? "View", IslandType.RowMeta, preview,
             _theme.Accent, TextAlign.Center, _opacity);
+        DrawClipboardAction(canvas, delete, IconKind.Close, IslandPageControl.ClipboardDelete, index, false);
+        DrawClipboardAction(canvas, pin, IconKind.Pin, IslandPageControl.Pin, index, item.IsPinned);
+        DrawClipboardAction(canvas, copy, copied ? IconKind.Check : IconKind.Copy, IslandPageControl.Copy, index, copied);
+    }
 
-        var delete = new SKRect(row.Right - 82, row.Top + 13, row.Right - 60, row.Top + 35);
-        var pin = new SKRect(row.Right - 58, row.Top + 13, row.Right - 36, row.Top + 35);
-        var copy = new SKRect(row.Right - 34, row.Top + 13, row.Right - 12, row.Top + 35);
-        if (hovered || IsHovered(IslandPageControl.ClipboardDelete, index)
-            || IsHovered(IslandPageControl.Pin, index) || IsHovered(IslandPageControl.Copy, index))
-        {
-            _fill.Color = Alpha(_theme.Foreground, 0.10f * _opacity);
-            if (hovered && !IsHovered(IslandPageControl.Pin, index) && !IsHovered(IslandPageControl.Copy, index)
-                && !IsHovered(IslandPageControl.ClipboardDelete, index))
-            {
-                canvas.DrawRoundRect(delete, 6, 6, _fill);
-                canvas.DrawRoundRect(pin, 6, 6, _fill);
-                canvas.DrawRoundRect(copy, 6, 6, _fill);
-            }
-            else
-            {
-                if (IsHovered(IslandPageControl.ClipboardDelete, index)) canvas.DrawRoundRect(delete, 6, 6, _fill);
-                if (IsHovered(IslandPageControl.Pin, index)) canvas.DrawRoundRect(pin, 6, 6, _fill);
-                if (IsHovered(IslandPageControl.Copy, index)) canvas.DrawRoundRect(copy, 6, 6, _fill);
-            }
-        }
-
-        IconSet.Draw(
-            canvas,
-            IconKind.Close,
-            delete.Deflate(6),
-            Alpha(_theme.ForegroundTertiary, _opacity),
-            _icon);
-        IconSet.Draw(
-            canvas,
-            IconKind.Pin,
-            pin.Deflate(5.5f),
-            Alpha(item.IsPinned ? _theme.Accent : _theme.ForegroundTertiary, _opacity),
-            _icon);
-        IconSet.Draw(
-            canvas,
-            copied ? IconKind.Check : IconKind.Copy,
-            copy.Deflate(5.5f),
-            Alpha(copied ? _theme.Accent : _theme.ForegroundTertiary, _opacity),
-            _icon);
-
-        canvas.Restore();
+    private void DrawClipboardAction(SKCanvas canvas, SKRect rect, IconKind glyph, IslandPageControl control, int index, bool active)
+    {
+        _fill.Color = Alpha(active ? _theme.Accent : _theme.Foreground,
+            (IsHovered(control, index) ? 0.15f : active ? 0.10f : 0.045f) * _opacity);
+        canvas.DrawRoundRect(rect, 6, 6, _fill);
+        IconSet.Draw(canvas, glyph, rect.Deflate(6), Alpha(active ? _theme.Accent : _theme.ForegroundSecondary, _opacity), _icon);
     }
 
     private SKColor ClipboardTone(ClipboardContentKind kind) => kind switch

@@ -2,8 +2,8 @@ namespace FluidBar.Core.Activities;
 
 /// <summary>
 /// Priority, persistence and default TTL policy for activity kinds (spec 2.3).
-/// Lower rank wins. Rank 10 is the Agent extension from the lead's priority brief;
-/// every other relative order matches the spec's table.
+/// Lower rank wins. FileShelf uses the rank 9 slot freed by notification promotion to rank 0;
+/// the relative priority of all existing activity kinds remains unchanged.
 /// </summary>
 public static class ActivityPriorityPolicy
 {
@@ -24,6 +24,9 @@ public static class ActivityPriorityPolicy
 
     /// <summary>Rank of <see cref="ActivityKind.Focus"/> (first ambient kind).</summary>
     public const int FocusRank = 6;
+
+    /// <summary>Files explicitly staged by the user, below system feedback and above agent/media content.</summary>
+    public const int FileShelfRank = 9;
 
     /// <summary>Rank of <see cref="ActivityKind.Volume"/>.</summary>
     public const int VolumeRank = 7;
@@ -60,6 +63,7 @@ public static class ActivityPriorityPolicy
     {
         ActivityKind.Lookup => LookupRank,
         ActivityKind.Clipboard => ClipboardRank,
+        ActivityKind.FileShelf => FileShelfRank,
         ActivityKind.LockKeys => LockKeysRank,
         ActivityKind.Device => DeviceRank,
         ActivityKind.Bluetooth => BluetoothRank,
@@ -83,6 +87,7 @@ public static class ActivityPriorityPolicy
     public static bool IsPersistent(ActivityKind kind, ActivityPayload? payload = null) => kind switch
     {
         ActivityKind.Focus => true,
+        ActivityKind.FileShelf => true,
         ActivityKind.BatteryLow => true,
         ActivityKind.Progress => true,
         ActivityKind.Timer => true,
@@ -102,6 +107,7 @@ public static class ActivityPriorityPolicy
     public static TimeSpan? DefaultTtl(ActivityKind kind) => kind switch
     {
         ActivityKind.Lookup => null,
+        ActivityKind.FileShelf => null,
         ActivityKind.Clipboard => TimeSpan.FromSeconds(4),
         ActivityKind.LockKeys => TimeSpan.FromSeconds(1.6),
         ActivityKind.Device => TimeSpan.FromSeconds(3),

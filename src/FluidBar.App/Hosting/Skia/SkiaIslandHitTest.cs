@@ -199,7 +199,8 @@ public static class SkiaIslandHitTest
             var body = PageLayout.ListBody(pageRect);
             for (var i = 0; i < pluginPage.Rows.Count; i++)
             {
-                var row = PageMetricsLayout.NotificationRow(pageRect, i, 0, metrics);
+                var row = PluginListLayout.Row(pageRect, pluginPage, i, metrics);
+                if (PluginListLayout.IsFileShelf(pluginPage) && row.Bottom > body.Bottom) continue;
                 if (!row.Contains(x, y) || !body.Contains(x, y))
                 {
                     continue;
@@ -207,10 +208,11 @@ public static class SkiaIslandHitTest
 
                 index = i;
                 var model = pluginPage.Rows[i];
-                var trailing = new SKRect(row.Right - 96, row.MidY - 12, row.Right - 8, row.MidY + 12);
+                var trailing = PluginListLayout.TrailingButton(row, model, PluginListLayout.IsFileShelf(pluginPage));
                 return trailing.Contains(x, y) && !string.IsNullOrWhiteSpace(model.TrailingCommandId)
                     ? IslandPageControl.PluginRowButton
                     : !string.IsNullOrWhiteSpace(model.RowCommandId) || !string.IsNullOrWhiteSpace(model.TrailingCommandId)
+                        || model.DragFiles is { Count: > 0 }
                         ? IslandPageControl.PluginRow
                         : IslandPageControl.None;
             }

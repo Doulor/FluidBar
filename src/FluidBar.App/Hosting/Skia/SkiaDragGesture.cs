@@ -14,6 +14,9 @@ public enum SkiaDragKind
 
     /// <summary>Notification card press: becomes a vertical dismiss gesture once the threshold is crossed.</summary>
     NotificationCandidate,
+
+    /// <summary>A file row press waiting for the native Copy drag threshold.</summary>
+    FileCandidate,
 }
 
 /// <summary>

@@ -34,12 +34,20 @@ public sealed class AppLoggerPlatformAdapter : IPlatformLogger
                 ? mapped
                 : LogCategories.Platform;
             _coreLogger.Log(MapLevel(entry.Level), category, entry.EventId, entry.Message,
-                exception: null, data: entry.Data);
+                exception: string.IsNullOrEmpty(entry.Exception) ? null : new ForwardedPlatformException(entry.Exception),
+                data: entry.Data);
         }
         catch (Exception)
         {
             // Logging adapters must never take a producer down.
         }
+    }
+
+    // Platform entries intentionally carry an already-formatted exception, not a live WinRT/COM
+    // object. Preserve that original type/message/stack through the Core logger's Exception contract.
+    private sealed class ForwardedPlatformException(string original) : Exception(original.Split('\n', 2)[0].TrimEnd())
+    {
+        public override string ToString() => original;
     }
 
     /// <summary>Maps a platform level onto the Core level enum.</summary>

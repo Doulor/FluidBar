@@ -91,6 +91,12 @@ public static partial class LocKeys
     /// <summary>Keys in the 'Island' area.</summary>
     public static class Island
     {
+        /// <summary>Keys in the file drag feedback.</summary>
+        public static class FileDrag
+        {
+            /// <summary><c>Island.FileDrag.CopyHint</c></summary>
+            public const string CopyHint = "Island.FileDrag.CopyHint";
+        }
         /// <summary><c>Island.Pin</c></summary>
         public const string Pin = "Island.Pin";
         /// <summary><c>Island.Unpin</c></summary>
@@ -223,6 +229,8 @@ public static partial class LocKeys
         public const string Progress = "Activity.Progress";
         /// <summary><c>Activity.Timer</c></summary>
         public const string Timer = "Activity.Timer";
+        /// <summary><c>Activity.FileShelf</c></summary>
+        public const string FileShelf = "Activity.FileShelf";
         /// <summary><c>Activity.Media</c></summary>
         public const string Media = "Activity.Media";
         /// <summary><c>Activity.Idle</c></summary>

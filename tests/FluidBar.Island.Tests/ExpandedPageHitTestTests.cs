@@ -85,18 +85,20 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(IslandPageControl.Row, rowHit.Control);
         Assert.Equal(0, rowHit.Index);
 
-        var pin = PageLayout.ClipboardPin(page, 2);
+        var scroll = PageLayout.ClampScroll(9999, state.Pages.Clipboard.Items.Count, PageLayout.ClipboardRowHeight, PageLayout.ClipboardRowGap);
+        state = IslandTestFixtures.WithPageScroll(state, 3, scroll);
+        var pin = PageLayout.ClipboardPin(page, 2, scroll);
         var pinHit = Hit(state, pin.MidX, pin.MidY);
         Assert.Equal(IslandPageControl.Pin, pinHit.Control);
         Assert.Equal(2, pinHit.Index);
 
-        var copy = PageLayout.ClipboardCopy(page, 3);
+        var copy = PageLayout.ClipboardCopy(page, 3, scroll);
         var copyHit = Hit(state, copy.MidX, copy.MidY);
         Assert.Equal(IslandPageControl.Copy, copyHit.Control);
         Assert.Equal(3, copyHit.Index);
 
-        var body = PageLayout.ListBody(page);
-        var scrollHit = Hit(state, body.MidX, body.Bottom - 2);
+        var gap = PageLayout.ClipboardRow(page, 2, scroll);
+        var scrollHit = Hit(state, gap.MidX, gap.Bottom + 2);
         Assert.Equal(IslandPageControl.Scroll, scrollHit.Control);
     }
 

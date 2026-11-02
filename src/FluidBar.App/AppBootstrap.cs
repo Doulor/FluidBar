@@ -1040,7 +1040,8 @@ internal sealed partial class AppBootstrap
             var result = await runtime.ExecuteCommandAsync(
                 request.OwnerPluginId,
                 request.CommandId,
-                FluidBar.Sdk.CommandInvocationSource.Island).ConfigureAwait(true);
+                FluidBar.Sdk.CommandInvocationSource.Island,
+                arguments: new Dictionary<string, string?> { ["pageId"] = request.PageId, ["rowId"] = request.RowId }).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -1068,7 +1069,7 @@ internal sealed partial class AppBootstrap
                 PluginRootDirectory = PluginRuntimePaths.ResolveRoot(),
                 LocalPluginRootDirectory = PluginRuntimePaths.ResolveLocalRoot(),
                 PluginStopped = pluginId => _pageRegistry.UnregisterOwner(pluginId),
-                AppVersion = new SemanticVersion(2, 0, 0),
+                AppVersion = PluginRuntimeVersion.Current,
                 Localizer = _localizer,
                 Logger = new AppPluginHostLogger(_logger),
                 InstallLogger = new AppPluginInstallLogger(_logger),
@@ -1079,8 +1080,9 @@ internal sealed partial class AppBootstrap
                     PublishPluginEvent,
                     _pageRegistry),
                 NotificationSinkFactory = manifest => new LoggingPluginNotificationSink(_logger, manifest.Id),
-                FileShelfFactory = _ => new FileShelfPresenter(_localizer,
-                    _skiaHost is { } fileDropHost ? fileDropHost.RegisterFileDropHandler : null),
+                FileShelfFactory = manifest => PluginFileShelfFactory.Create(manifest, _localizer,
+                    _skiaHost is { } fileDropHost ? fileDropHost.RegisterFileDropHandler : null,
+                    (paths, token) => _platformActions?.CopyShelfFilesAsync(paths, token) ?? Task.FromResult(false)),
                 BuiltinServices = services,
                 // Safe mode disables every community plugin (spec §8.4); first-party ones still load.
                 LoadCommunity = !SafeModeActive,
@@ -1446,6 +1448,16 @@ internal sealed partial class AppBootstrap
         _settings?.Dispose();
         _settingsStore?.Dispose();
         _localizer?.Dispose();
+
+        try
+        {
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.ShutdownAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(LogCategories.Lifecycle, "diagnostics.dispose-failed",
+                "The optional diagnostic trace did not flush before the shutdown deadline.", ex);
+        }
 
         try
         {

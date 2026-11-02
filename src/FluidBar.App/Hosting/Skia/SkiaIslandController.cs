@@ -599,12 +599,12 @@ public sealed partial class SkiaIslandController : IDisposable
             ApplyInput(IslandInput.PeekDwellElapsed());
         }
 
-        if (state.AutoCollapseDeadline is { } collapse && now >= collapse)
+        if (!_nativeFileDragActive && state.AutoCollapseDeadline is { } collapse && now >= collapse)
         {
             ApplyInput(IslandInput.AutoCollapseElapsed());
         }
 
-        if (state.AutoHideDeadline is { } hide && now >= hide)
+        if (!_nativeFileDragActive && state.AutoHideDeadline is { } hide && now >= hide)
         {
             ApplyInput(IslandInput.AutoHideElapsed());
         }
@@ -1119,6 +1119,10 @@ public sealed partial class SkiaIslandController : IDisposable
 
         _fileDragActive = false;
         var fileShelfPage = new CoreIslandPage("fluidbar-file-shelf.page");
+        if (State.Kind is IslandStateKind.Compact or IslandStateKind.Peek)
+        {
+            ApplyInput(IslandInput.PrimaryClick());
+        }
         ApplyInput(IslandInput.PageRequested(fileShelfPage));
         HandlePageRequest(fileShelfPage);
         BuildRenderState();
@@ -1567,6 +1571,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// </remarks>
     public bool HandlePointerPressed(double xDip, double yDip)
     {
+        _pendingFileDrag = null;
         _pointerX = xDip;
         _pointerY = yDip;
         _pointerInside = true;
@@ -1653,6 +1658,7 @@ public sealed partial class SkiaIslandController : IDisposable
                 return true;
 
             case IslandHitKind.PageControl:
+                if (DeferFileRow(hit, xDip, yDip)) return true;
                 HandlePageControl(hit);
                 return true;
 
@@ -1691,6 +1697,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// <param name="yDip">Client Y in DIP.</param>
     public void HandlePointerReleased(double xDip, double yDip)
     {
+        CommitFileClick(xDip, yDip);
         _pointerX = xDip;
         _pointerY = yDip;
         if (_railPendingPage >= 0)
@@ -1766,6 +1773,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// </remarks>
     public SkiaDragKind HandleDragStarted(double xDip, double yDip, long timestampMs)
     {
+        if (_pendingFileDrag is not null) return SkiaDragKind.FileCandidate;
         if (!_hasRenderState)
         {
             return SkiaDragKind.None;
@@ -3019,6 +3027,7 @@ public sealed partial class SkiaIslandController : IDisposable
     {
         ActivityIconKind.Media => FluidBar.Island.IconKind.Media,
         ActivityIconKind.Clipboard => FluidBar.Island.IconKind.Clipboard,
+        ActivityIconKind.File => FluidBar.Island.IconKind.Document,
         ActivityIconKind.Notification => FluidBar.Island.IconKind.Bell,
         ActivityIconKind.Volume => FluidBar.Island.IconKind.VolumeMedium,
         ActivityIconKind.Brightness => FluidBar.Island.IconKind.BrightnessHigh,
@@ -3672,6 +3681,9 @@ private void HandlePageControl(in IslandHitTarget hit)
             Clipboard = pages.Clipboard with { ScrollOffset = ScrollForKind(PageSlotKind.Clipboard) },
             Agent = pages.Agent with { ScrollOffset = ScrollForKind(PageSlotKind.Agent) },
             Widgets = pages.Widgets with { ScrollOffset = ScrollForKind(PageSlotKind.Widgets) },
+            PageSlots = pages.PageSlots.Select((slot, index) => slot.PluginPage is { } plugin
+                ? slot with { PluginPage = plugin with { ScrollOffset = index < _pageScroll.Length ? _pageScroll[index] : 0 } }
+                : slot).ToArray(),
             RailScrollOffset = RailScrollOffset,
         };
     }
@@ -3842,6 +3854,8 @@ private void HandlePageControl(in IslandHitTarget hit)
     {
         source ??= _pages;
         var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
+        if (source.PluginPageAt(page) is { } plugin)
+            return PluginListLayout.MaxScroll(plugin, metrics);
         var kind = source.PageSlotAt(page)?.Kind;
         return kind switch
         {

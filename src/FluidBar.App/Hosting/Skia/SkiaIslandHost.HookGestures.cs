@@ -23,7 +23,7 @@ public sealed partial class SkiaIslandHost
             _hookPressY = _hookDragY = y;
             _controller.HandlePointerPressed(x, y);
             // Classify at the press origin, not at the first moved point.
-            _hookDragKind = _controller.RenderState.Form == ShellForm.Expanded
+            _hookDragKind = _controller.HasPendingFileDrag ? SkiaDragKind.FileCandidate : _controller.RenderState.Form == ShellForm.Expanded
                 ? SkiaDragKind.None : _controller.HandleDragStarted(x, y, NowMs());
             _hookDragActive = false;
             EnsureDeadlineTicker();
@@ -71,6 +71,12 @@ public sealed partial class SkiaIslandHost
             MapHookPoint(entry, screenX, screenY, out var x, out var y);
             _hookDragX = x;
             _hookDragY = y;
+            if (_hookDragKind == SkiaDragKind.FileCandidate
+                && SkiaDragThreshold.Exceeds(_hookPressX, _hookPressY, x, y))
+            {
+                StartNativeFileDrag(entry, fromHook: true);
+                return;
+            }
             if (_hookDragKind == SkiaDragKind.None
                 && SkiaDragThreshold.Exceeds(_hookPressX, _hookPressY, x, y))
             {

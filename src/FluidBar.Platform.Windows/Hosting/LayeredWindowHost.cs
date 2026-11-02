@@ -1063,6 +1063,7 @@ public sealed partial class LayeredWindowHost : IDisposable
 
         if (_hwnd != IntPtr.Zero)
         {
+            SetFileDropEnabled(false);
             NativeMethods.User32.SetWindowLongPtr(_hwnd, NativeMethods.GWLP_USERDATA, IntPtr.Zero);
             if (!NativeMethods.User32.DestroyWindow(_hwnd))
             {

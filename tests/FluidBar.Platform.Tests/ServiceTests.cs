@@ -382,10 +382,25 @@ public sealed class RollingLoggerTests : IAsyncLifetime
 
         await logger.FlushAsync();
         var files = Directory.GetFiles(_directory, "*.jsonl");
-        Assert.InRange(files.Length, 1, 4);
+        Assert.InRange(files.Length, 1, options.MaxFiles);
         foreach (var file in files)
         {
             Assert.True(new FileInfo(file).Length <= 1024, $"{file} exceeded the rotation budget");
+        }
+    }
+
+    [Fact]
+    public async Task Log_Restart_reserves_a_slot_for_the_active_file()
+    {
+        var options = new RollingLogOptions { DirectoryPath = _directory, MaxFiles = 1 };
+        for (var startup = 0; startup < 2; startup++)
+        {
+            await using var logger = new RollingFileLogger(options);
+            await logger.StartAsync();
+            logger.LogInfo(PlatformLogCategory.Diagnostics, "restart", "current file");
+            await logger.FlushAsync();
+            var file = Assert.Single(Directory.GetFiles(_directory, "*.jsonl"));
+            Assert.Contains("current file", Assert.Single(ReadAllLinesShared(file)));
         }
     }
 

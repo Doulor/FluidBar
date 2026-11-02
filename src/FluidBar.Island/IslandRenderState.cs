@@ -1155,7 +1155,7 @@ public sealed record ClipboardPageModel
 /// <summary>One clipboard history row.</summary>
 public sealed record ClipboardItemModel
 {
-    /// <summary>Preview text (single line, ellipsised by the renderer).</summary>
+    /// <summary>Preview text (up to two lines, ellipsised by the renderer).</summary>
     public string? Preview { get; init; }
 
     /// <summary>Relative time label ("2 min").</summary>

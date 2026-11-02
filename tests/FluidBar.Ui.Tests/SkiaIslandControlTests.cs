@@ -170,7 +170,10 @@ public sealed class SkiaIslandControlTests
         var page = Page(3, fixture);
         Click(fixture, PageLayout.ClipboardPin(page, 0));
         Click(fixture, PageLayout.ClipboardCopy(page, 1));
-        Click(fixture, PageLayout.ClipboardRow(page, 2));
+        fixture.Controller.HandlePointerMoved(page.MidX, page.MidY);
+        fixture.Controller.HandleWheel(1000, false, false);
+        var scroll = (float)fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset;
+        Click(fixture, PageLayout.ClipboardRow(page, 2, scroll));
 
         Assert.Equal(3, actions.Calls.Count);
         Assert.Equal(IslandPlatformActionKind.ClipboardPin, actions.Calls[0].Kind);

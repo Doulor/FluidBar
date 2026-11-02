@@ -82,6 +82,10 @@ public sealed class PluginIslandEventAdapter
 
     private static (ActivityKind Kind, string Source) MapSource(string source)
     {
+        if (string.Equals(source, "fluidbar-file-shelf", StringComparison.Ordinal))
+        {
+            return (ActivityKind.FileShelf, "plugin:" + source);
+        }
         if (string.Equals(source, BuiltinIds.MediaPlugin, StringComparison.Ordinal))
         {
             return (ActivityKind.Media, "media:gsmtc");
@@ -173,6 +177,7 @@ public sealed class PluginIslandEventAdapter
             DetailLines = payload?.DetailLines is { } lines ? [.. lines] : ImmutableArray<string>.Empty,
             PositionTicks = payload?.PlaybackTicks ?? 0,
             VerificationCode = payload?.VerificationCode,
+            PreferredPage = kind == ActivityKind.FileShelf ? kind.ToPage() : null,
         };
     }
 }

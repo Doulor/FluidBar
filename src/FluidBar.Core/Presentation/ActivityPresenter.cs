@@ -50,6 +50,9 @@ public enum ActivityIconKind
 
     /// <summary>Agent.</summary>
     Agent,
+
+    /// <summary>File reference document.</summary>
+    File,
 }
 
 /// <summary>
@@ -248,6 +251,7 @@ public static class ActivityPresenter
         ActivityKind.Idle => ActivityIconKind.Clock,
         ActivityKind.Media => ActivityIconKind.Media,
         ActivityKind.Clipboard => ActivityIconKind.Clipboard,
+        ActivityKind.FileShelf => ActivityIconKind.File,
         ActivityKind.Notification => ActivityIconKind.Notification,
         ActivityKind.Volume => ActivityIconKind.Volume,
         ActivityKind.Brightness => ActivityIconKind.Brightness,

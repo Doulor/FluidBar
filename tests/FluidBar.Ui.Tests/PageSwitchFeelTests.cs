@@ -64,11 +64,11 @@ public sealed class PageSwitchFeelTests
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at ~15 Hz: each deliberate notch advances one page. The rail follows only
-        // when the selected tab would leave the visible band.
+        // Horizontal wheel explicitly pages across content that may scroll vertically (including
+        // the taller clipboard summaries). Each notch advances one page.
         for (var i = 0; i < 6; i++)
         {
-            controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+            controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: true, shift: false);
             Advance(fixture, 4);
         }
 
@@ -87,10 +87,10 @@ public sealed class PageSwitchFeelTests
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        // Six notches at 10 Hz still advance one page each; no gesture lock swallows them.
+        // Horizontal notches at 10 Hz page even when the current list has vertical overflow.
         for (var i = 0; i < 6; i++)
         {
-            controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+            controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: true, shift: false);
             Advance(fixture, 6);
         }
 

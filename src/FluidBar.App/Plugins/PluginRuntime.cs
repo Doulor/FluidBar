@@ -452,25 +452,34 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     }
 
     /// <summary>Executes a declared command through the host (built-in or community).</summary>
-    public async Task<PluginCommandExecutionResult> ExecuteCommandAsync(
+    public Task<PluginCommandExecutionResult> ExecuteCommandAsync(
         string pluginId,
         string commandId,
         CommandInvocationSource source = CommandInvocationSource.Settings,
+        CancellationToken cancellationToken = default)
+        => ExecuteCommandAsync(pluginId, commandId, source, null, cancellationToken);
+
+    /// <summary>Executes a declared command with host-provided invocation arguments.</summary>
+    public async Task<PluginCommandExecutionResult> ExecuteCommandAsync(
+        string pluginId,
+        string commandId,
+        CommandInvocationSource source,
+        IReadOnlyDictionary<string, string?>? arguments,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         var builtin = FindBuiltinSession(pluginId);
         if (builtin is not null)
         {
-            return await builtin.ExecuteCommandAsync(commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await builtin.ExecuteCommandAsync(commandId, source, arguments, cancellationToken).ConfigureAwait(false);
         }
 
         if (_localHost?.Find(pluginId) is not null)
         {
-            return await _localHost.ExecuteCommandAsync(pluginId, commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return await _localHost.ExecuteCommandAsync(pluginId, commandId, source, arguments, cancellationToken).ConfigureAwait(false);
         }
 
-        return await Host.ExecuteCommandAsync(pluginId, commandId, source, cancellationToken: cancellationToken).ConfigureAwait(false);
+        return await Host.ExecuteCommandAsync(pluginId, commandId, source, arguments, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Reads a host-owned setting value for the generic settings-page renderer.</summary>

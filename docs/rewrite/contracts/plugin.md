@@ -14,6 +14,8 @@
 
 ---
 
+2026-11-02 / FluidBar 4.1.0：插件安装、加载及市场兼容性使用宿主构建的实际 SemVer（保留预览标记），不再使用固定 2.0.0。文件暂存 1.0.3 的 minAppVersion=4.1.0，避免旧宿主加载调用 CopyFilesAsync/DragFiles 新接口的插件。
+
 ## 1. Assemblies and dependency rules
 
 | Project | TFM | References | Must not |
@@ -422,6 +424,18 @@ never stores plugin `Type`/`Assembly`/delegate/`Exception` objects.
 - Manifest is closed (`additionalProperties:false`); adding a field is a schema-version bump.
 
 ## 10. Non-goals for v2.0
+
+2026-11-02 additive update: `PageListRow.DragFiles` optionally supplies up to 32 absolute reference paths
+(2048 characters each, no embedded NUL). `capabilities.files` is required. The host snapshots these paths,
+defers row activation until release, and starts native Copy-only dragging after 6 DIP of movement.
+No original file or shelf reference is removed after success or cancellation. Only the known first-party
+file-shelf 1.0.0/1.0.1 `file-*` row/subtitle contract is adapted for backwards compatibility, with Files consent.
+
+2026-11-01 additive update: `IPluginFileShelf.CopyFilesAsync(paths, cancellationToken)` copies explicit
+file references to the clipboard and defaults to false on hosts without support. The App requires
+`clipboard.write`, checks that all referenced files/folders still exist off the UI thread, and uses
+the host clipboard writer. Island page commands carry `pageId`/`rowId` in `PluginCommandContext.Arguments`.
+The built-in list renderer shares its scroll offset with hit-testing and accessibility.
 
 Out-of-process/untrusted execution (v2.1), plugin XAML/`UserControl`/custom renderers, native dependencies,
 plugin windows, ratings/reviews, paid plugins, plugin-to-plugin dependency auto-install, in-app code editors, and

@@ -758,43 +758,44 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private List<UiaElementSnapshot> BuildClipboardControls(in IslandRenderState state, SKRect page)
     {
         var model = state.Pages.Clipboard;
+        var metrics = FontScaleMetrics.From(state.FontScale);
         var rows = new List<UiaElementSnapshot>();
         var body = PageLayout.ListBody(page);
-        var scroll = PageLayout.ClampScroll(model.ScrollOffset, model.Items.Count,
-            PageLayout.ClipboardRowHeight, PageLayout.ClipboardRowGap);
+        var scroll = PageMetricsLayout.ClampListScroll(model.Items.Count, PageMetricsLayout.ClipboardRowHeight(metrics),
+            PageLayout.ClipboardRowGap, (float)model.ScrollOffset);
 
         for (var i = 0; i < Math.Min(model.Items.Count, MaxListRows); i++)
         {
             var item = model.Items[i];
-            var row = PageLayout.ClipboardRow(page, i, scroll);
+            var row = PageMetricsLayout.ClipboardRow(page, i, scroll, metrics);
             var children = new List<UiaElementSnapshot>(4)
             {
                 Node(
                     $"island.page.3.row.{i}.preview",
                     UiaElementRole.Button,
                     model.PreviewLabel ?? L("Clipboard.Preview.Open", "View"),
-                    ToRect(PageLayout.ClipboardPreview(page, i, scroll)),
+                    ToRect(PageMetricsLayout.ClipboardPreview(page, i, scroll, metrics)),
                     UiaPatternKind.Invoke,
                     new UiaElementState { IsFocusable = true }),
                 Node(
                     $"island.page.3.row.{i}.delete",
                     UiaElementRole.Button,
                     L("Common.Delete", "Delete"),
-                    ToRect(PageLayout.ClipboardDelete(page, i, scroll)),
+                    ToRect(PageMetricsLayout.ClipboardDelete(page, i, scroll, metrics)),
                     UiaPatternKind.Invoke,
                     new UiaElementState { IsFocusable = true }),
                 Node(
                     $"island.page.3.row.{i}.pin",
                     UiaElementRole.Button,
                     item.IsPinned ? L("Island.Accessibility.Unpin", "Unpin") : L("Common.Pin", "Pin"),
-                    ToRect(PageLayout.ClipboardPin(page, i, scroll)),
+                    ToRect(PageMetricsLayout.ClipboardPin(page, i, scroll, metrics)),
                     UiaPatternKind.Toggle | UiaPatternKind.Invoke,
                     new UiaElementState { IsFocusable = true, IsToggled = item.IsPinned }),
                 Node(
                     $"island.page.3.row.{i}.copy",
                     UiaElementRole.Button,
                     L("Common.Copy", "Copy"),
-                    ToRect(PageLayout.ClipboardCopy(page, i, scroll)),
+                    ToRect(PageMetricsLayout.ClipboardCopy(page, i, scroll, metrics)),
                     UiaPatternKind.Invoke,
                     new UiaElementState { IsFocusable = true }),
             };
@@ -808,7 +809,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                 new UiaElementState
                 {
                     IsFocusable = true,
-                    IsOffscreen = !Intersects(row, body),
+                    IsOffscreen = !Intersects(row, body) || row.Bottom > body.Bottom,
                     ItemStatus = JoinNotEmpty(", ", item.TypeLabel, item.TimeText),
                 },
                 children: children));
@@ -997,7 +998,10 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         for (var i = 0; i < pluginPage.Rows.Count; i++)
         {
             var row = pluginPage.Rows[i];
-            var rowRect = PageMetricsLayout.NotificationRow(page, i, 0, metrics);
+            var rowRect = PluginListLayout.Row(page, pluginPage, i, metrics);
+            var body = PageLayout.ListBody(page);
+            if (rowRect.Bottom <= body.Top || rowRect.Top >= body.Bottom) continue;
+            if (PluginListLayout.IsFileShelf(pluginPage) && rowRect.Bottom > body.Bottom) continue;
             var name = string.Join(": ", new[] { row.Title, row.Subtitle }
                 .Where(static value => !string.IsNullOrWhiteSpace(value)));
             children.Add(Node(
@@ -1010,7 +1014,7 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
 
             if (!string.IsNullOrWhiteSpace(row.TrailingCommandId))
             {
-                var button = new SKRect(rowRect.Right - 96, rowRect.MidY - 12, rowRect.Right - 8, rowRect.MidY + 12);
+                var button = PluginListLayout.TrailingButton(rowRect, row, PluginListLayout.IsFileShelf(pluginPage));
                 children.Add(Node(
                     $"island.page.{pageIndex}.row.{i}.button",
                     UiaElementRole.Button,

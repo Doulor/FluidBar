@@ -116,6 +116,19 @@ internal sealed class PluginIslandPublisher : IIslandPublisher
             return false;
         }
 
+        // Older first-party shelf versions already publish explicit reference paths in file rows.
+        // Adapt only that known contract, and only with the same Files capability as native drag rows.
+        if (_pluginId == "fluidbar-file-shelf" && _manifest?.Capabilities.Files is not null && data.List is { } list)
+            data = data with { List = list with { Rows = list.Rows.Select(row =>
+                row.DragFiles is null && row.RowId.StartsWith("file-", StringComparison.Ordinal)
+                && row.Subtitle is { Length: > 0 and <= 2048 } path && !path.Contains('\0') && Path.IsPathFullyQualified(path)
+                    ? row with { DragFiles = new[] { path } } : row).ToArray() } };
+        if (data.List?.Rows.Any(row => row.DragFiles is { Count: > 0 }) == true
+            && _manifest?.Capabilities.Files is null)
+        {
+            Drop(_pluginId, "Row file dragging requires files capability.");
+            return false;
+        }
         return _inner.PublishPage(data);
     }
 

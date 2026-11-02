@@ -393,6 +393,7 @@ public static class LayoutTokens
         Activities.ActivityKind.Brightness => HudSize,
         Activities.ActivityKind.Notification => NotificationSize,
         Activities.ActivityKind.Clipboard => ClipboardSize,
+        Activities.ActivityKind.FileShelf => ClipboardSize,
         Activities.ActivityKind.Agent => AgentSize,
         Activities.ActivityKind.Timer => TimerSize,
         Activities.ActivityKind.BatteryLow => BatterySize,

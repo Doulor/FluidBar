@@ -12,11 +12,87 @@ using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Layout;
 using FluidBar.Island;
 using FluidBar.Platform.Windows.Hosting;
+using FluidBar.App.Hosting.Pages;
+using FluidBar.Sdk.Pages;
+using FluidBar.Sdk.Manifest;
 
 namespace FluidBar.Ui.Tests;
 
 public sealed class NotificationHookInputTests
 {
+    [Fact]
+    public void Native_window_file_drag_uses_native_button_state_when_the_global_hook_is_not_installed()
+    {
+        var invoked = false;
+        using var fixture = new HookFixture(FileShelfOutboundDragTests.Registry([Path.Combine(Path.GetTempPath(), "fallback.txt")]),
+            (_, released) => { Assert.Null(released); invoked = true; return false; });
+        fixture.Controller.ApplyInput(IslandInput.PrimaryClick());
+        fixture.Controller.HandlePageRequest(new PageRef("fluidbar-file-shelf.page"));
+        fixture.Step(100);
+        var state = fixture.Controller.RenderState;
+        var row = PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0, FontScaleMetrics.From(1));
+        fixture.Controller.HandlePointerPressed(row.MidX, row.MidY);
+        fixture.Call("StartNativeFileDrag", fixture.Window, false);
+        Assert.True(invoked);
+        Assert.False(fixture.Controller.HasPendingFileDrag);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void File_drag_from_production_hook_passes_release_to_native_source_then_restores_card_clicks(bool copied)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "native-drag.txt");
+        var registry = new PageRegistry();
+        Assert.True(registry.RegisterPage("fluidbar-file-shelf", new PageDescriptor
+        { PageId = "fluidbar-file-shelf.page", TemplateId = PageTemplates.List, Order = 110,
+            IconToken = "file", Title = new LocalizedString("Files") }, out _));
+        Assert.True(registry.PublishPage("fluidbar-file-shelf", new PageData
+        { PageId = "fluidbar-file-shelf.page", TemplateId = PageTemplates.List,
+            List = new PageListData { Rows = [new PageListRow
+            { RowId = "file-native", Title = "native-drag.txt", DragFiles = [path], RowCommandId = "fluidbar-file-shelf.copy" }] } }, out _));
+        HookFixture? fixture = null;
+        var dragCount = 0;
+        var x = 0;
+        var y = 0;
+        using (fixture = new HookFixture(registry, (paths, released) =>
+        {
+            dragCount++;
+            Assert.Equal(path, Assert.Single(paths));
+            Assert.NotNull(released);
+            Assert.False(released!());
+            fixture!.SendHook(0x0202, x + 20, y);
+            Assert.True(released());
+            return copied;
+        }))
+        {
+            fixture.Controller.ApplyInput(IslandInput.PrimaryClick());
+            fixture.Controller.HandlePageRequest(new PageRef("fluidbar-file-shelf.page"));
+            fixture.Step(100);
+            var state = fixture.Controller.RenderState;
+            var row = PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0, FontScaleMetrics.From(1));
+            x = (int)row.MidX;
+            y = (int)row.MidY;
+            var commands = new List<PluginPageCommandRequest>();
+            fixture.Controller.PluginPageCommandRequested += commands.Add;
+            fixture.SendHook(0x0201, x, y);
+            fixture.Drain();
+            fixture.SendHook(0x0200, x + 3, y);
+            fixture.Drain();
+            Assert.Equal(0, dragCount);
+            fixture.SendHook(0x0200, x + 20, y);
+            fixture.Drain();
+            Assert.Equal(1, dragCount);
+            Assert.Empty(commands);
+            Assert.False(fixture.Controller.HasPendingFileDrag);
+            Assert.Equal(path, Assert.Single(fixture.Controller.RenderState.Pages.PluginPageAt(6)!.Rows.Single().DragFiles!));
+            fixture.SendHook(0x0201, x, y);
+            fixture.SendHook(0x0202, x, y);
+            fixture.Drain();
+            Assert.Equal("fluidbar-file-shelf.copy", Assert.Single(commands).CommandId);
+        }
+    }
+
     [Fact]
     public void Production_hook_handlers_route_press_drag_outside_and_release_to_banner_gesture()
     {
@@ -120,8 +196,9 @@ public sealed class NotificationHookInputTests
         private readonly IslandMouseHook _hook;
         public RecordingIslandPlatformActions Actions { get; } = new();
         public SkiaIslandController Controller { get; }
+        public object Window => ((IList)Field(_host, "_windows").GetValue(_host)!)[0]!;
 
-        public HookFixture()
+        public HookFixture(PageRegistry? registry = null, Func<IReadOnlyList<string>, Func<bool>?, bool>? fileDrag = null)
         {
             var localizer = new FakeLocalizer();
             var store = new InMemoryUiSettingsStore(AppSettings.Default with { AutoCollapseMs = 0, AutoHideMs = 0 });
@@ -132,7 +209,8 @@ public sealed class NotificationHookInputTests
             try
             {
                 _host = new SkiaIslandHost(new SkiaIslandHostOptions
-                { Localizer = localizer, Settings = _settings, Data = _data, PlatformActions = Actions, TimeProvider = _time });
+                { Localizer = localizer, Settings = _settings, Data = _data, PlatformActions = Actions, TimeProvider = _time,
+                    PageRegistry = registry, FileDrag = fileDrag });
             }
             finally { SynchronizationContext.SetSynchronizationContext(previous); }
             Controller = (SkiaIslandController)Field(_host, "_controller").GetValue(_host)!;
@@ -150,6 +228,7 @@ public sealed class NotificationHookInputTests
             ((IList)Field(_host, "_windows").GetValue(_host)!).Add(entry);
             _messageHost = new PlatformMessageHost(NullPlatformLogger.Instance, new PlatformCounters());
             _hook = new IslandMouseHook(_messageHost, NullPlatformLogger.Instance, new PlatformCounters());
+            if (fileDrag is not null) Field(_host, "_mouseHook").SetValue(_host, _hook);
             foreach (var pair in new[]
             {
                 ("PointerPressed", "OnHookPointerPressed"), ("PointerReleased", "OnHookPointerReleased"),

@@ -942,9 +942,9 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
                 $"sync.island {position.TotalSeconds,7:0.0}s text='{(int)(position.TotalSeconds / 60)}:{(int)(position.TotalSeconds % 60):00}' title='{media.Title}'");
         }
 
-        _logger.Information(LogCategories.Platform, "position.anchor",
+        _logger.Debug(LogCategories.Platform, "position.anchor",
             $"sampled={media.Position.TotalMilliseconds:0}ms published={position.TotalMilliseconds:0}ms " +
-            $"duration={duration.TotalMilliseconds:0}ms playing={isPlaying} title='{media.Title}'");
+            $"duration={duration.TotalMilliseconds:0}ms playing={isPlaying}");
 
         var progress = duration.TotalMilliseconds > 0
             ? (int)Math.Clamp(position.TotalMilliseconds / duration.TotalMilliseconds * 100, 0, 100)
@@ -1277,7 +1277,8 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
         {
             ClipboardContentKind.Text when !string.IsNullOrWhiteSpace(entry.CompleteText ?? entry.Text)
                 => (entry.CompleteText ?? entry.Text!).TrimStart(),
-            ClipboardContentKind.Files => string.Join(", ", entry.FilePaths.Take(3)),
+            ClipboardContentKind.Files => string.Join(", ", entry.FilePaths.Take(3).Select(static path =>
+                Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } name ? name : path)),
             ClipboardContentKind.Image => "Image",
             _ => "(empty)",
         };

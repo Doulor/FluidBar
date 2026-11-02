@@ -37,6 +37,40 @@ public sealed class IslandMouseHook : IDisposable
     private long _lastEventTimestamp;
     private int _lastHookX;
     private int _lastHookY;
+    private int _nativeDragScopes;
+    private int _nativeReleaseVersion;
+
+    /// <summary>Hands all input to OLE while keeping the physical release visible to a hook-originated drag.</summary>
+    public NativeDragScope SuspendForNativeDrag()
+    {
+        lock (_gate)
+        {
+            _nativeDragScopes++;
+            _gesture.Reset();
+            return new NativeDragScope(this, _nativeReleaseVersion);
+        }
+    }
+
+    /// <summary>A queued move must not start a native drag after the physical button was already released.</summary>
+    public NativeDragScope? TrySuspendForNativeDrag()
+    {
+        lock (_gate) return _gesture.IsPressed ? SuspendForNativeDrag() : null;
+    }
+
+    public sealed class NativeDragScope : IDisposable
+    {
+        private readonly IslandMouseHook _owner;
+        private readonly int _releaseVersion;
+        private int _disposed;
+        internal NativeDragScope(IslandMouseHook owner, int releaseVersion)
+        { _owner = owner; _releaseVersion = releaseVersion; }
+        public bool LeftButtonReleased => Volatile.Read(ref _owner._nativeReleaseVersion) != _releaseVersion;
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            lock (_owner._gate) { _owner._nativeDragScopes--; _owner._gesture.Reset(); }
+        }
+    }
 
     /// <summary>Creates the hook; call <see cref="StartAsync"/> once.</summary>
     public IslandMouseHook(PlatformMessageHost host, IPlatformLogger logger, PlatformCounters counters)
@@ -192,7 +226,7 @@ public sealed class IslandMouseHook : IDisposable
                 }
 
                 _hook = reinstalled;
-                _gesture.Reset();
+                lock (_gate) _gesture.Reset();
                 GetCursorPos(out var cursor);
                 _lastHookX = cursor.X;
                 _lastHookY = cursor.Y;
@@ -268,14 +302,13 @@ public sealed class IslandMouseHook : IDisposable
         var wheel = message == WmMouseWheel
             ? unchecked((short)((long)data.mouseData >> 16)) / 120.0
             : 0;
-        if (message == WmRButtonDown && IsInsideInteractive(x, y))
+        var route = RouteHookMessage(x, y, message, wheel);
+        if (route.RightPressed)
         {
             // Right-click is the manual soften/restore gesture: always ours, never passed through.
             RightPressed?.Invoke(x, y);
             return new IntPtr(1);
         }
-
-        var route = _gesture.Route(ClassifyLocked(x, y), message, wheel);
 
         // Deliver in the same order the old inline switch did. A press inside/release outside now
         // always produces Released + Left, so the host can end its drag instead of leaving a phantom
@@ -324,25 +357,19 @@ public sealed class IslandMouseHook : IDisposable
             : CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
     }
 
-    private bool IsInsideInteractive(int x, int y)
+    internal GestureRoute RouteHookMessage(int x, int y, int message, double wheel = 0)
     {
         lock (_gate)
         {
-            return Classify(_regions, _watchRegions, x, y) == HookRegionKind.Interactive;
-        }
-    }
-
-    private HookRegionKind ClassifyLocked(int x, int y)
-    {
-        if (PassThrough)
-        {
-            // Yielding: the island is visible but must not take any input.
-            return HookRegionKind.Outside;
-        }
-
-        lock (_gate)
-        {
-            return Classify(_regions, _watchRegions, x, y);
+            if (_nativeDragScopes > 0)
+            {
+                if (message == WmLButtonUp) Interlocked.Increment(ref _nativeReleaseVersion);
+                return new GestureRoute();
+            }
+            var kind = Classify(_regions, _watchRegions, x, y);
+            if (message == WmRButtonDown && kind == HookRegionKind.Interactive)
+                return new GestureRoute(Consume: true, RightPressed: true);
+            return _gesture.Route(PassThrough ? HookRegionKind.Outside : kind, message, wheel);
         }
     }
 
@@ -465,6 +492,9 @@ public sealed class IslandMouseHook : IDisposable
                     _pressed = true;
                     return new GestureRoute(Consume: true, Pressed: true);
                 case WmLButtonUp:
+                    // Only finish a press owned by the island. Explorer/OLE needs the release for
+                    // a file drag that started elsewhere; swallowing it prevents IDropTarget.Drop.
+                    if (!_pressed) return new GestureRoute();
                     _pressed = false;
                     return new GestureRoute(Consume: true, Released: true);
                 case WmMouseMove:
@@ -486,7 +516,8 @@ public sealed class IslandMouseHook : IDisposable
         bool Dragged = false,
         bool Left = false,
         double? WheelNotches = null,
-        bool OutsidePressed = false);
+        bool OutsidePressed = false,
+        bool RightPressed = false);
 
     /// <summary>How one screen point is routed by the hook.</summary>
     internal enum HookRegionKind

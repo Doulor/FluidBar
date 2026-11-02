@@ -108,6 +108,14 @@ public sealed class PageRegistry
             return false;
         }
 
+        if (data.List.Rows.Any(row => row.DragFiles is { } paths &&
+                (paths.Count > 32 || paths.Any(path => string.IsNullOrWhiteSpace(path) || path.Length > 2048
+                    || path.Contains('\0') || !Path.IsPathFullyQualified(path)))))
+        {
+            error = "row drag files must contain at most 32 absolute paths of at most 2048 characters";
+            return false;
+        }
+
         lock (_gate)
         {
             var page = _pages.FirstOrDefault(entry => string.Equals(entry.OwnerId, ownerId, StringComparison.Ordinal)
@@ -118,7 +126,8 @@ public sealed class PageRegistry
                 return false;
             }
 
-            page.Data = data;
+            page.Data = data with { List = data.List with
+            { Rows = data.List.Rows.Select(row => row with { DragFiles = row.DragFiles?.ToArray() }).ToArray() } };
         }
 
         error = null;
@@ -226,6 +235,8 @@ public sealed class PageRegistry
                     RowCommandId = row.RowCommandId,
                     TrailingCommandId = row.TrailingCommandId,
                     TrailingLabel = row.TrailingLabel,
+                    DragFiles = row.DragFiles,
+                    FileDirectory = row.DragFiles is { Count: > 0 } files ? Path.GetDirectoryName(files[0]) : null,
                 }).ToArray() ?? [],
                 EmptyTitle = entry.Data?.List?.EmptyTitle,
                 EmptyHint = entry.Data?.List?.EmptyHint,

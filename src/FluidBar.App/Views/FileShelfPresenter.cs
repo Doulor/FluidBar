@@ -13,8 +13,12 @@ namespace FluidBar.App.Views;
 
 /// <summary>Optional host UI, instantiated only for plugins requesting file-reference access.</summary>
 internal sealed class FileShelfPresenter(ILocalizer localizer,
-    Func<Action<IReadOnlyList<string>>, IDisposable>? registerDrop = null) : IPluginFileShelf
+    Func<Action<IReadOnlyList<string>>, IDisposable>? registerDrop = null,
+    Func<IReadOnlyList<string>, CancellationToken, Task<bool>>? copyFiles = null) : IPluginFileShelf
 {
+    public async ValueTask<bool> CopyFilesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken)
+        => copyFiles is not null && await copyFiles(paths.ToArray(), cancellationToken).ConfigureAwait(false);
+
     public IDisposable? RegisterIslandDropTarget(Action<IReadOnlyList<string>> dropped, CancellationToken lifetime)
     {
         var registration = registerDrop?.Invoke(dropped);

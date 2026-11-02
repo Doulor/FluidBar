@@ -12,4 +12,8 @@ public interface IPluginFileShelf
 
     /// <summary>Opts into file drops on the island; disposing disables the registration.</summary>
     IDisposable? RegisterIslandDropTarget(Action<IReadOnlyList<string>> dropped, CancellationToken lifetime) => null;
+
+    /// <summary>Copies explicit file references to the system clipboard for pasting into another app.
+    /// Returns false if any reference is unavailable or the clipboard cannot be written. Never moves files.</summary>
+    ValueTask<bool> CopyFilesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken) => ValueTask.FromResult(false);
 }

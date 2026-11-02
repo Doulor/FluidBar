@@ -930,6 +930,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         host.SetFileDropEnabled(_fileDropHandlers is not null);
         host.FileDragEntered += () =>
         {
+            if (_nativeFileDragActive) return;
             _controller.HandleFileDragEnter();
             EnsureFrameLoop();
             RenderNow(forceFull: true);
@@ -942,6 +943,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         };
         host.FilesDropped += paths =>
         {
+            if (_nativeFileDragActive) return;
             _fileDropHandlers?.Invoke(paths);
             _controller.HandleFileDropCompleted();
             EnsureFrameLoop();
@@ -1016,7 +1018,14 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
                     entry.DragStartScreenYDip = drag.Pointer.ScreenY / SafeScale(entry.Host.Scale);
                     break;
                 case LayeredDragPhase.Moved:
-                    if (entry.DragKind == SkiaDragKind.Pager)
+                    if (entry.DragKind == SkiaDragKind.FileCandidate)
+                    {
+                        var scale = SafeScale(entry.Host.Scale);
+                        if (SkiaDragThreshold.Exceeds(entry.DragStartScreenXDip, entry.DragStartScreenYDip,
+                                drag.Pointer.ScreenX / scale, drag.Pointer.ScreenY / scale))
+                            StartNativeFileDrag(entry, fromHook: false);
+                    }
+                    else if (entry.DragKind == SkiaDragKind.Pager)
                     {
                         _controller.HandleDragMoved(x, y, timestamp);
                     }

@@ -1,4 +1,4 @@
-# FluidBar 4.0
+# FluidBar 4.1
 
 > Windows 上的灵动岛 — 常驻、可交互、可扩展的桌面信息与控制中心。
 
@@ -14,7 +14,7 @@ FluidBar 是一次完全重写（v1 代码已从本分支移除，历史保留�
 
 ## 当前状态
 
-**正式版 4.0.0（2026-10-31）** — 自包含单文件发布，之后进入 4.x 维护。
+**4.1.0 发布（2026-11-02）** — 完善文件暂存的拖入、拖出复制和持续预览，优化内容卡片，修复内置插件与通知、日志稳定性；继续提供自包含单文件 win-x64。
 
 | 里程碑 | 状态 |
 |---|---|
@@ -27,7 +27,7 @@ FluidBar 是一次完全重写（v1 代码已从本分支移除，历史保留�
 
 - **官方网站**：[website/](website/)（Vite + React，4.0 正式版发布页、真实 prototype2 交互演示与日光桌面壁纸）
 - 交互与视觉原型：[docs/rewrite/prototype2/index.html](docs/rewrite/prototype2/index.html)（浏览器打开即可；旧 prototype 已归档）
-- **4.0.0 发布说明**：[docs/rewrite/RELEASE-4.0.0.md](docs/rewrite/RELEASE-4.0.0.md)
+- **4.1.0 发布说明**：[docs/rewrite/RELEASE-4.1.0.md](docs/rewrite/RELEASE-4.1.0.md)
 - **当前状态 / 文档索引 / 变更记录**：[STATUS](docs/rewrite/STATUS.md) · [docs/rewrite/README.md](docs/rewrite/README.md) · [CHANGELOG.md](CHANGELOG.md)
 - 设计规范 / 实施计划 / 决策记录：[docs/rewrite](docs/rewrite/)
 - **项目方向与注意事项（后续 AI 必读）**：[PROJECT-NOTES.md](PROJECT-NOTES.md)

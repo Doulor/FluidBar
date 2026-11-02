@@ -80,6 +80,7 @@ internal sealed class CompactRenderer : IDisposable
                 DrawNotification(canvas, model, width, height);
                 break;
             case ActivityKind.Clipboard:
+            case ActivityKind.FileShelf:
                 DrawClipboard(canvas, model, width, height);
                 break;
             case ActivityKind.Agent:
@@ -674,6 +675,7 @@ internal sealed class CompactRenderer : IDisposable
         ActivityKind.BatteryLow => IconKind.Battery,
         ActivityKind.Notification => IconKind.Bell,
         ActivityKind.Clipboard => IconKind.Clipboard,
+        ActivityKind.FileShelf => IconKind.Document,
         ActivityKind.Agent => IconKind.Agent,
         ActivityKind.Media => IconKind.Media,
         ActivityKind.Volume => IconKind.Volume,

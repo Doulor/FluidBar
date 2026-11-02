@@ -1,8 +1,11 @@
 # FluidBar v2 — Release, signing, update-feed and performance baseline (M6)
 
-Status: **draft delivered** (branch `v2/rebuild`). Owner: platform-owner; release/signing follows the
-Lead's review (`Doulor` maintains signing keys). This document is the operational source of truth for
-building, versioning, publishing, signing, rollback and for the measured performance numbers.
+2026-11-02：**4.1.0 发行流程**，用户已授权提交与发布。正式发行使用 `main` 上的 `v4.1.0` 标签、
+`.github/workflows/release.yml` 和 `build/publish.ps1 -Version 4.1.0 -SelfContained`，提供自包含单文件
+EXE、ZIP 和 SHA-256 清单；版本来自 Directory.Build.props 的 4.1.0 构建戳。文件暂存 1.0.3 由现有
+签名市场流水线独立发布，最低宿主 4.1.0。4.1 延续 4.0 未签名宿主和强制资产 SHA-256 校验策略。
+后文的 M6 性能占位表及历史交付状态不代表本次发行实测；本次验证以 RELEASE-4.1.0.md、STATUS.md
+和对应 GitHub Actions 记录为准。
 
 ---
 
@@ -12,7 +15,7 @@ building, versioning, publishing, signing, rollback and for the measured perform
 |---|---|
 | App project | `src/FluidBar.App/FluidBar.App.csproj` (assembly name `FluidBar`, Avalonia shell) |
 | Runtime | `win-x64`, single-file bundle (`PublishSingleFile=true`), framework-dependent by default (`--self-contained false`) |
-| Version source | explicit `-Version`, else latest `v*` git tag, else `VersionPrefix` in `Directory.Build.props` (currently `2.0.0`) |
+| Version source | explicit `-Version`, else latest `v*` git tag, else `VersionPrefix` in `Directory.Build.props` (currently `4.1.0`) |
 | Version stamping | `-p:Version=… -p:FileVersion=… -p:InformationalVersion=<version>+<gitsha>` |
 | Release artifact | `build/artifacts/FluidBar-<version>-win-x64.zip` |
 | Publish manifest | `build/reports/publish-<version>.json` (version, git SHA, exe/zip SHA-256, size, `signature: unsigned`) |

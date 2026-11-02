@@ -96,6 +96,8 @@
     "Activity.BatteryLow": "电量低",
     "Activity.Progress": "进度",
     "Activity.Timer": "计时器",
+    "Activity.FileShelf": "文件暂存",
+    "Island.FileDrag.CopyHint": "复制 · {count} 个文件 · Esc 取消",
     "Activity.Media": "正在播放",
     "Activity.Idle": "FluidBar",
     "Hud.Volume": "音量",

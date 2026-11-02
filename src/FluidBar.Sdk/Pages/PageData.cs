@@ -26,6 +26,10 @@ public sealed record PageListRow
     public string? TrailingCommandId { get; init; }
 
     public string? TrailingLabel { get; init; }
+
+    /// <summary>Optional explicit file references offered as Copy by a user-initiated row drag.
+    /// Requires files capability; at most 32 absolute paths, each at most 2048 characters.</summary>
+    public IReadOnlyList<string>? DragFiles { get; init; }
 }
 
 /// <summary>Declarative list template data.</summary>

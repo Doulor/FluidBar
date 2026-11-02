@@ -312,9 +312,9 @@ public static class PageMetricsLayout
     public static SKRect NotificationBody(SKRect page)
         => new(page.Left + 16, page.Top + BodyTop, page.Right - 16, page.Bottom);
 
-    /// <summary>Clipboard row height (48 at 1.0).</summary>
+    /// <summary>Clipboard row height: two summary lines and a separate action footer (78 at 1.0).</summary>
     public static float ClipboardRowHeight(in FontScaleMetrics metrics)
-        => 48 + metrics.LineGrow(IslandType.RowTitle) + metrics.LineGrow(IslandType.RowMeta);
+        => 78 + 2 * metrics.LineGrow(IslandType.ContentTitle) + metrics.LineGrow(IslandType.RowMeta);
 
     /// <summary>Agent row height (44.6 at 1.0 — prototype2 row: 2×9 padding + head 12 + 2 + task 12.6).</summary>
     public static float AgentRowHeight(in FontScaleMetrics metrics)
@@ -362,28 +362,28 @@ public static class PageMetricsLayout
     public static SKRect ClipboardPreview(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
         var row = ClipboardRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 126, row.MidY - 11, row.Right - 86, row.MidY + 11);
+        return ContentCardLayout.ClipboardPreview(row, metrics);
     }
 
     /// <summary>Clipboard delete button (left of the pin button).</summary>
     public static SKRect ClipboardDelete(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
         var row = ClipboardRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 82, row.MidY - 11, row.Right - 60, row.MidY + 11);
+        return ContentCardLayout.ClipboardAction(row, 2, metrics);
     }
 
     /// <summary>Clipboard pin button (vertically centred in the row).</summary>
     public static SKRect ClipboardPin(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
         var row = ClipboardRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 58, row.MidY - 11, row.Right - 36, row.MidY + 11);
+        return ContentCardLayout.ClipboardAction(row, 1, metrics);
     }
 
     /// <summary>Clipboard copy button (vertically centred in the row).</summary>
     public static SKRect ClipboardCopy(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
         var row = ClipboardRow(page, index, scrollOffset, metrics);
-        return new SKRect(row.Right - 34, row.MidY - 11, row.Right - 12, row.MidY + 11);
+        return ContentCardLayout.ClipboardAction(row, 0, metrics);
     }
 
     /// <summary>Agent row rectangle for an index at a scroll offset (full page width, prototype2 .agent-row).</summary>
@@ -651,6 +651,7 @@ public static class PageMetricsLayout
                     var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), 6, scrollOffset);
                     for (var i = 0; i < count; i++)
                     {
+                        if (ClipboardRow(pageRect, i, scroll, metrics).Bottom > body.Bottom) continue;
                         if (ClipboardPreview(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;
@@ -678,6 +679,7 @@ public static class PageMetricsLayout
 
                     for (var i = 0; i < count; i++)
                     {
+                        if (ClipboardRow(pageRect, i, scroll, metrics).Bottom > body.Bottom) continue;
                         if (ClipboardRow(pageRect, i, scroll, metrics).Contains(x, y))
                         {
                             index = i;

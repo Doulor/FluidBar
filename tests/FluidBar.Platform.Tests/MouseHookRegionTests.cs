@@ -8,6 +8,47 @@ namespace FluidBar.Platform.Tests;
 /// </summary>
 public sealed class MouseHookRegionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void External_drag_released_over_the_card_keeps_the_release_with_the_source(bool fromWatchBand)
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(fromWatchBand ? IslandMouseHook.HookRegionKind.Watch : IslandMouseHook.HookRegionKind.Outside,
+            IslandMouseHook.WmLButtonDown);
+        gestures.Route(IslandMouseHook.HookRegionKind.Watch, IslandMouseHook.WmMouseMove);
+        var move = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmMouseMove);
+        Assert.True(move.Moved);
+        Assert.False(move.Dragged);
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonUp);
+        Assert.False(up.Consume);
+        Assert.False(up.Released);
+        Assert.False(gestures.IsPressed);
+    }
+
+    [Fact]
+    public void Release_without_an_owned_press_is_not_a_card_click()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmMouseMove);
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonUp);
+        Assert.False(up.Consume);
+        Assert.False(up.Released);
+    }
+
+    [Fact]
+    public void Press_and_release_inside_still_belong_to_the_card()
+    {
+        var gestures = new IslandMouseHook.GestureTracker();
+        var down = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonDown);
+        var up = gestures.Route(IslandMouseHook.HookRegionKind.Interactive, IslandMouseHook.WmLButtonUp);
+        Assert.True(down.Consume);
+        Assert.True(down.Pressed);
+        Assert.True(up.Consume);
+        Assert.True(up.Released);
+        Assert.False(gestures.IsPressed);
+    }
+
     [Fact]
     public void Captured_drag_continues_outside_the_card_until_release()
     {

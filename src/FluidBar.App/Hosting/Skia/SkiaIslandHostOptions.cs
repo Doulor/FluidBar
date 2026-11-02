@@ -32,6 +32,9 @@ public sealed record SkiaIslandHostOptions
     /// <summary>Optional plugin page registry; when present its pages are appended after the built-ins.</summary>
     public PageRegistry? PageRegistry { get; init; }
 
+    /// <summary>Optional native file-drag platform seam; defaults to Windows OLE Copy-only dragging.</summary>
+    public Func<IReadOnlyList<string>, Func<bool>?, bool>? FileDrag { get; init; }
+
     /// <summary>Injected time source (deadlines, wheel cooldowns).</summary>
     public TimeProvider? TimeProvider { get; init; }
 

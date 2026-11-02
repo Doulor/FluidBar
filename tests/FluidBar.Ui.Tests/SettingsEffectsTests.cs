@@ -493,19 +493,22 @@ public sealed class SettingsEffectsTests
     {
         var root = NewTempDir();
         var payload = new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03 };
-        var artifact = Path.Combine(root, "FluidBar-4.0.1-setup.exe");
+        var runningVersion = typeof(AppUpdateCoordinator).Assembly.GetName().Version!;
+        var offeredVersion = new Version(runningVersion.Major, runningVersion.Minor, runningVersion.Build + 1).ToString();
+        var artifactName = $"FluidBar-{offeredVersion}-setup.exe";
+        var artifact = Path.Combine(root, artifactName);
         await File.WriteAllBytesAsync(artifact, payload);
         var sha = await Sha256UpdateVerifier.ComputeFileSha256Async(artifact, CancellationToken.None);
         var index = Path.Combine(root, "index.json");
         await File.WriteAllTextAsync(index, $$"""
         [
           {
-            "tag_name": "v4.0.1",
-            "name": "4.0.1",
+            "tag_name": "v{{offeredVersion}}",
+            "name": "{{offeredVersion}}",
             "prerelease": false,
             "assets": [
               {
-                "name": "FluidBar-4.0.1-setup.exe",
+                "name": "{{artifactName}}",
                 "browser_download_url": "{{new Uri(artifact).AbsoluteUri}}",
                 "size": {{payload.Length}},
                 "digest": "sha256:{{sha}}"
@@ -532,7 +535,7 @@ public sealed class SettingsEffectsTests
             await coordinator.CheckNowAsync();
             await WaitUntilAsync(() => coordinator.Current.State == UpdateState.Available,
                 "the coordinator must publish the available state");
-            Assert.Equal("4.0.1", coordinator.Current.AvailableRelease!.Version.ToString());
+            Assert.Equal(offeredVersion, coordinator.Current.AvailableRelease!.Version.ToString());
 
             await coordinator.DownloadCurrentAsync();
             await WaitUntilAsync(() => coordinator.Current.State == UpdateState.ReadyToInstall,

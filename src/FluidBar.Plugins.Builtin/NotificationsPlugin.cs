@@ -179,17 +179,17 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
 
         if (olderThanShown)
         {
-            MediaAndState($"plugin.notify.skipped-older id={latest.Id} title='{ShortText(latest.Title)}'");
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.Log($"plugin.notify.skipped-older id={latest.Id}");
             return;
         }
 
         if (suppressed)
         {
-            MediaAndState($"plugin.notify.suppressed id={latest.Id} title='{ShortText(latest.Title)}'");
+            FluidBar.Platform.Windows.Media.MediaDiagnostics.Log($"plugin.notify.suppressed id={latest.Id}");
             return;
         }
 
-        MediaAndState($"plugin.notify.publish id={latest.Id} title='{ShortText(latest.Title)}'");
+        FluidBar.Platform.Windows.Media.MediaDiagnostics.Log($"plugin.notify.publish id={latest.Id}");
 
         var code = latest.VerificationCode;
         var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -241,9 +241,6 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
     /// <param name="entry">Notification entry.</param>
     private static string ContentKey(NotificationEntry entry)
         => entry.AppName + "|" + entry.Title + "|" + entry.Body;
-
-    private static string ShortText(string? value)
-        => value is { Length: > 40 } ? value[..40] : value ?? string.Empty;
 
     protected override void OnStopped()
     {

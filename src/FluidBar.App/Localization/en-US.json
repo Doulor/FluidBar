@@ -96,6 +96,8 @@
     "Activity.BatteryLow": "Low battery",
     "Activity.Progress": "Progress",
     "Activity.Timer": "Timer",
+    "Activity.FileShelf": "Files",
+    "Island.FileDrag.CopyHint": "Copy · {count} file(s) · Esc to cancel",
     "Activity.Media": "Now playing",
     "Activity.Idle": "FluidBar",
     "Hud.Volume": "Volume",

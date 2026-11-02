@@ -16,6 +16,19 @@ namespace FluidBar.Ui.Tests;
 public sealed class ClipboardQualityTests
 {
     [Fact]
+    public void File_summary_prioritizes_names_while_preserving_the_original_copy_paths()
+    {
+        var entry = Text(null) with { Kind = ClipboardContentKind.Files,
+            FilePaths = ImmutableArray.Create(@"C:\projects\long-directory\设计稿.pdf", @"D:\Music\Video Project 1.mp3") };
+        var method = typeof(SkiaPlatformActions).GetMethod("ClipboardPreview", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var summary = Assert.IsType<string>(method.Invoke(null, [entry]));
+        Assert.Contains("设计稿.pdf", summary);
+        Assert.Contains("Video Project 1.mp3", summary);
+        Assert.DoesNotContain("long-directory", summary);
+        Assert.Equal(@"C:\projects\long-directory\设计稿.pdf", entry.FilePaths[0]);
+    }
+
+    [Fact]
     public void Preview_has_a_separate_action_and_row_click_still_copies()
     {
         Assert.True(Enum.TryParse<FluidBar.Island.IslandPageControl>("ClipboardPreview", out var preview));

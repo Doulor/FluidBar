@@ -20,4 +20,18 @@ public sealed class FileReferenceShelfTests
         var entries = Enumerable.Range(0, 100).Select(index => Path.Combine(Path.GetTempPath(), "shelf-" + index));
         Assert.Equal(32, FileReferenceShelf.Normalize(entries).Length);
     }
+
+    [Fact]
+    public void Canonicalizes_aliases_before_deduplication()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "shelf.txt");
+        Assert.Equal(path, Assert.Single(FileReferenceShelf.Normalize([path, Path.Combine(Path.GetTempPath(), ".", "shelf.txt")])));
+    }
+
+    [Fact]
+    public void Invalid_entries_do_not_block_valid_files_in_the_same_drop()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "shelf.txt");
+        Assert.Equal(path, Assert.Single(FileReferenceShelf.Normalize([path + "\0bad", path])));
+    }
 }

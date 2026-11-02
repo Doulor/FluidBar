@@ -216,7 +216,6 @@ public sealed class RollingFileLogger : IPlatformLogger, IAsyncDisposable
             Directory.CreateDirectory(_options.DirectoryPath);
             lock (_fileLock)
             {
-                SweepOldFilesLocked();
                 OpenNextFileLocked();
             }
 
@@ -313,7 +312,6 @@ public sealed class RollingFileLogger : IPlatformLogger, IAsyncDisposable
             _stream.Flush();
             _stream.Dispose();
             _stream = null;
-            SweepOldFilesLocked();
             OpenNextFileLocked();
         }
     }
@@ -333,13 +331,16 @@ public sealed class RollingFileLogger : IPlatformLogger, IAsyncDisposable
         var path = Path.Combine(_options.DirectoryPath, name);
         _stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete,
             bufferSize: 16 * 1024, FileOptions.SequentialScan);
+        SweepOldFilesLocked();
     }
 
     private void SweepOldFilesLocked()
     {
         try
         {
-            var files = Directory.GetFiles(_options.DirectoryPath, $"{_options.FilePrefix}-*.jsonl");
+            // The active file consumes one slot and must survive clock changes or retention sweeps.
+            var files = Directory.GetFiles(_options.DirectoryPath, $"{_options.FilePrefix}-*.jsonl")
+                .Where(path => !string.Equals(path, _stream?.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (files.Length == 0)
             {
                 return;
@@ -348,7 +349,7 @@ public sealed class RollingFileLogger : IPlatformLogger, IAsyncDisposable
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
             var cutoff = _timeProvider.GetUtcNow().UtcDateTime.AddDays(-Math.Max(1, _options.RetentionDays));
             var removable = new List<string>();
-            var keep = Math.Max(1, _options.MaxFiles);
+            var keep = Math.Max(1, _options.MaxFiles) - 1;
             var excess = files.Length - keep;
             for (var i = 0; i < files.Length; i++)
             {

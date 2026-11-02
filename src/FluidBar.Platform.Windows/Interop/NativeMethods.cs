@@ -986,6 +986,9 @@ internal static partial class NativeMethods
         private const string Lib = "shell32.dll";
 
         [DllImport(Lib)]
+        internal static extern int SHDoDragDrop(IntPtr window, IntPtr data, IntPtr source, uint effects, out uint effect);
+
+        [DllImport(Lib)]
         internal static extern void DragAcceptFiles(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool accept);
 
         [DllImport(Lib)]
@@ -1268,10 +1271,16 @@ internal static partial class NativeMethods
         internal static extern int OleInitialize(IntPtr pvReserved);
 
         [DllImport(Lib)]
+        internal static extern void OleUninitialize();
+
+        [DllImport(Lib)]
         internal static extern int RegisterDragDrop(IntPtr hwnd, IntPtr pDropTarget);
 
         [DllImport(Lib)]
         internal static extern int RevokeDragDrop(IntPtr hwnd);
+
+        [DllImport(Lib)]
+        internal static extern int DoDragDrop(IntPtr data, IntPtr source, uint effects, out uint effect);
 
         [DllImport(Lib)]
         internal static extern int ReleaseStgMedium(ref System.Runtime.InteropServices.ComTypes.STGMEDIUM pmedium);

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
   "id": "fluidbar-file-shelf",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "apiVersion": "2.1.0",
   "dependencies": {
     "sdk": "^2.1.0"
   },
-  "minAppVersion": "2.0.0",
+  "minAppVersion": "4.1.0",
   "publisher": {
     "id": "fluidbar",
     "displayName": "FluidBar",
@@ -45,6 +45,11 @@
     "fallback": "en-US"
   },
   "capabilities": {
+    "clipboard": {
+      "read": false,
+      "write": true,
+      "reason": "Copies explicitly selected shelf files to the clipboard when you click Copy. Does not read the clipboard."
+    },
     "ui": {
       "island": true,
       "settings": true,
@@ -67,6 +72,31 @@
   ],
   "contributes": {
     "commands": [
+      {
+        "id": "fluidbar-file-shelf.copy",
+        "title": { "en-US": "Copy file", "zh-Hans": "复制文件" },
+        "contexts": ["island"]
+      },
+      {
+        "id": "fluidbar-file-shelf.copy-all",
+        "title": { "en-US": "Copy all files", "zh-Hans": "复制全部文件" },
+        "contexts": ["global", "island", "settings"]
+      },
+      {
+        "id": "fluidbar-file-shelf.remove",
+        "title": { "en-US": "Remove reference", "zh-Hans": "移除引用" },
+        "contexts": ["island"]
+      },
+      {
+        "id": "fluidbar-file-shelf.next",
+        "title": { "en-US": "Next page", "zh-Hans": "下一页" },
+        "contexts": ["island"]
+      },
+      {
+        "id": "fluidbar-file-shelf.previous",
+        "title": { "en-US": "Previous page", "zh-Hans": "上一页" },
+        "contexts": ["island"]
+      },
       {
         "id": "fluidbar-file-shelf.clear",
         "title": {
