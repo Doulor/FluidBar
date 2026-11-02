@@ -25,7 +25,13 @@ public sealed class MarketplaceInstallTests
             var artifacts = new List<MarketplacePluginArtifact>();
             foreach (var directory in MarketplacePluginDiscovery.Discover(Path.Combine(repository, "plugins")))
             {
-                var output = Path.Combine(directory, "bin/Release/net10.0");
+                var project = Path.GetFileNameWithoutExtension(Assert.Single(Directory.GetFiles(directory, "*.csproj")));
+                var artifactsBin = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Parent;
+                var isolatedOutput = Path.Combine(artifactsBin?.FullName ?? directory, project, "release");
+                var output = File.Exists(Path.Combine(isolatedOutput, "manifest.json"))
+                    ? isolatedOutput : Path.Combine(directory, "bin/Release/net10.0");
+                Assert.Equal(await File.ReadAllTextAsync(Path.Combine(directory, "manifest.json")),
+                    await File.ReadAllTextAsync(Path.Combine(output, "manifest.json")));
                 using var staging = FbpStagingBuilder.FromPluginOutput(output);
                 var manifest = PluginManifestParser.Parse(File.ReadAllText(Path.Combine(output, "manifest.json")));
                 var package = Path.Combine(temporary, manifest.Id + ".fbp");
@@ -54,7 +60,7 @@ public sealed class MarketplaceInstallTests
             Assert.Equal(CatalogFetchStatus.Success, fetched.Status);
             var activator = new Activator();
             using var installs = new PluginInstallService(new PluginInstallOptions { PluginRootDirectory = Path.Combine(temporary, "installed"),
-                AppVersion = new SemanticVersion(2, 0, 0), HostApiVersion = PluginApiVersion.Current, Trust = trust, Activator = activator });
+                AppVersion = new SemanticVersion(4, 1, 0), HostApiVersion = PluginApiVersion.Current, Trust = trust, Activator = activator });
             foreach (var plugin in fetched.Index!.Plugins!)
             {
                 var version = plugin.Latest!;

@@ -9,6 +9,7 @@
 - 发行兼容性检查改为宿主实际构建 SemVer，文件暂存 1.0.3 最低宿主版本 4.1.0；回归先复现固定 2.0.0 和旧版误判兼容，再修正。
 - 发行执行记录：`plans/2026-11-02-release-4.1.0.md`；说明：`RELEASE-4.1.0.md`。正在执行 Release 回归与发布前核验。
 - 本地 Release 十套测试最终 **2892/2892**：Core 615、SDK 172、Island 459、UI 653、BuiltinPlugins 30、PluginHost 40、OptionalPlugins 19、Architecture 18、Integration 31、Platform 855。液态玻璃性能用例初次受负载影响失败，独立复验及完整 Island 最终 459/459 通过，未改变门槛。
+- 首次 GitHub 干净构建发现 COM 枚举计数 null 参数的 CS8625；插件安装测试又因固定 2.0.0 与旧本地输出掩盖问题。已改为显式计数数组、测试 4.1.0，并校验构建 manifest 与源码一致；重新 Rebuild 两项发布门禁零警告/零错误，OptionalPlugins 19、Platform 855、BuiltinPlugins 30 全部通过。初始发布流水线未生成 Release，继续修正发布过程。
 
 ## 2026-11-02 内置插件、通知与日志稳定性
 

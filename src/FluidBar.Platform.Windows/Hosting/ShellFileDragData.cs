@@ -22,8 +22,9 @@ internal sealed class ShellFileDragData : IDisposable
         try
         {
             var formats = new FORMATETC[1];
+            var fetched = new int[1];
             var enumerator = inner.EnumFormatEtc(DATADIR.DATADIR_GET);
-            while (enumerator.Next(1, formats, null) == 0)
+            while (enumerator.Next(1, formats, fetched) == 0)
             {
                 var format = formats[0];
                 inner.GetData(ref format, out var medium);
