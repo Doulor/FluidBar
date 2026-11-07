@@ -9,4 +9,3 @@ export const LICENSE = `${GITHUB}/blob/main/LICENSE`;
 export const REACT_BITS = 'https://reactbits.dev';
 export const SHADERS = 'https://shaders.com';
 export const MOTION = 'https://motion.dev';
-
