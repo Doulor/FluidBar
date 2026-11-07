@@ -1,11 +1,12 @@
-// Verified against GitHub v4.1.0 and publish-4.1.0.json on 2026-11-02.
+// Verified against GitHub v4.2.0 and publish-4.2.0.json on 2026-11-07.
 // Update these values together when publishing a new website download.
+const version = '4.2.0';
 export const RELEASE = {
-  version: '4.1.0',
-  date: '2026-11-02',
-  tests: 2892,
-  url: 'https://github.com/Doulor/FluidBar/releases/tag/v4.1.0',
-  download: 'https://github.com/Doulor/FluidBar/releases/download/v4.1.0/FluidBar-4.1.0-win-x64.zip',
+  version,
+  date: '2026-11-07',
+  tests: 3004,
+  url: `https://github.com/Doulor/FluidBar/releases/tag/v${version}`,
+  download: `https://github.com/Doulor/FluidBar/releases/download/v${version}/FluidBar-${version}-win-x64.zip`,
   size: '49.9 MB',
-  sha256: '146f45569a04c8f1909387a9a4e390a06ad8da2cc5313022c9624d09991f6be9',
+  sha256: '70e81eeaf5058697292ed219c39a214b2dbacfe6859533266caa6ccb384df494',
 };

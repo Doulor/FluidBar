@@ -1,9 +1,12 @@
+import { RELEASE } from '../data/release';
+
 export const GITHUB = 'https://github.com/Doulor/FluidBar';
 export const RELEASES = `${GITHUB}/releases`;
 export const ISSUES = `${GITHUB}/issues`;
 export const PLUGIN_DOCS = `${GITHUB}/blob/main/docs/plugin/quickstart.md`;
-export const RELEASE_NOTES = `${GITHUB}/blob/main/docs/rewrite/RELEASE-4.1.0.md`;
+export const RELEASE_NOTES = `${GITHUB}/blob/main/docs/rewrite/RELEASE-${RELEASE.version}.md`;
 export const LICENSE = `${GITHUB}/blob/main/LICENSE`;
 export const REACT_BITS = 'https://reactbits.dev';
 export const SHADERS = 'https://shaders.com';
 export const MOTION = 'https://motion.dev';
+
