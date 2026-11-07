@@ -101,7 +101,10 @@ public sealed class DeviceIntegrationTests : IAsyncLifetime
         }
 
         await using var monitor = new UsbDeviceMonitor(_host, new CapturingLogger(), new PlatformCounters());
+        var firstSnapshot = new TaskCompletionSource<DeviceEventSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        monitor.SnapshotChanged += (_, args) => firstSnapshot.TrySetResult(args.Snapshot);
         await monitor.StartAsync();
+        await firstSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.NotNull(monitor.Current);
         await monitor.StopAsync();
         Assert.Equal(PlatformMonitorState.Stopped, monitor.State);
@@ -111,7 +114,10 @@ public sealed class DeviceIntegrationTests : IAsyncLifetime
     public async Task BluetoothMonitor_StartsAndStopsCleanly()
     {
         await using var monitor = new BluetoothDeviceMonitor(new CapturingLogger(), new PlatformCounters());
+        var firstSnapshot = new TaskCompletionSource<DeviceEventSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        monitor.SnapshotChanged += (_, args) => firstSnapshot.TrySetResult(args.Snapshot);
         await monitor.StartAsync(); // degrades to an empty snapshot when no radio is present
+        await firstSnapshot.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.NotNull(monitor.Current);
         await monitor.StopAsync();
     }

@@ -11,6 +11,7 @@
 - 发行门禁本地通过，完整 Release 回归 **3004/3004**：Core 624、SDK 172、Platform 866、Architecture 18、PluginHost 49、UI 729、BuiltinPlugins 31、Integration 31、Island 465、OptionalPlugins 19。补修调度取消额度与重复清理竞态，未降低调度上限或取消卸载等待。
 - 首次 GitHub 干净回归发现测试夹具未加入解决方案，Release 映射仍被覆盖为 Debug；将夹具正式加入解决方案并配置 Debug / Release 映射，移除无效的引用配置覆盖。本地解决方案 Rebuild 确认夹具输出为 Release，再验证插件宿主测试。
 - 随后干净回归的其余 3003 项通过，暴露无蓝牙设备 / 不支持 WinRT 会话时未发布空快照的容错缺口；在原有降级分支补齐快照，保留原生集成测试断言。
+- 干净 CI 已完整通过；首次标签发行再次暴露设备测试在异步快照派发前读取 Current 的竞态。USB / 蓝牙用例改为订阅并等待首次 SnapshotChanged 后断言，保留 5 秒边界和非空检查。公开 Release / 资产尚未创建，本次未发行标签仅在远端旧值保护下更新后重建。
 
 ## 2026-11-06 媒体已读歌词发光配置（未发布）
 
