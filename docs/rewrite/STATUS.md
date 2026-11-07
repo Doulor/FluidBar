@@ -10,6 +10,7 @@
 - 完整 Release 回归发现预览同步等待与插件测试夹具构建配置不一致，已修正；以最终回归和 GitHub Actions 为发行依据。
 - 发行门禁本地通过，完整 Release 回归 **3004/3004**：Core 624、SDK 172、Platform 866、Architecture 18、PluginHost 49、UI 729、BuiltinPlugins 31、Integration 31、Island 465、OptionalPlugins 19。补修调度取消额度与重复清理竞态，未降低调度上限或取消卸载等待。
 - 首次 GitHub 干净回归发现测试夹具未加入解决方案，Release 映射仍被覆盖为 Debug；将夹具正式加入解决方案并配置 Debug / Release 映射，移除无效的引用配置覆盖。本地解决方案 Rebuild 确认夹具输出为 Release，再验证插件宿主测试。
+- 随后干净回归的其余 3003 项通过，暴露无蓝牙设备 / 不支持 WinRT 会话时未发布空快照的容错缺口；在原有降级分支补齐快照，保留原生集成测试断言。
 
 ## 2026-11-06 媒体已读歌词发光配置（未发布）
 

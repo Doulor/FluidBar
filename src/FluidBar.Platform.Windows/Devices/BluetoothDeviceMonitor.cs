@@ -57,6 +57,7 @@ public sealed class BluetoothDeviceMonitor : PlatformMonitor<DeviceEventSnapshot
         catch (Exception ex)
         {
             // No Bluetooth radio / unsupported session: degrade silently and keep the service object usable.
+            Publish(_history.Snapshot());
             Counters.IncrementDeviceEvents();
             Logger.LogWarning(PlatformLogCategory.Monitor, "bluetooth.unavailable",
                 "Bluetooth device monitoring is unavailable on this system.", ex);
