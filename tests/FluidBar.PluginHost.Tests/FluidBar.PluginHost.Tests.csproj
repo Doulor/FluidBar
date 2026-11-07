@@ -33,7 +33,7 @@
 
   <ItemGroup>
     <!-- Build fixtures/samples as dependencies, but load them through the real ALC, never as references. -->
-    <ProjectReference Include="Fixtures\FluidBar.PluginHost.TestPlugin\FluidBar.PluginHost.TestPlugin.csproj" ReferenceOutputAssembly="false" AdditionalProperties="Configuration=$(Configuration)" />
+    <ProjectReference Include="Fixtures\FluidBar.PluginHost.TestPlugin\FluidBar.PluginHost.TestPlugin.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\plugins\samples\FluidBar.Plugins.SampleMinimal\FluidBar.Plugins.SampleMinimal.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\plugins\samples\FluidBar.Plugins.SampleRich\FluidBar.Plugins.SampleRich.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
