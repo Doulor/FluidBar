@@ -24,6 +24,13 @@ internal sealed class PluginSettingsStore : IPluginSettings, IDisposable
     private readonly string _settingsPath;
     private readonly IPluginHostLogger _logger;
     private readonly object _gate = new();
+
+    /// <summary>
+    /// One-writer gate for <c>&lt;settings&gt;.tmp</c>. The host settings bridge, plugin commands and the
+    /// unload path all flush this store, so overlapping writes used to hit a sharing violation on the shared
+    /// temp path and drop the newest values.
+    /// </summary>
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly Dictionary<string, JsonElement> _values = new(StringComparer.Ordinal);
     private readonly List<Subscription> _subscriptions = [];
     private bool _loaded;
@@ -281,7 +288,10 @@ internal sealed class PluginSettingsStore : IPluginSettings, IDisposable
                 throw new InvalidOperationException($"Plugin '{_pluginId}' exceeded the {MaxValueKeys}-setting limit.");
             }
 
-            _values[key] = element;
+            // Own the JSON: callers hand in elements borrowed from a JsonDocument they may dispose right
+            // after the write (the settings bridge and plugin commands both do), and the flush is async.
+            // Clone() is a no-op for a default element, so an explicit Undefined value still stores as is.
+            _values[key] = element.Clone();
             subscriptions = [.. _subscriptions];
         }
 
@@ -333,37 +343,77 @@ internal sealed class PluginSettingsStore : IPluginSettings, IDisposable
 
     public async ValueTask SaveAsync(CancellationToken cancellationToken = default)
     {
-        Dictionary<string, JsonElement> snapshot;
-        lock (_gate)
+        // Serialize flushes per store. The snapshot is taken only after the gate is held, so the last flush
+        // writes the last values and a cancellation while queued leaves the gate free for the next caller.
+        await _saveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            EnsureLoaded();
-            snapshot = new Dictionary<string, JsonElement>(_values, StringComparer.Ordinal);
+            Dictionary<string, JsonElement> snapshot;
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                EnsureLoaded();
+                snapshot = new Dictionary<string, JsonElement>(_values, StringComparer.Ordinal);
+            }
+
+            var document = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["schemaVersion"] = SchemaVersion,
+                ["pluginId"] = _pluginId,
+                ["values"] = snapshot,
+                ["updatedAt"] = DateTimeOffset.UtcNow,
+            };
+
+            var directory = Path.GetDirectoryName(_settingsPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var tempPath = _settingsPath + ".tmp";
+            try
+            {
+                await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true))
+                {
+                    await JsonSerializer.SerializeAsync(stream, document, SerializerOptions, cancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                File.Move(tempPath, _settingsPath, overwrite: true);
+            }
+            catch
+            {
+                // A cancelled or failed flush must not leave a partial temp file behind: the next flush would
+                // overwrite it anyway, but the leftover would also be read back by tools that scan the folder.
+                TryDeleteTempFile(tempPath);
+                throw;
+            }
+
+            _logger.Debug(_pluginId, $"Saved {snapshot.Count} settings value(s).");
         }
-
-        var document = new Dictionary<string, object?>(StringComparer.Ordinal)
+        finally
         {
-            ["schemaVersion"] = SchemaVersion,
-            ["pluginId"] = _pluginId,
-            ["values"] = snapshot,
-            ["updatedAt"] = DateTimeOffset.UtcNow,
-        };
-
-        var directory = Path.GetDirectoryName(_settingsPath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
+            _saveGate.Release();
         }
+    }
 
-        var tempPath = _settingsPath + ".tmp";
-        await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true))
+    private static void TryDeleteTempFile(string tempPath)
+    {
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, document, SerializerOptions, cancellationToken).ConfigureAwait(false);
-            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
         }
-
-        File.Move(tempPath, _settingsPath, overwrite: true);
-        _logger.Debug(_pluginId, $"Saved {snapshot.Count} settings value(s).");
+        catch (IOException)
+        {
+            // Best effort: the next flush recreates the temp file.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best effort: the next flush recreates the temp file.
+        }
     }
 
     private void RemoveSubscription(Subscription subscription)

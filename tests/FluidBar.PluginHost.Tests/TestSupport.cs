@@ -37,10 +37,13 @@ internal static class TestPaths
             throw new DirectoryNotFoundException($"Build the project first: '{bin}' does not exist.");
         }
 
-        return Directory.EnumerateDirectories(bin, "net10.0", SearchOption.AllDirectories)
-            .OrderByDescending(static directory => directory, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault()
-            ?? throw new DirectoryNotFoundException($"No net10.0 output found under '{bin}'.");
+        var configuration = typeof(TestPaths).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+            .Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration;
+        var output = Path.Combine(bin, configuration, "net10.0");
+        var assembly = Path.Combine(output, Path.GetFileName(projectDirectory) + ".dll");
+        return File.Exists(assembly) ? output
+            : throw new FileNotFoundException($"Build the fixture with Configuration={configuration} first.", assembly);
     }
 }
 

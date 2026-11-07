@@ -34,10 +34,11 @@ public sealed partial class SkiaIslandHost
                 var path = request.Paths[0];
                 var title = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
                 var hint = _options.Localizer.Format(FluidBar.App.Localization.LocKeys.Island.FileDrag.CopyHint, ("count", request.Paths.Count));
+                var scale = (float)SafeScale(entry.Host.Scale);
                 using var bitmap = FluidBar.Island.FileDragPreviewRenderer.Render(_controller.RenderState.Theme,
-                    string.IsNullOrEmpty(title) ? path : title, hint, (float)SafeScale(entry.Host.Scale));
+                    string.IsNullOrEmpty(title) ? path : title, hint, scale);
                 var image = new FluidBar.Platform.Windows.Hosting.FileDragImage(bitmap.Width, bitmap.Height,
-                    bitmap.Bytes, -16, -16);
+                    bitmap.Bytes, -(int)Math.Round(16 * scale), -(int)Math.Round(16 * scale));
                 FluidBar.Platform.Windows.Hosting.OleFileDrag.DragFiles(request.Paths, released, image);
             }
         }
@@ -54,6 +55,7 @@ public sealed partial class SkiaIslandHost
             _controller.CompleteFileDrag();
             _controller.HandlePointerReleased(_hookPressX, _hookPressY);
             _controller.HandlePointerLeft();
+            entry.PositionReturn.Resume();
             EnsureDeadlineTicker();
             EnsureFrameLoop();
             if (entry.Host.Handle != IntPtr.Zero) RenderNow(forceFull: true);
@@ -67,7 +69,7 @@ public sealed partial class SkiaIslandHost
         {
             if (_disposed || registration.IsDisposed) return;
             _fileDropHandlers += handler;
-            foreach (var entry in _windows) entry.Host.SetFileDropEnabled(true);
+            foreach (var entry in _windows) entry.Host.SetFileDropEnabled(!_nativeFileDragActive);
         });
         return registration;
     }
@@ -82,7 +84,8 @@ public sealed partial class SkiaIslandHost
             host._dispatcher.Post(() =>
             {
                 host._fileDropHandlers -= handler;
-                foreach (var entry in host._windows) entry.Host.SetFileDropEnabled(host._fileDropHandlers is not null);
+                foreach (var entry in host._windows)
+                    entry.Host.SetFileDropEnabled(!host._nativeFileDragActive && host._fileDropHandlers is not null);
             });
         }
     }

@@ -83,6 +83,9 @@ public sealed class IslandMouseHook : IDisposable
     /// <summary>Pointer pressed inside an island rectangle (screen physical pixels).</summary>
     public event Action<float, float>? PointerPressed;
 
+    /// <summary>Press position and keyboard modifiers captured before dispatching to the UI thread.</summary>
+    public event Action<float, float, LayeredKeyModifiers>? PointerPressedWithModifiers;
+
     /// <summary>Pointer released inside an island rectangle.</summary>
     public event Action<float, float>? PointerReleased;
 
@@ -315,6 +318,13 @@ public sealed class IslandMouseHook : IDisposable
         // pressed state behind.
         if (route.Pressed)
         {
+            var modifiers = (FluidBar.Platform.Windows.Interop.NativeMethods.User32.GetAsyncKeyState(0x11) & 0x8000) != 0
+                ? LayeredKeyModifiers.Control : LayeredKeyModifiers.None;
+            if ((FluidBar.Platform.Windows.Interop.NativeMethods.User32.GetAsyncKeyState(0x10) & 0x8000) != 0)
+                modifiers |= LayeredKeyModifiers.Shift;
+            if ((FluidBar.Platform.Windows.Interop.NativeMethods.User32.GetAsyncKeyState(0x12) & 0x8000) != 0)
+                modifiers |= LayeredKeyModifiers.Alt;
+            PointerPressedWithModifiers?.Invoke(x, y, modifiers);
             PointerPressed?.Invoke(x, y);
         }
 

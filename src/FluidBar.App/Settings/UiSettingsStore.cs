@@ -293,6 +293,9 @@ public sealed class SettingsController : IDisposable
     /// <summary>Raised with (previous, current) after any accepted change.</summary>
     public event Action<AppSettings, AppSettings>? Changed;
 
+    /// <summary>Raised after reset/import replaces the snapshot, so editors can reload every control.</summary>
+    public event Action? Replaced;
+
     /// <summary>Current immutable snapshot.</summary>
     public AppSettings Current
     {
@@ -334,7 +337,9 @@ public sealed class SettingsController : IDisposable
     public AppSettings Replace(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return Update(_ => settings);
+        var current = Update(_ => settings);
+        Replaced?.Invoke();
+        return current;
     }
 
     /// <inheritdoc />
@@ -346,5 +351,6 @@ public sealed class SettingsController : IDisposable
         }
 
         Changed = null;
+        Replaced = null;
     }
 }

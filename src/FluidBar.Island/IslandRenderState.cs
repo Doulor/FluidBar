@@ -1,4 +1,5 @@
 using FluidBar.Core.Activities;
+using FluidBar.Core.Configuration;
 using SkiaSharp;
 using FluidBar.Core.Layout;
 using FluidBar.Core.Interaction;
@@ -642,6 +643,9 @@ public sealed record CompactModel
     /// <summary>Karaoke sweep of the compact lyric line (0..1); negative = no per-word timing.</summary>
     public double LyricHighlight { get; init; } = -1;
 
+    /// <summary>Sung-word halo strength (0..1), independent of text highlight and timing.</summary>
+    public float LyricGlowStrength { get; init; } = LyricGlowSettings.DefaultStrength;
+
     /// <summary>Optional leading icon override.</summary>
     public IconKind? Icon { get; init; }
 
@@ -947,6 +951,9 @@ public sealed record MediaPageModel
     /// no per-word timing and must be painted as a plain line.
     /// </summary>
     public double LyricHighlight { get; init; } = -1;
+
+    /// <summary>Sung-word halo strength (0..1), independent of text highlight and timing.</summary>
+    public float LyricGlowStrength { get; init; } = LyricGlowSettings.DefaultStrength;
 
     /// <summary>
     /// Whether this track carries a karaoke timeline at all. The split style must follow the TRACK, not the

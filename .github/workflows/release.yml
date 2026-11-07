@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (semver, without leading v). Empty = derive from git tag/VersionPrefix.'
+        description: 'Release version (must match VersionPrefix). Empty = git tag or Directory.Build.props.'
         required: false
         type: string
       verify_published:
@@ -61,7 +61,7 @@ jobs:
             $version = '${{ github.ref_name }}'.TrimStart('v', 'V')
           }
           if ([string]::IsNullOrWhiteSpace($version)) {
-            $version = '0.0.0-ci'
+            $version = ([xml](Get-Content Directory.Build.props -Raw)).SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText
           }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Release version: $version"

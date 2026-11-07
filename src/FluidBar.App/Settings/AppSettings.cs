@@ -109,6 +109,9 @@ public sealed record PluginSettings
 /// </summary>
 public sealed record MonitorPlacementSetting
 {
+    /// <summary>True for visible-shell coordinates; false retains older host-window positioning.</summary>
+    public bool ShellBased { get; init; }
+
     /// <summary>Anchor token (<c>top-left</c>, <c>top-center</c>, ... <c>bottom-right</c>).</summary>
     public string Anchor { get; init; } = "top-center";
 
@@ -323,6 +326,11 @@ public sealed record AppSettings
                 placement.OffsetY);
         }
 
+        if (Placement.TryGetValue(FluidBar.Core.Settings.SettingsJsonNames.PrimaryPlacementKey, out var primary))
+        {
+            return new ResolvedMonitorPlacement(ParseAnchorToken(primary.Anchor), primary.OffsetX, primary.OffsetY);
+        }
+
         return new ResolvedMonitorPlacement(IslandAnchor, 0, null);
     }
 
@@ -340,6 +348,7 @@ public sealed record AppSettings
                 monitorId.Trim(),
                 new MonitorPlacementSetting
                 {
+                    ShellBased = true,
                     Anchor = FormatAnchorToken(anchor),
                     OffsetX = offsetX,
                     OffsetY = offsetY,
@@ -726,6 +735,7 @@ public sealed record AppSettings
         {
             monitors[id] = new PlacementEntryJson
             {
+                ShellBased = value.ShellBased,
                 Anchor = value.Anchor,
                 OffsetX = value.OffsetX,
                 OffsetY = value.OffsetY,
@@ -752,6 +762,7 @@ public sealed record AppSettings
 
             builder[id.Trim()] = new MonitorPlacementSetting
             {
+                ShellBased = entry.ShellBased ?? false,
                 Anchor = entry.Anchor ?? "top-center",
                 OffsetX = entry.OffsetX ?? 0,
                 OffsetY = entry.OffsetY,
@@ -875,6 +886,7 @@ internal sealed class PlacementJson
 
 internal sealed class PlacementEntryJson
 {
+    public bool? ShellBased { get; set; }
     public string? Anchor { get; set; }
     public double? OffsetX { get; set; }
     public double? OffsetY { get; set; }

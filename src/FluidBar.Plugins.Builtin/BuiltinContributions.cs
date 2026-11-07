@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FluidBar.Core.Configuration;
 using FluidBar.Sdk.Capabilities;
 using FluidBar.Sdk.Contributions;
 using FluidBar.Sdk.Manifest;
@@ -163,7 +164,9 @@ public static class BuiltinContributions
                 // Island pill form: cover + live lyric + wave instead of title/artist (default on).
                 Toggle("media.compactLyrics", "setting.media.compactLyrics.title"),
                 // Karaoke lead/lag belongs to the MEDIA plugin: it only compensates this source's clock.
-                Slider("media.lyricOffsetMs", "setting.media.lyricOffset.title", -800, 800, 50, 0, "ms")),
+                Slider("media.lyricOffsetMs", "setting.media.lyricOffset.title", -800, 800, 50, 0, "ms"),
+                Slider(LyricGlowSettings.Key, "setting.media.lyricGlow.title", 0, 100, 5,
+                    LyricGlowSettings.DefaultPercent, "%")),
         ],
         Commands =
         [

@@ -37,6 +37,9 @@ public sealed record PluginRuntimeOptions
     /// <summary>Host cleanup hook for page/command registrations when a plugin stops.</summary>
     public Action<string>? PluginStopped { get; init; }
 
+    /// <summary>Notifies the app after a host-owned setting changes; callers dispatch UI work as needed.</summary>
+    public Action<string, string, JsonElement>? SettingChanged { get; init; }
+
     /// <summary>Running FluidBar version used by the min/max app-version gates.</summary>
     public required SemanticVersion AppVersion { get; init; }
 
@@ -133,6 +136,7 @@ public sealed record PluginRuntimeReport(
 public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiService, ILocalPluginUiService
 {
     private readonly PluginRuntimeOptions _options;
+    private readonly SemaphoreSlim _settingsSaveGate = new(1, 1);
     private readonly PluginHostOptions _hostOptions;
     private readonly IPluginEnablementStore _enablement;
     private readonly IPluginHostLogger _logger;
@@ -497,6 +501,7 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     /// <summary>Writes a host-owned setting value and flushes it asynchronously.</summary>
     public bool SetSettingValue(string pluginId, string key, JsonElement value)
     {
+        if (_disposed) return false;
         bool written;
         var builtin = FindBuiltinSession(pluginId);
         if (builtin is not null)
@@ -511,6 +516,14 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         if (written)
         {
             _ = SaveSettingsAsync(pluginId);
+            try
+            {
+                _options.SettingChanged?.Invoke(pluginId, key, value.Clone());
+            }
+            catch (Exception exception)
+            {
+                _logger.Warn(pluginId, $"Setting change notification failed: {exception.GetType().FullName}: {exception.Message}");
+            }
         }
 
         return written;
@@ -519,23 +532,33 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
     /// <summary>Flushes a plugin's host-owned settings (best effort, never throws at the UI).</summary>
     public async Task SaveSettingsAsync(string pluginId, CancellationToken cancellationToken = default)
     {
+        var entered = false;
         try
         {
-            var builtin = FindBuiltinSession(pluginId);
-            if (builtin is not null)
+            // Slider updates can overlap. The underlying store uses one .tmp path, so serialize writes
+            // and snapshot only after acquiring the gate; an older save cannot overwrite the last value.
+            await _settingsSaveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            entered = true;
+            await Task.Run(async () =>
             {
-                await builtin.SaveSettingsAsync(cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            if (Host.Find(pluginId) is { } handle)
-            {
-                await handle.SaveSettingsAsync(cancellationToken).ConfigureAwait(false);
-            }
+                var builtin = FindBuiltinSession(pluginId);
+                if (builtin is not null)
+                    await builtin.SaveSettingsAsync(cancellationToken).ConfigureAwait(false);
+                else if (Host.Find(pluginId) is { } handle)
+                    await handle.SaveSettingsAsync(cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A cancelled flush is expected during teardown, not a failed user setting.
         }
         catch (Exception exception)
         {
             _logger.Warn(pluginId, $"Settings could not be saved: {exception.GetType().FullName}: {exception.Message}");
+        }
+        finally
+        {
+            if (entered) _settingsSaveGate.Release();
         }
     }
 
@@ -568,6 +591,11 @@ public sealed class PluginRuntime : IAsyncDisposable, IPluginContributionUiServi
         }
 
         _disposed = true;
+        // Drain queued UI saves before disposing stores, without letting blocked I/O hang shutdown.
+        if (await _settingsSaveGate.WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false))
+            _settingsSaveGate.Release();
+        else
+            _logger.Warn("<host>", "Settings save drain timed out; continuing shutdown.");
         Host.StateChanged -= OnHostStateChanged;
         foreach (var entry in _builtins)
         {

@@ -218,6 +218,8 @@ public sealed partial class SkiaIslandController : IDisposable
     private double _clickXDip;
     private double _clickYDip;
     private bool _windowDragActive;
+    private bool _controlPlacementPress;
+    private PageRef _pendingClickPage = PageRef.Home;
 
     // Notification-card upward dismiss: raw pointer travel is compressed by a logarithmic rubber band,
     // released into a spring, and only the off-screen end of that spring removes the notification.
@@ -1562,6 +1564,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// <summary>Primary button pressed at a host-local DIP point; returns whether the island handled it.</summary>
     /// <param name="xDip">Client X in DIP.</param>
     /// <param name="yDip">Client Y in DIP.</param>
+    /// <param name="control">Ctrl held at press: reserve the gesture for position reset or saved movement.</param>
     /// <remarks>
     /// A compact-shell press is <b>deferred</b>: it becomes a click on release only when the pointer
     /// stayed within <see cref="SkiaDragThreshold.ThresholdDip"/>. The host calls
@@ -1569,7 +1572,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// the pending click and moves the window instead. Dock mode disables dragging, so its press still
     /// expands immediately.
     /// </remarks>
-    public bool HandlePointerPressed(double xDip, double yDip)
+    public bool HandlePointerPressed(double xDip, double yDip, bool control = false)
     {
         _pendingFileDrag = null;
         _pointerX = xDip;
@@ -1591,6 +1594,15 @@ public sealed partial class SkiaIslandController : IDisposable
         }
 
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
+
+        if (control && hit.Kind != IslandHitKind.None)
+        {
+            _controlPlacementPress = true;
+            _clickXDip = xDip;
+            _clickYDip = yDip;
+            InvalidateFull();
+            return true;
+        }
 
         // Press feedback for every painted control (transport, toggles, list buttons).
         if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact or IslandHitKind.PageTab)
@@ -1631,8 +1643,17 @@ public sealed partial class SkiaIslandController : IDisposable
                     return true;
                 }
 
-                // Expand on press: the compact pill is the primary affordance. Drag-to-move is a
-                // secondary gesture; it must never make a normal click feel unresponsive.
+                // Keep the press available for a window move. A stationary release opens the
+                // activity the compact pill actually paints.
+                if (IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
+                {
+                    _clickPending = true;
+                    _pendingClickPage = _compact.Kind.ToPage();
+                    _clickXDip = xDip;
+                    _clickYDip = yDip;
+                    return true;
+                }
+
                 // The panel must open the page of the activity the pill actually PAINTS: the scheduler's
                 // primary page can be a different (newer) activity, which opened the agent card from a
                 // music pill (user report 2026-10-21).
@@ -1697,6 +1718,26 @@ public sealed partial class SkiaIslandController : IDisposable
     /// <param name="yDip">Client Y in DIP.</param>
     public void HandlePointerReleased(double xDip, double yDip)
     {
+        if (_controlPlacementPress)
+        {
+            var isClick = !SkiaDragThreshold.Exceeds(_clickXDip, _clickYDip, xDip, yDip);
+            CancelPendingClick();
+            _motion.SetPressed(false);
+            if (isClick)
+            {
+                var previous = _settings.Current;
+                var current = _settings.Update(settings => settings with
+                {
+                    Anchor = AppSettings.Default.Anchor,
+                    Placement = settings.Placement.Clear(),
+                });
+                // Temporary movement changes no settings, so a reset may still need to move the
+                // physical window even though the persisted snapshot was already at its default.
+                if (ReferenceEquals(previous, current)) PlacementRequested?.Invoke();
+            }
+            InvalidateFull();
+            return;
+        }
         CommitFileClick(xDip, yDip);
         _pointerX = xDip;
         _pointerY = yDip;
@@ -1756,6 +1797,11 @@ public sealed partial class SkiaIslandController : IDisposable
             if (isClick)
             {
                 ApplyInput(IslandInput.PrimaryClick());
+                if (_pendingClickPage != State.Page)
+                {
+                    ApplyInput(IslandInput.PageRequested(_pendingClickPage));
+                    HandlePageRequest(_pendingClickPage);
+                }
             }
         }
     }
@@ -1769,7 +1815,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// The expanded panel owns a horizontal pager drag. A compact/peek shell press is a
     /// <see cref="SkiaDragKind.WindowCandidate"/>: the host measures the screen-space threshold and
     /// calls <see cref="BeginWindowDrag"/> once it is crossed, so a click can still be committed on
-    /// release. Dock mode disables moving.
+    /// release. Ctrl also permits moving the expanded surface. Dock mode disables moving.
     /// </remarks>
     public SkiaDragKind HandleDragStarted(double xDip, double yDip, long timestampMs)
     {
@@ -1780,6 +1826,11 @@ public sealed partial class SkiaIslandController : IDisposable
         }
 
         var hit = SkiaIslandHitTest.Hit(_renderState, xDip, yDip);
+        if (_controlPlacementPress && hit.Kind != IslandHitKind.None
+            && IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
+        {
+            return SkiaDragKind.WindowCandidate;
+        }
         if (_renderState.Form == ShellForm.Expanded && hit.Kind is IslandHitKind.Page or IslandHitKind.Shell)
         {
             _pager.BeginDrag(xDip, timestampMs);
@@ -2065,7 +2116,7 @@ public sealed partial class SkiaIslandController : IDisposable
             return false;
         }
 
-        if (_renderState.Form is not (ShellForm.Compact or ShellForm.Peek)
+        if (!_controlPlacementPress && _renderState.Form is not (ShellForm.Compact or ShellForm.Peek)
             || !IslandPlacementDrag.AllowsDrag(_settings.Current.IslandMode))
         {
             return false;
@@ -3192,8 +3243,10 @@ public sealed partial class SkiaIslandController : IDisposable
             }
 
             _latestFeedbackRequestId = feedback.RequestId;
-            _actionFeedback = feedback;
-            _actionFeedbackExpiresAt = _time.GetLocalNow() + TimeSpan.FromSeconds(3);
+            // Success is already reflected by the control itself. Clear any progress overlay
+            // instead of covering the page with a generic completion message.
+            _actionFeedback = feedback.Status == IslandActionFeedbackStatus.Succeeded ? null : feedback;
+            _actionFeedbackExpiresAt = _actionFeedback is null ? default : _time.GetLocalNow() + TimeSpan.FromSeconds(3);
             BuildRenderState();
             InvalidateFull();
             StateChanged?.Invoke();
@@ -3203,7 +3256,6 @@ public sealed partial class SkiaIslandController : IDisposable
     private string? ActionFeedbackText() => _actionFeedback?.Status switch
     {
         IslandActionFeedbackStatus.Processing => _localizer.Get("Feedback.Processing"),
-        IslandActionFeedbackStatus.Succeeded => _localizer.Get("Feedback.Success"),
         IslandActionFeedbackStatus.Failed => _localizer.Get("Feedback.Failed"),
         IslandActionFeedbackStatus.Unavailable => _localizer.Get("Feedback.Unavailable"),
         _ => null,
@@ -3410,6 +3462,8 @@ public sealed partial class SkiaIslandController : IDisposable
 
         var modeOrAnchorChanged = previous.IslandMode != current.IslandMode
             || previous.IslandAnchor != current.IslandAnchor
+            || previous.Placement.Count != current.Placement.Count
+            || previous.Placement.Any(entry => !current.Placement.TryGetValue(entry.Key, out var value) || entry.Value != value)
             || previous.DisplayOn != current.DisplayOn;
         if (previous.IslandMode != current.IslandMode)
         {
@@ -3452,6 +3506,7 @@ public sealed partial class SkiaIslandController : IDisposable
     {
         _clickPending = false;
         _pendingNotificationClick = false;
+        _controlPlacementPress = false;
     }
 
         private long _lastSeekDragMs;
@@ -4230,8 +4285,22 @@ private void HandlePageControl(in IslandHitTarget hit)
         return true;
     }
 
+    /// <summary>Applies a media-plugin setting immediately, including while playback is paused.</summary>
+    public void SetLyricGlowStrength(System.Text.Json.JsonElement? value)
+    {
+        if (!_mediaPill.SetLyricGlowStrength(value)) return;
+        BuildRenderState();
+        InvalidateFull();
+        FrameRequested?.Invoke();
+    }
+
     private void BuildRenderState()
     {
+        var glowStrength = _mediaPill.LyricGlowStrength;
+        if (_compact.Model.LyricGlowStrength != glowStrength)
+            _compact = _compact with { Model = _compact.Model with { LyricGlowStrength = glowStrength } };
+        if (_pages.Media.LyricGlowStrength != glowStrength)
+            _pages = _pages with { Media = _pages.Media with { LyricGlowStrength = glowStrength } };
         SyncRailMotion(0);
         UpdatePositionText();
 

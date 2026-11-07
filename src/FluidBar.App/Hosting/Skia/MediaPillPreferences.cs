@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using FluidBar.Core.Configuration;
 using FluidBar.App.Plugins;
 
 namespace FluidBar.App.Hosting.Skia;
@@ -24,18 +26,81 @@ public sealed class MediaPillPreferences
     /// <summary>Karaoke lead/lag in milliseconds, owned by the media plugin (no island-side knob).</summary>
     public const string LyricOffsetKey = "media.lyricOffsetMs";
 
-    /// <summary>A reader that always reports the default ("on"; used by tests and headless hosts).</summary>
-    public static MediaPillPreferences Default { get; } = new(showCompactLyrics: true);
+    /// <summary>A new isolated reader with compact lyrics on; no file I/O (tests/headless hosts).</summary>
+    public static MediaPillPreferences Default => new(showCompactLyrics: true);
 
-    /// <summary>A reader that always reports "off" (tests that pin the title form).</summary>
-    public static MediaPillPreferences Off { get; } = new(showCompactLyrics: false);
+    /// <summary>A new isolated reader with compact lyrics off (tests that pin the title form).</summary>
+    public static MediaPillPreferences Off => new(showCompactLyrics: false);
 
     private readonly string _path;
     private readonly bool _followFile;
     private readonly object _gate = new();
     private bool _showCompactLyrics = true;
     private double _lyricOffsetMs;
+    private float _lyricGlowStrength = LyricGlowSettings.DefaultStrength;
     private DateTime _stamp = DateTime.MinValue;
+
+    /// <summary>Cached halo strength. The host pushes changes; this getter performs no file I/O.</summary>
+    public float LyricGlowStrength
+    {
+        get { lock (_gate) { return _lyricGlowStrength; } }
+    }
+
+    /// <summary>Applies the host-owned percentage; returns true only when the effective value changes.</summary>
+    public bool SetLyricGlowStrength(JsonElement? value)
+    {
+        var strength = ParseLyricGlowStrength(value);
+        lock (_gate)
+        {
+            if (_lyricGlowStrength == strength) return false;
+            _lyricGlowStrength = strength;
+            return true;
+        }
+    }
+
+    /// <summary>Normalizes a plugin value without touching storage; malformed or missing values use 70%.</summary>
+    public static float ParseLyricGlowStrength(JsonElement? value)
+    {
+        var percent = LyricGlowSettings.DefaultPercent;
+        if (value is { } element)
+        {
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var number))
+                percent = number;
+            else if (element.ValueKind == JsonValueKind.String && double.TryParse(element.GetString(),
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+                percent = parsed;
+        }
+        return LyricGlowSettings.ToStrength(percent);
+    }
+
+    /// <summary>Reads the startup value on a worker even when the media plugin cannot start.</summary>
+    public Task<JsonElement?> ReadStoredLyricGlowSettingAsync(CancellationToken cancellationToken = default)
+        => Task.Run(async () =>
+        {
+            if (!_followFile) return (JsonElement?)null;
+            try
+            {
+                var info = new FileInfo(_path);
+                if (!info.Exists || info.Length > 1024 * 1024) return null;
+                var json = await File.ReadAllTextAsync(_path, cancellationToken).ConfigureAwait(false);
+                using var document = JsonDocument.Parse(json, new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = true,
+                    CommentHandling = JsonCommentHandling.Skip,
+                });
+                if (document.RootElement.ValueKind == JsonValueKind.Object
+                    && document.RootElement.TryGetProperty("values", out var values)
+                    && values.ValueKind == JsonValueKind.Object
+                    && values.TryGetProperty(LyricGlowSettings.Key, out var value))
+                    return value.Clone();
+                return null;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // Same fallback as the plugin store: an unavailable/corrupt value uses the default.
+                return null;
+            }
+        }, cancellationToken);
 
     /// <summary>Creates a reader for the media plugin's settings file.</summary>
     /// <param name="settingsPath">Overrides the settings file (tests).</param>

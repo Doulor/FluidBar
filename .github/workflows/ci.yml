@@ -25,16 +25,14 @@ jobs:
       - name: Restore
         run: dotnet restore FluidBar.sln
 
-      - name: Build
-        run: dotnet build FluidBar.sln -c Release --no-restore -warnaserror
-
-      - name: Test
-        run: dotnet test FluidBar.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory artifacts/test-results
+      - name: Release compiler gate and full regression
+        shell: pwsh
+        run: ./build/publish.ps1 -SelfContained -VerifyOnly
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: artifacts/test-results
+          path: build/reports/tests
           if-no-files-found: ignore

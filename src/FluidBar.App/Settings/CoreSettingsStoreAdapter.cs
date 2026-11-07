@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using FluidBar.Core.Diagnostics;
 using FluidBar.Core.Settings;
 using AppAppearance = FluidBar.App.Settings;
@@ -97,8 +98,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
     /// <summary>Creates the production adapter rooted at <c>%APPDATA%\FluidBar\settings.json</c>.</summary>
     public static CoreSettingsStoreAdapter CreateDefault(IAppLogger? logger = null, string? appDataDirectory = null)
     {
-        var root = appDataDirectory
-            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar");
+        var root = ResolveDataDirectory(appDataDirectory);
         var fileSystem = new SystemSettingsFileSystem();
         var options = SettingsStoreOptions.ForAppData(root);
         var store = new SettingsStore(fileSystem, options, logger);
@@ -108,6 +108,15 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             LegacyImport = () => LegacySettingsImporter.ImportIfNeeded(
                 fileSystem, store, legacyPath, options.SettingsPath, logger),
         };
+    }
+
+    /// <summary>Resolves the same settings root for persistence and the data-folder/export UI.</summary>
+    public static string ResolveDataDirectory(string? appDataDirectory = null)
+    {
+        var root = appDataDirectory ?? Environment.GetEnvironmentVariable("FLUIDBAR_SETTINGS_DIR");
+        return Path.GetFullPath(string.IsNullOrWhiteSpace(root)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar")
+            : root);
     }
 
     /// <summary>Optional one-time legacy import executed on the first background load (tests/integration).</summary>
@@ -227,12 +236,17 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             ClipboardHidePreviews = core.Cards?.ClipboardHidePreviews ?? false,
             QuickActions = core.Cards is { QuickActions.IsDefault: false } cards ? cards.QuickActions : [],
             SchemaVersion = core.SchemaVersion,
+            PowerMode = core.PowerMode,
+            HotkeyToggle = core.Hotkeys.Toggle,
+            HotkeyHide = core.Hotkeys.Hide,
+            HotkeySettings = core.Hotkeys.Settings,
             Language = core.General.Language,
             StartWithWindows = core.General.StartWithWindows,
             TrayIcon = core.General.TrayIcon,
             Telemetry = core.General.Telemetry,
             AutoUpdate = core.General.AutoUpdate switch
             {
+                AutoUpdatePreference.Automatic => "auto",
                 AutoUpdatePreference.Notify => "notify",
                 AutoUpdatePreference.Off => "off",
                 _ => "notify",
@@ -265,6 +279,10 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             AccentFallback = core.Appearance.Accent.FallbackHex,
             FillOpacity = core.Appearance.FillOpacity,
             FontScale = core.Appearance.FontScale,
+            PanelRadius = core.Appearance.PanelRadius,
+            LyricOffsetMs = core.Appearance.LyricOffsetMs,
+            TabBarStyle = core.Appearance.TabBarStyle,
+            RailSide = core.Appearance.RailSide,
             MotionStrength = core.Appearance.MotionStrength,
             ReducedMotion = core.Appearance.ReducedMotion switch
             {
@@ -297,6 +315,22 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             AutoCollapseMs = core.Island.AutoCollapseMs,
             AutoHideMs = core.Island.AutoHideMs,
             PeekOnTrackChange = core.Island.PeekOnTrackChange,
+            WeatherCity = core.Island.WeatherCity,
+            // Old stores synthesize primary=TopCenter even after the global anchor changes.
+            // Ignore neutral fallback entries, but preserve migrated primary drag offsets.
+            Placement = core.Placement.Monitors
+                .Where(entry => entry.Key != SettingsJsonNames.PrimaryPlacementKey
+                    || entry.Value.ShellBased
+                    || entry.Value.OffsetX != 0 || entry.Value.OffsetY is not null
+                    || entry.Value.Anchor != core.Island.Anchor
+                        && entry.Value.Anchor != FluidBar.Core.Layout.IslandAnchor.TopCenter)
+                .ToImmutableDictionary(entry => entry.Key, entry => new MonitorPlacementSetting
+                {
+                    ShellBased = entry.Value.ShellBased,
+                    Anchor = AppSettings.FormatAnchorToken(entry.Value.Anchor),
+                    OffsetX = entry.Value.OffsetX,
+                    OffsetY = entry.Value.OffsetY,
+                }, StringComparer.Ordinal),
             DisplayOn = core.Island.DisplayOn switch
             {
                 CoreDisplayTarget.All => AppAppearance.DisplayTarget.All,
@@ -307,6 +341,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             Plugins = new PluginSettings
             {
                 Enabled = core.Plugins.Enabled,
+                PageOrder = core.Plugins.PageOrder.IsDefault ? AppSettings.Default.Plugins.PageOrder : core.Plugins.PageOrder,
                 Channel = core.Plugins.Channel,
                 CheckIntervalHours = core.Plugins.CheckIntervalHours,
             },
@@ -322,12 +357,20 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
 
     /// <summary>
     /// Applies the App model onto an existing Core snapshot (read-modify-write so Core-owned sections
-    /// such as hotkeys, activities, placement and market URLs are preserved).
+    /// such as hold-to-hide, activity policies and market URLs are preserved).
     /// </summary>
     public static FluidBarSettings ApplyToCore(FluidBarSettings core, AppSettings app)
     {
         ArgumentNullException.ThrowIfNull(core);
         ArgumentNullException.ThrowIfNull(app);
+        var placements = app.Placement.ToDictionary(entry => entry.Key, entry => new MonitorPlacement
+        {
+            ShellBased = entry.Value.ShellBased,
+            Anchor = AppSettings.ParseAnchorToken(entry.Value.Anchor),
+            OffsetX = entry.Value.OffsetX,
+            OffsetY = entry.Value.OffsetY,
+        }, StringComparer.Ordinal);
+        placements.TryAdd(SettingsJsonNames.PrimaryPlacementKey, new MonitorPlacement { Anchor = app.IslandAnchor });
         return core with
         {
             Cards = new FluidBar.Core.Settings.CardPreferences
@@ -337,6 +380,17 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 QuickActions = [.. app.QuickActions],
             }.Normalize(),
             SchemaVersion = FluidBarSettings.CurrentSchemaVersion,
+            PowerMode = app.PowerMode,
+            Hotkeys = core.Hotkeys with
+            {
+                Toggle = app.HotkeyToggle,
+                Hide = app.HotkeyHide,
+                Settings = app.HotkeySettings,
+            },
+            Placement = core.Placement with
+            {
+                Monitors = placements,
+            },
             General = core.General with
             {
                 Language = app.Language,
@@ -345,7 +399,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 Telemetry = app.Telemetry,
                 AutoUpdate = app.AutoUpdate switch
                 {
-                    "auto" => AutoUpdatePreference.Notify,
+                    "auto" => AutoUpdatePreference.Automatic,
                     "off" => AutoUpdatePreference.Off,
                     _ => AutoUpdatePreference.Notify,
                 },
@@ -384,6 +438,10 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 },
                 FillOpacity = app.FillOpacity,
                 FontScale = app.FontScale,
+                PanelRadius = app.PanelRadius,
+                LyricOffsetMs = app.LyricOffsetMs,
+                TabBarStyle = app.TabBarStyle,
+                RailSide = app.RailSide,
                 MotionStrength = app.MotionStrength,
                 ReducedMotion = app.ReducedMotion switch
                 {
@@ -419,6 +477,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
                 AutoCollapseMs = app.AutoCollapseMs,
                 AutoHideMs = app.AutoHideMs,
                 PeekOnTrackChange = app.PeekOnTrackChange,
+                WeatherCity = app.WeatherCity,
                 DisplayOn = app.DisplayOn switch
                 {
                     AppAppearance.DisplayTarget.All => CoreDisplayTarget.All,
@@ -430,6 +489,7 @@ public sealed class CoreSettingsStoreAdapter : IUiSettingsStore, IDisposable
             Plugins = core.Plugins with
             {
                 Enabled = [.. app.Plugins.Enabled],
+                PageOrder = [.. app.Plugins.PageOrder],
                 Channel = app.Plugins.Channel,
                 CheckIntervalHours = app.Plugins.CheckIntervalHours,
             },

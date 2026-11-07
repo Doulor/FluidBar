@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluidBar.Core.Layout;
+using FluidBar.Core.Configuration;
 
 namespace FluidBar.Core.Settings;
 
@@ -143,6 +144,10 @@ public enum AutoUpdatePreference
     /// <summary>Check and notify only (default).</summary>
     [JsonStringEnumMemberName("notify")]
     Notify,
+
+    /// <summary>Download and verify in the background; installation requires a user action.</summary>
+    [JsonStringEnumMemberName("auto")]
+    Automatic,
 }
 
 /// <summary>Anchors serialized with the spec's kebab-case names.</summary>
@@ -215,6 +220,18 @@ public sealed record AppearanceSettings
     /// <summary>Font scale; clamped to 0.8..1.6.</summary>
     public double FontScale { get; init; } = 1.0;
 
+    /// <summary>Expanded panel corner radius in DIP.</summary>
+    public double PanelRadius { get; init; } = 30;
+
+    /// <summary>Lyric timing correction in milliseconds.</summary>
+    public double LyricOffsetMs { get; init; }
+
+    /// <summary>Expanded page navigation style.</summary>
+    public TabBarStyle TabBarStyle { get; init; } = TabBarStyle.SideRail;
+
+    /// <summary>Edge hosting the page rail.</summary>
+    public PageRailSide RailSide { get; init; } = PageRailSide.Left;
+
     /// <summary>Reduced-motion preference.</summary>
     public MotionPreference ReducedMotion { get; init; } = MotionPreference.System;
 
@@ -266,6 +283,9 @@ public sealed record IslandSettings
 
     /// <summary>Specific monitor id when <see cref="DisplayOn"/> is <see cref="DisplayTarget.Specific"/>.</summary>
     public string? SpecificMonitorId { get; init; }
+
+    /// <summary>Weather city override; empty selects automatic location.</summary>
+    public string WeatherCity { get; init; } = string.Empty;
 }
 
 /// <summary>Dock mode settings (spec 2.2).</summary>
@@ -284,6 +304,9 @@ public sealed record DockSettings
 /// <summary>Per-monitor placement (spec 2.6).</summary>
 public sealed record MonitorPlacement
 {
+    /// <summary>Visible-shell coordinates; absent/false keeps legacy host-window coordinates.</summary>
+    public bool ShellBased { get; init; }
+
     /// <summary>Anchor within the monitor work area.</summary>
     public IslandAnchor Anchor { get; init; } = IslandAnchor.TopCenter;
 
@@ -449,8 +472,12 @@ public static class BuiltinPlugins
 /// <summary>Plugin enablement and update channel settings.</summary>
 public sealed record PluginsSettings
 {
+    /// <summary>User-selected order of island pages.</summary>
+    public ImmutableArray<string> PageOrder { get; init; } =
+        ["builtin.home", "builtin.media", "builtin.notifications", "builtin.clipboard", "builtin.agent", "builtin.widgets"];
+
     /// <summary>Enabled plugin ids.</summary>
-    public ImmutableArray<string> Enabled { get; init; } = [BuiltinPlugins.Media, BuiltinPlugins.Clipboard, BuiltinPlugins.Notifications];
+    public ImmutableArray<string> Enabled { get; init; } = [BuiltinPlugins.Media, BuiltinPlugins.Clipboard, BuiltinPlugins.Notifications, BuiltinPlugins.Agent];
 
     /// <summary>Update channel (<c>stable</c> or <c>beta</c>).</summary>
     public string Channel { get; init; } = "stable";
@@ -511,6 +538,9 @@ public sealed record AdvancedSettings
 /// </summary>
 public sealed record FluidBarSettings
 {
+    /// <summary>Island rendering and polling policy.</summary>
+    public IslandPowerMode PowerMode { get; init; } = IslandPowerMode.Performance;
+
     /// <summary>Card privacy and user-configured actions.</summary>
     public CardPreferences Cards { get; init; } = new();
     /// <summary>Current schema version.</summary>

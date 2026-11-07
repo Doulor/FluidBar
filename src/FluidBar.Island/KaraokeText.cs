@@ -1,4 +1,5 @@
 using SkiaSharp;
+using FluidBar.Core.Configuration;
 
 namespace FluidBar.Island;
 
@@ -105,8 +106,10 @@ public static class KaraokeText
     /// <param name="highlightColor">Colour for the sung part (artwork accent).</param>
     /// <param name="align">Horizontal alignment.</param>
     /// <param name="opacity">Layer opacity.</param>
+    /// <param name="glowStrength">Halo opacity multiplier (0..1); zero preserves the crisp highlight.</param>
     public static void Draw(ScaledText text, SKCanvas canvas, string? line, double highlight, TextStyle style,
-        SKRect area, SKColor baseColor, SKColor highlightColor, TextAlign align, float opacity)
+        SKRect area, SKColor baseColor, SKColor highlightColor, TextAlign align, float opacity,
+        float glowStrength = LyricGlowSettings.DefaultStrength)
     {
         if (string.IsNullOrEmpty(line) || area.Width <= 1 || area.Height <= 1 || opacity <= 0.01f)
         {
@@ -146,13 +149,19 @@ public static class KaraokeText
         // (wide bloom + tight ring) under a crisp pass, all clipped to the sweep so the glow never spills
         // onto the unsung half. The first version was a single faint pass and read as "no glow at all"
         // (user report 2026-10-22: "发光效果不明显").
-        var fontSize = text.Metrics.Style(style).Size;
-        var far = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowFarOpacity, 0, 255));
-        var near = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowNearOpacity, 0, 255));
-        text.Draw(canvas, line, style, area, far, align, opacity,
-            SharedGlowFilter(MathF.Max(2.4f, fontSize * GlowSigmaFarRatio)));
-        text.Draw(canvas, line, style, area, near, align, opacity,
-            SharedGlowFilter(MathF.Max(1.2f, fontSize * GlowSigmaNearRatio)));
+        var strength = float.IsFinite(glowStrength)
+            ? Math.Clamp(glowStrength, 0f, 1f)
+            : LyricGlowSettings.DefaultStrength;
+        if (strength > 0)
+        {
+            var fontSize = text.Metrics.Style(style).Size;
+            var far = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowFarOpacity * strength, 0, 255));
+            var near = highlightColor.WithAlpha((byte)Math.Clamp(highlightColor.Alpha * GlowNearOpacity * strength, 0, 255));
+            text.Draw(canvas, line, style, area, far, align, opacity,
+                SharedGlowFilter(MathF.Max(2.4f, fontSize * GlowSigmaFarRatio)));
+            text.Draw(canvas, line, style, area, near, align, opacity,
+                SharedGlowFilter(MathF.Max(1.2f, fontSize * GlowSigmaNearRatio)));
+        }
         text.Draw(canvas, line, style, area, highlightColor, align, opacity);
         canvas.Restore();
     }

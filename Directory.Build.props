@@ -23,7 +23,7 @@
   <PropertyGroup>
     <Product>FluidBar</Product>
     <Company>FluidBar contributors</Company>
-    <VersionPrefix>4.1.0</VersionPrefix>
+    <VersionPrefix>4.2.0</VersionPrefix>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

@@ -5,7 +5,15 @@ using FluidBar.Platform.Windows.Interop;
 namespace FluidBar.Platform.Windows.Hosting;
 
 /// <summary>Unpremultiplied BGRA drag bitmap, with the cursor offset from its top-left corner.</summary>
-public sealed record FileDragImage(int Width, int Height, byte[] Pixels, int OffsetX, int OffsetY);
+public sealed record FileDragImage(int Width, int Height, byte[] Pixels, int OffsetX, int OffsetY)
+{
+    internal void Validate()
+    {
+        if (Width is <= 0 or > 1024 || Height is <= 0 or > 1024
+            || Pixels is null || Pixels.Length != checked(Width * Height * 4))
+            throw new ArgumentException("A drag image requires a bounded 32-bit BGRA bitmap.");
+    }
+}
 
 /// <summary>Shell owns file references, private drag-image formats and their media for the native drag lifetime.</summary>
 internal sealed class ShellFileDragData : IDisposable
@@ -37,11 +45,11 @@ internal sealed class ShellFileDragData : IDisposable
         catch { result.Dispose(); throw; }
     }
 
+    internal void AttachImage(FileDragImage image) => AttachImage(Data, image);
+
     private static void AttachImage(IDataObject data, FileDragImage image)
     {
-        if (image.Width is <= 0 or > 1024 || image.Height is <= 0 or > 1024
-            || image.Pixels.Length != checked(image.Width * image.Height * 4))
-            throw new ArgumentException("A drag image requires a bounded 32-bit BGRA bitmap.", nameof(image));
+        image.Validate();
         var helperClass = new Guid("4657278a-411b-11d2-839a-00c04fd918d0");
         Marshal.ThrowExceptionForHR(NativeMethods.Ole32.CoCreateInstance(helperClass, IntPtr.Zero, 1,
             typeof(IDragSourceHelper).GUID, out var pointer));

@@ -46,11 +46,11 @@ public sealed class OleFileDragShellTests
                     NativeMethods.User32.EnumWindows((handle, _) =>
                     {
                         var name = new char[128];
-                        var length = NativeMethods.User32.GetClassNameW(handle, name, name.Length);
+                        var length = GetWindowTextW(handle, name, name.Length);
                         var className = new string(name, 0, length);
                         NativeMethods.User32.GetWindowThreadProcessId(handle, out var process);
                         if (process == Environment.ProcessId) observed.Add(className + ":" + NativeMethods.User32.IsWindowVisible(handle));
-                        if (process == Environment.ProcessId && className == "SysDragImage" && NativeMethods.User32.IsWindowVisible(handle))
+                        if (process == Environment.ProcessId && className == FileDragPreview.WindowTitle && NativeMethods.User32.IsWindowVisible(handle))
                         { visible = true; imageWindow = handle; }
                         return true;
                     }, IntPtr.Zero);
@@ -63,7 +63,7 @@ public sealed class OleFileDragShellTests
                     new FileDragImage(64, 32, Enumerable.Repeat((byte)255, 64 * 32 * 4).ToArray(), -12, -12));
                 NativeMethods.Ole32.RevokeDragDrop(window.Handle);
                 Assert.True(copied);
-                Assert.True(visible, "Windows must show the Shell drag image outside the source card. " + string.Join(", ", observed));
+                Assert.True(visible, "Windows must show the independent drag preview outside the source card. " + string.Join(", ", observed));
                 Assert.False(NativeMethods.User32.IsWindowVisible(imageWindow), "Completion must remove the drag image.");
                 completion.SetResult();
             }
@@ -87,6 +87,9 @@ public sealed class OleFileDragShellTests
 
     [DllImport("user32.dll")]
     private static extern bool PostThreadMessageW(uint thread, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(IntPtr window, [Out] char[] text, int count);
 
     [Fact]
     public async Task Shell_drag_data_keeps_the_drag_bitmap_for_cross_window_feedback()

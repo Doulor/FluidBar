@@ -164,9 +164,11 @@ public sealed class SettingsControlLayerTests
         // The media plugin declares three toggles → three prototype switches.
         Assert.Equal(3, snapshot.Switches);
 
-        // Four setting rows (three toggles + the lyric-offset slider) + three command rows share the
-        // 53 px row rhythm.
-        Assert.Equal(7, snapshot.Rows);
+        // Five setting rows (three toggles + lyric-offset/glow sliders) + three command rows share
+        // the 53 px row rhythm.
+        Assert.Equal(8, snapshot.Rows);
+        Assert.Contains("Sung lyric glow", snapshot.Texts);
+        Assert.Contains("70 %", snapshot.Texts);
 
         // Header, meta line and the localized back affordance are present.
         Assert.Contains(snapshot.Texts, text => text == snapshot.PluginName);

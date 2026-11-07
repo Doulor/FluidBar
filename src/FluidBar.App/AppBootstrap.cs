@@ -102,7 +102,11 @@ internal sealed partial class AppBootstrap
             // Telemetry failures must be diagnosable: initialise only after the JSON-lines sink exists.
             StartTelemetryIfEnabled(settingsRoot);
             EvaluateCrashGuard();
+            // Read before showing the host, including when the media plugin is disabled or fails.
+            // The settings read runs off the UI thread and never enters the animation frame loop.
+            var storedLyricGlow = await new MediaPillPreferences().ReadStoredLyricGlowSettingAsync().ConfigureAwait(true);
             await StartIslandHostAsync().ConfigureAwait(true);
+            _skiaHost?.SetLyricGlowStrength(storedLyricGlow);
             // The island is up: this is the moment "the app became usable" for the startup-time report.
             _telemetry?.MarkReady();
             await StartStartupRegistrationAsync().ConfigureAwait(true);
@@ -1069,6 +1073,14 @@ internal sealed partial class AppBootstrap
                 PluginRootDirectory = PluginRuntimePaths.ResolveRoot(),
                 LocalPluginRootDirectory = PluginRuntimePaths.ResolveLocalRoot(),
                 PluginStopped = pluginId => _pageRegistry.UnregisterOwner(pluginId),
+                SettingChanged = (pluginId, key, value) =>
+                {
+                    if (pluginId == FluidBar.Plugins.Builtin.BuiltinIds.MediaPlugin
+                        && key == FluidBar.Core.Configuration.LyricGlowSettings.Key)
+                    {
+                        Dispatcher.UIThread.Post(() => _skiaHost?.SetLyricGlowStrength(value));
+                    }
+                },
                 AppVersion = PluginRuntimeVersion.Current,
                 Localizer = _localizer,
                 Logger = new AppPluginHostLogger(_logger),
@@ -1099,6 +1111,12 @@ internal sealed partial class AppBootstrap
             _logger.Information(LogCategories.Plugin, "plugin.runtime.compose-task-started",
                 "Plugin runtime composition task started.");
             _pluginRuntime = await composeTask.ConfigureAwait(true);
+            if (_pluginRuntime.FindBuiltinSession(FluidBar.Plugins.Builtin.BuiltinIds.MediaPlugin) is not null)
+            {
+                _skiaHost?.SetLyricGlowStrength(_pluginRuntime.GetSettingValue(
+                    FluidBar.Plugins.Builtin.BuiltinIds.MediaPlugin,
+                    FluidBar.Core.Configuration.LyricGlowSettings.Key));
+            }
             _logger.Information(LogCategories.Plugin, "plugin.runtime.compose-returned",
                 "Plugin runtime composition returned.");
             var report = _pluginRuntime.Report;

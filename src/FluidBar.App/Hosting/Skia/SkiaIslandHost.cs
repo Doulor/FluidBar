@@ -412,6 +412,10 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         return true;
     }
 
+    /// <summary>Applies the media plugin's lyric halo value on the UI thread.</summary>
+    public void SetLyricGlowStrength(System.Text.Json.JsonElement? value)
+        => _controller.SetLyricGlowStrength(value);
+
     /// <summary>Simulates Escape.</summary>
     public void SimulateEscape() => _controller.HandleEscape();
 
@@ -753,7 +757,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         _mouseHookHost = new PlatformMessageHost(_platformLogger, _platformCounters);
         await _mouseHookHost.StartAsync(cancellationToken).ConfigureAwait(true);
         _mouseHook = new IslandMouseHook(_mouseHookHost, _platformLogger, _platformCounters);
-        _mouseHook.PointerPressed += OnHookPointerPressed;
+        _mouseHook.PointerPressedWithModifiers += OnHookPointerPressedWithModifiers;
         _mouseHook.PointerReleased += OnHookPointerReleased;
         _mouseHook.PointerMoved += OnHookPointerMoved;
         _mouseHook.PointerDragged += OnHookPointerDragged;
@@ -927,7 +931,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             "Liquid-glass backdrop capture needs the window excluded from screen captures.",
             data: new Dictionary<string, object?> { ["excludedFromCapture"] = host.ExcludeFromCapture });
         host.AttachAccessibility(_uiaSource, _uiaSource);
-        host.SetFileDropEnabled(_fileDropHandlers is not null);
+        host.SetFileDropEnabled(!_nativeFileDragActive && _fileDropHandlers is not null);
         host.FileDragEntered += () =>
         {
             if (_nativeFileDragActive) return;
@@ -984,13 +988,16 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         };
         host.PointerPressed += pointer =>
         {
-            _controller.HandlePointerPressed(pointer.ClientXDip, pointer.ClientYDip);
+            entry.PositionReturn.Suspend();
+            entry.PersistDrag = (pointer.Modifiers & LayeredKeyModifiers.Control) != 0;
+            _controller.HandlePointerPressed(pointer.ClientXDip, pointer.ClientYDip, entry.PersistDrag);
             EnsureDeadlineTicker();
             EnsureFrameLoop();
         };
         host.PointerReleased += pointer =>
         {
             _controller.HandlePointerReleased(pointer.ClientXDip, pointer.ClientYDip);
+            if (!entry.DragActive) entry.PositionReturn.Resume();
         };
         host.PointerWheel += wheel =>
         {
@@ -1091,6 +1098,12 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
                     else
                     {
                         _controller.HandleDragEnded(x, y, timestamp);
+                    }
+
+                    if (drag.Phase == LayeredDragPhase.Cancelled)
+                    {
+                        _controller.HandlePointerLeft();
+                        entry.PositionReturn.Resume();
                     }
 
                     entry.DragKind = SkiaDragKind.None;
@@ -1195,37 +1208,42 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             entry.DragActive = true;
             entry.DragOriginPx = entry.Host.Placement.WindowPixel;
+            entry.PositionReturn.Cancel();
         }
 
         var mode = CurrentSettings().IslandMode;
-        var width = entry.Host.Placement.WindowPixel.Width;
-        var height = entry.Host.Placement.WindowPixel.Height;
-        var work = entry.Monitor.WorkArea;
-        var x = Math.Clamp(
-            entry.DragOriginPx.X + drag.DeltaX,
-            work.X,
-            Math.Max(work.X, work.Right - width));
+        var x = entry.DragOriginPx.X + drag.DeltaX;
         var y = entry.DragOriginPx.Y;
         if (IslandPlacementDrag.AllowsVerticalDrag(mode))
         {
-            y = Math.Clamp(
-                entry.DragOriginPx.Y + drag.DeltaY,
-                work.Y,
-                Math.Max(work.Y, work.Bottom - height));
+            y += drag.DeltaY;
         }
+        var origin = ClampIslandOrigin(entry, x, y);
+        entry.Host.PlacePhysical(origin.X, origin.Y);
+    }
 
-        entry.Host.PlacePhysical(x, y);
+    private (int X, int Y) ClampIslandOrigin(WindowEntry entry, int x, int y)
+    {
+        var shell = IslandMetrics.ShellRect(_controller.RenderState);
+        var scale = SafeScale(entry.Host.Scale);
+        var work = entry.Monitor.WorkArea;
+        var minX = (int)Math.Ceiling(work.X - shell.Left * scale);
+        var maxX = (int)Math.Floor(work.Right - shell.Right * scale);
+        var minY = (int)Math.Ceiling(work.Y - shell.Top * scale);
+        var maxY = (int)Math.Floor(work.Bottom - shell.Bottom * scale);
+        return (Math.Clamp(x, minX, Math.Max(minX, maxX)), Math.Clamp(y, minY, Math.Max(minY, maxY)));
     }
 
     /// <summary>
-    /// Ends a window drag. On a normal drop the final host-window rectangle is resolved into a
+    /// Ends a window drag. A Ctrl drop resolves the final host-window rectangle into a
     /// per-monitor anchor/offset <b>before</b> the controller applies
     /// <see cref="IslandInput.DragEnded"/> (whose <c>PersistPlacement</c> effect writes it). A
-    /// cancelled drag restores the settings-driven placement and writes nothing.
+    /// plain drag waits before springing home; cancellation restores immediately. Neither is saved.
     /// </summary>
     private void EndWindowDrag(WindowEntry entry, bool cancelled)
     {
-        _pendingDrop = cancelled ? null : CapturePendingDrop(entry);
+        var dropped = entry.Host.Placement.WindowPixel;
+        _pendingDrop = !cancelled && entry.PersistDrag ? CapturePendingDrop(entry) : null;
         if (!_controller.EndWindowDrag())
         {
             _pendingDrop = null;
@@ -1233,8 +1251,20 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         if (cancelled)
         {
+            entry.PositionReturn.Cancel();
             ApplyPlacement(entry);
         }
+        else if (!entry.PersistDrag)
+        {
+            var home = CalculateWindowPlacement(entry);
+            var scale = SafeScale(entry.Host.Scale);
+            entry.PositionReturn.Start(new VisualPoint(
+                (dropped.X - home.WindowPixel.X) / scale,
+                (dropped.Y - home.WindowPixel.Y) / scale), _controller.Motion.ReducedMotion);
+            ApplyPlacement(entry);
+        }
+        UpdateHitRegions(force: true);
+        RenderNow(forceFull: true);
     }
 
     /// <summary>Resolves the dropped host window into the anchor/offset persisted for its monitor.</summary>
@@ -1250,17 +1280,16 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         var scale = SafeScale(entry.Host.Scale);
         var window = entry.Host.Placement.WindowPixel;
         var work = entry.Monitor.WorkArea;
-        var windowDip = new VisualRect(
-            (window.X - work.X) / scale,
-            (window.Y - work.Y) / scale,
-            entry.Host.SurfaceSizeDip.WidthDip,
-            entry.Host.SurfaceSizeDip.HeightDip);
+        var shell = IslandMetrics.ShellRect(_controller.RenderState);
+        var shellDip = new VisualRect(
+            (window.X - work.X) / scale + shell.Left,
+            (window.Y - work.Y) / scale + shell.Top,
+            shell.Width, shell.Height);
         var current = settings.ResolveMonitorPlacement(entry.Monitor.Id);
-        var solved = IslandPlacementDrag.Solve(
-            windowDip,
+        var solved = IslandPlacementDrag.SolveShell(
+            shellDip,
             entry.Monitor,
             mode,
-            _controller.State.ContentKind,
             current.Anchor);
         return new PendingDrop(entry, entry.Monitor.Id, solved.Anchor, solved.OffsetX, solved.OffsetY);
     }
@@ -1415,6 +1444,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 
     private void OnPlacementRequested()
     {
+        foreach (var entry in _windows) entry.PositionReturn.Cancel();
         ApplyPlacementAll();
         // The hook rectangles are absolute screen coordinates. Anchor/mode changes move the window
         // without changing the shell signature, so the old rects would keep eating clicks at the
@@ -1432,6 +1462,29 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
     }
 
     private void ApplyPlacement(WindowEntry entry)
+    {
+        var placement = CalculateWindowPlacement(entry);
+        entry.LastPlacement = placement;
+        if (entry.PositionReturn.IsActive)
+        {
+            var offset = entry.PositionReturn.Offset;
+            var scale = SafeScale(entry.Host.Scale);
+            var origin = ClampIslandOrigin(entry,
+                placement.WindowPixel.X + WindowPlacementConverter.Round(offset.X * scale),
+                placement.WindowPixel.Y + WindowPlacementConverter.Round(offset.Y * scale));
+            placement = placement with
+            {
+                WindowPixel = placement.WindowPixel with { X = origin.X, Y = origin.Y },
+            };
+        }
+        var current = entry.Host.Placement.WindowPixel;
+        var next = placement.WindowPixel;
+        if (current.X != next.X || current.Y != next.Y || current.Width != next.Width || current.Height != next.Height)
+            entry.Host.PlaceForWindowPlacement(placement, ToLayeredMode(CurrentSettings().IslandMode));
+        entry.Host.HitRegion.HasInteractiveContent = _controller.RenderState.IsVisible;
+    }
+
+    private WindowPlacement CalculateWindowPlacement(WindowEntry entry)
     {
         var settings = CurrentSettings();
         var mode = settings.IslandMode;
@@ -1472,12 +1525,55 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             tabBarStyle: settings.TabBarStyle);
         var layout = IslandLayout.Calculate(request, entry.Monitor);
 
-        // Core's WindowPlacement is the single placement product for float, flush and dock: the host
-        // surface sizes match HostSurface exactly, so the window origin is WindowPixel verbatim. The
-        // old dock PlacePhysical workaround is gone (see docs/rewrite/contracts/skia-host.md §5).
-        entry.Host.PlaceForWindowPlacement(layout.Placement, layeredMode);
-        entry.LastPlacement = layout.Placement;
-        entry.Host.HitRegion.HasInteractiveContent = _controller.RenderState.IsVisible;
+        // Keep old files in host coordinates. New drops position the visible shell, allowing the
+        // transparent canvas to overhang the screen without changing the user's saved location.
+        var windowPlacement = layout.Placement;
+        if (mode != IslandMode.Dock && UsesShellPlacement(settings, entry.Monitor.Id))
+        {
+            var state = _controller.RenderState;
+            // Content nudges and notification swipes must remain local animations: compensating
+            // for them with native-window movement would visually cancel those gestures.
+            var local = new VisualRect(state.ShellOrigin.X, state.ShellOrigin.Y, state.ShellWidth, state.ShellHeight);
+            var shell = IslandPlacementDrag.PlaceShell(
+                new IslandDragPlacement(placement.Anchor, placement.OffsetX, placement.OffsetY, false),
+                new VisualSize(local.Width, local.Height), entry.Monitor.WorkAreaDip, mode);
+            var window = windowPlacement.WindowVisual with { X = shell.X - local.X, Y = shell.Y - local.Y };
+            windowPlacement = windowPlacement with
+            {
+                Shell = shell,
+                WindowVisual = window,
+                WindowPixel = WindowPlacementConverter.ToPhysical(window, entry.Monitor),
+                ShellLocalOffset = new VisualPoint(local.X, local.Y),
+            };
+        }
+        return windowPlacement;
+    }
+
+    private bool HasPositionReturns => _windows.Any(static entry => entry.PositionReturn.NeedsFrames);
+
+    private static bool UsesShellPlacement(AppSettings settings, string monitorId)
+    {
+        return (settings.Placement.TryGetValue(monitorId, out var saved)
+            || settings.Placement.TryGetValue(FluidBar.Core.Settings.SettingsJsonNames.PrimaryPlacementKey, out saved))
+            && saved.ShellBased;
+    }
+
+    private bool AdvanceWindowPositions(TimeSpan delta)
+    {
+        var settings = CurrentSettings();
+        var moved = false;
+        foreach (var entry in _windows)
+        {
+            if (entry.DragActive) continue;
+            var returning = entry.PositionReturn.IsActive;
+            var followsSavedAnchor = _controller.IsAnimating && UsesShellPlacement(settings, entry.Monitor.Id);
+            if (!returning && !followsSavedAnchor) continue;
+            var before = entry.Host.Placement.WindowPixel;
+            entry.PositionReturn.Step(delta, _controller.Motion.ReducedMotion);
+            ApplyPlacement(entry);
+            moved |= before != entry.Host.Placement.WindowPixel;
+        }
+        return moved;
     }
 
     private static LayeredHostMode ToLayeredMode(IslandMode mode)
@@ -1521,7 +1617,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         // controller's animation flags.
         var yieldActive = _softYield?.IsActive == true;
         if (!IslandFrameLoopPolicy.ShouldRun(
-                _controller.IsAnimating || yieldActive || _awaitingFirstGlass || _backdropDirty,
+                _controller.IsAnimating || HasPositionReturns || yieldActive || _awaitingFirstGlass || _backdropDirty,
                 _controller.IsAgentAnimating,
                 keepIdleFrames))
         {
@@ -1583,6 +1679,8 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 
             _controller.PumpTimers();
             _controller.Advance(delta);
+            var positionMoved = AdvanceWindowPositions(delta);
+            var positionReturning = HasPositionReturns;
             // Soften animation: keep painting while the island fades back and while the safety timer runs.
             var yieldAnimating = _softYield is not null && _softYield.Step(NowMs());
             _probeAdvanceAlloc = _perfProbe is null ? 0 : SkiaHostPerfProbe.CurrentAllocatedBytes() - perfStart;
@@ -1591,8 +1689,9 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             // nothing, the idle branch stops the clock, and the glass keeps the old material until hover.
             var glassFramePending = IslandGlassRefreshPolicy.RequiresFullFrame(
                 _backdropDirty, _luminanceAnimating, _awaitingFirstGlass);
-            var painted = RenderAllLocked(forceFull: yieldAnimating || glassFramePending);
-            if (yieldAnimating || glassFramePending)
+            var painted = RenderAllLocked(forceFull: yieldAnimating || glassFramePending
+                || positionMoved && CurrentSettings().Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass);
+            if (yieldAnimating || glassFramePending || positionMoved || positionReturning)
             {
                 EnsureFrameLoop();
             }
@@ -1600,7 +1699,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             var stopThreshold = _controller.HasSpinningSplitRing
                 ? profile.EmptyFrameStopThreshold
                 : 2;
-            if (stopThreshold > 0)
+            if (stopThreshold > 0 && !positionReturning)
             {
                 if (!painted)
                 {
@@ -1648,12 +1747,12 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
                     _lastChange);
             }
 
-            if (_controller.IsAnimating || _controller.IsAgentAnimating)
+            if (_controller.IsAnimating || _controller.IsAgentAnimating || positionReturning || positionMoved)
             {
                 // Follow the painted shell every frame: the expand/collapse transition, the pager and
                 // the preview-rail springs all move the clickable geometry. The region is a plain
                 // in-memory model (no Win32 calls), so refreshing it per frame is cheap.
-                UpdateHitRegions(force: false);
+                UpdateHitRegions(force: positionMoved);
             }
             else if ((!_controller.PowerProfile.KeepIdleFrames || !_controller.HasSpinningSplitRing)
                 && IslandGlassRefreshPolicy.CanStopIdleLoop(_backdropDirty, _luminanceAnimating, _awaitingFirstGlass))
@@ -3082,6 +3181,11 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
 
         /// <summary>Whether the threshold was crossed and the window is following the pointer.</summary>
         public bool DragActive { get; set; }
+
+        /// <summary>Ctrl was held when the pointer press started; only these drops are saved.</summary>
+        public bool PersistDrag { get; set; }
+
+        public IslandPositionReturn PositionReturn { get; } = new();
 
         /// <summary>Window origin (physical) captured when the drag crossed the threshold.</summary>
         public LayeredRect DragOriginPx { get; set; }

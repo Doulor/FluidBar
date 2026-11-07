@@ -196,6 +196,7 @@ public sealed class SettingsWindow : Window, ILocalizable
         Content = root;
 
         _settings.Changed += OnSettingsChanged;
+        _settings.Replaced += RebuildContent;
         Activated += (_, _) => ReassertAcrylicBackdrop();
         _localizer.Changed += OnLocalizerChanged;
         if (_updates is not null)
@@ -579,6 +580,13 @@ public sealed class SettingsWindow : Window, ILocalizable
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
+        _settings.Changed -= OnSettingsChanged;
+        _settings.Replaced -= RebuildContent;
+        _localizer.Changed -= OnLocalizerChanged;
+        if (_updates is not null)
+        {
+            _updates.Changed -= OnUpdateChanged;
+        }
         _fadeClock?.Dispose();
         base.OnClosed(e);
     }
@@ -1357,6 +1365,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             Owner = () => this,
             OpenPath = _openPath,
             ShowStatus = ShowStatus,
+            Status = _status,
             Updates = _updates,
             FrameStats = _frameStats,
             RestartToInstall = _restartToInstall,
@@ -1364,10 +1373,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             ExecuteQuickAction = _executeQuickAction,
         };
         var content = SettingsSectionBuilder.Build(_section, context);
-        if (_section == SettingsWindowSection.Appearance)
-        {
-            _preview = FindPreview(content);
-        }
+        _preview = _section == SettingsWindowSection.Appearance ? FindPreview(content) : null;
 
         _content.Content = content;
         UpdateNavSelection();
@@ -1423,23 +1429,15 @@ public sealed class SettingsWindow : Window, ILocalizable
     private void OnSettingsChanged(AppSettings previous, AppSettings current)
     {
         var themeChanged = ResolvePaletteTheme(previous.Theme) != ResolvePaletteTheme(current.Theme);
-        if (themeChanged)
+        var materialChanged = previous.Material != current.Material;
+        if (themeChanged || materialChanged)
         {
+            _liquidGlass = current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
             _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme), _liquidGlass);
             ApplyChrome();
             RebuildTitleBarBrushes();
             RebuildNav();
             RebuildContent();
-            return;
-        }
-
-        if (previous.Material != current.Material)
-        {
-            // The palette is glass-aware (brighter dark-theme text over the blurred desktop).
-            _liquidGlass = current.Material == FluidBar.App.Settings.IslandMaterial.LiquidGlass;
-            _palette = SettingsPalette.For(ResolvePaletteTheme(current.Theme), _liquidGlass);
-            ApplyChrome();
-            RebuildTitleBarBrushes();
             return;
         }
 
@@ -1450,6 +1448,10 @@ public sealed class SettingsWindow : Window, ILocalizable
 
         // Diagnostics/update panes show live values: rebuild so the toggle has an immediate effect.
         if (_section == SettingsWindowSection.Advanced && previous.Advanced.FrameStats != current.Advanced.FrameStats)
+        {
+            RebuildContent();
+        }
+        else if (_section == SettingsWindowSection.Appearance && previous.Advanced.SafeMode != current.Advanced.SafeMode)
         {
             RebuildContent();
         }

@@ -199,7 +199,7 @@ internal sealed class CompactRenderer : IDisposable
         var measured = _text.Measure(model.LyricLine, IslandType.CompactMediaLyric, line.Width);
         var align = measured <= line.Width - 4 ? TextAlign.Center : TextAlign.Left;
         KaraokeText.Draw(_text, canvas, model.LyricLine, model.LyricHighlight, IslandType.CompactMediaLyric,
-            line, baseColor, sungColor, align, alpha);
+            line, baseColor, sungColor, align, alpha, model.LyricGlowStrength);
         canvas.Restore();
     }
 

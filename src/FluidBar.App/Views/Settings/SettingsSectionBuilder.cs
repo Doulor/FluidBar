@@ -51,6 +51,9 @@ public sealed record SettingsWindowContext
     /// <summary>Shows a transient status line in the section (exported path, errors).</summary>
     public required Action<string> ShowStatus { get; init; }
 
+    /// <summary>Last status message, retained when reset/import reloads the pane.</summary>
+    public string? Status { get; init; }
+
     /// <summary>Update service for the About pane (null in previews/headless builds).</summary>
     public IUpdateUiService? Updates { get; init; }
 
@@ -188,11 +191,12 @@ public static class SettingsSectionBuilder
 
     private static Control SegmentedRow(SettingsWindowContext context, string label, string? description,
         (string Label, string Value)[] options, string current, Action<string> changed, bool small = false,
-        double? width = null)
+        double? width = null, bool notifyOnReselect = false)
     {
         var palette = context.Palette;
         var segmented = new SegmentedControl
         {
+            NotifyOnReselect = notifyOnReselect,
             ControlWidth = width ?? (small ? SettingsMetrics.SegmentedSmallWidth : SettingsMetrics.SegmentedWidth),
             Fill = palette.RaisedBrush,
             Hairline = palette.LineBrush,
@@ -284,6 +288,7 @@ public static class SettingsSectionBuilder
                     ctx.Localizer.Get(LocKeys.Settings.General.TrayIconHint), settings.TrayIcon,
                     value => ctx.Settings.Update(s => s with { TrayIcon = value }))));
 
+        panel.Children.Insert(1, BuildGestureGuide(ctx));
         panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.General.Hotkeys), palette));
         panel.Children.Add(SettingsWidgets.Group(palette, topBorder: false,
             HotkeyRow(ctx, ctx.Localizer.Get(LocKeys.Settings.General.Hotkey.Toggle), settings.HotkeyToggle,
@@ -294,6 +299,25 @@ public static class SettingsSectionBuilder
                 value => ctx.Settings.Update(s => s with { HotkeySettings = value }), last: true)));
         panel.Children.Add(CardSettingsPanel.Build(ctx));
         panel.Children.Add(SettingsControls.FooterNote(ctx.Localizer.Get(LocKeys.Settings.FooterNote), palette));
+        return panel;
+    }
+
+    private static Control BuildGestureGuide(SettingsWindowContext ctx)
+    {
+        var palette = ctx.Palette;
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 16) };
+        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.Title), palette));
+        panel.Children.Add(SettingsWidgets.Group(palette, topBorder: false,
+            SettingsWidgets.ShortcutRow(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.TemporaryMove),
+                [ctx.Localizer.Get(LocKeys.Settings.General.Gestures.DragReturn)], palette),
+            SettingsWidgets.ShortcutRow(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.SavePosition),
+                ["Ctrl", ctx.Localizer.Get(LocKeys.Settings.General.Gestures.Drag)], palette),
+            SettingsWidgets.ShortcutRow(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.ResetPosition),
+                ["Ctrl", ctx.Localizer.Get(LocKeys.Settings.General.Gestures.Click)], palette),
+            SettingsWidgets.ShortcutRow(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.TemporaryHide),
+                [ctx.Localizer.Get(LocKeys.Settings.General.Gestures.RightClick)], palette, last: true)));
+        panel.Children.Add(SettingsControls.StatusLine(ctx.Localizer.Get(LocKeys.Settings.General.Gestures.Hint),
+            palette, SettingsTone.Neutral, SettingsMetrics.RowDescSize));
         return panel;
     }
 
@@ -377,16 +401,6 @@ public static class SettingsSectionBuilder
 
     // ---- appearance -------------------------------------------------------------------------
 
-    /// <summary>Accent swatch colors offered by the appearance section (prototype ACCENTS).</summary>
-    private static readonly (string Name, string Hex)[] AccentChoices =
-    [
-        ("#4CC9F0", "#4CC9F0"),
-        ("#34C759", "#34C759"),
-        ("#FF9500", "#FF9500"),
-        ("#F06AB0", "#F06AB0"),
-        ("#0A84FF", "#0A84FF"),
-    ];
-
     private static Control BuildAppearance(SettingsWindowContext ctx)
     {
         var settings = ctx.Settings.Current;
@@ -394,80 +408,6 @@ public static class SettingsSectionBuilder
         // Same rule the mapper applies: every translucent tier degrades to obsidian in safe mode.
         var translucent = settings.Material != IslandMaterial.Obsidian && !settings.Advanced.SafeMode;
         var preview = new IslandPreview();
-
-        var swatchList = new List<(AccentSwatch Swatch, string Hex)>();
-        var swatchNote = new TextBlock
-        {
-            FontSize = SettingsMetrics.ApMetaSize,
-            LineHeight = SettingsMetrics.ApMetaSize * 1.5,
-            Foreground = palette.TertiaryBrush,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 6, 0, 0),
-            IsVisible = false,
-        };
-        var swatches = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = SettingsMetrics.AccentGap,
-        };
-        foreach (var (_, hex) in AccentChoices)
-        {
-            var color = Color.Parse(hex);
-            var swatch = new AccentSwatch
-            {
-                SwatchColor = color,
-                Ring = palette.ForegroundBrush,
-                HoverRing = palette.SecondaryBrush,
-            };
-            swatch.Clicked += () =>
-            {
-                ctx.Settings.Update(s => s with { AccentFallback = hex, AccentMode = "custom" });
-                SyncSwatches();
-            };
-            swatchList.Add((swatch, hex));
-            swatches.Children.Add(swatch);
-        }
-
-        var swatchColumn = new StackPanel { Spacing = 0 };
-        swatchColumn.Children.Add(swatches);
-        swatchColumn.Children.Add(swatchNote);
-
-        // The swatch state has to follow the settings live: the appearance page is not rebuilt on every
-        // change (only a theme switch rebuilds it), so the row updates itself.
-        void SyncSwatches()
-        {
-            var current = ctx.Settings.Current;
-            var artwork = string.Equals(current.AccentMode, "artwork", StringComparison.OrdinalIgnoreCase);
-            foreach (var (swatch, hex) in swatchList)
-            {
-                // The store normalises the hex (e.g. "#ff4cc9f0"), so compare parsed colours, not text.
-                var active = !artwork
-                    && Accents.ParseOrDefault(current.AccentFallback, Accents.Fallback)
-                        == Color.Parse(hex);
-                swatch.IsActive = active;
-                swatch.InvalidateVisual();
-                var name = hex;
-                AutomationProperties.SetName(swatch,
-                    active
-                        ? $"{name} {ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Selected)}"
-                        : name);
-                AutomationProperties.SetHelpText(swatch, hex is null ? null : "Accent " + hex);
-            }
-
-            // With artwork sampling on, no swatch is the current accent: say so instead of letting a
-            // stale ring imply a selection.
-            swatchNote.Text = ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkSwatchHint);
-            swatchNote.IsVisible = artwork;
-        }
-
-        // Accent changes can also arrive from elsewhere (import, another pane); follow the settings while this
-        // page is alive and unhook when it is replaced, so nothing leaks across rebuilds.
-        ctx.Settings.Changed += OnAccentChanged;
-        swatches.DetachedFromVisualTree += (_, _) => ctx.Settings.Changed -= OnAccentChanged;
-
-        void OnAccentChanged(AppSettings previous, AppSettings current) => SyncSwatches();
-
-        SyncSwatches();
 
         var panel = Section(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Title),
             ctx.Localizer.Get(LocKeys.Settings.Appearance.Subtitle),
@@ -565,21 +505,6 @@ public static class SettingsSectionBuilder
                     ],
                     settings.Palette,
                     value => ctx.Settings.Update(s => s with { Palette = value })),
-                SettingsWidgets.Row(ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Title),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Desc), swatchColumn, palette),
-                // Artwork accent moved here as well; its hint states that the preview always paints the
-                // fallback colour (it is static, so there is no artwork to sample).
-                ToggleRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.Artwork),
-                    ctx.Localizer.Get(LocKeys.Settings.Appearance.Accent.ArtworkHint),
-                    settings.AccentMode == "artwork",
-                    value =>
-                    {
-                        ctx.Settings.Update(s => s with { AccentMode = value ? "artwork" : "custom" });
-                        // Custom and artwork accents are mutually exclusive: switching to artwork has to drop the
-                        // swatch ring right away, instead of leaving a stale selection until the page is rebuilt
-                        // (user report 2026-10-24: the ring only cleared after visiting another page and back).
-                        SyncSwatches();
-                    }),
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadius),
                     ctx.Localizer.Get(LocKeys.Settings.Appearance.PanelRadiusHint), 16, 36, 1, settings.PanelRadius,
                     value => $"{value:0} px", value => ctx.Settings.Update(s => s with { PanelRadius = value })),
@@ -705,7 +630,11 @@ public static class SettingsSectionBuilder
                         (ctx.Localizer.Get(LocKeys.Settings.Island.Anchor.BottomRight), "bottom-right"),
                     ],
                     settings.Anchor,
-                    value => ctx.Settings.Update(s => s with { Anchor = value })),
+                    value => ctx.Settings.Update(s => s with
+                    {
+                        Anchor = value,
+                        Placement = s.Placement.Clear(),
+                    }), notifyOnReselect: true),
                 SegmentedRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Title),
                     ctx.Localizer.Get(LocKeys.Settings.Island.Stacking.Desc),
                     [
@@ -809,15 +738,15 @@ public static class SettingsSectionBuilder
     {
         var palette = ctx.Palette;
         var descriptors = ctx.Pages?.BuildPageDescriptors() ?? [];
-        var titles = descriptors.ToDictionary(static descriptor => descriptor.PageId, static descriptor =>
-            descriptor.Title.Value ?? descriptor.Title.Translations.Values.FirstOrDefault() ?? descriptor.PageId,
+        var titles = descriptors.ToDictionary(static descriptor => descriptor.PageId, descriptor =>
+            LocalizedValue.Resolve(descriptor.Title, ctx.Localizer),
             StringComparer.OrdinalIgnoreCase);
         var order = ctx.Settings.Current.Plugins.PageOrder.ToList();
         var list = new StackPanel { Spacing = 4 };
         var panel = new StackPanel { Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
-        panel.Children.Add(SettingsWidgets.Caption("Page order", palette));
+        panel.Children.Add(SettingsWidgets.Caption(ctx.Localizer.Get(LocKeys.Settings.Island.PageOrder), palette));
         panel.Children.Add(SettingsControls.StatusLine(
-            "Drag a page to reorder the island and rail. Unknown pages stay at the end.",
+            ctx.Localizer.Get(LocKeys.Settings.Island.PageOrderHint),
             palette, SettingsTone.Neutral, SettingsMetrics.RowDescSize));
         panel.Children.Add(list);
         var dragIndex = -1;
@@ -842,7 +771,16 @@ public static class SettingsSectionBuilder
             for (var i = 0; i < all.Count; i++)
             {
                 var pageId = all[i];
-                var title = titles.TryGetValue(pageId, out var resolved) ? resolved : pageId;
+                var title = pageId switch
+                {
+                    "builtin.home" => ctx.Localizer.Get(LocKeys.Page.Home.Title),
+                    "builtin.media" => ctx.Localizer.Get(LocKeys.Page.Media.Title),
+                    "builtin.notifications" => ctx.Localizer.Get(LocKeys.Page.Notifications.Title),
+                    "builtin.clipboard" => ctx.Localizer.Get(LocKeys.Page.Clipboard.Title),
+                    "builtin.agent" => ctx.Localizer.Get(LocKeys.Page.Agent.Title),
+                    "builtin.widgets" => ctx.Localizer.Get(LocKeys.Page.Widgets.Title),
+                    _ => titles.TryGetValue(pageId, out var resolved) ? resolved : pageId,
+                };
                 var row = new Border
                 {
                     Padding = new Thickness(10, 7),
@@ -884,6 +822,7 @@ public static class SettingsSectionBuilder
                     }
 
                     dragIndex = -1;
+                    args.Pointer.Capture(null);
                 };
                 rows.Add(row);
                 list.Children.Add(row);
@@ -1312,10 +1251,11 @@ public static class SettingsSectionBuilder
     {
         var settings = ctx.Settings.Current;
         var palette = ctx.Palette;
-        var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FluidBar");
+        var appData = CoreSettingsStoreAdapter.ResolveDataDirectory();
         var localData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FluidBar");
         var status = new TextBlock
         {
+            Text = ctx.Status,
             FontSize = SettingsMetrics.FooterNoteSize,
             Foreground = palette.TertiaryBrush,
             TextWrapping = TextWrapping.Wrap,
@@ -1337,10 +1277,10 @@ public static class SettingsSectionBuilder
             Spacing = SettingsMetrics.AdvActionsGap,
             Margin = new Thickness(0, SettingsMetrics.AdvActionsMarginTop, 0, 0),
         };
-        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder), palette, false ? SettingsButtonVariant.Danger : SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Folder, () => ctx.OpenPath(appData)));
-        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs), palette, false ? SettingsButtonVariant.Danger : SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.File, () => ctx.OpenPath(Path.Combine(localData, "logs"))));
-        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export), palette, false ? SettingsButtonVariant.Danger : SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Download, () => _ = ExportAsync()));
-        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import), palette, false ? SettingsButtonVariant.Danger : SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Refresh, () => _ = ImportAsync()));
+        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.OpenFolder), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Folder, () => ctx.OpenPath(appData)));
+        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.ViewLogs), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.File, () => ctx.OpenPath(Path.Combine(localData, "logs"))));
+        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Export), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Download, () => _ = ExportAsync()));
+        actions.Children.Add(SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import), palette, SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Refresh, () => _ = ImportAsync()));
         panel.Children.Add(actions);
 
         var confirmField = SettingsControls.TextField(
@@ -1406,46 +1346,11 @@ public static class SettingsSectionBuilder
                 return;
             }
 
-            var defaults = settings with
-            {
-                Language = AppSettings.Default.Language,
-                Theme = AppSettings.Default.Theme,
-                PowerMode = AppSettings.Default.PowerMode,
-                LyricOffsetMs = AppSettings.Default.LyricOffsetMs,
-                StartWithWindows = AppSettings.Default.StartWithWindows,
-                TrayIcon = AppSettings.Default.TrayIcon,
-                AutoUpdate = AppSettings.Default.AutoUpdate,
-                HotkeyToggle = AppSettings.Default.HotkeyToggle,
-                HotkeyHide = AppSettings.Default.HotkeyHide,
-                HotkeySettings = AppSettings.Default.HotkeySettings,
-                Material = AppSettings.Default.Material,
-                Palette = AppSettings.Default.Palette,
-                AccentMode = AppSettings.Default.AccentMode,
-                AccentFallback = AppSettings.Default.AccentFallback,
-                FillOpacity = AppSettings.Default.FillOpacity,
-                PanelRadius = AppSettings.Default.PanelRadius,
-                FontScale = AppSettings.Default.FontScale,
-                ReducedMotion = AppSettings.Default.ReducedMotion,
-                MotionStrength = AppSettings.Default.MotionStrength,
-                HoverPeek = AppSettings.Default.HoverPeek,
-                AutoCollapseMs = AppSettings.Default.AutoCollapseMs,
-                AutoHideMs = AppSettings.Default.AutoHideMs,
-                Stacking = AppSettings.Default.Stacking,
-                Mode = AppSettings.Default.Mode,
-                Anchor = AppSettings.Default.Anchor,
-                DisplayOn = AppSettings.Default.DisplayOn,
-                PeekOnTrackChange = AppSettings.Default.PeekOnTrackChange,
-                WeatherCity = AppSettings.Default.WeatherCity,
-                Placement = AppSettings.Default.Placement,
-                Dock = AppSettings.Default.Dock,
-                Plugins = AppSettings.Default.Plugins,
-                Advanced = AppSettings.Default.Advanced,
-            };
-            ctx.Settings.Replace(defaults);
             SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.ResetDone));
+            ctx.Settings.Replace(AppSettings.Default);
         }
 
-        var resetChip = SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), palette, true ? SettingsButtonVariant.Danger : SettingsButtonVariant.Raised, SettingsButtonSize.Md, SettingsIconKind.Trash, ApplyReset);
+        var resetChip = SettingsControls.Button(ctx.Localizer.Get(LocKeys.Settings.Advanced.Reset), palette, SettingsButtonVariant.Danger, SettingsButtonSize.Md, SettingsIconKind.Trash, ApplyReset);
         var resetHost = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -1540,8 +1445,8 @@ public static class SettingsSectionBuilder
                     return;
                 }
 
-                ctx.Settings.Replace(parsed);
                 SetStatus(ctx.Localizer.Get(LocKeys.Settings.Advanced.Import));
+                ctx.Settings.Replace(parsed);
             }
             catch (Exception ex)
             {

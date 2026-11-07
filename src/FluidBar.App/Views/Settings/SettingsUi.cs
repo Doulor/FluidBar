@@ -50,6 +50,9 @@ public sealed class SegmentedControl : Control
     /// <summary>Current value.</summary>
     public string SelectedValue => _selected;
 
+    /// <summary>Allows an active position segment to reset saved drag offsets.</summary>
+    public bool NotifyOnReselect { get; set; }
+
     /// <summary>Items currently offered (tests/diagnostics).</summary>
     internal IReadOnlyList<(string Label, string Value)> Items => _items;
 
@@ -127,7 +130,7 @@ public sealed class SegmentedControl : Control
             }
         }
 
-        if (string.Equals(_items[index].Value, _selected, StringComparison.Ordinal))
+        if (!NotifyOnReselect && string.Equals(_items[index].Value, _selected, StringComparison.Ordinal))
         {
             return;
         }

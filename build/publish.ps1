@@ -6,17 +6,17 @@
 
 .DESCRIPTION
     Steps:
-      1. Resolve the version (explicit -Version, else latest `v*` git tag, else Directory.Build.props VersionPrefix).
+      1. Read Directory.Build.props VersionPrefix; an explicit -Version must match its base version.
       2. Warning gate: `dotnet build -warnaserror` for the platform + first-party plugin projects
          (the projects this repo owns outright; third-party/Avalonia warnings are not gated here).
-      3. Tests: platform tests + built-in plugin tests (skippable with -SkipTests).
+      3. Tests: full solution regression (skippable locally with -SkipTests).
       4. `dotnet publish src/FluidBar.App` single-file win-x64 (self-contained optional).
       5. Zip artifact under build/artifacts/ + sha256 manifest JSON (feed hash for the update workflow).
       6. Emit build/reports/publish-<version>.json for CI/doc evidence.
 
 .EXAMPLE
     pwsh build/publish.ps1
-    pwsh build/publish.ps1 -Version 2.0.0 -SelfContained -SkipTests
+    pwsh build/publish.ps1 -Version 4.2.0 -SelfContained
 #>
 [CmdletBinding()]
 param(
@@ -25,7 +25,8 @@ param(
     [string]$Version = '',
     [string]$OutputRoot = '',
     [switch]$SelfContained,
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,33 +56,21 @@ function Test-SemanticVersion {
 
 function Resolve-Version {
     param([string]$Explicit)
+    $props = Join-Path $repoRoot 'Directory.Build.props'
+    $prefix = ([xml](Get-Content -LiteralPath $props -Raw)).SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText
+    if (-not (Test-SemanticVersion $prefix)) { throw 'Directory.Build.props must declare a valid VersionPrefix.' }
     if (-not [string]::IsNullOrWhiteSpace($Explicit)) {
         $candidate = $Explicit.Trim().TrimStart('v', 'V')
         if (-not (Test-SemanticVersion $candidate)) {
             throw "Invalid -Version '$Explicit'. Expected semver like 2.0.0 or 2.0.0-rc.1."
         }
 
+        if (($candidate -split '[-+]', 2)[0] -ne $prefix) {
+            throw "Release version '$candidate' does not match VersionPrefix '$prefix'. Update Directory.Build.props first."
+        }
         return $candidate
     }
-
-    # Prefer a semver git tag (v2.0.0); legacy archived tags (v1-final) are ignored.
-    $tag = (& git -C $repoRoot describe --tags --match 'v[0-9]*' --abbrev=0 2>$null)
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tag)) {
-        $candidate = $tag.Trim().TrimStart('v', 'V')
-        if (Test-SemanticVersion $candidate) {
-            return $candidate
-        }
-    }
-
-    $props = Join-Path $repoRoot 'Directory.Build.props'
-    if (Test-Path $props) {
-        $match = Select-String -Path $props -Pattern '<VersionPrefix>([^<]+)</VersionPrefix>'
-        if ($match -and (Test-SemanticVersion $match.Matches[0].Groups[1].Value)) {
-            return $match.Matches[0].Groups[1].Value
-        }
-    }
-
-    return '0.0.0-dev'
+    return $prefix
 }
 
 function Get-ShortGitSha {
@@ -126,19 +115,22 @@ foreach ($project in $gatedProjects) {
 # --- 2. Tests --------------------------------------------------------------------------------------
 if (-not $SkipTests) {
     Write-Host '== Tests ==' -ForegroundColor Cyan
-    Invoke-DotNet @('test',
-        (Join-Path $repoRoot 'tests/FluidBar.Platform.Tests/FluidBar.Platform.Tests.csproj'),
-        '-c', $Configuration, '--nologo', '-v', 'minimal')
-    Invoke-DotNet @('test',
-        (Join-Path $repoRoot 'tests/FluidBar.BuiltinPlugins.Tests/FluidBar.BuiltinPlugins.Tests.csproj'),
-        '-c', $Configuration, '--nologo', '-v', 'minimal')
+    Invoke-DotNet @('test', (Join-Path $repoRoot 'FluidBar.sln'),
+        '-c', $Configuration, '-m:1', '-p:RunAnalyzers=false', '--nologo', '-v', 'minimal',
+        '--logger', 'trx', '--results-directory', (Join-Path $reportsRoot 'tests'))
 }
 
 # --- 3. Publish ------------------------------------------------------------------------------------
+if ($VerifyOnly) { return }
 Write-Host '== Publish (single-file) ==' -ForegroundColor Cyan
 $appProject = Join-Path $repoRoot 'src/FluidBar.App/FluidBar.App.csproj'
 if (Test-Path $publishRoot) {
-    Remove-Item -Recurse -Force $publishRoot
+    $resolvedPublish = (Resolve-Path -LiteralPath $publishRoot).Path
+    $resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedPublish.StartsWith($resolvedOutput, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a publish directory outside OutputRoot: $resolvedPublish"
+    }
+    Remove-Item -LiteralPath $resolvedPublish -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $publishRoot | Out-Null
 
@@ -156,6 +148,7 @@ $publishArgs = @(
     "-p:Version=$version",
     "-p:FileVersion=$version",
     "-p:InformationalVersion=$informationalVersion",
+    '-p:IncludeSourceRevisionInInformationalVersion=false',
     '--nologo',
     '-v', 'minimal',
     '-o', $publishRoot

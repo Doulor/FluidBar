@@ -25,6 +25,7 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not (Test-Path (Join-Path $repo 'FluidBar.sln'))) {
     throw "Cannot locate FluidBar.sln from $PSScriptRoot"
 }
+$version = ([xml](Get-Content (Join-Path $repo 'Directory.Build.props') -Raw)).SelectSingleNode('/Project/PropertyGroup/VersionPrefix').InnerText
 
 $out = Join-Path $repo "build/release/$Runtime"
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
@@ -37,7 +38,9 @@ $args = @(
     '-r', $Runtime,
     "--self-contained:$($SelfContained.ToString().ToLowerInvariant())",
     '-p:PublishSingleFile=true',
-    '-p:IncludeNativeLibrariesForSelfExtract=true'
+    '-p:IncludeNativeLibrariesForSelfExtract=true',
+    "-p:Version=$version",
+    "-p:FileVersion=$version"
 )
 if ($SelfContained) {
     # Only valid for self-contained bundles.
@@ -69,7 +72,7 @@ Write-Host "SHA256: $hash"
 
 $manifest = [ordered]@{
     product = 'FluidBar'
-    version = (Get-Date).ToString('yyyy.MM.dd')
+    version = $version
     runtime = $Runtime
     selfContained = [bool]$SelfContained
     exe = $exe
@@ -83,7 +86,7 @@ $manifest | ConvertTo-Json | Set-Content (Join-Path $out 'publish.json') -Encodi
 Get-ChildItem -Path $out -Filter *.pdb -File -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
 
 if (-not $SkipZip) {
-    $zip = Join-Path $repo "build/release/FluidBar-$Runtime.zip"
+    $zip = Join-Path $repo "build/release/FluidBar-$version-$Runtime.zip"
     if (Test-Path $zip) { Remove-Item -Force $zip }
     Compress-Archive -Path (Join-Path $out '*') -DestinationPath $zip -CompressionLevel Optimal
     Write-Host "Zip: $zip"

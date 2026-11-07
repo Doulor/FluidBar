@@ -198,6 +198,24 @@ public sealed class CardActionFeedbackTests
         Assert.Equal(0, frames);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SuccessfulActionDoesNotOverlayTheIsland(bool asynchronous)
+    {
+        var actions = new FeedbackActions();
+        using var fixture = ControllerFixture.Create(actions: actions);
+        if (asynchronous)
+        {
+            actions.Publish(1, IslandActionFeedbackStatus.Processing);
+            Assert.NotNull(fixture.Controller.RenderState.ActionFeedbackText);
+        }
+        actions.Publish(1, IslandActionFeedbackStatus.Succeeded);
+        Assert.Null(fixture.Controller.RenderState.ActionFeedbackText);
+        Assert.False(fixture.Controller.RenderState.ActionFeedbackIsError);
+        Assert.False(fixture.Controller.HasUiDeadline);
+    }
+
     [Fact]
     public void OlderCompletion_DoesNotReplaceTheLatestAction()
     {
@@ -205,11 +223,11 @@ public sealed class CardActionFeedbackTests
         using var fixture = ControllerFixture.Create(actions: actions);
         actions.Publish(2, IslandActionFeedbackStatus.Succeeded);
         actions.Publish(1, IslandActionFeedbackStatus.Failed);
-        Assert.Equal("Feedback.Success", fixture.Controller.RenderState.ActionFeedbackText);
+        Assert.Null(fixture.Controller.RenderState.ActionFeedbackText);
         fixture.Controller.Dispose();
         Assert.Equal(0, actions.Subscribers);
         actions.Publish(3, IslandActionFeedbackStatus.Failed);
-        Assert.Equal("Feedback.Success", fixture.Controller.RenderState.ActionFeedbackText);
+        Assert.Null(fixture.Controller.RenderState.ActionFeedbackText);
     }
 
     [Fact]
@@ -230,10 +248,10 @@ public sealed class CardActionFeedbackTests
         }
         using (fixture)
         {
-            await Task.Run(() => actions.Publish(1, IslandActionFeedbackStatus.Succeeded));
+            await Task.Run(() => actions.Publish(1, IslandActionFeedbackStatus.Failed));
             Assert.Null(fixture.Controller.RenderState.ActionFeedbackText);
             context.Drain();
-            Assert.Equal("Feedback.Success", fixture.Controller.RenderState.ActionFeedbackText);
+            Assert.Equal("Feedback.Failed", fixture.Controller.RenderState.ActionFeedbackText);
         }
     }
 

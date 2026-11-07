@@ -125,7 +125,7 @@ internal sealed class PluginLease : IPluginLease
     private readonly IPluginHostLogger _logger;
     private readonly TimeProvider _timeProvider;
     private readonly CancellationTokenSource _lifetime;
-    private readonly List<Task> _tasks = [];
+    private readonly List<ScheduledTask> _tasks = [];
     private readonly object _gate = new();
     private long _disposed;
 
@@ -156,7 +156,7 @@ internal sealed class PluginLease : IPluginLease
             Task[] tasks;
             lock (_gate)
             {
-                tasks = [.. _tasks];
+                tasks = _tasks.Select(static schedule => schedule.Completion).ToArray();
             }
 
             return tasks.Length == 0 ? Task.CompletedTask : Task.WhenAll(tasks);
@@ -213,15 +213,18 @@ internal sealed class PluginLease : IPluginLease
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(IsDisposed, this);
-            _tasks.RemoveAll(static task => task.IsCompleted);
-            if (_tasks.Count >= MaxSchedules)
+            _tasks.RemoveAll(static schedule => schedule.Completion.IsCompleted);
+            // Cancellation releases the logical subscription immediately, even if its callback or
+            // cancellation continuation has not returned yet. Retain the task for safe unload.
+            if (_tasks.Count(static schedule => !schedule.Cancellation.IsCancellationRequested) >= MaxSchedules)
             {
                 throw new InvalidOperationException($"Plugin '{_pluginId}' exceeded the {MaxSchedules}-schedule lease limit.");
             }
 
             var scheduleCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            var token = scheduleCancellation.Token;
             var task = RunAsync(body, scheduleCancellation);
-            _tasks.Add(task);
+            _tasks.Add(new ScheduledTask(task, token));
             return new ScheduleHandle(scheduleCancellation);
         }
     }
@@ -257,6 +260,8 @@ internal sealed class PluginLease : IPluginLease
         _lifetime.Dispose();
     }
 
+    private sealed record ScheduledTask(Task Completion, CancellationToken Cancellation);
+
     private sealed class ScheduleHandle(CancellationTokenSource cancellation) : IDisposable
     {
         private int _disposed;
@@ -268,8 +273,9 @@ internal sealed class PluginLease : IPluginLease
                 return;
             }
 
-            cancellation.Cancel();
-            cancellation.Dispose();
+            // RunAsync owns disposal of the source; a completed task may have disposed it already.
+            try { cancellation.Cancel(); }
+            catch (ObjectDisposedException) { }
         }
     }
 }

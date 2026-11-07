@@ -1,5 +1,10 @@
 # FluidBar v2 — Release, signing, update-feed and performance baseline (M6)
 
+2026-11-07：**4.2.0 发行流程**统一从 `Directory.Build.props` 读取基础版本，显式版本或标签必须匹配该基础版本。
+默认不再读取最近的旧标签。`build/publish.ps1 -Version 4.2.0 -SelfContained` 和 GitHub `v4.2.0` 标签构建均执行完整解决方案回归；普通 CI 通过同一脚本的 `-VerifyOnly` 模式执行相同检查。既有平台 / 内置插件编译警告门禁保留，全仓库分析器建议仍单独跟踪，不宣称全仓库零警告。
+
+版本规则：不兼容变更提升主版本，兼容新增功能提升次版本，修复提升修订号；预发布使用 `-preview.N` 或 `-rc.N`。旧版标签与已发布资产保持不变，不能以预览轮次代替主版本。
+
 2026-11-02：**4.1.0 发行流程**，用户已授权提交与发布。正式发行使用 `main` 上的 `v4.1.0` 标签、
 `.github/workflows/release.yml` 和 `build/publish.ps1 -Version 4.1.0 -SelfContained`，提供自包含单文件
 EXE、ZIP 和 SHA-256 清单；版本来自 Directory.Build.props 的 4.1.0 构建戳。文件暂存 1.0.3 由现有
@@ -15,7 +20,7 @@ EXE、ZIP 和 SHA-256 清单；版本来自 Directory.Build.props 的 4.1.0 构�
 |---|---|
 | App project | `src/FluidBar.App/FluidBar.App.csproj` (assembly name `FluidBar`, Avalonia shell) |
 | Runtime | `win-x64`, single-file bundle (`PublishSingleFile=true`), framework-dependent by default (`--self-contained false`) |
-| Version source | explicit `-Version`, else latest `v*` git tag, else `VersionPrefix` in `Directory.Build.props` (currently `4.1.0`) |
+| Version source | `VersionPrefix` in `Directory.Build.props` (currently `4.2.0`); explicit `-Version` / tag must use the same base version |
 | Version stamping | `-p:Version=… -p:FileVersion=… -p:InformationalVersion=<version>+<gitsha>` |
 | Release artifact | `build/artifacts/FluidBar-<version>-win-x64.zip` |
 | Publish manifest | `build/reports/publish-<version>.json` (version, git SHA, exe/zip SHA-256, size, `signature: unsigned`) |

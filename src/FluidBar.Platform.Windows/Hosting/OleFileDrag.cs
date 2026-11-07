@@ -20,15 +20,19 @@ public static class OleFileDrag
     public static bool DragFiles(IReadOnlyList<string> paths, Func<bool>? released = null)
         => DragFiles(paths, released, null);
 
-    /// <summary>Uses Shell-managed drag imagery so feedback remains visible outside the source window.</summary>
+    /// <summary>Tracks a cached preview independently of the target application's native drag callbacks.</summary>
     public static bool DragFiles(IReadOnlyList<string> paths, Func<bool>? released, FileDragImage? image)
     {
         Marshal.ThrowExceptionForHR(NativeMethods.Ole32.OleInitialize(IntPtr.Zero));
         try
         {
-            using var data = ShellFileDragData.Create(paths, image);
-            using var feedback = image is not null ? new ShellDragImageFeedback(data.Data) : null;
-            var source = new FileDropSource(released, feedback is null ? null : feedback.Update);
+            using var preview = image is null ? null : FileDragPreview.TryCreate(image);
+            // Only one image owner. Attach a Shell image lazily only if the independent preview fails.
+            using var data = ShellFileDragData.Create(paths);
+            using var feedback = image is null ? null : new FileDragFeedback(data, image,
+                preview?.Initialization ?? Task.FromResult(false));
+            var source = new FileDropSource(released, () => { preview?.Dispose(); feedback?.Dispose(); },
+                feedback is null ? null : feedback.Update);
             var dataPointer = Marshal.GetComInterfaceForObject(data.Data, typeof(IDataObject));
             try
             {
@@ -58,15 +62,17 @@ public static class OleFileDrag
 
     [ComVisible(true)]
     [ClassInterface(ClassInterfaceType.None)]
-    internal sealed class FileDropSource(Func<bool>? released, Action<uint>? feedback = null) : IDropSource
+    internal sealed class FileDropSource(Func<bool>? released, Action? finished = null, Action<uint>? feedback = null) : IDropSource
     {
         public int QueryContinueDrag(bool escape, uint keys)
-            => escape ? Cancel : (released?.Invoke() ?? (keys & 1) == 0) ? Drop : 0;
-        public int GiveFeedback(uint effect)
         {
-            feedback?.Invoke(effect);
-            return DefaultCursors;
+            var result = escape ? Cancel : (released?.Invoke() ?? (keys & 1) == 0) ? Drop : 0;
+            // Drop may synchronously copy files for a long time. Stop visual tracking on release,
+            // before the target starts that work, rather than leaving a stale card under the cursor.
+            if (result != 0) finished?.Invoke();
+            return result;
         }
+        public int GiveFeedback(uint effect) { feedback?.Invoke(effect); return DefaultCursors; }
     }
 
     [ComImport, ComVisible(true)]

@@ -2,11 +2,11 @@
 
 > Windows 上的灵动岛：把媒体、通知、剪贴板和常用控制收进一颗小胶囊，需要时再展开。
 
-[官方网站](https://fluidbar.doulor.cn/) · [下载 4.1.0](https://github.com/Doulor/FluidBar/releases/tag/v4.1.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
+[官方网站](https://fluidbar.doulor.cn/) · [下载 4.2.0](https://github.com/Doulor/FluidBar/releases/tag/v4.2.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
 
-**当前正式版：4.1.0（2026-11-02）**。本版完善文件暂存的拖入、拖出复制与持续预览，优化内容卡片，并修复内置插件、通知与日志稳定性。详见 [4.1.0 发布说明](<docs/rewrite/RELEASE-4.1.0.md>)。
+**当前版本：4.2.0（2026-11-07）**。新增拖动定位与弹性回位，完善设置保存、歌词发光配置及 Agent 默认启用，改善文件拖出预览。详见 [4.2.0 发布说明](<docs/rewrite/RELEASE-4.2.0.md>)。
 
-README 更新于 **2026-11-06**，功能与开发说明按当前仓库核对。
+README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 
 ## 实际界面
 
@@ -47,6 +47,8 @@ README 更新于 **2026-11-06**，功能与开发说明按当前仓库核对。
 | **外观与交互** | 三种材质、配色、动效、显示器与位置设置；支持中文和英文，页面导航可选侧栏或底部预览。 |
 | **插件扩展** | 内置媒体、通知、剪贴板、Agent、设备插件；应用内管理社区插件，支持签名包安装、更新与回滚。 |
 
+**4.2.0 新增：**「设置 → 插件 → 媒体详情」提供**已读歌词发光强度**，范围 0–100%、步长 5%、默认 70%。紧凑胶囊与展开媒体页共同生效，调整后即时保存并刷新；0% 仅关闭光晕，保留已读文字颜色和逐字高亮，100% 对应原有效果。上方截图仍来自 4.1.0。
+
 **可选卡片：**
 
 - **倒计时**：支持暂停、继续和完成提醒。
@@ -66,10 +68,10 @@ README 更新于 **2026-11-06**，功能与开发说明按当前仓库核对。
 
 ### 启动与更新
 
-1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v4.1.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-4.1.0-win-x64.zip`。
+1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v4.2.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-4.2.0-win-x64.zip`。
 2. 将程序放在打算长期保留的目录中运行；已有旧版时，先从系统托盘退出旧版。
 3. 点击小岛展开；通过设置按钮、托盘菜单或 `Ctrl + Alt + S` 打开设置。开机启动、语言和更新偏好均可在设置中调整。
-4. 可使用应用内更新，或退出后手动替换程序。下载校验值与构建信息见 [发布说明](<docs/rewrite/RELEASE-4.1.0.md>)。
+4. 可使用应用内更新，或退出后手动替换程序。下载校验值与构建信息见 [发布说明](<docs/rewrite/RELEASE-4.2.0.md>)。
 
 > 当前主程序**没有 Windows Authenticode 代码签名**，Windows 可能显示未知发布者提示。请核实下载来源与发布资产的 SHA-256，不要为安装而关闭系统安全防护。应用内更新的哈希校验不等于发布者签名认证。
 
@@ -80,6 +82,10 @@ README 更新于 **2026-11-06**，功能与开发说明按当前仓库核对。
 | `Ctrl + Alt + D` | 展开 / 收起控制中心 |
 | `Ctrl + Alt + H` | 隐藏 / 显示灵动岛 |
 | `Ctrl + Alt + S` | 打开设置 |
+| 拖动收起的灵动岛 | 临时移开，松手停留约 1.2 秒后弹回已保存的位置 |
+| 按住 `Ctrl` 拖动 | 保存新位置，重启后保留 |
+| `Ctrl` + 单击灵动岛 | 恢复默认位置 |
+| 右键灵动岛 | 临时让位并允许点击下方内容；再次右键或 3 秒后恢复 |
 | 按住 `左 Alt` | 临时隐藏灵动岛 |
 
 ## 隐私与插件信任
@@ -127,10 +133,12 @@ dotnet run --project tests/FluidBar.Soak -c Release
 使用与正式发布流程一致的 [发布脚本](<build/publish.ps1>)：
 
 ```powershell
-pwsh -File ./build/publish.ps1 -Version 4.1.0 -SelfContained
+pwsh -File ./build/publish.ps1 -Version 4.2.0 -SelfContained
 ```
 
-脚本生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。脚本中的测试门禁只覆盖部分项目，不能替代上面的完整解决方案测试。
+脚本执行完整解决方案回归并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `4.2.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
+
+版本采用 `主版本.次版本.修订号`：不兼容变更提升主版本，兼容的新功能提升次版本，问题修复提升修订号。测试轮次使用 `-preview.N` 或 `-rc.N`，正式版本发布后不覆盖原标签和资产。
 
 ### 仓库结构
 
@@ -158,7 +166,7 @@ docs/                         发布、设计、插件、隐私与截图文档
 
 ## 文档与贡献
 
-- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-4.1.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
+- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-4.2.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
 - **开发与维护**：[文档索引](<docs/rewrite/README.md>) · [当前状态](<docs/rewrite/STATUS.md>) · [项目方向与约束](<PROJECT-NOTES.md>) · [架构决策](<docs/rewrite/DECISIONS.md>)
 - **插件作者**：[快速开始](<docs/plugin/quickstart.md>) · [审核清单](<docs/plugin/review-checklist.md>) · [插件文档](<docs/plugin/>)
 - **视觉参考**：[浏览器交互原型](<docs/rewrite/prototype2/index.html>)使用示例数据，供交互参考，不等同于原生应用。旧版实现可在 `v1-final` 标签与 Git 历史中查阅。

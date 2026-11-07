@@ -1,12 +1,16 @@
+using System.Text.Json.Serialization;
+
 namespace FluidBar.Core.Layout;
 
 /// <summary>Presentation style of the expanded page tabs.</summary>
 public enum TabBarStyle
 {
     /// <summary>In-card left/right rail (default).</summary>
+    [JsonStringEnumMemberName("side-rail")]
     SideRail = 0,
 
     /// <summary>Detached preview islands below the card.</summary>
+    [JsonStringEnumMemberName("bottom-preview")]
     BottomPreview = 1,
 }
 
@@ -14,9 +18,11 @@ public enum TabBarStyle
 public enum PageRailSide
 {
     /// <summary>Rail on the left edge (default).</summary>
+    [JsonStringEnumMemberName("left")]
     Left = 0,
 
     /// <summary>Rail on the right edge.</summary>
+    [JsonStringEnumMemberName("right")]
     Right = 1,
 }
 

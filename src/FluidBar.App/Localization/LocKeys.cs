@@ -692,6 +692,20 @@ public static partial class LocKeys
         /// <summary>Keys in the 'General' area.</summary>
         public static class General
         {
+            /// <summary>Mouse and position gestures.</summary>
+            public static class Gestures
+            {
+                public const string Title = "Settings.General.Gestures.Title";
+                public const string TemporaryMove = "Settings.General.Gestures.TemporaryMove";
+                public const string SavePosition = "Settings.General.Gestures.SavePosition";
+                public const string ResetPosition = "Settings.General.Gestures.ResetPosition";
+                public const string TemporaryHide = "Settings.General.Gestures.TemporaryHide";
+                public const string DragReturn = "Settings.General.Gestures.DragReturn";
+                public const string Drag = "Settings.General.Gestures.Drag";
+                public const string Click = "Settings.General.Gestures.Click";
+                public const string RightClick = "Settings.General.Gestures.RightClick";
+                public const string Hint = "Settings.General.Gestures.Hint";
+            }
             /// <summary><c>Settings.General.Title</c></summary>
             public const string Title = "Settings.General.Title";
             /// <summary><c>Settings.General.Subtitle</c></summary>
@@ -901,6 +915,10 @@ public static partial class LocKeys
         /// <summary>Keys in the 'Island' area.</summary>
         public static class Island
         {
+            /// <summary><c>Settings.Island.PageOrder</c></summary>
+            public const string PageOrder = "Settings.Island.PageOrder";
+            /// <summary><c>Settings.Island.PageOrderHint</c></summary>
+            public const string PageOrderHint = "Settings.Island.PageOrderHint";
             /// <summary><c>Settings.Island.Description</c></summary>
             public const string Description = "Settings.Island.Description";
             /// <summary><c>Settings.Island.MotionStrength</c></summary>
@@ -1660,6 +1678,16 @@ public static partial class LocKeys
                 public const string description = "setting.media.compactLyrics.description";
             }
 
+
+            /// <summary>Keys in the 'lyricGlow' area.</summary>
+            public static class lyricGlow
+            {
+                /// <summary><c>setting.media.lyricGlow.title</c></summary>
+                public const string title = "setting.media.lyricGlow.title";
+
+                /// <summary><c>setting.media.lyricGlow.description</c></summary>
+                public const string description = "setting.media.lyricGlow.description";
+            }
 
     /// <summary>Keys in the 'lyricOffset' area.</summary>
     public static class lyricOffset

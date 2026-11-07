@@ -541,7 +541,7 @@ internal sealed partial class PageRenderer : IDisposable
                 var moved = new SKRect(lineBox.Left, lineBox.Top - (LyricTransition.SlideDip * (float)SmoothStep(outT)),
                     lineBox.Right, lineBox.Bottom - (LyricTransition.SlideDip * (float)SmoothStep(outT)));
                 KaraokeText.Draw(_text, canvas, _lyricOutgoing, -1, IslandType.Lyric, moved, baseColor, sungColor,
-                    TextAlign.Left, _opacity * (float)(1 - outT));
+                    TextAlign.Left, _opacity * (float)(1 - outT), media.LyricGlowStrength);
             }
 
             var inT = Math.Clamp((elapsed - timing.StaggerMs) / timing.InMs, 0, 1);
@@ -550,12 +550,12 @@ internal sealed partial class PageRenderer : IDisposable
                 lineBox.Top + (LyricTransition.SlideDip * (float)(1 - SmoothStep(inT))), lineBox.Right,
                 lineBox.Bottom + (LyricTransition.SlideDip * (float)(1 - SmoothStep(inT))));
             KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric, incoming,
-                baseColor, sungColor, TextAlign.Left, _opacity * alpha);
+                baseColor, sungColor, TextAlign.Left, _opacity * alpha, media.LyricGlowStrength);
             return;
         }
 
         KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric, lineBox,
-            baseColor, sungColor, TextAlign.Left, _opacity);
+            baseColor, sungColor, TextAlign.Left, _opacity, media.LyricGlowStrength);
     }
 
     private void DrawMedia(SKCanvas canvas, MediaPageModel media, SKRect page)
@@ -606,7 +606,7 @@ internal sealed partial class PageRenderer : IDisposable
                 : accent;
             KaraokeText.Draw(_text, canvas, media.LyricLine, media.LyricHighlight, IslandType.Lyric,
                 new SKRect(lyricCard.Left + 10, lyricTop, lyricCard.Right - 10, lyricBottom),
-                baseColor, sungColor, TextAlign.Left, _opacity);
+                baseColor, sungColor, TextAlign.Left, _opacity, media.LyricGlowStrength);
             var nextTop = lyricBottom + 3;
             var nextBottom = nextTop + 14 + m.LineGrow(IslandType.LyricNext);
             // The tag is measured instead of parked in a fixed 30 DIP column: at a 1.6 font scale the old

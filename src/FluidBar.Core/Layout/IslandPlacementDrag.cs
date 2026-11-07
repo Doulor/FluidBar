@@ -53,6 +53,52 @@ public static class IslandPlacementDrag
     /// <param name="mode">Presentation mode.</param>
     public static bool AllowsVerticalDrag(IslandMode mode) => mode == IslandMode.Float;
 
+    /// <summary>Places the visible island independently of its transparent host canvas.</summary>
+    public static VisualRect PlaceShell(IslandDragPlacement placement, VisualSize size, VisualRect work, IslandMode mode)
+    {
+        var x = placement.Anchor switch
+        {
+            IslandAnchor.TopLeft or IslandAnchor.BottomLeft => work.X + placement.OffsetX,
+            IslandAnchor.TopCenter or IslandAnchor.BottomCenter => work.X + (work.Width - size.Width) / 2 + placement.OffsetX,
+            _ => work.Right - size.Width - placement.OffsetX,
+        };
+        var offsetY = mode == IslandMode.Flush ? 0 : placement.OffsetY ?? LayoutTokens.DefaultFloatOffsetY;
+        var y = IsBottom(placement.Anchor) ? work.Bottom - size.Height - offsetY : work.Y + offsetY;
+        return new VisualRect(x, y, size.Width, size.Height).ClampInside(work);
+    }
+
+    /// <summary>Converts a dropped visible shell to anchor offsets without clamping its invisible host canvas.</summary>
+    public static IslandDragPlacement SolveShell(VisualRect shell, MonitorInfo monitor, IslandMode mode, IslandAnchor currentAnchor)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        if (!AllowsDrag(mode) || shell.IsEmpty)
+            return new IslandDragPlacement(currentAnchor, 0, null, false);
+        var work = monitor.WorkAreaDip;
+        shell = shell.ClampInside(work);
+        var size = new VisualSize(shell.Width, shell.Height);
+        var bestAnchor = currentAnchor;
+        var bestDistance = double.PositiveInfinity;
+        var bestShell = shell;
+        foreach (var anchor in Candidates(mode, currentAnchor))
+        {
+            var natural = PlaceShell(new IslandDragPlacement(anchor, 0, null, false), size, work, mode);
+            var dx = shell.X - natural.X;
+            var dy = AllowsVerticalDrag(mode) ? shell.Y - natural.Y : 0;
+            var distance = dx * dx + dy * dy;
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestAnchor = anchor;
+                bestShell = natural;
+            }
+        }
+        var offsetX = IsRight(bestAnchor) ? bestShell.X - shell.X : shell.X - bestShell.X;
+        double? offsetY = AllowsVerticalDrag(mode)
+            ? LayoutTokens.DefaultFloatOffsetY + (IsBottom(bestAnchor) ? bestShell.Y - shell.Y : shell.Y - bestShell.Y)
+            : null;
+        return new IslandDragPlacement(bestAnchor, offsetX, offsetY, false);
+    }
+
     /// <summary>
     /// Resolves a dropped host window into an anchor + offsets for the monitor it was dropped on.
     /// </summary>

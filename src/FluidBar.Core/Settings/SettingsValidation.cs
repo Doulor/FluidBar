@@ -280,6 +280,11 @@ public static partial class SettingsValidator
         var island = settings.Island;
         var autoCollapse = ClampInt(island.AutoCollapseMs, MinAutoCollapseMs, MaxAutoCollapseMs, "island.autoCollapseMs", issues);
         var autoHide = ClampInt(island.AutoHideMs, 0, MaxAutoHideMs, "island.autoHideMs", issues);
+        var weatherCity = (island.WeatherCity ?? string.Empty).Trim();
+        if (weatherCity.Length > 64)
+        {
+            weatherCity = weatherCity[..64];
+        }
 
         var dock = settings.Dock;
         var dockHeight = ClampInt(dock.Height, MinDockHeight, MaxDockHeight, "dock.height", issues);
@@ -308,6 +313,8 @@ public static partial class SettingsValidator
             SchemaVersion = normalizedVersion,
             Appearance = appearance with
             {
+                PanelRadius = Clamp(appearance.PanelRadius, 16, 36, "appearance.panelRadius", issues),
+                LyricOffsetMs = Clamp(appearance.LyricOffsetMs, -800, 800, "appearance.lyricOffsetMs", issues),
                 FillOpacity = fillOpacity,
                 FontScale = fontScale,
                 MotionStrength = motionStrength,
@@ -320,6 +327,7 @@ public static partial class SettingsValidator
             },
             Island = island with
             {
+                WeatherCity = weatherCity,
                 AutoCollapseMs = autoCollapse,
                 AutoHideMs = autoHide,
                 SpecificMonitorId = string.IsNullOrWhiteSpace(island.SpecificMonitorId) ? null : island.SpecificMonitorId.Trim(),
@@ -327,6 +335,7 @@ public static partial class SettingsValidator
             Dock = dock with { Height = dockHeight, Tiles = tiles },
             Plugins = plugins with
             {
+                PageOrder = NormalizeIds(plugins.PageOrder, "plugins.pageOrder", issues),
                 Channel = channel,
                 CheckIntervalHours = checkInterval,
                 Enabled = NormalizeIds(plugins.Enabled, "plugins.enabled", issues),
