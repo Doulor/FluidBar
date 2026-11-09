@@ -336,7 +336,11 @@ public sealed class UpdateTests
         var second = await client.CheckAsync(new UpdateCheckRequest(new Version(1, 9, 0)));
 
         Assert.Equal(UpdateCheckStatus.UpdateAvailable, first.Status);
-        Assert.Equal(UpdateCheckStatus.NotModified, second.Status);
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, second.Status);
+        Assert.Equal(UpdateState.Available, client.Current.State);
+        Assert.Equal(first.Latest!.Tag, second.Latest!.Tag);
+        Assert.Equal(first.Latest.InstallerSha256Hex, second.Latest.InstallerSha256Hex);
+        Assert.True(client.Current.AvailableRelease!.CanOfferInstaller);
         Assert.Equal(2, handler.Calls);
         Assert.Contains(handler.Requests, request => request.Headers.IfNoneMatch.Count > 0);
     }
@@ -349,6 +353,45 @@ public sealed class UpdateTests
         var result = await client.CheckAsync(new UpdateCheckRequest(new Version(2, 0, 0)));
         Assert.Equal(UpdateCheckStatus.UpToDate, result.Status);
         Assert.Equal(UpdateState.UpToDate, client.Current.State);
+    }
+
+    [Fact]
+    public async Task Cached_feed_reselects_channel_and_compares_installed_version()
+    {
+        var handler = new StubHttpMessageHandler(request => request.Headers.IfNoneMatch.Count > 0
+            ? StubHttpMessageHandler.Json("", status: HttpStatusCode.NotModified)
+            : StubHttpMessageHandler.Json(Manifest, "\"feed\""));
+        await using var client = CreateClient(handler);
+        var beta = await client.CheckAsync(new(new Version(1, 9, 0), UpdateChannel.Prerelease));
+        Assert.Equal("2.1.0-beta.1", beta.Latest!.Version.ToString());
+        var stable = await client.CheckAsync(new(new Version(1, 9, 0), UpdateChannel.Stable));
+        Assert.Equal("2.0.0", stable.Latest!.Version.ToString());
+        Assert.Equal(UpdateState.Available, client.Current.State);
+        var installed = await client.CheckAsync(new(new Version(2, 0, 0), UpdateChannel.Stable));
+        Assert.Equal(UpdateCheckStatus.NotModified, installed.Status);
+        Assert.Equal(UpdateState.UpToDate, client.Current.State);
+    }
+
+    [Fact]
+    public async Task Etag_without_a_cached_document_requests_full_feed()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            Assert.Empty(request.Headers.IfNoneMatch);
+            return StubHttpMessageHandler.Json(Manifest, "\"fresh\"");
+        });
+        await using var client = CreateClient(handler);
+        var result = await client.CheckAsync(new(new Version(1, 9, 0), ETag: "\"stale\""));
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, result.Status);
+    }
+
+    [Fact]
+    public async Task Unsolicited_304_is_a_check_failure_instead_of_up_to_date()
+    {
+        var handler = new StubHttpMessageHandler(_ => StubHttpMessageHandler.Json("", status: HttpStatusCode.NotModified));
+        await using var client = CreateClient(handler);
+        Assert.Equal(UpdateCheckStatus.Failed, (await client.CheckAsync(new(new Version(1, 9, 0)))).Status);
+        Assert.Equal(UpdateState.Failed, client.Current.State);
     }
 
     [Fact]

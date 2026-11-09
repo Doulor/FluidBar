@@ -41,6 +41,11 @@ public sealed record NotificationsSnapshot(
     public static readonly NotificationsSnapshot Empty =
         new(NotificationAccessState.Unavailable, ImmutableArray<NotificationEntry>.Empty);
 
+    /// <summary>Local read/undo metadata revision, so equal toast arrays can still publish a UI change.</summary>
+    public long LocalRevision { get; init; }
+    /// <summary>Read/history updates refresh the page without replaying a restored toast.</summary>
+    public bool IsLocalUpdate { get; init; }
+
     public NotificationEntry? Latest => Recent.IsEmpty ? null : Recent[0];
 }
 

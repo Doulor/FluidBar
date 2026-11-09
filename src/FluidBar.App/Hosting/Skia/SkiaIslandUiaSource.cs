@@ -682,78 +682,62 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
     private List<UiaElementSnapshot> BuildNotificationControls(in IslandRenderState state, SKRect page)
     {
         var model = state.Pages.Notifications;
+        var controls = new List<UiaElementSnapshot>();
+        var pageIndex = 0;
+        for (var i = 0; i < state.Pages.PageSlots.Count; i++)
+            if (state.Pages.PageSlots[i].Kind == PageSlotKind.Notifications) { pageIndex = i; break; }
+        var prefix = $"island.page.{pageIndex}";
+        UiaElementSnapshot Button(string id, string name, SKRect bounds) => Node(id, UiaElementRole.Button, name,
+            ToRect(bounds), UiaPatternKind.Invoke, new UiaElementState { IsFocusable = true });
+        if (model.Detail is { } detail)
+        {
+            controls.Add(Button(prefix + ".notificationback", model.BackLabel, PageMetricsLayout.NotificationToolbarButton(page, 0)));
+            controls.Add(Node(prefix + ".body", UiaElementRole.Text,
+                JoinNotEmpty(" — ", detail.AppName, detail.Title, detail.FullBody ?? detail.Body), ToRect(PageMetricsLayout.NotificationDetailBody(page))));
+            var detailId = prefix + $".notificationdetail.{detail.Id}";
+            controls.Add(Button(detailId + ".copybody", model.CopyBodyLabel, PageMetricsLayout.NotificationDetailAction(page, 0)));
+            if (!string.IsNullOrWhiteSpace(detail.VerificationCode))
+                controls.Add(Button(detailId + ".copycode", model.CopyCodeLabel ?? L("Notifications.CopyCode", "Copy code"), PageMetricsLayout.NotificationDetailAction(page, 1)));
+            controls.Add(Button(detailId + ".open", model.OpenSourceLabel, PageMetricsLayout.NotificationDetailAction(page, 2)));
+            return controls;
+        }
+        for (var i = 0; i < 3; i++)
+            controls.Add(Button(prefix + $".notificationfilter.{i}", model.FilterLabels.ElementAtOrDefault(i) ?? string.Empty,
+                PageMetricsLayout.NotificationToolbarButton(page, i)));
+        controls.Add(Button(prefix + ".notificationread", model.MarkReadLabel, PageMetricsLayout.NotificationToolbarButton(page, 3)));
+        if (!string.IsNullOrWhiteSpace(model.UndoLabel))
+            controls.Add(Button(prefix + ".notificationundo", model.UndoLabel, PageMetricsLayout.NotificationToolbarButton(page, 4)));
+        if (!string.IsNullOrWhiteSpace(model.ClearLabel))
+            controls.Add(Button(prefix + ".clear", model.ClearLabel,
+                PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle))));
         var rows = new List<UiaElementSnapshot>();
         var metrics = FontScaleMetrics.From(state.FontScale);
         var body = PageMetricsLayout.NotificationBody(page);
-        var scroll = PageMetricsLayout.ClampListScroll(
-            model.Items.Count,
-            PageMetricsLayout.NotificationRowHeight(metrics),
-            PageMetricsLayout.NotificationGap,
-            (float)model.ScrollOffset);
-
+        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, PageMetricsLayout.NotificationMaxScroll(model.Items.Count, metrics));
         for (var i = 0; i < Math.Min(model.Items.Count, MaxListRows); i++)
         {
             var item = model.Items[i];
             var row = PageMetricsLayout.NotificationRow(page, i, scroll, metrics);
-            var name = JoinNotEmpty(" — ", item.AppName, item.Title, item.Body);
+            if (!Intersects(row, body)) continue;
+            // Stable notification ids keep an existing accessibility element bound to its original toast.
+            var id = prefix + $".notification.{item.Id}";
+            var children = new List<UiaElementSnapshot>();
             var dismiss = PageMetricsLayout.NotificationDismiss(row);
-            var children = new List<UiaElementSnapshot>(2);
-            if (item.VerificationCode is { Length: > 0 })
-            {
-                var copy = PageMetricsLayout.NotificationCopyCode(row);
-                children.Add(Node(
-                    $"island.page.2.row.{i}.copy",
-                    UiaElementRole.Button,
-                    model.CopyCodeLabel ?? L("Notifications.CopyCode", "Copy code"),
-                    ToRect(copy),
-                    UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true }));
-            }
-
-            children.Add(Node(
-                $"island.page.2.row.{i}.dismiss",
-                UiaElementRole.Button,
-                model.DismissLabel ?? L("Common.Close", "Dismiss"),
-                ToRect(dismiss),
-                UiaPatternKind.Invoke,
-                new UiaElementState { IsFocusable = true }));
-
-            rows.Add(Node(
-                $"island.page.2.row.{i}",
-                UiaElementRole.ListItem,
-                name.Length > 0 ? name : F("Island.Accessibility.NotificationRow", "Notification {0}", i + 1),
-                ToRect(row),
-                UiaPatternKind.Invoke,
-                new UiaElementState
-                {
-                    IsFocusable = true,
-                    IsOffscreen = !Intersects(row, body),
-                    ItemStatus = JoinNotEmpty(", ", item.TimeText, item.CodeChipLabel ?? item.VerificationCode),
-                },
-                children: children));
+            if (Intersects(dismiss, body)) children.Add(Button(id + ".dismiss", model.DismissLabel ?? L("Common.Close", "Close"), ClipClipboardBounds(dismiss, body)));
+            var copy = PageMetricsLayout.NotificationCopyCode(row);
+            if (!string.IsNullOrWhiteSpace(item.VerificationCode) && Intersects(copy, body))
+                children.Add(Button(id + ".copy", model.CopyCodeLabel ?? L("Notifications.CopyCode", "Copy code"), ClipClipboardBounds(copy, body)));
+            rows.Add(Node(id, UiaElementRole.ListItem, JoinNotEmpty(" — ", item.AppName, item.Title, item.Body),
+                ToRect(ClipClipboardBounds(row, body)), UiaPatternKind.Invoke,
+                new UiaElementState { IsFocusable = true, ItemStatus = JoinNotEmpty(", ", item.TimeText, item.CodeChipLabel ?? item.VerificationCode) }, children: children));
         }
-
-        var controls = new List<UiaElementSnapshot>(2);
-        if (!string.IsNullOrWhiteSpace(model.ClearLabel))
-        {
-            controls.Add(Node(
-                "island.page.2.clear",
-                UiaElementRole.Button,
-                model.ClearLabel,
-                ToRect(PageLayout.NotificationClearRect(IslandMetrics.ContentRect(IslandMetrics.ShellRect(state), state.RailSide, state.TabBarStyle))),
-                UiaPatternKind.Invoke,
-                new UiaElementState { IsFocusable = true }));
-        }
-
-        controls.Add(Node(
-            "island.page.2.list",
-            UiaElementRole.List,
-            state.Pages.Title(2),
-            ToRect(body),
-            state: new UiaElementState { IsOffscreen = false },
-            children: rows));
+        controls.Add(Node(prefix + ".list", UiaElementRole.List, state.Pages.Title(pageIndex), ToRect(body), children: rows));
         return controls;
     }
+
+    private static SKRect ClipClipboardBounds(SKRect rect, SKRect body)
+        => !Intersects(rect, body) ? SKRect.Empty
+            : new(Math.Max(rect.Left, body.Left), Math.Max(rect.Top, body.Top), Math.Min(rect.Right, body.Right), Math.Min(rect.Bottom, body.Bottom));
 
     private List<UiaElementSnapshot> BuildClipboardControls(in IslandRenderState state, SKRect page)
     {
@@ -761,55 +745,54 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         var metrics = FontScaleMetrics.From(state.FontScale);
         var rows = new List<UiaElementSnapshot>();
         var body = PageLayout.ListBody(page);
-        var scroll = PageMetricsLayout.ClampListScroll(model.Items.Count, PageMetricsLayout.ClipboardRowHeight(metrics),
-            PageLayout.ClipboardRowGap, (float)model.ScrollOffset);
+
 
         for (var i = 0; i < Math.Min(model.Items.Count, MaxListRows); i++)
         {
             var item = model.Items[i];
-            var row = PageMetricsLayout.ClipboardRow(page, i, scroll, metrics);
+            var row = ContentCardLayout.ClipboardRow(page, model, i, metrics);
             var children = new List<UiaElementSnapshot>(4)
             {
                 Node(
                     $"island.page.3.row.{i}.preview",
                     UiaElementRole.Button,
                     model.PreviewLabel ?? L("Clipboard.Preview.Open", "View"),
-                    ToRect(PageMetricsLayout.ClipboardPreview(page, i, scroll, metrics)),
+                    ToRect(ClipClipboardBounds(ContentCardLayout.ClipboardPreview(row, metrics), body)),
                     UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true }),
+                    new UiaElementState { IsFocusable = true, IsOffscreen = !Intersects(ContentCardLayout.ClipboardAction(row, 0, metrics), body) }),
                 Node(
                     $"island.page.3.row.{i}.delete",
                     UiaElementRole.Button,
                     L("Common.Delete", "Delete"),
-                    ToRect(PageMetricsLayout.ClipboardDelete(page, i, scroll, metrics)),
+                    ToRect(ClipClipboardBounds(ContentCardLayout.ClipboardAction(row, 2, metrics), body)),
                     UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true }),
+                    new UiaElementState { IsFocusable = true, IsOffscreen = !Intersects(ContentCardLayout.ClipboardAction(row, 0, metrics), body) }),
                 Node(
                     $"island.page.3.row.{i}.pin",
                     UiaElementRole.Button,
                     item.IsPinned ? L("Island.Accessibility.Unpin", "Unpin") : L("Common.Pin", "Pin"),
-                    ToRect(PageMetricsLayout.ClipboardPin(page, i, scroll, metrics)),
+                    ToRect(ClipClipboardBounds(ContentCardLayout.ClipboardAction(row, 1, metrics), body)),
                     UiaPatternKind.Toggle | UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true, IsToggled = item.IsPinned }),
+                    new UiaElementState { IsFocusable = true, IsToggled = item.IsPinned, IsOffscreen = !Intersects(ContentCardLayout.ClipboardAction(row, 0, metrics), body) }),
                 Node(
                     $"island.page.3.row.{i}.copy",
                     UiaElementRole.Button,
                     L("Common.Copy", "Copy"),
-                    ToRect(PageMetricsLayout.ClipboardCopy(page, i, scroll, metrics)),
+                    ToRect(ClipClipboardBounds(ContentCardLayout.ClipboardAction(row, 0, metrics), body)),
                     UiaPatternKind.Invoke,
-                    new UiaElementState { IsFocusable = true }),
+                    new UiaElementState { IsFocusable = true, IsOffscreen = !Intersects(ContentCardLayout.ClipboardAction(row, 0, metrics), body) }),
             };
 
             rows.Add(Node(
                 $"island.page.3.row.{i}",
                 UiaElementRole.ListItem,
                 item.Preview ?? F("Island.Accessibility.ClipboardRow", "Clipboard item {0}", i + 1),
-                ToRect(row),
+                ToRect(ClipClipboardBounds(row, body)),
                 UiaPatternKind.Invoke,
                 new UiaElementState
                 {
                     IsFocusable = true,
-                    IsOffscreen = !Intersects(row, body) || row.Bottom > body.Bottom,
+                    IsOffscreen = !Intersects(row, body),
                     ItemStatus = JoinNotEmpty(", ", item.TypeLabel, item.TimeText),
                 },
                 children: children));
@@ -999,26 +982,31 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
         {
             var row = pluginPage.Rows[i];
             var rowRect = PluginListLayout.Row(page, pluginPage, i, metrics);
-            var body = PageLayout.ListBody(page);
+            var body = PluginListLayout.Clip(page, pluginPage, i, metrics);
             if (rowRect.Bottom <= body.Top || rowRect.Top >= body.Bottom) continue;
-            if (PluginListLayout.IsFileShelf(pluginPage) && rowRect.Bottom > body.Bottom) continue;
-            var name = string.Join(": ", new[] { row.Title, row.Subtitle }
+            var name = string.Join(": ", new[] { row.Title, row.FileVisual?.TypeLabel,
+                    row.FileVisual?.SizeText, row.Subtitle ?? row.FileDirectory, row.Value }
                 .Where(static value => !string.IsNullOrWhiteSpace(value)));
+            var canInvoke = !string.IsNullOrWhiteSpace(row.RowCommandId)
+                || !PluginListLayout.IsFileShelf(pluginPage) && !string.IsNullOrWhiteSpace(row.TrailingCommandId);
             children.Add(Node(
                 $"island.page.{pageIndex}.row.{i}",
-                UiaElementRole.ListItem,
+                PluginListLayout.IsToolbar(pluginPage, i) && canInvoke ? UiaElementRole.Button : UiaElementRole.ListItem,
                 name,
-                ToRect(rowRect),
-                UiaPatternKind.Invoke,
-                new UiaElementState { IsFocusable = row.RowCommandId is not null }));
+                ToRect(SKRect.Intersect(rowRect, body)),
+                canInvoke ? UiaPatternKind.Invoke : UiaPatternKind.None,
+                new UiaElementState { IsFocusable = canInvoke }));
 
             if (!string.IsNullOrWhiteSpace(row.TrailingCommandId))
             {
                 var button = PluginListLayout.TrailingButton(rowRect, row, PluginListLayout.IsFileShelf(pluginPage));
+                button = SKRect.Intersect(button, body);
+                if (button.IsEmpty) continue;
                 children.Add(Node(
                     $"island.page.{pageIndex}.row.{i}.button",
                     UiaElementRole.Button,
-                    row.TrailingLabel ?? row.Title,
+                    PluginListLayout.IsFileShelf(pluginPage) && PluginListLayout.IsFile(row)
+                        ? $"{row.TrailingLabel ?? row.Title}: {row.Title}" : row.TrailingLabel ?? row.Title,
                     ToRect(button),
                     UiaPatternKind.Invoke,
                     new UiaElementState { IsFocusable = true }));
@@ -1335,6 +1323,44 @@ public sealed class SkiaIslandUiaSource : IUiaElementSource, IUiaKeyboardSink, I
                     _controller.HandlePageRequest(PageRef.Media);
                 }
 
+                return;
+            case "notification" when parts.Length > 4 && uint.TryParse(parts[4], out var notificationId):
+                if (!_controller.HasRenderState) return;
+                var items = _controller.RenderState.Pages.Notifications.Items;
+                for (var i = 0; i < items.Count; i++)
+                {
+                    if (items[i].Id != notificationId) continue;
+                    _controller.ActivateAccessibleControl(parts.Length > 5 ? parts[5] switch
+                    {
+                        "dismiss" => IslandPageControl.Dismiss,
+                        "copy" => IslandPageControl.Copy,
+                        _ => IslandPageControl.Row,
+                    } : IslandPageControl.Row, page, i);
+                    break;
+                }
+                return;
+            case "notificationfilter":
+                _controller.ActivateAccessibleControl(IslandPageControl.NotificationFilter, page, index);
+                return;
+            case "notificationread":
+                _controller.ActivateAccessibleControl(IslandPageControl.NotificationMarkRead, page);
+                return;
+            case "notificationundo":
+                _controller.ActivateAccessibleControl(IslandPageControl.NotificationUndo, page);
+                return;
+            case "notificationback":
+                _controller.ActivateAccessibleControl(IslandPageControl.NotificationBack, page);
+                return;
+            case "notificationdetail" when parts.Length > 5 && uint.TryParse(parts[4], out var detailId):
+                if (!_controller.HasRenderState || _controller.RenderState.Pages.Notifications.Detail?.Id != detailId) return;
+                var detailControl = parts[5] switch
+                {
+                    "copybody" => IslandPageControl.NotificationCopyBody,
+                    "copycode" => IslandPageControl.Copy,
+                    "open" => IslandPageControl.NotificationOpenSource,
+                    _ => IslandPageControl.None,
+                };
+                _controller.ActivateAccessibleControl(detailControl, page);
                 return;
             case "clear":
                 _controller.ClearNotifications();

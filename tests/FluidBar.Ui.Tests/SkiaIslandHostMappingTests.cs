@@ -236,17 +236,17 @@ public sealed class SkiaIslandHostMappingTests
         fixture.ExpandAndSettle();
 
         // One physical notch is one 140 DIP page step now.
-        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true);
         Assert.True(first.Paged);
         Assert.Equal(1, first.Page);
         fixture.RunToRest();
 
         // A notch inside the 180 ms cooldown does not flip a page.
-        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true).Paged);
 
         // After the cooldown the next notch commits the next page.
         fixture.Time.Advance(TimeSpan.FromMilliseconds(FluidBar.Core.Interaction.PagerConstants.WheelCooldownMs + 40));
-        var third = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        var third = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true);
         Assert.True(third.Paged);
         Assert.Equal(2, third.Page);
     }
@@ -260,16 +260,16 @@ public sealed class SkiaIslandHostMappingTests
         });
         fixture.ExpandAndSettle();
 
-        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        var first = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true);
         Assert.True(first.Paged);
 
         // The next notch lands inside the cooldown: no page step.
-        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false).Paged);
+        Assert.False(fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true).Paged);
 
         // After the cooldown the held pair is a fresh page step (prototype2 pacing); the old behaviour
         // froze wheel input until the snap spring finished, which swallowed gestures.
         fixture.Time.Advance(TimeSpan.FromMilliseconds(500));
-        var next = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: false);
+        var next = fixture.Controller.HandleWheel(PerNotchDip, horizontal: false, shift: true);
         Assert.True(next.Paged);
     }
 

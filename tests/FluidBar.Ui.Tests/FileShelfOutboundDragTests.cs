@@ -10,6 +10,24 @@ namespace FluidBar.Ui.Tests;
 public sealed class FileShelfOutboundDragTests
 {
     [Fact]
+    public void Remove_button_dispatches_only_remove_for_the_stable_file_row()
+    {
+        using var fixture = Create();
+        var state = fixture.Controller.RenderState;
+        var model = state.Pages.PluginPageAt(6)!;
+        var row = PluginListLayout.Row(IslandMetrics.PageRect(state, 6), model, 0, FontScaleMetrics.From(state.FontScale));
+        var button = PluginListLayout.TrailingButton(row, model.Rows[0]);
+        var calls = new List<PluginPageCommandRequest>();
+        fixture.Controller.PluginPageCommandRequested += calls.Add;
+        fixture.Controller.HandlePointerPressed(button.MidX, button.MidY);
+        Assert.False(fixture.Controller.HasPendingFileDrag);
+        fixture.Controller.HandlePointerReleased(button.MidX, button.MidY);
+        var call = Assert.Single(calls);
+        Assert.Equal("fluidbar-file-shelf.remove", call.CommandId);
+        Assert.Equal("file-stable", call.RowId);
+    }
+
+    [Fact]
     public void File_row_defers_copy_until_release()
     {
         using var fixture = Create();
@@ -76,7 +94,7 @@ public sealed class FileShelfOutboundDragTests
     internal static SkiaSharp.SKRect Row(ControllerFixture fixture)
     {
         var state = fixture.Controller.RenderState;
-        return PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0,
+        return PluginListLayout.Row(IslandMetrics.PageRect(state, 6), state.Pages.PluginPageAt(6)!, 0,
             FontScaleMetrics.From(state.FontScale));
     }
 

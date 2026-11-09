@@ -302,19 +302,129 @@ public static class PageMetricsLayout
 
     /// <summary>Notification card height (72 at 1.0; grows with the title, two body lines and meta row).</summary>
     public static float NotificationRowHeight(in FontScaleMetrics metrics)
-        => 72 + metrics.LineGrow(IslandType.RowTitle) + (2 * metrics.LineGrow(IslandType.RowBody))
-            + metrics.LineGrow(IslandType.RowMeta);
+        => 124 + metrics.LineGrow(NotificationTitleStyle) + (2 * metrics.LineGrow(NotificationBodyStyle))
+            + metrics.LineGrow(IslandType.RowMeta) + metrics.LineGrow(IslandType.Chip);
 
     /// <summary>Gap between notification cards (4 DIP).</summary>
-    public const float NotificationGap = 4;
+    public const float NotificationGap = 8;
+    public const float NotificationToolbarHeight = 32;
 
     /// <summary>Painted list body for notification cards (16 DIP side insets).</summary>
     public static SKRect NotificationBody(SKRect page)
-        => new(page.Left + 16, page.Top + BodyTop, page.Right - 16, page.Bottom);
+        => new(page.Left + 16, page.Top + BodyTop + NotificationToolbarHeight, page.Right - 16, page.Bottom);
+
+    /// <summary>Shared model-aware geometry for mouse input, renderer and accessibility.</summary>
+    public static IslandPageControl HitTestNotifications(SKRect page, NotificationsPageModel model,
+        float x, float y, in FontScaleMetrics metrics, out int index)
+    {
+        index = -1;
+        if (model.Detail is { } detail)
+        {
+            if (NotificationToolbarButton(page, 0).Contains(x, y)) return IslandPageControl.NotificationBack;
+            if (NotificationDetailAction(page, 0).Contains(x, y)) return IslandPageControl.NotificationCopyBody;
+            if (!string.IsNullOrWhiteSpace(detail.VerificationCode) && NotificationDetailAction(page, 1).Contains(x, y)) return IslandPageControl.Copy;
+            if (NotificationDetailAction(page, 2).Contains(x, y)) return IslandPageControl.NotificationOpenSource;
+            return NotificationDetailBody(page).Contains(x, y) ? IslandPageControl.Scroll : IslandPageControl.None;
+        }
+        for (var i = 0; i < 3; i++)
+            if (NotificationToolbarButton(page, i).Contains(x, y)) { index = i; return IslandPageControl.NotificationFilter; }
+        if (NotificationToolbarButton(page, 3).Contains(x, y)) return IslandPageControl.NotificationMarkRead;
+        if (!string.IsNullOrEmpty(model.UndoLabel) && NotificationToolbarButton(page, 4).Contains(x, y)) return IslandPageControl.NotificationUndo;
+        if (!NotificationBody(page).Contains(x, y)) return IslandPageControl.None;
+        var scroll = (float)Math.Clamp(double.IsFinite(model.ScrollOffset) ? model.ScrollOffset : 0, 0, NotificationMaxScroll(model.Items.Count, metrics));
+        for (var i = 0; i < model.Items.Count; i++)
+        {
+            var row = NotificationRow(page, i, scroll, metrics);
+            if (!row.Contains(x, y)) continue;
+            index = i;
+            if (NotificationDismiss(row).Contains(x, y)) return IslandPageControl.Dismiss;
+            if (!string.IsNullOrWhiteSpace(model.Items[i].VerificationCode) && NotificationCopyCode(row).Contains(x, y)) return IslandPageControl.Copy;
+            return IslandPageControl.Row;
+        }
+        return IslandPageControl.Scroll;
+    }
+
+    public static SKRect NotificationToolbarButton(SKRect page, int index)
+    {
+        var width = (page.Width - 32) / 5;
+        return new(page.Left + 16 + index * width, page.Top + BodyTop,
+            page.Left + 16 + (index + 1) * width - 3, page.Top + BodyTop + 25);
+    }
+
+    public static float NotificationMaxScroll(int count, in FontScaleMetrics metrics)
+        => Math.Max(0, count * (NotificationRowHeight(metrics) + NotificationGap) - NotificationGap - (BodyHeight - NotificationToolbarHeight));
+
+    public static SKRect NotificationDetailBody(SKRect page)
+        => new(page.Left + 24, page.Top + BodyTop + 58, page.Right - 24, page.Bottom - 40);
+
+    public static SKRect NotificationDetailAction(SKRect page, int index)
+    {
+        var width = (page.Width - 32) / 3;
+        return new(page.Left + 16 + index * width, page.Bottom - 32,
+            page.Left + 16 + (index + 1) * width - 5, page.Bottom - 6);
+    }
+
+    public static readonly TextStyle NotificationTitleStyle = new(FontRole.UiSemiBold, 12.5f);
+    public static readonly TextStyle NotificationBodyStyle = new(FontRole.Ui, 11.5f);
+    public static readonly TextStyle NotificationCodeStyle = new(FontRole.MonoSemiBold, 23f);
+    private static readonly object NotificationWrapGate = new();
+    private static readonly Queue<(string Text, float Width, double Scale, bool Title, string[] Lines)> NotificationWrapCache = new();
+
+    public static string[] NotificationDetailLines(string? text, float width, in FontScaleMetrics metrics, bool title = false)
+    {
+        var value = text ?? string.Empty;
+        lock (NotificationWrapGate)
+        {
+            foreach (var cached in NotificationWrapCache)
+                if (ReferenceEquals(cached.Text, value) && cached.Width == width && cached.Scale == metrics.Value && cached.Title == title) return cached.Lines;
+            using var engine = new TextEngine();
+            var style = metrics.Style(title ? NotificationTitleStyle : NotificationBodyStyle);
+            var lines = new List<string>();
+            foreach (var paragraph in value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n'))
+            {
+                if (paragraph.Length == 0) { lines.Add(string.Empty); continue; }
+                var starts = System.Globalization.StringInfo.ParseCombiningCharacters(paragraph);
+                for (var start = 0; start < starts.Length;)
+                {
+                    var low = start + 1;
+                    var high = starts.Length;
+                    var best = low;
+                    while (low <= high)
+                    {
+                        var mid = low + (high - low) / 2;
+                        var end = mid == starts.Length ? paragraph.Length : starts[mid];
+                        if (engine.Measure(paragraph[starts[start]..end], style) <= width)
+                        { best = mid; low = mid + 1; }
+                        else high = mid - 1;
+                    }
+                    lines.Add(paragraph[starts[start]..(best == starts.Length ? paragraph.Length : starts[best])]);
+                    start = best;
+                }
+            }
+            var result = lines.ToArray();
+            NotificationWrapCache.Enqueue((value, width, metrics.Value, title, result));
+            while (NotificationWrapCache.Count > 4) NotificationWrapCache.Dequeue();
+            return result;
+        }
+    }
+
+    public static float NotificationDetailLineHeight(in FontScaleMetrics metrics) => 19 * (float)metrics.Value;
+    public static float NotificationDetailTitleLineHeight(in FontScaleMetrics metrics) => 22 * (float)metrics.Value;
+    public static float NotificationDetailTitleHeight(SKRect body, NotificationItemModel item, in FontScaleMetrics metrics)
+        => string.IsNullOrEmpty(item.Title) ? 0 : NotificationDetailLines(item.Title, body.Width, metrics, title: true).Length
+            * NotificationDetailTitleLineHeight(metrics) + 8;
+    public static float NotificationCodeHeight(NotificationItemModel item, in FontScaleMetrics metrics)
+        => string.IsNullOrWhiteSpace(item.VerificationCode) ? 0 : 54 * (float)metrics.Value;
+    public static float NotificationDetailMaxScroll(SKRect page, NotificationItemModel item, in FontScaleMetrics metrics)
+    {
+        var body = NotificationDetailBody(page);
+        return Math.Max(0, NotificationDetailLines(item.FullBody ?? item.Body, body.Width, metrics).Length
+            * NotificationDetailLineHeight(metrics) + NotificationDetailTitleHeight(body, item, metrics) + NotificationCodeHeight(item, metrics) - body.Height);
+    }
 
     /// <summary>Clipboard row height: two summary lines and a separate action footer (78 at 1.0).</summary>
     public static float ClipboardRowHeight(in FontScaleMetrics metrics)
-        => 78 + 2 * metrics.LineGrow(IslandType.ContentTitle) + metrics.LineGrow(IslandType.RowMeta);
+        => ContentCardLayout.ClipboardHeight(ClipboardContentKind.Text, metrics);
 
     /// <summary>Agent row height (44.6 at 1.0 — prototype2 row: 2×9 padding + head 12 + 2 + task 12.6).</summary>
     public static float AgentRowHeight(in FontScaleMetrics metrics)
@@ -323,25 +433,25 @@ public static class PageMetricsLayout
     /// <summary>Notification card rectangle for an index at a scroll offset.</summary>
     public static SKRect NotificationRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
-        var top = page.Top + BodyTop + (index * (NotificationRowHeight(metrics) + NotificationGap)) - scrollOffset;
+        var top = page.Top + BodyTop + NotificationToolbarHeight + (index * (NotificationRowHeight(metrics) + NotificationGap)) - scrollOffset;
         return new SKRect(page.Left + 16, top, page.Right - 16, top + NotificationRowHeight(metrics));
     }
 
     /// <summary>Leading app glyph (36 DIP, vertically centred in the card).</summary>
     public static SKRect NotificationIcon(SKRect row)
-        => new(row.Left + 10, row.MidY - 18, row.Left + 46, row.MidY + 18);
+        => new(row.Left + 10, row.Top + 9, row.Left + 28, row.Top + 27);
 
     /// <summary>Dismiss chip at the bottom-left of the card.</summary>
     public static SKRect NotificationDismiss(SKRect row)
-        => new(row.Left + 58, row.Bottom - 20, row.Left + 102, row.Bottom - 4);
+        => new(row.Right - 29, row.Top + 5, row.Right - 5, row.Top + 29);
 
     /// <summary>Copy-verification-code chip, immediately right of the dismiss chip.</summary>
     public static SKRect NotificationCopyCode(SKRect row)
-        => new(row.Left + 108, row.Bottom - 20, row.Left + 184, row.Bottom - 4);
+        => new(row.Left + 12, row.Bottom - 31, row.Left + 154, row.Bottom - 7);
 
     /// <summary>Bottom-right timestamp slot.</summary>
     public static SKRect NotificationTime(SKRect row)
-        => new(row.Right - 88, row.Bottom - 20, row.Right - 16, row.Bottom - 4);
+        => new(row.Right - 88, row.Bottom - 29, row.Right - 12, row.Bottom - 7);
 
     /// <summary>Notification dismiss chip for an index at a scroll offset.</summary>
     public static SKRect NotificationDismiss(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
@@ -354,7 +464,7 @@ public static class PageMetricsLayout
     /// <summary>Clipboard row rectangle for an index at a scroll offset.</summary>
     public static SKRect ClipboardRow(SKRect page, int index, float scrollOffset, in FontScaleMetrics metrics)
     {
-        var top = page.Top + BodyTop + (index * (ClipboardRowHeight(metrics) + 6)) - scrollOffset;
+        var top = page.Top + BodyTop + (index * (ClipboardRowHeight(metrics) + ContentCardLayout.ClipboardGap)) - scrollOffset;
         return new SKRect(page.Left + 16, top, page.Right - 16, top + ClipboardRowHeight(metrics));
     }
 
@@ -608,7 +718,7 @@ public static class PageMetricsLayout
                     }
 
                     var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampListScroll(count, NotificationRowHeight(metrics), NotificationGap, scrollOffset);
+                    var scroll = Math.Clamp(scrollOffset, 0, NotificationMaxScroll(count, metrics));
                     for (var i = 0; i < count; i++)
                     {
                         if (NotificationDismiss(pageRect, i, scroll, metrics).Contains(x, y))
@@ -648,7 +758,7 @@ public static class PageMetricsLayout
                     }
 
                     var count = Math.Clamp(itemCount, 0, 64);
-                    var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), 6, scrollOffset);
+                    var scroll = ClampListScroll(count, ClipboardRowHeight(metrics), ContentCardLayout.ClipboardGap, scrollOffset);
                     for (var i = 0; i < count; i++)
                     {
                         if (ClipboardRow(pageRect, i, scroll, metrics).Bottom > body.Bottom) continue;

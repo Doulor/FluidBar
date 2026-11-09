@@ -486,12 +486,13 @@ public sealed class SkiaIslandUiaTests
         fixture.ExpandAndSettle();
         fixture.GoToPage(2);
 
-        Assert.NotNull(source.BuildSnapshot().Find("island.page.2.row.0"));
-        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, "island.page.2.row.0"));
-        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, "island.page.2.row.0.dismiss"));
+        var rowId = $"island.page.2.notification.{fixture.Controller.RenderState.Pages.Notifications.Items[0].Id}";
+        Assert.NotNull(source.BuildSnapshot().Find(rowId));
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, rowId));
+        source.Perform(new UiaElementActionRequest(UiaElementAction.Invoke, rowId + ".dismiss"));
 
         Assert.Collection(actions.Calls,
-            call => Assert.Equal(IslandPlatformActionKind.NotificationActivate, call.Kind),
+            call => Assert.Equal(IslandPlatformActionKind.NotificationPreview, call.Kind),
             call => Assert.Equal(IslandPlatformActionKind.NotificationDismiss, call.Kind));
     }
 

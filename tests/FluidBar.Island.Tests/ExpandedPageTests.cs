@@ -176,7 +176,7 @@ public sealed class ExpandedPageTests
         };
         var pages = baseState.Pages with
         {
-            Notifications = baseState.Pages.Notifications with { Items = items },
+            Notifications = baseState.Pages.Notifications with { Items = items, SelectedIndex = -1 },
         };
         var unscrolled = baseState with { Pages = pages };
         var scrolled = baseState with
@@ -193,16 +193,13 @@ public sealed class ExpandedPageTests
             {
                 Notifications = pages.Notifications with
                 {
-                    ScrollOffset = PageMetricsLayout.MaxListScroll(
-                        items.Count,
-                        PageMetricsLayout.NotificationRowHeight(FontScaleMetrics.One),
-                        PageMetricsLayout.NotificationGap),
+                    ScrollOffset = PageMetricsLayout.NotificationMaxScroll(items.Count, FontScaleMetrics.One),
                 },
             },
         };
         var selected = baseState with
         {
-            Pages = pages with { Notifications = pages.Notifications with { SelectedIndex = 2 } },
+            Pages = pages with { Notifications = pages.Notifications with { SelectedIndex = 0 } },
         };
         var hovered = baseState with
         {

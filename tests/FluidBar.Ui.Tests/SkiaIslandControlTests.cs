@@ -153,7 +153,7 @@ public sealed class SkiaIslandControlTests
         Click(fixture, PageMetricsLayout.NotificationDismiss(page, 1, 0, metrics));
 
         Assert.Equal(2, actions.Calls.Count);
-        Assert.Equal(IslandPlatformActionKind.NotificationActivate, actions.Calls[0].Kind);
+        Assert.Equal(IslandPlatformActionKind.NotificationPreview, actions.Calls[0].Kind);
         Assert.Equal(0, actions.Calls[0].Index);
         Assert.Equal(IslandPlatformActionKind.NotificationDismiss, actions.Calls[1].Kind);
         Assert.Equal(1, actions.Calls[1].Index);
@@ -169,11 +169,13 @@ public sealed class SkiaIslandControlTests
 
         var page = Page(3, fixture);
         Click(fixture, PageLayout.ClipboardPin(page, 0));
-        Click(fixture, PageLayout.ClipboardCopy(page, 1));
         fixture.Controller.HandlePointerMoved(page.MidX, page.MidY);
+        fixture.Controller.HandleWheel(120, false, false);
+        var model = fixture.Controller.RenderState.Pages.Clipboard;
+        Click(fixture, ContentCardLayout.ClipboardAction(ContentCardLayout.ClipboardRow(page, model, 1, FontScaleMetrics.One), 0, FontScaleMetrics.One));
         fixture.Controller.HandleWheel(1000, false, false);
-        var scroll = (float)fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset;
-        Click(fixture, PageLayout.ClipboardRow(page, 2, scroll));
+        model = fixture.Controller.RenderState.Pages.Clipboard;
+        Click(fixture, ContentCardLayout.ClipboardRow(page, model, 2, FontScaleMetrics.One));
 
         Assert.Equal(3, actions.Calls.Count);
         Assert.Equal(IslandPlatformActionKind.ClipboardPin, actions.Calls[0].Kind);
@@ -358,7 +360,7 @@ public sealed class SkiaIslandControlTests
         var validRow = new IslandHitTarget(IslandHitKind.PageControl, 2, IslandPageControl.Row, 0);
         var action = SkiaIslandControlRouter.Map(validRow, state, 0);
         Assert.NotNull(action);
-        Assert.Equal(IslandPlatformActionKind.NotificationActivate, action!.Value.Kind);
+        Assert.Equal(IslandPlatformActionKind.NotificationPreview, action!.Value.Kind);
     }
 
     [Fact]
@@ -369,6 +371,7 @@ public sealed class SkiaIslandControlTests
         fixture.GoToPage(2);
 
         var state = fixture.Controller.RenderState;
+        state = state with { Pages = state.Pages with { Notifications = state.Pages.Notifications with { Items = [] } } };
         var page = IslandMetrics.PageRect(state, 2);
         // Row index 3 does not exist (three notification rows); the empty band below the last card is
         // still the list's scroll region.

@@ -59,6 +59,10 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
     private UserNotificationListener? _listener;
     private ImmutableArray<NotificationEntry> _recent = ImmutableArray<NotificationEntry>.Empty;
     private ImmutableHashSet<uint> _readIds = ImmutableHashSet<uint>.Empty;
+    private long _localRevision;
+    private ImmutableArray<NotificationEntry> _undoEntries = [];
+    private ImmutableHashSet<uint> _undoReadIds = ImmutableHashSet<uint>.Empty;
+    public bool CanUndo { get { lock (_stateGate) return !_undoEntries.IsDefaultOrEmpty; } }
     private NotificationAccessState _access = NotificationAccessState.Unavailable;
     private static int s_activeInstances;
     private ITimer? _pollTimer;
@@ -442,22 +446,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             // listener, so the recent list must drop them (before this, only additions were handled and
             // a closed toast stayed on the island page forever).
             var liveIds = new HashSet<uint>(notifications.Select(notification => notification.Id));
-            var previousCount = 0;
-            lock (_stateGate)
-            {
-                previousCount = _recent.Length;
-                var pruned = NotificationListReducer.Prune(_recent, liveIds);
-                var merged = NotificationListReducer.Merge(pruned, added, _options.MaxRecentNotifications);
-                if (NotificationListReducer.SequenceEqual(merged, _recent))
-                {
-                    return;
-                }
-
-                _recent = merged;
-                PruneReadIds();
-            }
-
-            Publish(new NotificationsSnapshot(NotificationAccessState.Allowed, _recent));
+            if (!ApplyLiveNotifications(liveIds, added, out var previousCount)) return;
             _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.received",
                 "Notification list changed.", new Dictionary<string, object?>
                 {
@@ -577,6 +566,30 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             () => notification.CreationTime, _options.MaxTextCharacters));
 
 
+    private NotificationsSnapshot LocalSnapshot(NotificationAccessState access, bool local = true)
+        => new(access, _recent) { LocalRevision = Interlocked.Increment(ref _localRevision), IsLocalUpdate = local };
+
+    // Shared by WinRT refresh and headless close-sync regression tests.
+    private bool ApplyLiveNotifications(IReadOnlySet<uint> liveIds, IReadOnlyList<NotificationEntry> added, out int previousCount)
+    {
+        NotificationsSnapshot snapshot;
+        lock (_stateGate)
+        {
+            previousCount = _recent.Length;
+            var undo = NotificationListReducer.Prune(_undoEntries, liveIds);
+            var undoChanged = !NotificationListReducer.SequenceEqual(undo, _undoEntries);
+            _undoEntries = undo;
+            _undoReadIds = _undoReadIds.Intersect(undo.Select(entry => entry.Id));
+            var merged = NotificationListReducer.Merge(NotificationListReducer.Prune(_recent, liveIds), added, _options.MaxRecentNotifications);
+            if (!undoChanged && NotificationListReducer.SequenceEqual(merged, _recent)) return false;
+            _recent = merged;
+            PruneReadIds();
+            snapshot = LocalSnapshot(NotificationAccessState.Allowed, local: false);
+        }
+        Publish(snapshot);
+        return true;
+    }
+
     /// <summary>
     /// Clears the island's local notification page. The Windows Action Center entries are untouched;
     /// the history watermark stays primed, so the same live toasts are not replayed by the next poll.
@@ -590,11 +603,13 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
                 return;
             }
 
+            _undoEntries = _recent;
+            _undoReadIds = _readIds;
             _recent = ImmutableArray<NotificationEntry>.Empty;
             _readIds = ImmutableHashSet<uint>.Empty;
         }
 
-        Publish(new NotificationsSnapshot(_access, _recent));
+        Publish(LocalSnapshot(_access));
         _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.cleared",
             "Notification page cleared locally.");
     }
@@ -614,6 +629,24 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
         }
     }
 
+    /// <summary>Restores the latest local removal without replaying notifications or losing new arrivals.</summary>
+    public void UndoLocalRemoval()
+    {
+        NotificationsSnapshot snapshot;
+        lock (_stateGate)
+        {
+            if (_undoEntries.IsDefaultOrEmpty) return;
+            _recent = NotificationListReducer.Bounded(_recent.Concat(_undoEntries)
+                .OrderByDescending(entry => entry.CreatedAt), _options.MaxRecentNotifications);
+            _readIds = _readIds.Union(_undoReadIds);
+            _undoEntries = [];
+            _undoReadIds = ImmutableHashSet<uint>.Empty;
+            PruneReadIds();
+            snapshot = LocalSnapshot(_access);
+        }
+        Publish(snapshot);
+    }
+
     /// <summary>Marks one toast as read; the next snapshot clears its unread dot.</summary>
     public void MarkRead(uint id)
     {
@@ -626,7 +659,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             }
 
             _readIds = _readIds.Add(id);
-            publish = new NotificationsSnapshot(_access, _recent);
+            publish = LocalSnapshot(_access);
         }
 
         Publish(publish);
@@ -647,7 +680,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             }
 
             _readIds = next;
-            publish = new NotificationsSnapshot(_access, _recent);
+            publish = LocalSnapshot(_access);
         }
 
         Publish(publish);
@@ -670,6 +703,8 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
             var next = NotificationListReducer.Remove(_recent, id);
             if (next.Length != _recent.Length)
             {
+                _undoEntries = _recent.Where(entry => entry.Id == id).ToImmutableArray();
+                _undoReadIds = _readIds;
                 _recent = next;
                 PruneReadIds();
                 removed = true;
@@ -678,7 +713,7 @@ public sealed class NotificationService : PlatformMonitor<NotificationsSnapshot>
 
         if (removed)
         {
-            Publish(new NotificationsSnapshot(AccessState, _recent));
+            Publish(LocalSnapshot(AccessState));
             _logger.LogInfo(PlatformLogCategory.Notifications, "notifications.dismissed-locally",
                 "Notification removed from the island list.", new Dictionary<string, object?>
                 {

@@ -128,6 +128,11 @@ public sealed class NotificationsPlugin : BuiltinPluginBase
     internal void PublishSnapshot(NotificationsSnapshot? snapshot)
     {
         var latest = snapshot?.Latest;
+        if (snapshot is { IsLocalUpdate: true } && latest is not null)
+        {
+            RememberWithoutPublishing(latest);
+            return;
+        }
         if (latest is null)
         {
             lock (_stateGate)

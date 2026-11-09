@@ -62,6 +62,8 @@ public static class NotificationContentMapper
         var title = string.IsNullOrWhiteSpace(entry.Title) ? source : CollapseWhitespace(entry.Title);
         return new NotificationItemData
         {
+            Id = entry.Id,
+            FullBody = entry.Body ?? string.Empty,
             Title = title,
             Body = TruncateBody(CollapseWhitespace(entry.Body)),
             Source = source,

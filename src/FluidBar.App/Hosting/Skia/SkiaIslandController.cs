@@ -53,11 +53,6 @@ public sealed partial class SkiaIslandController : IDisposable
     private readonly PageRegistry? _pageRegistry;
     private IReadOnlyList<PluginPageModel> _pluginPages = [];
 
-    /// <summary>Wheel scroll chain: content first, then an overscroll threshold before paging.</summary>
-    private readonly PagerScrollChainPolicy _scrollChain = new();
-
-    /// <summary>When the last wheel page step happened (freezes the chain during the snap).</summary>
-    private DateTimeOffset _lastPageStepAt = DateTimeOffset.MinValue;
     private double _railWheelAccumulatedDip;
     private long _lastRailWheelStepMs;
     private readonly Spring _railFollowSpring = new(new SpringParameters(0.26, 0.92));
@@ -1039,6 +1034,13 @@ public sealed partial class SkiaIslandController : IDisposable
     public void HandleEscape()
     {
         CancelPendingClick();
+        if (_hasRenderState && _renderState.Form == ShellForm.Expanded
+            && _renderState.Pages.PageSlotAt(_renderState.PageIndex)?.Kind == PageSlotKind.Notifications
+            && _renderState.Pages.Notifications.Detail is not null)
+        {
+            DispatchControl(new IslandPlatformAction(IslandPlatformActionKind.NotificationBack), _renderState.PageIndex);
+            return;
+        }
         ApplyInput(IslandInput.Escape());
     }
 
@@ -1146,13 +1148,6 @@ public sealed partial class SkiaIslandController : IDisposable
                     break;
                 }
             }
-        }
-
-        if (page == CoreIslandPage.Notifications)
-        {
-            // Opening the page is the user's "I saw these" signal; rows lose their unread dot even
-            // when the user only glances at the list and leaves without clicking a row.
-            _platformActions?.Invoke(new IslandPlatformAction(IslandPlatformActionKind.NotificationMarkAllRead));
         }
 
         // Keep the Core state and the pager in lockstep. Selecting only the pager leaves
@@ -2167,6 +2162,8 @@ public sealed partial class SkiaIslandController : IDisposable
         var wheelHit = _pointerInside
             ? SkiaIslandHitTest.Hit(_renderState, _pointerX, _pointerY).Kind
             : IslandHitKind.None;
+        if (_renderState.Form == ShellForm.Expanded && (horizontal || shift))
+            return StepExpandedPage(deltaDip, now);
         var stackRotateAllowed = _settings.Current.Stacking == StackingStrategySetting.Stacked
             && State.Kind is IslandStateKind.Compact or IslandStateKind.Peek
             && _schedulerState.Visible.Length > 1;
@@ -2205,66 +2202,22 @@ public sealed partial class SkiaIslandController : IDisposable
             }
         }
 
-        // Wheel arbitration: the side rail and short pages turn one page per notch immediately.
-        // Only genuinely scrollable page bodies own the wheel first; at an edge the chain flips.
+        // Vertical wheel input belongs to the expanded content, including its edges and empty
+        // states. Navigation is explicit: side rail, horizontal wheel, or Shift+wheel.
         if (!horizontal && !shift && _renderState.Form == ShellForm.Expanded)
         {
             if (wheelHit == IslandHitKind.PageTab)
-            {
                 return StepExpandedPage(deltaDip, now);
-            }
-
+            if (!double.IsFinite(deltaDip) || Math.Abs(deltaDip) < 0.0001)
+                return SkiaWheelOutcome.None;
             var page = _pager.SelectedIndex;
             var max = MaxScrollForPage(page);
-            if (max <= 0.5)
-            {
-                return StepExpandedPage(deltaDip, now);
-            }
-
-            var current = page < _pageScroll.Length ? _pageScroll[page] : 0;
-            var direction = deltaDip < 0 ? PagerScrollDirection.Up : PagerScrollDirection.Down;
-            var boundary = direction == PagerScrollDirection.Down
-                ? (current >= max - 0.01 ? PagerScrollBoundary.Bottom : PagerScrollBoundary.None)
-                : (current <= 0.01 ? PagerScrollBoundary.Top : PagerScrollBoundary.None);
-            var locked = now - _lastPageStepAt < TimeSpan.FromMilliseconds(PagerConstants.WheelCooldownMs);
-            var decision = _scrollChain.Handle(new PagerScrollChainRequest
-            {
-                WheelDeltaDip = deltaDip,
-                ContentScrollable = true,
-                ContentBoundary = boundary,
-                CurrentPage = page,
-                PageCount = _pages.PageCount,
-                Now = now,
-                PageAnimationLocked = locked,
-            });
-
-            if (decision.Action == PagerScrollChainAction.ScrollContent)
-            {
-                if (page < _pageScroll.Length)
-                {
-                    _pageScroll[page] = Math.Clamp(current + deltaDip, 0, max);
-                }
-
-                _pages = ApplyPageScroll(_pages);
-                BuildRenderState();
-                InvalidateFull();
-                return new SkiaWheelOutcome(true, false, page, true, false);
-            }
-
-            if (decision.Action is PagerScrollChainAction.PageNext or PagerScrollChainAction.PagePrevious)
-            {
-                _lastPageStepAt = now;
-                _scrollChain.Reset();
-                var before = _pager.SelectedIndex;
-                _pager.SelectPage(decision.TargetPage);
-                var paged = _pager.SelectedIndex != before;
-                return new SkiaWheelOutcome(true, paged, _pager.SelectedIndex, false, false);
-            }
-
-            if (decision.Consumed)
-            {
-                return new SkiaWheelOutcome(true, false, page, false, false);
-            }
+            if (page < _pageScroll.Length)
+                _pageScroll[page] = Math.Clamp(_pageScroll[page] + deltaDip, 0, max);
+            _pages = ApplyPageScroll(_pages);
+            BuildRenderState();
+            InvalidateFull();
+            return new SkiaWheelOutcome(true, false, page, true, false);
         }
 
         var outcome = _pager.Wheel(deltaDip, horizontal, shift, now,
@@ -2319,7 +2272,6 @@ public sealed partial class SkiaIslandController : IDisposable
 
         _railWheelAccumulatedDip -= sign * PagerConstants.WheelNotchDip;
         _lastRailWheelStepMs = nowMs;
-        _lastPageStepAt = now;
         var before = _pager.SelectedIndex;
         _pager.MoveBy(sign);
         return new SkiaWheelOutcome(true, _pager.SelectedIndex != before, _pager.SelectedIndex, false, false);
@@ -3461,6 +3413,7 @@ public sealed partial class SkiaIslandController : IDisposable
         }
 
         var modeOrAnchorChanged = previous.IslandMode != current.IslandMode
+            || previous.IslandScale != current.IslandScale
             || previous.IslandAnchor != current.IslandAnchor
             || previous.Placement.Count != current.Placement.Count
             || previous.Placement.Any(entry => !current.Placement.TryGetValue(entry.Key, out var value) || entry.Value != value)
@@ -3714,10 +3667,34 @@ private void HandlePageControl(in IslandHitTarget hit)
     /// data source on each sync, so the offset lives in the controller and is re-applied here (clamped
     /// against the font-scale aware content extent / row metrics).
     /// </summary>
+    private uint? _notificationDetailScrollId;
+    private double _notificationSavedListScroll;
+    private int _notificationScrollFilter;
+
     private ExpandedPageContent ApplyPageScroll(ExpandedPageContent pages)
     {
         for (var page = 0; page < pages.PageCount && page < _pageScroll.Length; page++)
         {
+            if (pages.PageSlotAt(page)?.Kind == PageSlotKind.Notifications)
+            {
+                var detailId = pages.Notifications.Detail?.Id;
+                if (detailId != _notificationDetailScrollId)
+                {
+                    if (detailId.HasValue)
+                    {
+                        if (!_notificationDetailScrollId.HasValue) _notificationSavedListScroll = _pageScroll[page];
+                        _pageScroll[page] = 0;
+                    }
+                    else _pageScroll[page] = _notificationSavedListScroll;
+                    _notificationDetailScrollId = detailId;
+                }
+                if (_notificationScrollFilter != pages.Notifications.Filter)
+                {
+                    _notificationScrollFilter = pages.Notifications.Filter;
+                    _pageScroll[page] = 0;
+                    _notificationSavedListScroll = 0;
+                }
+            }
             _pageScroll[page] = Math.Clamp(_pageScroll[page], 0, MaxScrollForPage(page, pages));
         }
 
@@ -3916,8 +3893,10 @@ private void HandlePageControl(in IslandHitTarget hit)
         {
             PageSlotKind.Home => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Home, metrics),
             PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Media, metrics),
-            PageSlotKind.Notifications => ListMaxScroll(source.Notifications.Items?.Count ?? 0, PageMetricsLayout.NotificationRowHeight(metrics), 4),
-            PageSlotKind.Clipboard => ListMaxScroll(source.Clipboard.Items?.Count ?? 0, PageMetricsLayout.ClipboardRowHeight(metrics), 6),
+            PageSlotKind.Notifications => source.Notifications.Detail is { } detail
+                ? PageMetricsLayout.NotificationDetailMaxScroll(MetricPageRect(), detail, metrics)
+                : PageMetricsLayout.NotificationMaxScroll(source.Notifications.Items?.Count ?? 0, metrics),
+            PageSlotKind.Clipboard => ContentCardLayout.ClipboardMaxScroll(source.Clipboard, metrics),
             PageSlotKind.Agent => ListMaxScroll(source.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
             PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Widgets, metrics, source.Widgets.Tasks?.Count ?? 0),
             _ => 0,

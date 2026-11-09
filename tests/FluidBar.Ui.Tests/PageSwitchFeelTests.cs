@@ -43,7 +43,7 @@ public sealed class PageSwitchFeelTests
         var positions = new List<double> { Position(controller) };
 
         // One physical notch is one 60 DIP page step.
-        Assert.True(controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false).Paged);
+        Assert.True(controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: true).Paged);
         for (var i = 0; i < 90; i++)
         {
             Advance(fixture, 1);
@@ -109,14 +109,14 @@ public sealed class PageSwitchFeelTests
         var (fixture, controller) = Create();
         using var _fixture = fixture;
 
-        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
-        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: true);
+        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: true);
         Advance(fixture, 4); // ~67 ms into the 0.38 s snap: the spring is still running
         Assert.True(controller.Pager.IsAnimating);
 
         fixture.Time.Advance(TimeSpan.FromMilliseconds(PagerConstants.WheelCooldownMs + 20));
-        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
-        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: false);
+        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: true);
+        controller.HandleWheel(PagerConstants.WheelDipPerNotch, horizontal: false, shift: true);
         for (var i = 0; i < 120; i++)
         {
             Advance(fixture, 1);

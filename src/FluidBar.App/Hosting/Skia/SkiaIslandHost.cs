@@ -1288,7 +1288,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         var current = settings.ResolveMonitorPlacement(entry.Monitor.Id);
         var solved = IslandPlacementDrag.SolveShell(
             shellDip,
-            entry.Monitor,
+            entry.Monitor with { LayoutScale = settings.IslandScale },
             mode,
             current.Anchor);
         return new PendingDrop(entry, entry.Monitor.Id, solved.Anchor, solved.OffsetX, solved.OffsetY);
@@ -1479,7 +1479,8 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
         var current = entry.Host.Placement.WindowPixel;
         var next = placement.WindowPixel;
-        if (current.X != next.X || current.Y != next.Y || current.Width != next.Width || current.Height != next.Height)
+        if (current.X != next.X || current.Y != next.Y || current.Width != next.Width || current.Height != next.Height
+            || Math.Abs(entry.Host.Scale - placement.Scale) > 0.0001)
             entry.Host.PlaceForWindowPlacement(placement, ToLayeredMode(CurrentSettings().IslandMode));
         entry.Host.HitRegion.HasInteractiveContent = _controller.RenderState.IsVisible;
     }
@@ -1523,7 +1524,10 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             pagePosition: _controller.Pager.PagePosition,
             archipelagoVisible: _controller.Archipelago.IsVisible,
             tabBarStyle: settings.TabBarStyle);
-        var layout = IslandLayout.Calculate(request, entry.Monitor);
+        // Keep design coordinates shared by drawing, hit-testing and accessibility. Only the
+        // logical-to-pixel conversion changes, composed with each monitor's actual DPI.
+        var layoutMonitor = entry.Monitor with { LayoutScale = settings.IslandScale };
+        var layout = IslandLayout.Calculate(request, layoutMonitor);
 
         // Keep old files in host coordinates. New drops position the visible shell, allowing the
         // transparent canvas to overhang the screen without changing the user's saved location.
@@ -1536,13 +1540,13 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
             var local = new VisualRect(state.ShellOrigin.X, state.ShellOrigin.Y, state.ShellWidth, state.ShellHeight);
             var shell = IslandPlacementDrag.PlaceShell(
                 new IslandDragPlacement(placement.Anchor, placement.OffsetX, placement.OffsetY, false),
-                new VisualSize(local.Width, local.Height), entry.Monitor.WorkAreaDip, mode);
+                new VisualSize(local.Width, local.Height), layoutMonitor.WorkAreaDip, mode);
             var window = windowPlacement.WindowVisual with { X = shell.X - local.X, Y = shell.Y - local.Y };
             windowPlacement = windowPlacement with
             {
                 Shell = shell,
                 WindowVisual = window,
-                WindowPixel = WindowPlacementConverter.ToPhysical(window, entry.Monitor),
+                WindowPixel = WindowPlacementConverter.ToPhysical(window, layoutMonitor),
                 ShellLocalOffset = new VisualPoint(local.X, local.Y),
             };
         }

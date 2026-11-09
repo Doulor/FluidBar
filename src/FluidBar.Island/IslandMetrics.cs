@@ -756,10 +756,10 @@ public static class PageLayout
     public const float ListBodyHeight = 232;
 
     /// <summary>Clipboard row height (78 DIP: two summary lines and an action footer).</summary>
-    public const float ClipboardRowHeight = 78;
+    public const float ClipboardRowHeight = 116;
 
     /// <summary>Clipboard row gap (6 DIP).</summary>
-    public const float ClipboardRowGap = 6;
+    public const float ClipboardRowGap = ContentCardLayout.ClipboardGap;
 
     /// <summary>Agent row height (44.6 DIP — prototype2 .agent-row: 2×9 padding + 12 + 2 + 12.6).</summary>
     public const float AgentRowHeight = 44.6f;

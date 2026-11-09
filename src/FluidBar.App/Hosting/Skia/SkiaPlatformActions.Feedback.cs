@@ -121,7 +121,9 @@ public sealed partial class SkiaPlatformActions : IIslandActionFeedbackSource, I
             && invocation.Action.Kind is IslandPlatformActionKind.VolumeSet
                 or IslandPlatformActionKind.BrightnessSet or IslandPlatformActionKind.MediaSeek
                 or IslandPlatformActionKind.NotificationMarkAllRead or IslandPlatformActionKind.CalendarNavigate
-                or IslandPlatformActionKind.ClipboardCycleFilter)
+                or IslandPlatformActionKind.ClipboardCycleFilter
+                or IslandPlatformActionKind.NotificationFilter or IslandPlatformActionKind.NotificationBack
+                or IslandPlatformActionKind.NotificationPreview)
         {
             return;
         }

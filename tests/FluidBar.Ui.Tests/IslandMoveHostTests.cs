@@ -16,6 +16,74 @@ namespace FluidBar.Ui.Tests;
 
 public sealed class IslandMoveHostTests
 {
+    [Theory]
+    [InlineData("float")]
+    [InlineData("flush")]
+    [InlineData("dock")]
+    public async Task ExpandedIslandUsesTheSameScaleAndRetainsPhysicalMonitorDpi(string mode)
+    {
+        await AvaloniaTest.Run(() =>
+        {
+            using var fixture = new MoveFixture(144);
+            fixture.Settings.Update(s => s with { Mode = mode, IslandScale = 1.25 });
+            fixture.Controller.ApplyInput(IslandInput.PrimaryClick());
+            fixture.Controller.SnapMotion();
+            fixture.ApplySavedPlacement();
+            var shell = fixture.VisibleShell();
+            Assert.Equal(ShellForm.Expanded, fixture.Controller.RenderState.Form);
+            Assert.Equal(LayoutTokens.ExpandedWidth * 1.5 * 1.25, shell.Width, 4);
+            Assert.Equal(LayoutTokens.ExpandedHeight * 1.5 * 1.25, shell.Height, 4);
+            Assert.Equal(144u, fixture.Window.Dpi);
+            Assert.Equal(1, fixture.Controller.RenderState.FontScale);
+        });
+    }
+
+    [Fact]
+    public async Task MonitorDpiChangePreservesTheUserIslandScale()
+    {
+        await AvaloniaTest.Run(() =>
+        {
+            using var fixture = new MoveFixture();
+            fixture.Settings.Update(s => s with { IslandScale = 1.25 });
+            fixture.Raise("LayeredDpiChanged", new LayeredDpiChange(96, 144, 1, 1.5, default));
+            Assert.Equal(1.5 * 1.25, fixture.Window.Scale, 6);
+            Assert.Equal(144u, fixture.Window.Dpi);
+        });
+    }
+
+    [Theory]
+    [InlineData(96u, 0.8)]
+    [InlineData(144u, 1.25)]
+    [InlineData(192u, 1.4)]
+    public async Task IslandScaleResizesTheLiveHostAndPreservesSavedDragPosition(uint dpi, double scale)
+    {
+        await AvaloniaTest.Run(() =>
+        {
+            using var fixture = new MoveFixture(dpi);
+            var before = fixture.VisibleShell();
+            var settings = AppSettings.TryParse(System.Text.Json.JsonSerializer.Serialize(
+                new { schemaVersion = 2, appearance = new { islandScale = scale } }), out _)!;
+            fixture.Settings.Replace(settings with { AutoCollapseMs = 0, AutoHideMs = 0 });
+            Assert.Equal(dpi / 96.0 * scale, fixture.Window.Scale, 6);
+            Assert.Equal(before.Width * scale, fixture.VisibleShell().Width, 4);
+            Assert.Equal(before.Height * scale, fixture.VisibleShell().Height, 4);
+            Assert.Equal(1, fixture.Controller.RenderState.FontScale);
+            Assert.Equal((int)Math.Ceiling(fixture.Window.SurfaceSizeDip.WidthDip * fixture.Window.Scale),
+                fixture.Window.SurfaceSizePx.Width);
+
+            var point = fixture.PressPoint();
+            fixture.Call("OnHookPointerPressedWithModifiers", point.X, point.Y, LayeredKeyModifiers.Control);
+            fixture.Call("OnHookPointerDragged", point.X + 120, point.Y + 80);
+            var dropped = fixture.VisibleShell();
+            fixture.Call("OnHookPointerReleased", point.X + 120, point.Y + 80);
+            Assert.InRange(Math.Abs(fixture.VisibleShell().X - dropped.X), 0, 1);
+            Assert.InRange(Math.Abs(fixture.VisibleShell().Y - dropped.Y), 0, 1);
+            fixture.ApplySavedPlacement();
+            Assert.InRange(Math.Abs(fixture.VisibleShell().X - dropped.X), 0, 1);
+            Assert.InRange(Math.Abs(fixture.VisibleShell().Y - dropped.Y), 0, 1);
+        });
+    }
+
     [Fact]
     public async Task PluginRegistrationChangesDoNotReenableTheSourceAsADropTargetDuringAnOutboundDrag()
     {
@@ -101,7 +169,7 @@ public sealed class IslandMoveHostTests
             fixture.Controller.SnapMotion();
             for (var frame = 0; frame < 100; frame++) fixture.Controller.Advance(TimeSpan.FromMilliseconds(16));
             var state = fixture.Controller.RenderState;
-            var row = PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0, FontScaleMetrics.From(state.FontScale));
+            var row = PluginListLayout.Row(IslandMetrics.PageRect(state, 6), state.Pages.PluginPageAt(6)!, 0, FontScaleMetrics.From(state.FontScale));
             var window = fixture.Window.Placement.WindowPixel;
             var pointer = new LayeredPointerEvent((int)row.MidX, (int)row.MidY, row.MidX, row.MidY,
                 window.X + (int)row.MidX, window.Y + (int)row.MidY, LayeredPointerButtons.Left, LayeredKeyModifiers.None, 0);

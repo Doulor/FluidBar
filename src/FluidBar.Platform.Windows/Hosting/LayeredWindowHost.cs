@@ -192,7 +192,7 @@ public sealed partial class LayeredWindowHost : IDisposable
     /// <summary>Current surface size in physical pixels.</summary>
     public LayeredPixelSize SurfaceSizePx => _surface?.Size ?? default;
 
-    /// <summary>Current DIP scale (monitor DPI / 96).</summary>
+    /// <summary>Current logical-to-pixel scale, including any content scale from Core placement.</summary>
     public double Scale => _scale;
 
     /// <summary>Current effective DPI (96 = 100%).</summary>
@@ -433,7 +433,9 @@ public sealed partial class LayeredWindowHost : IDisposable
         EnsureOwningThread();
         ThrowIfNotCreated();
         var computed = ComputePlacement(placement, mode);
-        var dpi = (uint)Math.Round(computed.Scale * 96);
+        // Content scaling belongs to the render transform, not the physical monitor DPI. Keeping
+        // these separate also lets WM_DPICHANGED detect real monitor changes correctly.
+        var dpi = _monitor is { DpiX: > 0 } ? _monitor.DpiX : (uint)Math.Round(computed.Scale * 96);
         return ApplyPlacement(_monitor ?? CreateSyntheticMonitor(placement, computed.Scale), mode, dpi,
             computed.Scale, computed.WindowPixel, computed.SurfaceSizeDip, placement.ShellLocalOffset,
             computed.SurfaceSizePx);

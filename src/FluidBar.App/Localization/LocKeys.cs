@@ -283,6 +283,18 @@ public static partial class LocKeys
     /// <summary>Keys in the 'Notifications' area.</summary>
     public static class Notifications
     {
+        public const string MarkRead = "Notifications.MarkRead";
+        public const string Undo = "Notifications.Undo";
+        public const string Back = "Notifications.Back";
+        public const string CopyBody = "Notifications.CopyBody";
+        public const string OpenSource = "Notifications.OpenSource";
+        public static class Filter
+        {
+            public const string All = "Notifications.Filter.All";
+            public const string Unread = "Notifications.Filter.Unread";
+            public const string Code = "Notifications.Filter.Code";
+        }
+
         /// <summary><c>Notifications.Title</c></summary>
         public const string Title = "Notifications.Title";
         /// <summary><c>Notifications.Empty</c></summary>
@@ -321,6 +333,8 @@ public static partial class LocKeys
         public const string All = "Clipboard.All";
         /// <summary><c>Clipboard.Text</c></summary>
         public const string Text = "Clipboard.Text";
+        public const string Code = "Clipboard.Code";
+        public const string Link = "Clipboard.Link";
         /// <summary><c>Clipboard.Image</c></summary>
         public const string Image = "Clipboard.Image";
         /// <summary><c>Clipboard.File</c></summary>
@@ -792,6 +806,10 @@ public static partial class LocKeys
             public const string FillOpacityHint = "Settings.Appearance.FillOpacityHint";
             /// <summary><c>Settings.Appearance.FontScale</c></summary>
             public const string FontScale = "Settings.Appearance.FontScale";
+            /// <summary><c>Settings.Appearance.IslandScale</c></summary>
+            public const string IslandScale = "Settings.Appearance.IslandScale";
+            /// <summary><c>Settings.Appearance.IslandScaleHint</c></summary>
+            public const string IslandScaleHint = "Settings.Appearance.IslandScaleHint";
             /// <summary><c>Settings.Appearance.MotionStrength</c></summary>
             public const string MotionStrength = "Settings.Appearance.MotionStrength";
             /// <summary><c>Settings.Appearance.Preview</c></summary>

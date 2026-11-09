@@ -149,6 +149,7 @@ internal sealed partial class PageRenderer : IDisposable
         }
 
         if (state.Pages.PageSlotAt(page)?.Kind == PageSlotKind.Notifications
+            && state.Pages.Notifications.Detail is null
             && state.Pages.Notifications.ClearLabel is { Length: > 0 } clearLabel)
         {
             var clear = PageLayout.NotificationClearRect(content);

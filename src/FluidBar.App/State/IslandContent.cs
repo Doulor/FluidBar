@@ -89,6 +89,8 @@ public sealed record MediaSessionData
 /// <summary>One notification row on the expanded notifications page.</summary>
 public sealed record NotificationItemData
 {
+    public uint Id { get; init; }
+    public string FullBody { get; init; } = string.Empty;
     /// <summary>Notification title.</summary>
     public string Title { get; init; } = string.Empty;
 
@@ -117,6 +119,10 @@ public sealed record NotificationItemData
 /// <summary>One clipboard history row.</summary>
 public sealed record ClipboardItemData
 {
+    public string? FileDetail { get; init; }
+    public bool IsCode { get; init; }
+    public bool IsLink { get; init; }
+
     /// <summary>Text preview or image label.</summary>
     public string Preview { get; init; } = string.Empty;
 
@@ -233,6 +239,9 @@ public sealed record CalendarDayData
 /// </summary>
 public sealed record IslandContent
 {
+    public int NotificationFilter { get; init; }
+    public bool NotificationCanUndo { get; init; }
+    public NotificationItemData? NotificationDetail { get; init; }
     /// <summary>Snapshot time.</summary>
     public DateTimeOffset Now { get; init; } = DateTimeOffset.Now;
 
@@ -283,6 +292,8 @@ public sealed record IslandContent
 
     /// <summary>Localized label for the active clipboard type filter (null hides the header chip).</summary>
     public string? ClipboardFilterLabel { get; init; }
+
+    public bool ClipboardFilesOnly { get; init; }
 
     /// <summary>Active clipboard search query (null when search is closed/cleared).</summary>
     public string? ClipboardSearchQuery { get; init; }

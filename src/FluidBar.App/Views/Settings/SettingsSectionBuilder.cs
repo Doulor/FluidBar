@@ -517,7 +517,12 @@ public static class SettingsSectionBuilder
                     LayoutTokens.MinFillOpacity, 1.0, 0.01, settings.FillOpacity,
                     value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { FillOpacity = value }),
                     enabled: !translucent),
-                // Text size moved here: it is an island token, so the preview clock scales live.
+                SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.IslandScale),
+                    ctx.Localizer.Get(LocKeys.Settings.Appearance.IslandScaleHint),
+                    FluidBar.Core.Settings.SettingsValidator.MinIslandScale,
+                    FluidBar.Core.Settings.SettingsValidator.MaxIslandScale, 0.05, settings.IslandScale,
+                    value => $"{value * 100:0}%", value => ctx.Settings.Update(s => s with { IslandScale = value })),
+                // Text size remains independent of the whole-island scale.
                 SliderRow(ctx, ctx.Localizer.Get(LocKeys.Settings.Appearance.FontScale), null,
                     0.8, 1.6, 0.05, settings.FontScale,
                     value => $"{value:0.00}×", value => ctx.Settings.Update(s => s with { FontScale = value }))));
@@ -567,7 +572,6 @@ public static class SettingsSectionBuilder
 
         var canvas = new Border
         {
-            Height = SettingsMetrics.ApCanvasHeight,
             CornerRadius = new CornerRadius(SettingsMetrics.ApCanvasRadius),
             BorderBrush = palette.LineBrush,
             BorderThickness = new Thickness(1),

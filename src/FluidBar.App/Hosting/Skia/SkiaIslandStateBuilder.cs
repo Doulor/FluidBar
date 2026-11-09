@@ -220,7 +220,20 @@ public static class SkiaIslandStateBuilder
 
         var notificationsPage = new NotificationsPageModel
         {
-            Items = BuildNotifications(content.Notifications, localizer),
+            Items = BuildNotifications(content.Notifications.Where(item => content.NotificationFilter switch
+            {
+                1 => item.IsUnread,
+                2 => !string.IsNullOrWhiteSpace(item.VerificationCode),
+                _ => true,
+            }).ToArray(), localizer),
+            Filter = content.NotificationFilter,
+            Detail = content.NotificationDetail is { } detail ? BuildNotifications([detail], localizer)[0] : null,
+            BackLabel = localizer.Get(LocKeys.Notifications.Back),
+            CopyBodyLabel = localizer.Get(LocKeys.Notifications.CopyBody),
+            OpenSourceLabel = localizer.Get(LocKeys.Notifications.OpenSource),
+            FilterLabels = [localizer.Get(LocKeys.Notifications.Filter.All), localizer.Get(LocKeys.Notifications.Filter.Unread), localizer.Get(LocKeys.Notifications.Filter.Code)],
+            MarkReadLabel = localizer.Get(LocKeys.Notifications.MarkRead),
+            UndoLabel = content.NotificationCanUndo ? localizer.Get(LocKeys.Notifications.Undo) : null,
             EmptyTitle = localizer.Get(LocKeys.Notifications.Empty),
             EmptyHint = localizer.Get(LocKeys.Notifications.EmptyHint),
             DismissLabel = localizer.Get(LocKeys.Common.Close),
@@ -236,6 +249,7 @@ public static class SkiaIslandStateBuilder
             PinnedLabel = localizer.Get(LocKeys.Clipboard.Pinned),
             PreviewLabel = localizer.Get("Clipboard.Preview.Open"),
             FilterLabel = content.ClipboardFilterLabel,
+            FilesOnly = content.ClipboardFilesOnly,
             SearchLabel = content.ClipboardFilterLabel is null
                 ? null
                 : string.IsNullOrWhiteSpace(content.ClipboardSearchQuery)
@@ -300,6 +314,8 @@ public static class SkiaIslandStateBuilder
             var code = NullIfEmpty(item.VerificationCode);
             models[i] = new NotificationItemModel
             {
+                Id = item.Id,
+                FullBody = item.FullBody,
                 AppName = NullIfEmpty(item.Source),
                 Title = item.Title,
                 Body = item.Body,
@@ -325,10 +341,12 @@ public static class SkiaIslandStateBuilder
             var item = items[i];
             var kind = item.IsImage
                 ? ClipboardContentKind.Image
-                : item.IsFiles ? ClipboardContentKind.Files : ClipboardContentKind.Text;
+                : item.IsFiles ? ClipboardContentKind.Files : item.IsCode ? ClipboardContentKind.Code : item.IsLink ? ClipboardContentKind.Link : ClipboardContentKind.Text;
             models[i] = new ClipboardItemModel
             {
                 Preview = item.Preview,
+                FileDetail = item.FileDetail,
+                IsMonospace = item.IsCode,
                 TimeText = item.Meta,
                 IsPinned = item.Pinned,
                 Kind = kind,
@@ -338,6 +356,8 @@ public static class SkiaIslandStateBuilder
                 {
                     ClipboardContentKind.Image => LocKeys.Clipboard.Image,
                     ClipboardContentKind.Files => LocKeys.Clipboard.File,
+                    ClipboardContentKind.Code => LocKeys.Clipboard.Code,
+                    ClipboardContentKind.Link => LocKeys.Clipboard.Link,
                     _ => LocKeys.Clipboard.Text,
                 }),
                 ImagePng = item.ImagePng,
@@ -495,7 +515,10 @@ public static class SkiaIslandStateBuilder
             .Append((int)content.WeatherGlyph).Append('|').Append(content.TasksEmptyHint).Append('|')
             .Append(content.TasksMoreText).Append('|').Append(content.TasksProgressText).Append('|');
 
+        builder.Append(content.NotificationFilter).Append('|').Append(content.NotificationCanUndo).Append('|')
+            .Append(content.NotificationDetail?.Id).Append('|');
         AppendNotifications(builder, content.Notifications);
+        builder.Append(content.ClipboardFilesOnly).Append(content.ClipboardFilterLabel).Append(content.ClipboardSearchQuery);
         AppendClipboard(builder, content.Clipboard);
         AppendAgents(builder, content.Agents);
         AppendStats(builder, content.Stats);
@@ -509,7 +532,8 @@ public static class SkiaIslandStateBuilder
         for (var i = 0; i < items.Count; i++)
         {
             var item = items[i];
-            builder.Append(item.Title).Append('|').Append(item.Body).Append('|')
+            builder.Append(item.Id).Append('|').Append(item.IsUnread).Append('|').Append(item.FullBody).Append('|')
+                .Append(item.Title).Append('|').Append(item.Body).Append('|')
                 .Append(item.Source).Append('|').Append(item.TimeText).Append('|')
                 .Append(item.VerificationCode).Append('|');
         }
@@ -522,7 +546,8 @@ public static class SkiaIslandStateBuilder
         {
             var item = items[i];
             builder.Append(item.Preview).Append('|').Append(item.Meta).Append('|')
-                .Append(item.Pinned ? '1' : '0').Append(item.IsImage ? '1' : '0').Append('|');
+                .Append(item.Pinned ? '1' : '0').Append(item.IsImage ? '1' : '0').Append('|')
+                .Append(item.IsFiles).Append(item.IsCode).Append(item.IsLink).Append(item.FileDetail).Append(item.ImageKey).Append('|');
         }
     }
 

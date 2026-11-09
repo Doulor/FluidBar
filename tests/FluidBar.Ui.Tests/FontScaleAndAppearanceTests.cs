@@ -67,7 +67,7 @@ public sealed class FontScaleAndAppearanceTests
 
         for (var i = 0; i < 3 && fixture.Controller.State.Page == FluidBar.Core.Activities.PageRef.Home; i++)
         {
-            fixture.Controller.HandleWheel(PagerConstants.WheelNotchDip, horizontal: false, shift: false);
+            fixture.Controller.HandleWheel(PagerConstants.WheelNotchDip, horizontal: false, shift: true);
             Assert.Equal(0, fixture.Controller.RenderState.Pages.Home.ScrollOffset, 3);
             fixture.Time.Advance(TimeSpan.FromMilliseconds(PagerConstants.WheelCooldownMs + 40));
             fixture.RunToRest();

@@ -395,7 +395,7 @@ public sealed partial class LayeredWindowHost
     {
         _counters.IncrementWin32Failures();
         _logger.LogError(PlatformLogCategory.Platform, "layered-host.wndproc-failed",
-            "Layered host window procedure threw; the message was ignored.", exception);
+            "Layered host window procedure threw; the message was ignored. " + exception.StackTrace, exception);
     }
 
     private void TrackLeave()
@@ -479,7 +479,8 @@ public sealed partial class LayeredWindowHost
 
     private static LayeredPointerButtons DecodeButtons(IntPtr wParam)
     {
-        var value = wParam.ToInt32();
+        // Mouse flags live in LOWORD; HIWORD may contain a negative wheel delta.
+        var value = (int)(wParam.ToInt64() & 0xFFFF);
         var buttons = LayeredPointerButtons.None;
         if ((value & NativeMethods.MK_LBUTTON) != 0)
         {
@@ -511,7 +512,8 @@ public sealed partial class LayeredWindowHost
 
     private static LayeredKeyModifiers DecodeModifiers(IntPtr wParam)
     {
-        var value = wParam.ToInt32();
+        // Mouse flags live in LOWORD; HIWORD may contain a negative wheel delta.
+        var value = (int)(wParam.ToInt64() & 0xFFFF);
         var modifiers = LayeredKeyModifiers.None;
         if ((value & NativeMethods.MK_SHIFT) != 0)
         {

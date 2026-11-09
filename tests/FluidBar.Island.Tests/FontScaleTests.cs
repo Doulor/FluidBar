@@ -90,8 +90,8 @@ public sealed class FontScaleTests
         Assert.True(PageMetricsLayout.AgentRowHeight(large) > PageMetricsLayout.AgentRowHeight(one));
         Assert.True(PageMetricsLayout.HomeContentExtent(pageRect, large) > PageMetricsLayout.HomeContentExtent(pageRect, one));
         Assert.True(PageMetricsLayout.MediaContentExtent(pageRect, large) > PageMetricsLayout.MediaContentExtent(pageRect, one));
-        Assert.Equal(PageMetricsLayout.NotificationRowHeight(one), 72, 3);
-        Assert.Equal(PageMetricsLayout.ClipboardRowHeight(one), 78, 3);
+        Assert.Equal(PageMetricsLayout.NotificationRowHeight(one), 124, 3);
+        Assert.Equal(PageMetricsLayout.ClipboardRowHeight(one), 116, 3);
         Assert.Equal(PageMetricsLayout.AgentRowHeight(one), 44.6, 3);
         Assert.Equal(PageMetricsLayout.HomeContentExtent(pageRect, one), 212, 3);
         Assert.Equal(PageMetricsLayout.MediaContentExtent(pageRect, one), 232, 3);

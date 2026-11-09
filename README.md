@@ -2,9 +2,9 @@
 
 > Windows 上的灵动岛：把媒体、通知、剪贴板和常用控制收进一颗小胶囊，需要时再展开。
 
-[官方网站](https://fluidbar.doulor.cn/) · [下载 4.2.0](https://github.com/Doulor/FluidBar/releases/tag/v4.2.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
+[官方网站](https://fluidbar.doulor.cn/) · [下载 4.3.0](https://github.com/Doulor/FluidBar/releases/tag/v4.3.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
 
-**当前版本：4.2.0（2026-11-07）**。新增拖动定位与弹性回位，完善设置保存、歌词发光配置及 Agent 默认启用，改善文件拖出预览。详见 [4.2.0 发布说明](<docs/rewrite/RELEASE-4.2.0.md>)。
+**当前版本：4.3.0（2026-11-09）**。优化通知、剪贴板和文件暂存卡片，新增岛体缩放，分离页内滚动与切页，并修复更新缓存误报“已是最新版”。详见 [4.3.0 发布说明](<docs/rewrite/RELEASE-4.3.0.md>)。
 
 README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 
@@ -68,10 +68,10 @@ README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 
 ### 启动与更新
 
-1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v4.2.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-4.2.0-win-x64.zip`。
+1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v4.3.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-4.3.0-win-x64.zip`。
 2. 将程序放在打算长期保留的目录中运行；已有旧版时，先从系统托盘退出旧版。
 3. 点击小岛展开；通过设置按钮、托盘菜单或 `Ctrl + Alt + S` 打开设置。开机启动、语言和更新偏好均可在设置中调整。
-4. 可使用应用内更新，或退出后手动替换程序。下载校验值与构建信息见 [发布说明](<docs/rewrite/RELEASE-4.2.0.md>)。
+4. 可使用应用内更新，或退出后手动替换程序。下载校验值与构建信息见 [发布说明](<docs/rewrite/RELEASE-4.3.0.md>)。
 
 > 当前主程序**没有 Windows Authenticode 代码签名**，Windows 可能显示未知发布者提示。请核实下载来源与发布资产的 SHA-256，不要为安装而关闭系统安全防护。应用内更新的哈希校验不等于发布者签名认证。
 
@@ -133,10 +133,10 @@ dotnet run --project tests/FluidBar.Soak -c Release
 使用与正式发布流程一致的 [发布脚本](<build/publish.ps1>)：
 
 ```powershell
-pwsh -File ./build/publish.ps1 -Version 4.2.0 -SelfContained
+pwsh -File ./build/publish.ps1 -Version 4.3.0 -SelfContained
 ```
 
-脚本执行完整解决方案回归并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `4.2.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
+脚本执行完整解决方案回归并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `4.3.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
 
 版本采用 `主版本.次版本.修订号`：不兼容变更提升主版本，兼容的新功能提升次版本，问题修复提升修订号。测试轮次使用 `-preview.N` 或 `-rc.N`，正式版本发布后不覆盖原标签和资产。
 
@@ -166,7 +166,7 @@ docs/                         发布、设计、插件、隐私与截图文档
 
 ## 文档与贡献
 
-- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-4.2.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
+- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-4.3.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
 - **开发与维护**：[文档索引](<docs/rewrite/README.md>) · [当前状态](<docs/rewrite/STATUS.md>) · [项目方向与约束](<PROJECT-NOTES.md>) · [架构决策](<docs/rewrite/DECISIONS.md>)
 - **插件作者**：[快速开始](<docs/plugin/quickstart.md>) · [审核清单](<docs/plugin/review-checklist.md>) · [插件文档](<docs/plugin/>)
 - **视觉参考**：[浏览器交互原型](<docs/rewrite/prototype2/index.html>)使用示例数据，供交互参考，不等同于原生应用。旧版实现可在 `v1-final` 标签与 Git 历史中查阅。

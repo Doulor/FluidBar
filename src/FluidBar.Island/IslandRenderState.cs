@@ -1036,6 +1036,14 @@ public sealed record MediaPageModel
 /// </summary>
 public sealed record NotificationsPageModel
 {
+    public int Filter { get; init; }
+    public string[] FilterLabels { get; init; } = ["全部", "未读", "验证码"];
+    public string? UndoLabel { get; init; }
+    public string MarkReadLabel { get; init; } = "全部已读";
+    public NotificationItemModel? Detail { get; init; }
+    public string BackLabel { get; init; } = "返回";
+    public string CopyBodyLabel { get; init; } = "复制正文";
+    public string OpenSourceLabel { get; init; } = "打开来源";
     /// <summary>Notification rows (newest first).</summary>
     public IReadOnlyList<NotificationItemModel> Items { get; init; } = [];
 
@@ -1067,6 +1075,8 @@ public sealed record NotificationsPageModel
 /// <summary>One notification row.</summary>
 public sealed record NotificationItemModel
 {
+    public uint Id { get; init; }
+    public string? FullBody { get; init; }
     /// <summary>Source app name ("Teams").</summary>
     public string? AppName { get; init; }
 
@@ -1125,6 +1135,9 @@ public enum ClipboardContentKind
 /// </summary>
 public sealed record ClipboardPageModel
 {
+    /// <summary>Explicit file-only filter; enables two columns without changing the mixed feed.</summary>
+    public bool FilesOnly { get; init; }
+
     /// <summary>Clipboard entries (pinned entries first).</summary>
     public IReadOnlyList<ClipboardItemModel> Items { get; init; } = [];
 
@@ -1162,6 +1175,9 @@ public sealed record ClipboardPageModel
 /// <summary>One clipboard history row.</summary>
 public sealed record ClipboardItemModel
 {
+    /// <summary>Available file metadata, prepared outside painting.</summary>
+    public string? FileDetail { get; init; }
+
     /// <summary>Preview text (up to two lines, ellipsised by the renderer).</summary>
     public string? Preview { get; init; }
 

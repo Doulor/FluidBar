@@ -410,6 +410,12 @@ public sealed class FakeNotificationSource : INotificationSource
         SnapshotChanged?.Invoke(this, new SnapshotEventArgs<NotificationsSnapshot>(Current));
     }
 
+    public void Emit(NotificationsSnapshot snapshot)
+    {
+        Current = snapshot;
+        SnapshotChanged?.Invoke(this, new SnapshotEventArgs<NotificationsSnapshot>(snapshot));
+    }
+
     public Task<NotificationAccessState> RequestAccessAsync(CancellationToken cancellationToken = default)
     {
         RequestAccessCalls++;

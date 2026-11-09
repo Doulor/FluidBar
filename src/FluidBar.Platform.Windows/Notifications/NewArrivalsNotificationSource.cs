@@ -95,7 +95,7 @@ public sealed class NewArrivalsNotificationSource : INotificationSource
 
         return builder.Count == snapshot.Recent.Length
             ? snapshot
-            : new NotificationsSnapshot(snapshot.Access, builder.ToImmutable());
+            : snapshot with { Recent = builder.ToImmutable() };
     }
 
     private void OnInnerSnapshotChanged(object? sender, SnapshotEventArgs<NotificationsSnapshot> args)

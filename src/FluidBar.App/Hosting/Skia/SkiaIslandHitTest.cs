@@ -196,29 +196,7 @@ public static class SkiaIslandHitTest
         var metrics = FontScaleMetrics.From(state.FontScale);
         if (pages.PluginPageAt(page) is { } pluginPage)
         {
-            var body = PageLayout.ListBody(pageRect);
-            for (var i = 0; i < pluginPage.Rows.Count; i++)
-            {
-                var row = PluginListLayout.Row(pageRect, pluginPage, i, metrics);
-                if (PluginListLayout.IsFileShelf(pluginPage) && row.Bottom > body.Bottom) continue;
-                if (!row.Contains(x, y) || !body.Contains(x, y))
-                {
-                    continue;
-                }
-
-                index = i;
-                var model = pluginPage.Rows[i];
-                var trailing = PluginListLayout.TrailingButton(row, model, PluginListLayout.IsFileShelf(pluginPage));
-                return trailing.Contains(x, y) && !string.IsNullOrWhiteSpace(model.TrailingCommandId)
-                    ? IslandPageControl.PluginRowButton
-                    : !string.IsNullOrWhiteSpace(model.RowCommandId) || !string.IsNullOrWhiteSpace(model.TrailingCommandId)
-                        || model.DragFiles is { Count: > 0 }
-                        ? IslandPageControl.PluginRow
-                        : IslandPageControl.None;
-            }
-
-            index = -1;
-            return IslandPageControl.None;
+            return PluginListLayout.HitTest(pageRect, pluginPage, x, y, metrics, out index);
         }
 
         var kind = pages.PageSlotAt(page)?.Kind ?? PageSlotKind.Home;
@@ -260,12 +238,19 @@ public static class SkiaIslandHitTest
         }
 
         if (kind == PageSlotKind.Notifications
+            && pages.Notifications.Detail is null
             && !string.IsNullOrWhiteSpace(pages.Notifications.ClearLabel)
             && PageLayout.NotificationClearRect(contentRect).Contains(x, y))
         {
             index = -1;
             return IslandPageControl.NotificationClear;
         }
+
+        if (kind == PageSlotKind.Notifications)
+            return PageMetricsLayout.HitTestNotifications(pageRect, pages.Notifications, x, y, metrics, out index);
+
+        if (kind == PageSlotKind.Clipboard)
+            return ContentCardLayout.HitTestClipboard(pageRect, pages.Clipboard, x, y, metrics, out index);
 
         var control = PageMetricsLayout.HitTest(kind, pageRect, x, y, metrics, scroll, count, out index,
             state.Pages.Home.Toggles.Count);

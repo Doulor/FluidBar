@@ -108,6 +108,12 @@ public enum IslandPageControl
 
     /// <summary>Clear the local notification list (header chip).</summary>
     NotificationClear,
+    NotificationFilter,
+    NotificationUndo,
+    NotificationMarkRead,
+    NotificationBack,
+    NotificationCopyBody,
+    NotificationOpenSource,
 
     /// <summary>Cycle the clipboard type filter (header chip).</summary>
     ClipboardFilter,

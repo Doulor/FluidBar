@@ -352,6 +352,17 @@ public sealed class IslandRenderer : IDisposable
                     pageScroll,
                     PageItemCount(state, kind),
                     out var index);
+                if (kind == PageSlotKind.Notifications)
+                {
+                    control = PageMetricsLayout.HitTestNotifications(pageRect, state.Pages.Notifications, x, y, metrics, out index);
+                    if (state.Pages.Notifications.Detail is null && !string.IsNullOrWhiteSpace(state.Pages.Notifications.ClearLabel)
+                        && PageLayout.NotificationClearRect(content).Contains(x, y))
+                        control = IslandPageControl.NotificationClear;
+                }
+                if (kind == PageSlotKind.Clipboard)
+                    control = ContentCardLayout.HitTestClipboard(pageRect, state.Pages.Clipboard, x, y, metrics, out index);
+                if (state.Pages.PluginPageAt(page) is { } pluginPage)
+                    control = PluginListLayout.HitTest(pageRect, pluginPage, x, y, metrics, out index);
                 if (control != IslandPageControl.None)
                 {
                     return new IslandHitTarget(IslandHitKind.PageControl, page, control, index);

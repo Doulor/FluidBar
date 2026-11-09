@@ -41,8 +41,9 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(IslandPageControl.Dismiss, dismissHit.Control);
         Assert.Equal(1, dismissHit.Index);
 
-        var scroll = PageLayout.ListBody(page);
-        var scrollHit = Hit(state, scroll.MidX, scroll.Bottom - 2);
+        var scroll = PageMetricsLayout.NotificationBody(page);
+        var empty = state with { Pages = state.Pages with { Notifications = state.Pages.Notifications with { Items = [] } } };
+        var scrollHit = Hit(empty, scroll.MidX, scroll.Bottom - 2);
         Assert.Equal(IslandPageControl.Scroll, scrollHit.Control);
     }
 
@@ -85,19 +86,19 @@ public sealed class ExpandedPageHitTestTests
         Assert.Equal(IslandPageControl.Row, rowHit.Control);
         Assert.Equal(0, rowHit.Index);
 
-        var scroll = PageLayout.ClampScroll(9999, state.Pages.Clipboard.Items.Count, PageLayout.ClipboardRowHeight, PageLayout.ClipboardRowGap);
+        var scroll = ContentCardLayout.ClipboardMaxScroll(state.Pages.Clipboard, FontScaleMetrics.One);
         state = IslandTestFixtures.WithPageScroll(state, 3, scroll);
-        var pin = PageLayout.ClipboardPin(page, 2, scroll);
+        var pin = ContentCardLayout.ClipboardAction(ContentCardLayout.ClipboardRow(page, state.Pages.Clipboard, 2, FontScaleMetrics.One), 1, FontScaleMetrics.One);
         var pinHit = Hit(state, pin.MidX, pin.MidY);
         Assert.Equal(IslandPageControl.Pin, pinHit.Control);
         Assert.Equal(2, pinHit.Index);
 
-        var copy = PageLayout.ClipboardCopy(page, 3, scroll);
+        var copy = ContentCardLayout.ClipboardAction(ContentCardLayout.ClipboardRow(page, state.Pages.Clipboard, 3, FontScaleMetrics.One), 0, FontScaleMetrics.One);
         var copyHit = Hit(state, copy.MidX, copy.MidY);
         Assert.Equal(IslandPageControl.Copy, copyHit.Control);
         Assert.Equal(3, copyHit.Index);
 
-        var gap = PageLayout.ClipboardRow(page, 2, scroll);
+        var gap = ContentCardLayout.ClipboardRow(page, state.Pages.Clipboard, 2, FontScaleMetrics.One);
         var scrollHit = Hit(state, gap.MidX, gap.Bottom + 2);
         Assert.Equal(IslandPageControl.Scroll, scrollHit.Control);
     }

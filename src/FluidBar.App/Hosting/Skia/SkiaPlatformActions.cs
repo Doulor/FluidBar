@@ -79,6 +79,8 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
     private readonly LyricsService _lyrics;
     private readonly SkiaSystemStats _systemStats;
     private readonly NotificationService _notifications;
+    private int _notificationFilter;
+    private NotificationEntry? _notificationDetail;
     private readonly WeatherService _weather;
     private readonly TaskListService _tasks;
     private readonly CalendarEventService _calendarEvents;
@@ -246,6 +248,7 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
 
         _media.SnapshotChanged += OnSnapshotChanged;
         _clipboard.SnapshotChanged += OnSnapshotChanged;
+        _clipboardFileVisuals.Changed += OnClipboardFileVisualChanged;
         _battery.SnapshotChanged += OnSnapshotChanged;
         _volume.SnapshotChanged += OnSnapshotChanged;
         _brightness.SnapshotChanged += OnSnapshotChanged;
@@ -403,11 +406,16 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
             Media = media is { IsEmpty: false } ? MapMedia(media) : null,
             Clipboard = DisplayedClipboard().Select(MapClipboard).ToImmutableArray(),
             ClipboardFilterLabel = _clipboard.GetHistory().Count > 0 ? ClipboardFilterLabel() : null,
+            ClipboardFilesOnly = _clipboardFilter == ClipboardFilter.Files,
             ClipboardSearchQuery = _clipboardSearchQuery,
             // Real Windows toast listener (see the ctor): seeded with the current list, kept in sync by
             // arrival and by the user closing a toast in Action Center.
             Notifications = NotificationContentMapper.Map(
                 _notifications.Current, PageNotificationLimit, now, _localizer, _notifications.ReadIds),
+            NotificationFilter = _notificationFilter,
+            NotificationCanUndo = _notifications.CanUndo,
+            NotificationDetail = _notificationDetail is { } detail
+                ? NotificationContentMapper.MapEntry(detail, now, _localizer, isUnread: false) : null,
             Agents = MapAgents(_agentSources.Current),
             Tasks = tasks.Tasks,
             TasksEmptyHint = tasks.EmptyHint,
@@ -1175,6 +1183,8 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
     {
         var hide = _settings.Current.ClipboardHidePreviews;
         var preview = hide ? _localizer?.Get("Clipboard.Preview.Hidden") ?? "Preview hidden" : ClipboardPreview(entry);
+        var file = !hide && entry.Kind == ClipboardContentKind.Files && entry.FilePaths.Length > 0
+            ? _clipboardFileVisuals.Get(entry.FilePaths[0], entry.Sequence.ToString(CultureInfo.InvariantCulture)) : null;
         return new ClipboardItemData
         {
             Preview = preview,
@@ -1184,9 +1194,29 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
             Pinned = _pinnedClipboard.Contains(PinKey(entry)),
             IsImage = entry.Kind == ClipboardContentKind.Image,
             IsFiles = entry.Kind == ClipboardContentKind.Files,
-            ImagePng = hide ? null : entry.ImagePng,
-            ImageKey = !hide && entry.ImagePng is { Length: > 0 } ? $"clip:{entry.Sequence}" : null,
+            IsLink = !hide && entry.Kind == ClipboardContentKind.Text
+                && Uri.TryCreate(preview, UriKind.Absolute, out var link) && link.Scheme is "https" or "http",
+            IsCode = !hide && entry.Kind == ClipboardContentKind.Text && LooksLikeCode(preview),
+            FileDetail = file is null ? null : entry.FilePaths.Length > 1
+                ? $"{_localizer?.Get(LocKeys.Clipboard.File) ?? "Files"} × {entry.FilePaths.Length}"
+                : string.Join(" · ", new[] { file.TypeLabel, file.SizeText }.Where(value => !string.IsNullOrEmpty(value))),
+            ImagePng = hide ? null : file?.ThumbnailPng ?? entry.ImagePng,
+            ImageKey = hide ? null : file?.ImageKey ?? (entry.ImagePng is { Length: > 0 } ? $"clip:{entry.Sequence}" : null),
         };
+    }
+
+    private readonly FluidBar.App.Hosting.Pages.FileVisualCache _clipboardFileVisuals = new();
+
+    private static bool LooksLikeCode(string text)
+        => text.StartsWith("```", StringComparison.Ordinal)
+            || text.Contains('\n') && (text.StartsWith("using ", StringComparison.Ordinal)
+                || text.StartsWith("import ", StringComparison.Ordinal) || text.StartsWith("def ", StringComparison.Ordinal)
+                || text.StartsWith("function ", StringComparison.Ordinal) || text.StartsWith("const ", StringComparison.Ordinal)
+                || text.StartsWith("public class ", StringComparison.Ordinal));
+
+    private void OnClipboardFileVisualChanged(object? sender, EventArgs args)
+    {
+        if (Volatile.Read(ref _disposed) == 0) Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -1283,7 +1313,7 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
             _ => "(empty)",
         };
         if (preview.Length > 16_384) preview = preview[..16_384];
-        return preview.ReplaceLineEndings(" ").Trim();
+        return preview.Trim();
     }
 
     private IslandActionResult ToggleClipboardPin(int index)
@@ -1488,9 +1518,14 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
             IslandPlatformActionKind.QuickToggle => Toggle(action.Toggle),
             IslandPlatformActionKind.MediaOutput => OpenSoundSettings(),
             IslandPlatformActionKind.MediaQueue => OpenMediaPlayer(),
-            IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index),
-            IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index),
+            IslandPlatformActionKind.NotificationActivate => ActivateNotification(action.Index, action.NotificationId),
+            IslandPlatformActionKind.NotificationDismiss => DismissNotification(action.Index, action.NotificationId),
             IslandPlatformActionKind.NotificationCopyCode => CopyNotificationCode(action),
+            IslandPlatformActionKind.NotificationCopyBody => CopyNotificationCode(action),
+            IslandPlatformActionKind.NotificationPreview => PreviewNotification(action),
+            IslandPlatformActionKind.NotificationBack => BackFromNotification(),
+            IslandPlatformActionKind.NotificationFilter => FilterNotifications(action.Index),
+            IslandPlatformActionKind.NotificationUndo => UndoNotifications(),
             IslandPlatformActionKind.NotificationMarkAllRead => MarkAllNotificationsRead(),
             IslandPlatformActionKind.NotificationClearAll => ClearNotifications(),
             IslandPlatformActionKind.ClipboardCopy => CopyClipboard(action),
@@ -1970,15 +2005,14 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
     /// but the toast XML carries the app's <c>launch</c> protocol URI (QQ uses a ntqq:// deep link);
     /// use it first, then fall back to the running app's executable.
     /// </summary>
-    private IslandActionResult ActivateNotification(int index)
+    private IslandActionResult ActivateNotification(int index, uint? id = null)
     {
-        var recent = _notifications.Current?.Recent ?? ImmutableArray<NotificationEntry>.Empty;
-        if (index < 0 || index >= Math.Min(PageNotificationLimit, recent.Length))
+        var entry = FindNotification(index, id);
+        if (entry is null)
         {
             return Unsupported("the notification row no longer exists");
         }
 
-        var entry = recent[index];
         _notifications.MarkRead(entry.Id);
         var launch = NotificationToastImageReader.TryReadLaunch(entry.Id);
         if (!string.IsNullOrWhiteSpace(launch))
@@ -2026,18 +2060,56 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
     /// removes the row from the island list only; closing it in Action Center then keeps it gone (the
     /// service's close-sync prune).
     /// </summary>
-    private IslandActionResult DismissNotification(int index)
+    private IslandActionResult DismissNotification(int index, uint? id = null)
     {
-        var recent = _notifications.Current?.Recent ?? ImmutableArray<NotificationEntry>.Empty;
-        if (index < 0 || index >= Math.Min(PageNotificationLimit, recent.Length))
+        var entry = FindNotification(index, id);
+        if (entry is null)
         {
             return Unsupported("the notification row no longer exists");
         }
 
-        var entry = recent[index];
         return _notifications.RemoveLocally(entry.Id)
             ? IslandActionResult.Handled
             : Unsupported("the notification is no longer in the listener list");
+    }
+
+    private NotificationEntry? FindNotification(int index, uint? id)
+    {
+        var recent = _notifications.Current?.Recent ?? [];
+        // Once the UI supplies a stable id, never fall back to an index after a concurrent arrival.
+        return id.HasValue ? recent.FirstOrDefault(entry => entry.Id == id.Value)
+            ?? (_notificationDetail?.Id == id.Value ? _notificationDetail : null)
+            : index >= 0 && index < recent.Length ? recent[index] : null;
+    }
+
+    private IslandActionResult PreviewNotification(in IslandPlatformAction action)
+    {
+        var entry = FindNotification(action.Index, action.NotificationId);
+        if (entry is null) return Unsupported("the notification row no longer exists");
+        _notificationDetail = entry;
+        _notifications.MarkRead(entry.Id);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult BackFromNotification()
+    {
+        _notificationDetail = null;
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult FilterNotifications(int filter)
+    {
+        _notificationFilter = Math.Clamp(filter, 0, 2);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return IslandActionResult.Handled;
+    }
+
+    private IslandActionResult UndoNotifications()
+    {
+        _notifications.UndoLocalRemoval();
+        return IslandActionResult.Handled;
     }
 
     /// <summary>
@@ -2216,6 +2288,7 @@ public sealed partial class SkiaPlatformActions : IIslandPlatformActions, IIslan
         }
 
         _settings.Changed -= OnSettingsChanged;
+        _clipboardFileVisuals.Changed -= OnClipboardFileVisualChanged;
         _calendarEvents.Changed -= OnCalendarEventsChanged;
         await StopOneAsync("clipboard", () => _clipboard.DisposeAsync().AsTask()).ConfigureAwait(false);
         await StopOneAsync("usb-devices", () => _usbDevices.DisposeAsync().AsTask()).ConfigureAwait(false);

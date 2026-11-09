@@ -69,6 +69,22 @@ public static class SkiaIslandControlRouter
                 return new IslandPlatformAction(IslandPlatformActionKind.MediaQueue);
             case IslandPageControl.NotificationClear:
                 return new IslandPlatformAction(IslandPlatformActionKind.NotificationClearAll);
+            case IslandPageControl.NotificationFilter:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationFilter, hit.Index);
+            case IslandPageControl.NotificationUndo:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationUndo);
+            case IslandPageControl.NotificationMarkRead:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationMarkAllRead);
+            case IslandPageControl.NotificationBack:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationBack);
+            case IslandPageControl.NotificationCopyBody:
+                return new IslandPlatformAction(IslandPlatformActionKind.NotificationCopyBody,
+                    Text: state.Pages.Notifications.Detail?.FullBody ?? state.Pages.Notifications.Detail?.Body,
+                    NotificationId: state.Pages.Notifications.Detail?.Id);
+            case IslandPageControl.NotificationOpenSource:
+                return state.Pages.Notifications.Detail is { } detail
+                    ? new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, NotificationId: detail.Id)
+                    : null;
             case IslandPageControl.ClipboardFilter:
                 return new IslandPlatformAction(IslandPlatformActionKind.ClipboardCycleFilter);
             case IslandPageControl.ClipboardSearch:
@@ -79,7 +95,8 @@ public static class SkiaIslandControlRouter
                     : null;
             case IslandPageControl.Dismiss:
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
-                    ? new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, hit.Index)
+                    ? new IslandPlatformAction(IslandPlatformActionKind.NotificationDismiss, hit.Index,
+                        NotificationId: state.Pages.Notifications.Items[hit.Index].Id)
                     : null;
             case IslandPageControl.ClipboardDelete:
                 return HasRow(state.Pages.Clipboard.Items, hit.Index)
@@ -129,7 +146,8 @@ public static class SkiaIslandControlRouter
         {
             case PageSlotKind.Notifications:
                 return HasRow(state.Pages.Notifications.Items, hit.Index)
-                    ? new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, hit.Index)
+                    ? new IslandPlatformAction(IslandPlatformActionKind.NotificationPreview, hit.Index,
+                        NotificationId: state.Pages.Notifications.Items[hit.Index].Id)
                     : null;
             case PageSlotKind.Clipboard:
                 // A clipboard row click copies the row (Windows clipboard-history behaviour).
@@ -162,6 +180,9 @@ public static class SkiaIslandControlRouter
 
     private static IslandPlatformAction? TryNotificationCopyCode(in IslandRenderState state, int index)
     {
+        if (state.Pages.Notifications.Detail is { } detail)
+            return string.IsNullOrWhiteSpace(detail.VerificationCode) ? null
+                : new IslandPlatformAction(IslandPlatformActionKind.NotificationCopyCode, Text: detail.VerificationCode, NotificationId: detail.Id);
         var items = state.Pages.Notifications.Items;
         if (!HasRow(items, index))
         {
@@ -172,8 +193,8 @@ public static class SkiaIslandControlRouter
         return string.IsNullOrWhiteSpace(code)
             // The copy chip is only painted when a code exists; a click in that lane on a code-less
             // card must still behave like the row instead of becoming a dead zone.
-            ? new IslandPlatformAction(IslandPlatformActionKind.NotificationActivate, index)
-            : new IslandPlatformAction(IslandPlatformActionKind.NotificationCopyCode, index, Text: code);
+            ? new IslandPlatformAction(IslandPlatformActionKind.NotificationPreview, index, NotificationId: items[index].Id)
+            : new IslandPlatformAction(IslandPlatformActionKind.NotificationCopyCode, index, Text: code, NotificationId: items[index].Id);
     }
 
     private static bool HasRow<T>(IReadOnlyList<T>? items, int index)

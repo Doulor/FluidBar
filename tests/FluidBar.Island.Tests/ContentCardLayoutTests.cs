@@ -113,6 +113,6 @@ public sealed class ContentCardLayoutTests
         var file = PluginListLayout.Row(page, model, 1, FontScaleMetrics.One);
         Assert.True(toolbar.Height < file.Height);
         Assert.True(toolbar.Bottom < file.Top);
-        Assert.True(PluginListLayout.TrailingButton(file, model.Rows[1]).Width <= 30);
+        Assert.True(PluginListLayout.TrailingButton(file, model.Rows[1]).Width <= 72);
     }
 }

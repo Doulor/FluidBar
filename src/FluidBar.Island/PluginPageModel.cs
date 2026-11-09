@@ -50,4 +50,7 @@ public sealed record PluginPageRowModel
 
     /// <summary>Parent directory prepared without filesystem access when the row is published.</summary>
     public string? FileDirectory { get; init; }
+
+    /// <summary>Asynchronously inspected and cached file facts; no disk access during rendering.</summary>
+    public FileVisualMetadata? FileVisual { get; init; }
 }

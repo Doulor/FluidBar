@@ -29,6 +29,7 @@ public sealed class UpdateCheckClient : IAsyncDisposable
     private readonly SemaphoreSlim _downloadGate = new(1, 1);
 
     private string? _lastETag;
+    private string? _cachedManifestJson;
     private string? _downloadedFilePath;
     private string? _downloadedInstallerTag;
     private UpdateVerificationStatus _downloadedVerification = UpdateVerificationStatus.NotVerified;
@@ -113,37 +114,34 @@ public sealed class UpdateCheckClient : IAsyncDisposable
             timeout.CancelAfter(_options.Timeout);
 
             using var httpRequest = new HttpRequestMessage(HttpMethod.Get, _options.ReleaseFeedUrl);
-            if (!string.IsNullOrWhiteSpace(etag))
+            if (_cachedManifestJson is not null && etag == _lastETag && !string.IsNullOrWhiteSpace(etag))
             {
                 httpRequest.Headers.TryAddWithoutValidation("If-None-Match", etag);
             }
 
             using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead,
                 timeout.Token).ConfigureAwait(false);
-            var responseEtag = response.Headers.ETag?.Tag;
-            if (responseEtag is not null)
-            {
-                _lastETag = responseEtag;
-            }
-
-            if (response.StatusCode == HttpStatusCode.NotModified)
-            {
-                var now = _timeProvider.GetUtcNow();
-                Publish(new UpdateStatusSnapshot(UpdateState.UpToDate, _currentVersion, null, null,
-                    UpdateVerificationStatus.NotVerified, now, null));
-                return new UpdateCheckResult(UpdateCheckStatus.NotModified, null, _lastETag);
-            }
-
-            if (!response.IsSuccessStatusCode)
+            var notModified = response.StatusCode == HttpStatusCode.NotModified;
+            if (notModified && httpRequest.Headers.IfNoneMatch.Count == 0)
+                return Fail("Update feed returned 304 without a matching cached manifest.", _lastETag);
+            if (!response.IsSuccessStatusCode && !notModified)
             {
                 return Fail($"Update feed returned HTTP {(int)response.StatusCode}.", _lastETag);
             }
 
-            var json = await ReadCappedStringAsync(response, _options.MaxManifestBytes, timeout.Token)
-                .ConfigureAwait(false);
+            // 304 means the feed is unchanged, not that the installed app is up to date.
+            // Re-evaluate the cached document for the requested channel and installed version.
+            var json = notModified ? _cachedManifestJson
+                : await ReadCappedStringAsync(response, _options.MaxManifestBytes, timeout.Token).ConfigureAwait(false);
             if (json is null)
             {
-                return Fail("Update manifest exceeded the size limit.", _lastETag);
+                return Fail(notModified ? "Update feed returned 304 without a cached manifest."
+                    : "Update manifest exceeded the size limit.", _lastETag);
+            }
+            if (!notModified)
+            {
+                _cachedManifestJson = json;
+                _lastETag = response.Headers.ETag?.ToString();
             }
 
             var release = ReleaseManifestParser.SelectRelease(json, request.Channel,
@@ -162,11 +160,13 @@ public sealed class UpdateCheckClient : IAsyncDisposable
             {
                 Publish(new UpdateStatusSnapshot(UpdateState.UpToDate, _currentVersion, release, null,
                     UpdateVerificationStatus.NotVerified, now2, null));
-                return new UpdateCheckResult(UpdateCheckStatus.UpToDate, release, _lastETag);
+                return new UpdateCheckResult(notModified ? UpdateCheckStatus.NotModified : UpdateCheckStatus.UpToDate, release, _lastETag);
             }
 
-            Publish(new UpdateStatusSnapshot(UpdateState.Available, _currentVersion, release, null,
-                UpdateVerificationStatus.NotVerified, now2, null));
+            var cachedInstaller = IsCachedInstallerValid(release);
+            Publish(new UpdateStatusSnapshot(cachedInstaller ? UpdateState.ReadyToInstall : UpdateState.Available,
+                _currentVersion, release, cachedInstaller ? _downloadedFilePath : null,
+                cachedInstaller ? _downloadedVerification : UpdateVerificationStatus.NotVerified, now2, null));
             _counters.IncrementUpdateChecks();
             _logger.LogInfo(PlatformLogCategory.Update, "update.available",
                 "A newer release is available.",

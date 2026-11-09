@@ -222,6 +222,12 @@ public static partial class SettingsValidator
     /// <summary>Maximum font scale.</summary>
     public const double MaxFontScale = 1.6;
 
+    /// <summary>Minimum whole-island scale.</summary>
+    public const double MinIslandScale = 0.8;
+
+    /// <summary>Maximum whole-island scale.</summary>
+    public const double MaxIslandScale = 1.4;
+
     /// <summary>Minimum motion strength.</summary>
     public const double MinMotionStrength = 0.5;
 
@@ -270,6 +276,7 @@ public static partial class SettingsValidator
         var appearance = settings.Appearance;
         var fillOpacity = Clamp(appearance.FillOpacity, MinFillOpacity, 1.0, "appearance.fillOpacity", issues);
         var fontScale = Clamp(appearance.FontScale, MinFontScale, MaxFontScale, "appearance.fontScale", issues);
+        var islandScale = Clamp(appearance.IslandScale, MinIslandScale, MaxIslandScale, "appearance.islandScale", issues);
         var motionStrength = Clamp(appearance.MotionStrength, MinMotionStrength, MaxMotionStrength, "appearance.motionStrength", issues);
         var bloom = Clamp(appearance.BloomStrength, 0, 2, "appearance.bloomStrength", issues);
         var accentFallback = NormalizeHex(appearance.Accent.FallbackHex, "#4CC9F0", "appearance.accent.fallbackHex", issues);
@@ -317,6 +324,7 @@ public static partial class SettingsValidator
                 LyricOffsetMs = Clamp(appearance.LyricOffsetMs, -800, 800, "appearance.lyricOffsetMs", issues),
                 FillOpacity = fillOpacity,
                 FontScale = fontScale,
+                IslandScale = islandScale,
                 MotionStrength = motionStrength,
                 BloomStrength = bloom,
                 Accent = appearance.Accent with

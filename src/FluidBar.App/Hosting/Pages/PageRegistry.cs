@@ -17,6 +17,12 @@ public sealed class PageRegistry
     private readonly object _gate = new();
     private readonly List<Entry> _pages = [];
     private IReadOnlyList<string> _order = [];
+    private readonly FileVisualCache _fileVisuals = new();
+
+    public PageRegistry()
+    {
+        _fileVisuals.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Raised after a page is registered, updated or removed (safe from any thread).</summary>
     public event EventHandler? Changed;
@@ -216,14 +222,14 @@ public sealed class PageRegistry
     {
         lock (_gate)
         {
-            return _pages.Select(static entry => new PluginPageModel
+            return _pages.Select(entry => new PluginPageModel
             {
                 PageId = entry.Descriptor.PageId,
                 OwnerPluginId = entry.OwnerId,
                 Title = Resolve(entry.Descriptor.Title),
                 ShortTitle = entry.Descriptor.ShortTitle is null ? null : Resolve(entry.Descriptor.ShortTitle),
                 IconToken = entry.Descriptor.IconToken,
-                Rows = entry.Data?.List?.Rows.Select(static row => new PluginPageRowModel
+                Rows = entry.Data?.List?.Rows.Select(row => new PluginPageRowModel
                 {
                     RowId = row.RowId,
                     IconToken = row.IconToken,
@@ -237,6 +243,8 @@ public sealed class PageRegistry
                     TrailingLabel = row.TrailingLabel,
                     DragFiles = row.DragFiles,
                     FileDirectory = row.DragFiles is { Count: > 0 } files ? Path.GetDirectoryName(files[0]) : null,
+                    FileVisual = entry.OwnerId == "fluidbar-file-shelf" && row.DragFiles is { Count: > 0 } filePaths
+                        ? _fileVisuals.Get(filePaths[0]) : null,
                 }).ToArray() ?? [],
                 EmptyTitle = entry.Data?.List?.EmptyTitle,
                 EmptyHint = entry.Data?.List?.EmptyHint,

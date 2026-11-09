@@ -45,6 +45,7 @@ public sealed class IslandPreview : Control
     public void Update(AppSettings settings, ILocalizer? localizer)
     {
         Model = IslandPreviewModel.From(settings ?? throw new ArgumentNullException(nameof(settings)));
+        Height = SettingsMetrics.ApCanvasHeight * Math.Max(1, Model.IslandScale);
         _localizer = localizer;
         ModelChanged?.Invoke(Model);
         InvalidateVisual();
@@ -52,7 +53,7 @@ public sealed class IslandPreview : Control
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
-        => new(availableSize.Width is > 1 and < 4000 ? availableSize.Width : 560, SettingsMetrics.ApCanvasHeight);
+        => new(availableSize.Width is > 1 and < 4000 ? availableSize.Width : 560, Height);
 
     /// <inheritdoc />
     public override void Render(DrawingContext context)
@@ -103,6 +104,13 @@ public sealed class IslandPreview : Control
         var scale = model.FontScale;
         var shellWidth = SettingsMetrics.ApShellWidth * scale;
         var shellHeight = SettingsMetrics.ApShellHeight;
+        // Scale around the stage centre. Fit the preview when both text and island size are large
+        // so the largest settings still show a complete shell inside the settings window.
+        var islandScale = Math.Min(model.IslandScale, Math.Max(0.1, (width - 16) / shellWidth));
+        using var islandTransform = context.PushTransform(
+            Matrix.CreateTranslation(-width / 2, -height / 2)
+            * Matrix.CreateScale(islandScale, islandScale)
+            * Matrix.CreateTranslation(width / 2, height / 2));
         var shell = new Rect((width - shellWidth) / 2, (height - shellHeight) / 2, shellWidth, shellHeight);
         var radius = model.RadiusFor(shellHeight);
 

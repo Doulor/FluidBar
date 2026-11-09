@@ -210,6 +210,23 @@ public sealed class ClipboardPluginTests
 public sealed class NotificationsPluginTests
 {
     [Fact]
+    public async Task Restoring_local_history_does_not_replay_an_old_toast()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-11-09T10:00:00Z"));
+        var notifications = new FakeNotificationSource();
+        var (context, _) = await PluginTestHarness.StartAsync(new NotificationsPlugin(notifications), BuiltinIds.NotificationsPlugin, time);
+        var entry = PluginTestHarness.Notification(null, id: 42);
+        notifications.Emit(entry);
+        Assert.Equal(1, context.Publisher.Count);
+        notifications.Emit(new NotificationsSnapshot(NotificationAccessState.Allowed, []) { IsLocalUpdate = true });
+        time.Advance(TimeSpan.FromHours(1));
+        notifications.Emit(new NotificationsSnapshot(NotificationAccessState.Allowed, [entry]) { IsLocalUpdate = true });
+        Assert.Equal(1, context.Publisher.Count);
+        notifications.Emit(entry with { Id = 43, Title = "New arrival" });
+        Assert.Equal(2, context.Publisher.Count);
+    }
+
+    [Fact]
     public async Task PublishesVerificationCodeFlag()
     {
         var notifications = new FakeNotificationSource();

@@ -56,6 +56,9 @@ public sealed record IslandPreviewModel
     /// <summary>Island text scale.</summary>
     public required double FontScale { get; init; }
 
+    /// <summary>Whole-island scale, applied to the shell and all its content.</summary>
+    public double IslandScale { get; init; } = 1.0;
+
     /// <summary>Palette id (<c>obsidian</c>…<c>nord</c>).</summary>
     public required string Palette { get; init; }
 
@@ -108,6 +111,8 @@ public sealed record IslandPreviewModel
             LiquidGlass = theme.Material == IslandMaterialTier.LiquidGlass,
             PanelRadius = settings.PanelRadius,
             FontScale = Math.Clamp(settings.FontScale, 0.8, 1.6),
+            IslandScale = Math.Clamp(double.IsFinite(settings.IslandScale) ? settings.IslandScale : 1.0,
+                FluidBar.Core.Settings.SettingsValidator.MinIslandScale, FluidBar.Core.Settings.SettingsValidator.MaxIslandScale),
             Palette = string.IsNullOrWhiteSpace(settings.Palette) ? "obsidian" : settings.Palette,
             // Report the material the shell will actually paint (safe mode degrades to obsidian).
             Material = theme.Material switch

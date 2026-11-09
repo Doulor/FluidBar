@@ -7,6 +7,31 @@ namespace FluidBar.Core.Tests;
 
 public class SettingsSerializationTests
 {
+    [Theory]
+    [InlineData(0.1, 0.8)]
+    [InlineData(2, 1.4)]
+    [InlineData(1.25, 1.25)]
+    public void IslandScaleIsValidatedIndependentlyOfTextSize(double value, double expected)
+    {
+        var settings = FluidBarSettings.CreateDefault();
+        var normalized = SettingsValidator.Normalize(settings with
+        {
+            Appearance = settings.Appearance with { IslandScale = value, FontScale = 1.1 },
+        }, out _);
+        Assert.Equal(expected, normalized.Appearance.IslandScale);
+        Assert.Equal(1.1, normalized.Appearance.FontScale);
+        Assert.True(SettingsJson.TryDeserialize(SettingsJson.Serialize(normalized), out var restored, out _));
+        Assert.Equal(expected, restored!.Appearance.IslandScale);
+    }
+
+    [Fact]
+    public void SettingsWithoutIslandScaleKeepTheirOriginalSize()
+    {
+        Assert.True(SettingsJson.TryDeserialize("""{"schemaVersion":2,"appearance":{"fontScale":1.3}}""", out var restored, out _));
+        Assert.Equal(1, restored!.Appearance.IslandScale);
+        Assert.Equal(1.3, restored.Appearance.FontScale);
+    }
+
     [Fact]
     public void Defaults_AreValid()
     {

@@ -51,6 +51,11 @@ public enum IslandPlatformActionKind
 
     /// <summary>Clear the island's local notification list (Action Center is not modified).</summary>
     NotificationClearAll,
+    NotificationPreview,
+    NotificationFilter,
+    NotificationUndo,
+    NotificationBack,
+    NotificationCopyBody,
 
     /// <summary>Copy a clipboard row; <see cref="IslandPlatformAction.Text"/> is the row text.</summary>
     ClipboardCopy,
@@ -115,7 +120,8 @@ public readonly record struct IslandPlatformAction(
     int Index = -1,
     double Value = 0,
     IslandQuickToggle Toggle = IslandQuickToggle.Wifi,
-    string? Text = null)
+    string? Text = null,
+    uint? NotificationId = null)
 {
     /// <inheritdoc />
     public override string ToString() => Kind switch

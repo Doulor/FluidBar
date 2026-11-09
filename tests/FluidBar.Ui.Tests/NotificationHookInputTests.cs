@@ -30,7 +30,7 @@ public sealed class NotificationHookInputTests
         fixture.Controller.HandlePageRequest(new PageRef("fluidbar-file-shelf.page"));
         fixture.Step(100);
         var state = fixture.Controller.RenderState;
-        var row = PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0, FontScaleMetrics.From(1));
+        var row = PluginListLayout.Row(IslandMetrics.PageRect(state, 6), state.Pages.PluginPageAt(6)!, 0, FontScaleMetrics.From(1));
         fixture.Controller.HandlePointerPressed(row.MidX, row.MidY);
         fixture.Call("StartNativeFileDrag", fixture.Window, false);
         Assert.True(invoked);
@@ -70,7 +70,7 @@ public sealed class NotificationHookInputTests
             fixture.Controller.HandlePageRequest(new PageRef("fluidbar-file-shelf.page"));
             fixture.Step(100);
             var state = fixture.Controller.RenderState;
-            var row = PageMetricsLayout.NotificationRow(IslandMetrics.PageRect(state, 6), 0, 0, FontScaleMetrics.From(1));
+            var row = PluginListLayout.Row(IslandMetrics.PageRect(state, 6), state.Pages.PluginPageAt(6)!, 0, FontScaleMetrics.From(1));
             x = (int)row.MidX;
             y = (int)row.MidY;
             var commands = new List<PluginPageCommandRequest>();

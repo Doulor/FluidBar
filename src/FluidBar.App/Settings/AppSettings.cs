@@ -213,6 +213,9 @@ public sealed record AppSettings
     /// <summary>Text scale for island content (0.8–1.6).</summary>
     public double FontScale { get; init; } = 1.0;
 
+    /// <summary>Whole-island scale, independent of text size (0.8–1.4).</summary>
+    public double IslandScale { get; init; } = 1.0;
+
     /// <summary>
     /// Karaoke lead/lag correction in milliseconds (-800..+800). Positive shows the words earlier.
     /// Sources whose clock only has one-second resolution (the KuGou accessibility path) leave a
@@ -442,6 +445,8 @@ public sealed record AppSettings
         FillOpacity = Math.Clamp(FillOpacity, LayoutTokens.MinFillOpacity, 1.0),
         PanelRadius = Math.Clamp(PanelRadius, 16, 36),
         FontScale = Math.Clamp(FontScale, 0.8, 1.6),
+        IslandScale = Math.Clamp(double.IsFinite(IslandScale) ? IslandScale : 1.0,
+            FluidBar.Core.Settings.SettingsValidator.MinIslandScale, FluidBar.Core.Settings.SettingsValidator.MaxIslandScale),
             LyricOffsetMs = Math.Clamp(double.IsFinite(LyricOffsetMs) ? LyricOffsetMs : 0, -800, 800),
         ReducedMotion = Enum.IsDefined(ReducedMotion) ? ReducedMotion : ReducedMotionPreference.System,
         MotionStrength = Math.Clamp(MotionStrength, MotionProfile.MinStrength, MotionProfile.MaxStrength),
@@ -513,6 +518,7 @@ public sealed record AppSettings
                 TabBarStyle = TabBarStyle == TabBarStyle.BottomPreview ? "bottom-preview" : "side-rail",
                 RailSide = RailSide == PageRailSide.Right ? "right" : "left",
                 FontScale = FontScale,
+                IslandScale = IslandScale,
             LyricOffsetMs = LyricOffsetMs,
                 ReducedMotion = ReducedMotion.ToString().ToLowerInvariant(),
                 MotionStrength = MotionStrength,
@@ -601,6 +607,7 @@ public sealed record AppSettings
                 TabBarStyle = ParseTabBarStyle(document.Appearance?.TabBarStyle, defaults.TabBarStyle),
                 RailSide = ParseRailSide(document.Appearance?.RailSide, defaults.RailSide),
                 FontScale = document.Appearance?.FontScale ?? defaults.FontScale,
+                IslandScale = document.Appearance?.IslandScale ?? defaults.IslandScale,
             LyricOffsetMs = document.Appearance?.LyricOffsetMs ?? defaults.LyricOffsetMs,
                 ReducedMotion = ParseReducedMotion(document.Appearance?.ReducedMotion),
                 MotionStrength = document.Appearance?.MotionStrength ?? defaults.MotionStrength,
@@ -852,6 +859,7 @@ internal sealed class AppearanceJson
     public string? TabBarStyle { get; set; }
     public string? RailSide { get; set; }
     public double? FontScale { get; set; }
+    public double? IslandScale { get; set; }
 
     /// <summary>Karaoke offset in milliseconds (-800..+800).</summary>
     public double? LyricOffsetMs { get; set; }

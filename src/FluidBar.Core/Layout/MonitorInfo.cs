@@ -22,8 +22,14 @@ public sealed record MonitorInfo
     /// <summary>Whether this is the primary monitor.</summary>
     public bool IsPrimary { get; init; }
 
-    /// <summary>DIP scale factor (<see cref="Dpi"/> / 96).</summary>
-    public double Scale => Dpi / 96.0;
+    /// <summary>
+    /// Optional content scale for a layout-only copy of the monitor. The physical DPI and screen
+    /// bounds remain unchanged; placement and work-area conversion use the combined scale.
+    /// </summary>
+    public double LayoutScale { get; init; } = 1.0;
+
+    /// <summary>Logical-to-physical scale (monitor DPI / 96 × content scale).</summary>
+    public double Scale => Dpi / 96.0 * LayoutScale;
 
     /// <summary>Work-area width in DIP.</summary>
     public double WorkAreaWidthDip => WorkArea.Width / Scale;

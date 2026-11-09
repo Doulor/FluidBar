@@ -220,6 +220,9 @@ public sealed record AppearanceSettings
     /// <summary>Font scale; clamped to 0.8..1.6.</summary>
     public double FontScale { get; init; } = 1.0;
 
+    /// <summary>Whole-island scale, independent of text size; clamped to 0.8..1.4.</summary>
+    public double IslandScale { get; init; } = 1.0;
+
     /// <summary>Expanded panel corner radius in DIP.</summary>
     public double PanelRadius { get; init; } = 30;
 
