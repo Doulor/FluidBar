@@ -71,7 +71,7 @@ public sealed record IslandPreviewModel
     /// <summary>Simulated-glass tier paints a fixed translucent fill (renderer parity: 0.72).</summary>
     public const double GlassFillOpacity = 0.72;
 
-    /// <summary>Liquid-glass tier paints a fixed translucent fill (renderer parity: 0.68).</summary>
+    /// <summary>The preview has no desktop capture, so it uses the renderer's dense liquid-glass fallback.</summary>
     public const double LiquidGlassFillOpacity = LiquidGlassTokens.FillOpacity;
 
     /// <summary>Fill opacity actually painted (translucent tiers override the slider, like the renderer).</summary>

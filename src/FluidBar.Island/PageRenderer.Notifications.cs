@@ -49,7 +49,6 @@ internal sealed partial class PageRenderer
             if (row.Bottom > body.Top) DrawNotificationRow(canvas, model.Items[i], row, i, model);
         }
         canvas.Restore();
-        DrawContentScrollIndicator(canvas, body, scroll, maxScroll);
     }
 
     private void DrawNotificationRow(SKCanvas canvas, NotificationItemModel item, SKRect row, int index, NotificationsPageModel model)
@@ -128,7 +127,6 @@ internal sealed partial class PageRenderer
             _text.Draw(canvas, _notificationDetailLines[i], PageMetricsLayout.NotificationBodyStyle, new SKRect(body.Left, y, body.Right, y + lineHeight), _theme.ForegroundSecondary, TextAlign.Left, _opacity);
         }
         canvas.Restore();
-        DrawContentScrollIndicator(canvas, body, scroll, maxScroll);
         DrawNotificationButton(canvas, PageMetricsLayout.NotificationDetailAction(page, 0), model.CopyBodyLabel, IslandPageControl.NotificationCopyBody);
         if (!string.IsNullOrWhiteSpace(item.VerificationCode))
             DrawNotificationButton(canvas, PageMetricsLayout.NotificationDetailAction(page, 1), model.CopyCodeLabel ?? "Copy code", IslandPageControl.Copy, selected: true);

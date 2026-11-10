@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>FluidBar · 液面</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1D2028"/>
+      <stop offset="1" stop-color="#08090C"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".2"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".08"/>
+    </linearGradient>
+    <linearGradient id="liquid" x1="0" y1="118" x2="0" y2="156" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5BD3F5"/>
+      <stop offset="1" stop-color="#0A84FF"/>
+    </linearGradient>
+    <clipPath id="inner"><rect x="52" y="102" width="152" height="52" rx="26"/></clipPath>
+    <filter id="glow" x="-50%" y="-100%" width="200%" height="300%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="60" fill="url(#bg)"/>
+  <rect x="9" y="9" width="238" height="238" rx="59" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  <rect x="56" y="132" width="144" height="36" rx="18" fill="#2BA4F4" opacity=".35" filter="url(#glow)"/>
+  <!-- A capsule ("bar") holding a liquid ("fluid") with a moving surface. -->
+  <g clip-path="url(#inner)">
+    <path d="M40 121c16-8 32-8 48 0s32 8 48 0 32-8 48 0 32 8 48 0V170H40Z" fill="#4CC9F0" opacity=".42"/>
+    <path d="M16 126c16-8 32-8 48 0s32 8 48 0 32-8 48 0 32 8 48 0 32-8 48 0V170H16Z" fill="url(#liquid)"/>
+    <circle cx="150" cy="141" r="3" fill="#fff" opacity=".55"/>
+    <circle cx="166" cy="146" r="2" fill="#fff" opacity=".45"/>
+  </g>
+  <rect x="44" y="94" width="168" height="68" rx="34" fill="none" stroke="#F7F8FA" stroke-width="8"/>
+</svg>

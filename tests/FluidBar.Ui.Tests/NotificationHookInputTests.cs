@@ -21,6 +21,29 @@ namespace FluidBar.Ui.Tests;
 public sealed class NotificationHookInputTests
 {
     [Fact]
+    public void Hook_keeps_scrollbar_drag_captured_outside_the_viewport_without_starting_a_page_drag()
+    {
+        using var fixture = new HookFixture();
+        fixture.Controller.ApplyInput(IslandInput.PrimaryClick());
+        fixture.Controller.HandlePageRequest(new PageRef("builtin.clipboard"));
+        fixture.Step(100);
+        var state = fixture.Controller.RenderState;
+        var geometry = ContentScrollLayout.Measure(state.Pages, 3, IslandMetrics.PageRect(state, 3), FontScaleMetrics.From(state.FontScale));
+        Assert.True(geometry.CanScroll);
+        fixture.Call("OnHookPointerPressed", geometry.Thumb.MidX, geometry.Thumb.MidY);
+        fixture.Drain();
+        Assert.True(fixture.Controller.HasContentScrollDrag);
+        fixture.Call("OnHookPointerDragged", geometry.Thumb.MidX, geometry.Track.Bottom + 80);
+        fixture.Drain();
+        Assert.Equal(geometry.Maximum, fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset, 3);
+        fixture.Call("OnHookPointerReleased", geometry.Thumb.MidX, geometry.Track.Bottom + 80);
+        fixture.Drain();
+        Assert.False(fixture.Controller.HasContentScrollDrag);
+        Assert.False(fixture.Controller.Pager.IsDragging);
+        Assert.Equal(3, fixture.Controller.Pager.SelectedIndex);
+    }
+
+    [Fact]
     public void Native_window_file_drag_uses_native_button_state_when_the_global_hook_is_not_installed()
     {
         var invoked = false;

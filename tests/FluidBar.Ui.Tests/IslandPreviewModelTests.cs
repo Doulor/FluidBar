@@ -75,7 +75,7 @@ public sealed class IslandPreviewModelTests
         Assert.False(safe.Glass);
         Assert.Equal(0.9, safe.EffectiveFillOpacity, 3);
 
-        // Tier 2: liquid glass stays translucent, but at its own fill level and with its own id.
+        // The preview has no captured desktop: match the liquid tier's dense fallback and material id.
         var liquid = IslandPreviewModel.From(
             Baseline with { Material = IslandMaterial.LiquidGlass, FillOpacity = 0.9 }, DarkAppearance);
         Assert.True(liquid.Glass);
@@ -83,8 +83,8 @@ public sealed class IslandPreviewModelTests
         Assert.False(acrylic.LiquidGlass);
         Assert.Equal("liquid-glass", liquid.Material);
         Assert.Equal(IslandPreviewModel.LiquidGlassFillOpacity, liquid.EffectiveFillOpacity, 3);
-        Assert.True(liquid.EffectiveFillOpacity < acrylic.EffectiveFillOpacity,
-            "liquid glass should be clearer than acrylic");
+        Assert.True(liquid.EffectiveFillOpacity >= 0.94,
+            "without a captured desktop the preview must not expose sharp text behind the glass");
 
         var liquidSafe = IslandPreviewModel.From(
             Baseline with

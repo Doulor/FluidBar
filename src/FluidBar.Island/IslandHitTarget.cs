@@ -144,6 +144,8 @@ public enum IslandPageControl
 
     /// <summary>Scrollable list body (wheel/touch scroll region).</summary>
     Scroll,
+    /// <summary>Draggable content scrollbar, shared by all expanded pages.</summary>
+    Scrollbar,
 
     /// <summary>Plugin list row; <see cref="IslandHitTarget.Index"/> is the row.</summary>
     PluginRow,

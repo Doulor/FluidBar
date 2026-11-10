@@ -11,10 +11,10 @@ namespace FluidBar.Island;
 public static class LiquidGlassTokens
 {
     /// <summary>
-    /// Shell fill opacity while the liquid-glass tier is active (the opacity slider is bypassed). Slightly
-    /// clearer than the acrylic tier so the desktop keeps showing through under the baked shadow.
+    /// Fallback shell opacity when no blurred desktop is available. A translucent tint would expose
+    /// sharp desktop text and look like broken glass. Successful captures use BackdropTintAlpha instead.
     /// </summary>
-    public const double FillOpacity = 0.68;
+    public const double FillOpacity = 0.96;
 
     /// <summary>Tint alpha painted over the blurred backdrop (backdrop mode).</summary>
     public const double BackdropTintAlpha = 0.30;

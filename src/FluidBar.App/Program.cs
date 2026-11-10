@@ -117,6 +117,7 @@ public sealed class FluidBarApplication : Application
         {
             Styles.Add(new FluentTheme());
         }
+        AppBranding.ConfigureWindowIcons();
     }
 
     /// <inheritdoc />

@@ -1,16 +1,28 @@
-# FluidBar 4.1
+<p align="center">
+  <img src="src/FluidBar.App/Assets/fluidbar.png" width="112" height="112" alt="FluidBar 蓝色液面图标" />
+</p>
+
+<h1 align="center">FluidBar 5.0</h1>
 
 > Windows 上的灵动岛：把媒体、通知、剪贴板和常用控制收进一颗小胶囊，需要时再展开。
 
-[官方网站](https://fluidbar.doulor.cn/) · [下载 4.3.0](https://github.com/Doulor/FluidBar/releases/tag/v4.3.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
+[官方网站](https://fluidbar.doulor.cn/) · [下载 5.0.0](https://github.com/Doulor/FluidBar/releases/tag/v5.0.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
 
-**当前版本：4.3.0（2026-11-09）**。优化通知、剪贴板和文件暂存卡片，新增岛体缩放，分离页内滚动与切页，并修复更新缓存误报“已是最新版”。详见 [4.3.0 发布说明](<docs/rewrite/RELEASE-4.3.0.md>)。
+**当前版本：5.0.0（2026-11-10）**。统一软件图标，完善所有详情页的滚动操作，修复液态玻璃背景意外变透明，以及通知中回车显示为方框的问题。详见 [5.0.0 发布说明](<docs/rewrite/RELEASE-5.0.0.md>)。
 
-README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
+## 5.0.0 更新
+
+- **统一图标**：使用蓝色液面图标，EXE、系统托盘、窗口 / 任务栏、设置标题栏和关于页共用同一套资源，包含适合不同 DPI 的多尺寸 ICO。[SVG 源文件](<src/FluidBar.App/Assets/fluidbar.svg>)与[图标维护说明](<src/FluidBar.App/Assets/README.md>)一并保留。
+- **更顺手的详情页**：滚动条支持拖动与点击定位；拖出窗口后仍可继续拖动，松手结束。鼠标滚轮平滑滚动、反向立即响应，触控板连续输入直接跟随；普通纵向滚轮在列表边界也不会误切页。
+- **稳定的液态玻璃**：修正背景截图中未定义的透明通道，防止模糊后的背景本身变透明；材质切换时保留完整背景，采样不可用时使用更实的底色回退。
+- **更清晰的通知**：顶部通知将回车、换行等不可见分隔符合并为空格，避免“群名□发消息人”；详情和复制内容保留原始换行，冒号与 emoji 不受影响。
+- **长通知阅读优化**：复用相同正文的换行结果，缩小首次排版的测量范围，减少详情滚动中的重复排版。
+
+继续保留 4.3 的通知 / 剪贴板 / 文件暂存卡片、独立岛体缩放，以及更新缓存修复。5.0.0 沿用现有用户数据目录，升级不要求重置设置或插件。
 
 ## 实际界面
 
-以下图片均为 **FluidBar 4.1.0 在 Windows 上运行时的原生窗口截图**，不是官网交互原型或渲染效果图。媒体信息来自正在运行的播放器；截图只做区域裁切，未重绘界面。拍摄环境、裁切范围见 [截图说明](<docs/screenshots/README.md>)。
+以下图片为 **FluidBar 4.1.0 的历史原生窗口截图**，用于展示基本使用方式；5.0.0 的统一图标和内容卡片已更新，请以当前版本为准。这些图片来自 Windows 上实际运行的程序，媒体信息来自正在运行的播放器，截图只做区域裁切，未重绘界面。拍摄环境、裁切范围见 [截图说明](<docs/screenshots/README.md>)。
 
 ### 平时保持紧凑，点击展开
 
@@ -47,7 +59,7 @@ README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 | **外观与交互** | 三种材质、配色、动效、显示器与位置设置；支持中文和英文，页面导航可选侧栏或底部预览。 |
 | **插件扩展** | 内置媒体、通知、剪贴板、Agent、设备插件；应用内管理社区插件，支持签名包安装、更新与回滚。 |
 
-**4.2.0 新增：**「设置 → 插件 → 媒体详情」提供**已读歌词发光强度**，范围 0–100%、步长 5%、默认 70%。紧凑胶囊与展开媒体页共同生效，调整后即时保存并刷新；0% 仅关闭光晕，保留已读文字颜色和逐字高亮，100% 对应原有效果。上方截图仍来自 4.1.0。
+**歌词外观：**「设置 → 插件 → 媒体详情」提供**已读歌词发光强度**，范围 0–100%、步长 5%、默认 70%。紧凑胶囊与展开媒体页共同生效，调整后即时保存并刷新；0% 仅关闭光晕，保留已读文字颜色和逐字高亮。
 
 **可选卡片：**
 
@@ -68,10 +80,12 @@ README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 
 ### 启动与更新
 
-1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v4.3.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-4.3.0-win-x64.zip`。
+1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v5.0.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-5.0.0-win-x64.zip`。
 2. 将程序放在打算长期保留的目录中运行；已有旧版时，先从系统托盘退出旧版。
 3. 点击小岛展开；通过设置按钮、托盘菜单或 `Ctrl + Alt + S` 打开设置。开机启动、语言和更新偏好均可在设置中调整。
-4. 可使用应用内更新，或退出后手动替换程序。下载校验值与构建信息见 [发布说明](<docs/rewrite/RELEASE-4.3.0.md>)。
+4. 可使用应用内更新，或退出后手动替换程序。构建版本与下载校验值见发行页附带的 `publish-5.0.0.json`；升级说明见 [发布说明](<docs/rewrite/RELEASE-5.0.0.md>)。
+
+4.1 用户如果仍被提示“已是最新版”，可先退出重启再检查；仍检测不到时，从上方发行页手动覆盖升级一次，保留用户数据目录即可。
 
 > 当前主程序**没有 Windows Authenticode 代码签名**，Windows 可能显示未知发布者提示。请核实下载来源与发布资产的 SHA-256，不要为安装而关闭系统安全防护。应用内更新的哈希校验不等于发布者签名认证。
 
@@ -114,9 +128,8 @@ README 更新于 **2026-11-07**，功能与开发说明按当前仓库核对。
 
 ```powershell
 # 还原、构建与测试
-# -warnaserror 与 CI 保持一致
 dotnet restore FluidBar.sln
-dotnet build FluidBar.sln -c Release --no-restore -warnaserror
+dotnet build FluidBar.sln -c Release --no-restore -p:RunAnalyzers=false
 dotnet test FluidBar.sln -c Release --no-build
 
 # 启动桌面应用
@@ -133,12 +146,12 @@ dotnet run --project tests/FluidBar.Soak -c Release
 使用与正式发布流程一致的 [发布脚本](<build/publish.ps1>)：
 
 ```powershell
-pwsh -File ./build/publish.ps1 -Version 4.3.0 -SelfContained
+pwsh -File ./build/publish.ps1 -Version 5.0.0 -SelfContained
 ```
 
-脚本执行完整解决方案回归并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `4.3.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
+脚本执行第一方项目的编译警告门禁及完整解决方案回归，并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `5.0.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
 
-版本采用 `主版本.次版本.修订号`：不兼容变更提升主版本，兼容的新功能提升次版本，问题修复提升修订号。测试轮次使用 `-preview.N` 或 `-rc.N`，正式版本发布后不覆盖原标签和资产。
+版本采用 `主版本.次版本.修订号`，兼容性与迁移要求会在发布说明中列出。测试轮次使用 `-preview.N` 或 `-rc.N`，正式版本发布后不覆盖原标签和资产。
 
 ### 仓库结构
 
@@ -166,7 +179,7 @@ docs/                         发布、设计、插件、隐私与截图文档
 
 ## 文档与贡献
 
-- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-4.3.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
+- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-5.0.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
 - **开发与维护**：[文档索引](<docs/rewrite/README.md>) · [当前状态](<docs/rewrite/STATUS.md>) · [项目方向与约束](<PROJECT-NOTES.md>) · [架构决策](<docs/rewrite/DECISIONS.md>)
 - **插件作者**：[快速开始](<docs/plugin/quickstart.md>) · [审核清单](<docs/plugin/review-checklist.md>) · [插件文档](<docs/plugin/>)
 - **视觉参考**：[浏览器交互原型](<docs/rewrite/prototype2/index.html>)使用示例数据，供交互参考，不等同于原生应用。旧版实现可在 `v1-final` 标签与 Git 历史中查阅。

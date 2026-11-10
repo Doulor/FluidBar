@@ -121,7 +121,7 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         await _tray.StartAsync(new TrayIconOptions
         {
             ToolTip = tooltip,
-            IconFilePath = TryExtractTrayIcon(),
+            IconFilePath = TryGetTrayIcon(),
         }, cancellationToken).ConfigureAwait(false);
         var menu = new List<TrayMenuItem>
         {
@@ -188,31 +188,16 @@ public sealed class SkiaShellIntegration : IAsyncDisposable
         }
     }
 
-    /// <summary>Extracts the exe's associated icon to a temp .ico so the tray uses the FluidBar mark.</summary>
-    private static string? TryExtractTrayIcon()
+    /// <summary>Uses the embedded multi-size brand asset, preserving the small tray resolutions.</summary>
+    private static string? TryGetTrayIcon()
     {
         try
         {
-            var exe = Environment.ProcessPath;
-            if (string.IsNullOrWhiteSpace(exe))
-            {
-                return null;
-            }
-
-            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(exe);
-            if (icon is null)
-            {
-                return null;
-            }
-
-            var path = Path.Combine(Path.GetTempPath(), "fluidbar-tray.ico");
-            using var stream = File.Create(path);
-            icon.Save(stream);
-            return path;
+            return AppBranding.GetIconFilePath();
         }
         catch (Exception ex)
         {
-            Trace.WriteLine("tray icon extraction failed: " + ex.Message);
+            Trace.WriteLine("tray brand asset could not be loaded: " + ex.Message);
             return null;
         }
     }

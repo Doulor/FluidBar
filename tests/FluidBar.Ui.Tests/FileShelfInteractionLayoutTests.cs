@@ -39,8 +39,10 @@ public sealed class FileShelfInteractionLayoutTests
         var page = IslandMetrics.PageRect(fixture.Controller.RenderState, 6);
         fixture.Controller.HandlePointerMoved(page.MidX, page.MidY);
         Assert.True(fixture.Controller.HandleWheel(80, false, false).ContentScroll);
+        fixture.RunToRest();
         Verify();
         Assert.True(fixture.Controller.HandleWheel(10000, false, false).ContentScroll);
+        fixture.RunToRest();
         Verify();
         var bottom = fixture.Controller.RenderState.Pages.PluginPageAt(6)!.ScrollOffset;
         fixture.Time.Advance(TimeSpan.FromSeconds(1));

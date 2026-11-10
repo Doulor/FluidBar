@@ -234,9 +234,13 @@ public readonly record struct IslandRenderState
     /// <summary>Material swap progress 0..1 (1 = no swap). Only read when <see cref="PreviousTheme"/> is set.</summary>
     public double MaterialBlend { get; init; } = 1;
 
+    /// <summary>Both sides of a material fade keep their blurred desktop until the fade ends.</summary>
+    public bool RequiresLiquidBackdrop => Theme.Material == IslandMaterial.LiquidGlass
+        || (PreviousTheme?.Material == IslandMaterial.LiquidGlass && MaterialBlend < 1);
+
     /// <summary>
     /// Blurred snapshot of the desktop behind the host surface (liquid glass). When null the material
-    /// falls back to its tinted fill. The image covers the whole host surface in DIP.
+    /// falls back to a dense fill that hides sharp desktop text. The image covers the whole host surface in DIP.
     /// </summary>
     public SkiaSharp.SKImage? Backdrop { get; init; }
 

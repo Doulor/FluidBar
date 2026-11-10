@@ -97,6 +97,10 @@ public static class SkiaIslandHitTest
 
         if (state.Form == ShellForm.Expanded)
         {
+            var scrollbar = ContentScrollLayout.Measure(state.Pages, state.PageIndex,
+                IslandMetrics.PageRect(state, state.PageIndex), FontScaleMetrics.From(state.FontScale));
+            if (scrollbar.CanScroll && scrollbar.Track.Contains(x, y))
+                return new IslandHitTarget(IslandHitKind.PageControl, state.PageIndex, IslandPageControl.Scrollbar);
             if (PageLayout.CollapseRect(content).Contains(x, y))
             {
                 return new IslandHitTarget(IslandHitKind.Collapse, state.PageIndex);

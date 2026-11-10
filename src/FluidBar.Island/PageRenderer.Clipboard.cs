@@ -83,7 +83,6 @@ internal sealed partial class PageRenderer
         }
 
         canvas.Restore();
-        DrawContentScrollIndicator(canvas, body, scroll, maxScroll);
     }
 
     private void DrawClipboardRow(

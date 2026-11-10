@@ -11,6 +11,37 @@ namespace FluidBar.Ui.Tests;
 /// </summary>
 public sealed class IslandGlassRefreshTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(128)]
+    [InlineData(255)]
+    public async Task Backdrop_bake_blurs_text_sized_stripes_instead_of_only_resizing_them(int captureAlpha)
+    {
+        using var provider = new IslandBackdropProvider();
+        var rect = (X: 0, Y: 0, Width: 480, Height: 240);
+        provider.CaptureOverride = _ =>
+        {
+            var pixels = new byte[rect.Width * rect.Height * 4];
+            for (var y = 0; y < rect.Height; y++)
+            for (var x = 0; x < rect.Width; x++)
+            {
+                var value = (byte)((x / 12) % 2 == 0 ? 0 : 255);
+                var i = (y * rect.Width + x) * 4;
+                pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
+                pixels[i + 3] = (byte)captureAlpha;
+            }
+            return new BackdropFrame(rect.Width, rect.Height, rect.Width * 4, pixels);
+        };
+        Assert.True(await CaptureAsync(provider, rect));
+        using var bitmap = SkiaSharp.SKBitmap.FromImage(provider.Get(rect)!);
+        var levels = Enumerable.Range(16, bitmap.Width - 32).Select(x => (int)bitmap.GetPixel(x, bitmap.Height / 2).Red).ToArray();
+        Assert.True(levels.Max() - levels.Min() < 30, $"Backdrop still contains sharp stripes: contrast {levels.Max() - levels.Min()}.");
+        Assert.InRange(levels.Average(), 110, 145); // Preserve desktop RGB instead of replacing it with an opaque black image.
+        foreach (var point in new[] { (bitmap.Width / 2, bitmap.Height / 2), (0, 0), (bitmap.Width - 1, bitmap.Height - 1) })
+            Assert.True(bitmap.GetPixel(point.Item1, point.Item2).Alpha >= 250,
+                $"Capture alpha {captureAlpha} leaked into the blurred desktop at {point}: {bitmap.GetPixel(point.Item1, point.Item2).Alpha}.");
+    }
+
     [Fact]
     public void Another_window_at_the_same_brightness_still_wakes_the_loop()
     {

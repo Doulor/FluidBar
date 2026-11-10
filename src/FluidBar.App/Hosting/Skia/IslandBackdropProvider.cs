@@ -348,6 +348,14 @@ internal sealed class IslandBackdropProvider : IDisposable
         double sum = 0;
         var count = 0;
         var pixels = frame.Pixels;
+        // Desktop capture RGB is already composited. GDI and some WGC frames leave the fourth byte
+        // zero/reserved; declaring SKAlphaType.Opaque alone does not sanitize those bytes before
+        // the Skia blur/color-filter pipeline. Otherwise a valid capture bakes into a transparent image.
+        for (var y = 0; y < frame.Height; y++)
+        {
+            var row = y * frame.Stride;
+            for (var x = 0; x < frame.Width; x++) pixels[row + x * 4 + 3] = 255;
+        }
         var x0 = 0;
         var y0 = 0;
         var x1 = frame.Width;
@@ -385,7 +393,7 @@ internal sealed class IslandBackdropProvider : IDisposable
             {
                 // Box-downsample + a small Gaussian at the reduced resolution: sigma 2 at 1/6 scale is
                 // roughly a 12-18 px blur at device pixels, i.e. the 20-30 px CSS blur of the prototype.
-                paint.ImageFilter = SKImageFilter.CreateBlur(BakeSigma, BakeSigma);
+                paint.ImageFilter = SKImageFilter.CreateBlur(BakeSigma, BakeSigma, SKShaderTileMode.Clamp);
                 paint.ColorFilter = saturation;
                 paint.FilterQuality = SKFilterQuality.Medium;
                 canvas.DrawImage(source, new SKRect(0, 0, width, height), paint);

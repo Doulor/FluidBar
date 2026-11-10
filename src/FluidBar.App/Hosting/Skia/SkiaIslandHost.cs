@@ -2333,7 +2333,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         }
 
         var state = _controller.RenderState;
-        if (!state.IsVisible || state.Theme.Material != FluidBar.Island.IslandMaterial.LiquidGlass)
+        if (!state.IsVisible || !state.RequiresLiquidBackdrop)
         {
             return;
         }
@@ -2542,7 +2542,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         // Liquid glass: attach a blurred capture of the desktop behind this window (throttled inside).
         var renderState = state;
 
-        if (state.IsVisible && state.Theme.Material == FluidBar.Island.IslandMaterial.LiquidGlass)
+        if (state.IsVisible && state.RequiresLiquidBackdrop)
         {
             var window = entry.Host.Placement.WindowPixel;
             var rect = (window.X, window.Y, window.Width, window.Height);
@@ -2679,7 +2679,7 @@ public sealed partial class SkiaIslandHost : IDisposable, IFrameStatsSource
         // first paint until a capture exists, with a hard deadline so the island can never stay invisible.
         if (!entry.FirstGlassPainted
             && state.IsVisible
-            && state.Theme.Material == FluidBar.Island.IslandMaterial.LiquidGlass
+            && state.RequiresLiquidBackdrop
             && renderState.Backdrop is null)
         {
             if (entry.ShownAtMs == 0)

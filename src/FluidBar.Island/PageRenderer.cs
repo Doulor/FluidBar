@@ -181,6 +181,19 @@ internal sealed partial class PageRenderer : IDisposable
             Alpha(_theme.Foreground.WithAlpha((byte)(settingsHover ? 220 : 128)), _opacity), _icon);
         IconSet.Draw(canvas, IconKind.ChevronDown, PageLayout.CollapseRect(content).Deflate(5),
             Alpha(_theme.Foreground.WithAlpha((byte)(collapseHover ? 220 : 128)), _opacity), _icon);
+        // Chrome is painted in shell-local coordinates; pointer geometry uses host coordinates.
+        var scrollPage = IslandMetrics.PageRect(state, state.PageIndex);
+        var shell = IslandMetrics.ShellRect(state);
+        scrollPage.Offset(-shell.Left, -shell.Top);
+        var scrollbar = ContentScrollLayout.Measure(state.Pages, state.PageIndex, scrollPage, _metrics);
+        if (scrollbar.CanScroll)
+        {
+            var active = state.HoverControl == IslandPageControl.Scrollbar || state.PressedControl == IslandPageControl.Scrollbar;
+            _fill.Color = Alpha(_theme.ForegroundSecondary, (active ? 0.13f : 0.06f) * _opacity);
+            canvas.DrawRoundRect(scrollbar.Track, 5, 5, _fill);
+            _fill.Color = Alpha(_theme.ForegroundSecondary, (active ? 0.85f : 0.55f) * _opacity);
+            canvas.DrawRoundRect(scrollbar.Thumb, 3, 3, _fill);
+        }
     }
 
 

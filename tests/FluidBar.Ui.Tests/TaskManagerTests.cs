@@ -71,9 +71,15 @@ public sealed class TaskManagerTests
                     input.Text = "renamed";
                     Click(Buttons(window, "task-add").Single());
                     await WaitUntil(() => service.Current?.Items[0].Title == "renamed");
+                    // SnapshotChanged posts the new rows asynchronously; interact with the updated,
+                    // enabled row rather than toggling a detached row with a stale optimistic snapshot.
+                    await WaitUntil(() => window.GetVisualDescendants().OfType<CheckBox>()
+                        .Any(control => control.IsEffectivelyEnabled && control.Content is TextBlock { Text: "renamed" }));
                     var check = window.GetVisualDescendants().OfType<CheckBox>().Single();
                     check.IsChecked = true;
                     await WaitUntil(() => service.Current?.Items[0].Done == true);
+                    await WaitUntil(() => Buttons(window, "task-delete-0").Any()
+                        && window.GetVisualDescendants().OfType<CheckBox>().Any(control => control.IsChecked == true));
                     Click(Buttons(window, "task-delete-0").Single());
                     await WaitUntil(() => service.Current?.Count == 0);
                     Assert.Empty(service.Load().Items);

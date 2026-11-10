@@ -44,12 +44,15 @@ public sealed class SkiaWheelArbitrationTests
             Assert.False(result.Paged);
             fixture.Time.Advance(TimeSpan.FromMilliseconds(250));
         }
+        fixture.RunToRest();
         var max = ContentCardLayout.ClipboardMaxScroll(fixture.Controller.RenderState.Pages.Clipboard, FontScaleMetrics.One);
         Assert.Equal(max, fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset, 3);
         var bottom = fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset;
         fixture.Controller.HandleWheel(-60, false, false);
+        fixture.RunToRest();
         Assert.Equal(Math.Max(0, bottom - 60), fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset, 3);
         for (var i = 0; i < 30; i++) fixture.Controller.HandleWheel(-140, false, false);
+        fixture.RunToRest();
         Assert.Equal(0, fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset);
         Assert.Equal(3, fixture.Controller.Pager.SelectedIndex);
     }
@@ -80,6 +83,8 @@ public sealed class SkiaWheelArbitrationTests
         var page = IslandMetrics.PageRect(fixture.Controller.RenderState, 3);
         fixture.Controller.HandlePointerMoved(page.MidX, page.MidY);
         Assert.True(fixture.Controller.HandleWheel(60, false, false).ContentScroll);
+        Assert.InRange(fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset, 0.1, 59.9);
+        fixture.RunToRest();
         Assert.Equal(60, fixture.Controller.RenderState.Pages.Clipboard.ScrollOffset, 3);
     }
 

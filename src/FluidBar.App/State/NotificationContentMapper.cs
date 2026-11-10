@@ -59,13 +59,13 @@ public static class NotificationContentMapper
     {
         ArgumentNullException.ThrowIfNull(entry);
         var source = string.IsNullOrWhiteSpace(entry.AppName) ? FallbackAppName : entry.AppName.Trim();
-        var title = string.IsNullOrWhiteSpace(entry.Title) ? source : CollapseWhitespace(entry.Title);
+        var title = string.IsNullOrWhiteSpace(entry.Title) ? source : SingleLinePreview(entry.Title);
         return new NotificationItemData
         {
             Id = entry.Id,
             FullBody = entry.Body ?? string.Empty,
             Title = title,
-            Body = TruncateBody(CollapseWhitespace(entry.Body)),
+            Body = TruncateBody(SingleLinePreview(entry.Body)),
             Source = source,
             TimeText = RelativeTime(entry.CreatedAt, now, localizer),
             VerificationCode = string.IsNullOrWhiteSpace(entry.VerificationCode) ? null : entry.VerificationCode,
@@ -105,7 +105,8 @@ public static class NotificationContentMapper
             : localizer.Format(LocKeys.Notifications.HoursAgo, ("count", hours));
     }
 
-    private static string CollapseWhitespace(string? text)
+    /// <summary>Formats a single display line without changing the full toast body used for detail/copy.</summary>
+    internal static string SingleLinePreview(string? text)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -116,7 +117,7 @@ public static class NotificationContentMapper
         var pendingSpace = false;
         foreach (var ch in text)
         {
-            if (char.IsWhiteSpace(ch))
+            if (char.IsWhiteSpace(ch) || char.IsControl(ch))
             {
                 pendingSpace = builder.Length > 0;
                 continue;

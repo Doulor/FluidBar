@@ -70,6 +70,7 @@ public sealed class IslandRenderer : IDisposable
     private readonly SKPaint _stroke = new() { IsAntialias = true };
     private readonly SKPaint _clear = new() { IsAntialias = false, BlendMode = SKBlendMode.Src };
     private readonly SKPaint _glassPaint = new() { IsAntialias = true };
+    private readonly SKPaint _materialLayerPaint = new() { BlendMode = SKBlendMode.Plus };
     // Material cross-fade context (spec 3.4): when set, the shell body is painted twice with Plus.
     private IslandTheme? _bodyFrom;
     private float _bodyMix = 1f;
@@ -308,6 +309,10 @@ public sealed class IslandRenderer : IDisposable
 
         if (state.Form == ShellForm.Expanded)
         {
+            var scrollbar = ContentScrollLayout.Measure(state.Pages, state.PageIndex,
+                IslandMetrics.PageRect(state, state.PageIndex), FontScaleMetrics.From(state.FontScale));
+            if (scrollbar.CanScroll && scrollbar.Track.Contains(x, y))
+                return new IslandHitTarget(IslandHitKind.PageControl, state.PageIndex, IslandPageControl.Scrollbar);
             if (PageLayout.CollapseRect(content).Contains(x, y))
             {
                 return new IslandHitTarget(IslandHitKind.Collapse, state.PageIndex);
@@ -551,8 +556,8 @@ public sealed class IslandRenderer : IDisposable
     private void DrawSceneWithMaterialBlend(SKCanvas canvas, in IslandRenderState state, float dpiScale)
     {
         // Material swap (spec 3.4: 180 ms cross-fade). The shell body is painted twice with premultiplied
-        // additive compositing — old material at (1-t), new at t — so the ramp is a true cross-fade while
-        // costing one extra body pass instead of two full-surface SaveLayers (~7.7 ms on CPU).
+        // additive compositing — old material at (1-t), new at t. Sampled glass blends its complete
+        // body in shell-sized layers; flat fills keep the cheaper direct additive passes.
         // Adapt the palette once, for the whole scene: the compact/page/icon renderers read the theme
         // from the state, so adapting only the shell body left their labels white on white pages.
         var theme = AdaptThemeForBackdrop(state.Theme ?? IslandTheme.Dark, state);
@@ -1018,6 +1023,16 @@ public sealed class IslandRenderer : IDisposable
         if (_bodyFrom is { } from && _bodyMix < 0.999f)
         {
             var saved = _theme;
+            if (state.Backdrop is not null && state.RequiresLiquidBackdrop)
+            {
+                // Blend finished bodies, including their blurred desktop. The tint-only additive path
+                // below cannot represent an opaque sampled background and exposed sharp desktop text.
+                _theme = from;
+                DrawCapturedMaterialPass(canvas, state, path, opacity, 1f - _bodyMix);
+                _theme = saved;
+                DrawCapturedMaterialPass(canvas, state, path, opacity, _bodyMix);
+                return;
+            }
             _theme = from;
             DrawShellBodyPass(canvas, state, path, opacity * (1f - _bodyMix), SKBlendMode.Plus);
             _theme = saved;
@@ -1026,6 +1041,16 @@ public sealed class IslandRenderer : IDisposable
         }
 
         DrawShellBodyPass(canvas, state, path, opacity, SKBlendMode.SrcOver);
+    }
+
+    private void DrawCapturedMaterialPass(SKCanvas canvas, in IslandRenderState state, SKPath path, float opacity, float weight)
+    {
+        if (weight <= 0) return;
+        _materialLayerPaint.Color = SKColors.White.WithAlpha((byte)Math.Clamp(MathF.Round(weight * 255), 0, 255));
+        // The layer covers only the shell body, rather than the host's large transparent hit-test margin.
+        canvas.SaveLayer(path.Bounds, _materialLayerPaint);
+        try { DrawShellBodyPass(canvas, state, path, opacity, SKBlendMode.SrcOver); }
+        finally { canvas.Restore(); }
     }
 
     private void DrawShellBodyPass(
@@ -1673,6 +1698,7 @@ public sealed class IslandRenderer : IDisposable
         _stroke.Dispose();
         _clear.Dispose();
         _glassPaint.Dispose();
+        _materialLayerPaint.Dispose();
         if (_ownsText)
         {
             _text.Dispose();

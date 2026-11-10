@@ -894,26 +894,7 @@ public sealed class SettingsWindow : Window, ILocalizable
             }
         };
 
-        // .sw-mark: 24×24, 8 px radius, #070709 with a 14% white rim.
-        var mark = new Border
-        {
-            Width = SettingsMetrics.MarkSize,
-            Height = SettingsMetrics.MarkSize,
-            CornerRadius = new CornerRadius(SettingsMetrics.MarkRadius),
-            Background = new SolidColorBrush(_palette.Mark),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
-            BorderThickness = new Thickness(1),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new SettingsIcon
-            {
-                Kind = SettingsIconKind.Island,
-                Brush = Brushes.White,
-                Width = SettingsMetrics.MarkIcon,
-                Height = SettingsMetrics.MarkIcon,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
+        var mark = AppBranding.CreateLogo(SettingsMetrics.MarkSize);
         Grid.SetColumn(mark, 0);
         bar.Children.Add(mark);
 

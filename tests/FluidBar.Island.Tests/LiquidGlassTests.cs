@@ -10,6 +10,7 @@ namespace FluidBar.Island.Tests;
 /// inside the frame budget. The layered host cannot ask DWM for a backdrop blur, so these assertions
 /// guard the *drawn* optical simulation that replaces it.
 /// </summary>
+[Collection("Liquid glass render budget")]
 public sealed class LiquidGlassTests
 {
     private static IslandTheme Liquid => IslandTheme.Dark.WithMaterial(IslandMaterial.LiquidGlass);
@@ -36,7 +37,7 @@ public sealed class LiquidGlassTests
     }
 
     [Fact]
-    public void Liquid_body_is_more_translucent_than_obsidian_and_acrylic()
+    public void Liquid_body_uses_a_dense_fallback_when_the_blurred_backdrop_is_unavailable()
     {
         var alpha = new Dictionary<IslandMaterial, byte>();
         foreach (var material in new[]
@@ -55,10 +56,8 @@ public sealed class LiquidGlassTests
         }
 
         Assert.True(alpha[IslandMaterial.Obsidian] > 240, $"obsidian should stay opaque, got {alpha[IslandMaterial.Obsidian]}");
-        Assert.True(alpha[IslandMaterial.LiquidGlass] < alpha[IslandMaterial.SimulatedGlass],
-            $"liquid glass ({alpha[IslandMaterial.LiquidGlass]}) should be clearer than acrylic ({alpha[IslandMaterial.SimulatedGlass]})");
-        Assert.True(alpha[IslandMaterial.LiquidGlass] < 200,
-            $"liquid glass body should let the desktop through, got alpha {alpha[IslandMaterial.LiquidGlass]}");
+        Assert.True(alpha[IslandMaterial.LiquidGlass] >= 240,
+            $"Without a blurred capture the liquid fallback must hide sharp desktop text, got alpha {alpha[IslandMaterial.LiquidGlass]}");
     }
 
     [Fact]
@@ -779,7 +778,7 @@ public sealed class LiquidGlassTests
     public void Backdrop_mode_paints_the_captured_desktop_instead_of_the_flat_tint()
     {
         var theme = Liquid;
-        var state = CompactState(theme);
+        var state = CompactState(theme) with { Compact = null };
         using var renderer = new IslandRenderer(theme);
 
         // Synthetic "desktop": a coarse checkerboard (the host hands over a blurred capture; a blocky
@@ -812,8 +811,8 @@ public sealed class LiquidGlassTests
 
         // Sample well inside the shell: the rim band and the key line make the outer 8 DIP non-flat.
         var shell = IslandMetrics.ShellRect(state);
-        var left = (int)Math.Round((shell.Left + 8) * IslandTestFixtures.Scale);
-        var right = (int)Math.Round((shell.Left + 68) * IslandTestFixtures.Scale);
+        var left = (int)Math.Round((shell.Left + 16) * IslandTestFixtures.Scale);
+        var right = (int)Math.Round((shell.Left + 76) * IslandTestFixtures.Scale);
         var y = (int)Math.Round((shell.Top + (shell.Height * 0.50)) * IslandTestFixtures.Scale);
 
         var flatLeft = Luma(flat.GetPixel(left, y));
@@ -868,8 +867,8 @@ public sealed class LiquidGlassTests
         var expected = (plainObsidian.Alpha + plainLiquid.Alpha) / 2.0;
         Assert.True(Math.Abs(mid.Alpha - expected) <= 10,
             $"midpoint alpha {mid.Alpha} should sit between {plainObsidian.Alpha} and {plainLiquid.Alpha}");
-        Assert.True(mid.Alpha < plainObsidian.Alpha && mid.Alpha > plainLiquid.Alpha,
-            "the cross-fade must be monotonic between the two materials");
+        Assert.InRange(mid.Alpha, Math.Min(plainObsidian.Alpha, plainLiquid.Alpha) - 3,
+            Math.Max(plainObsidian.Alpha, plainLiquid.Alpha) + 3);
     }
 
     [Fact]

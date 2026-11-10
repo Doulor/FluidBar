@@ -59,8 +59,13 @@ public static class SkiaIslandStateBuilder
             && (content.Media?.IsPlaying == true
                 || island.Ghosts.Any(ghost => ghost.Kind == ActivityKind.Media && ghost.IsActive));
         var isNotification = kind == ActivityKind.Notification;
+        // Toast text can contain line breaks between a group and sender. The compact renderer draws
+        // single lines; passing controls through to Skia produces missing-glyph boxes instead of breaks.
+        var title = isNotification ? NotificationContentMapper.SingleLinePreview(model.Title) : model.Title;
+        var body = isNotification ? NotificationContentMapper.SingleLinePreview(model.Body) : model.Body;
+        var source = isNotification ? NotificationContentMapper.SingleLinePreview(model.SourceName) : model.SourceName;
         var notification = isNotification
-            ? FindNotification(content, model.SourceName, model.Title)
+            ? FindNotification(content, source, title)
                 ?? (content.Notifications.IsDefaultOrEmpty ? null : content.Notifications[0])
             : null;
         var notificationTime = isNotification
@@ -75,11 +80,11 @@ public static class SkiaIslandStateBuilder
         {
             ShowLyrics = lyricLine is not null,
             LyricLine = lyricLine,
-            Title = NullIfEmpty(model.Title),
+            Title = NullIfEmpty(title),
             Subtitle = NullIfEmpty(model.Subtitle),
-            Body = NullIfEmpty(model.Body),
+            Body = NullIfEmpty(body),
             Badge = NullIfEmpty(model.Badge),
-            AppName = NullIfEmpty(model.SourceName),
+            AppName = NullIfEmpty(source),
             ClockText = model.ClockText,
             DateText = model.DateText,
             StatusText = NullIfEmpty(model.StatusText),

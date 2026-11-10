@@ -3,7 +3,8 @@ using FluidBar.Platform.Windows.Interop;
 
 namespace FluidBar.Platform.Windows.Hosting;
 
-/// <summary>One captured desktop region (top-down BGRA, premultiplied-free: alpha is 255).</summary>
+/// <summary>One captured desktop region (top-down BGRA). RGB is composited desktop colour;
+/// capture APIs may leave alpha reserved, so blur consumers must make it opaque before filtering.</summary>
 /// <param name="Width">Pixel width.</param>
 /// <param name="Height">Pixel height.</param>
 /// <param name="Stride">Bytes per row (width * 4).</param>

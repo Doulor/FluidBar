@@ -171,9 +171,11 @@ public sealed class SkiaIslandControlTests
         Click(fixture, PageLayout.ClipboardPin(page, 0));
         fixture.Controller.HandlePointerMoved(page.MidX, page.MidY);
         fixture.Controller.HandleWheel(120, false, false);
+        fixture.RunToRest();
         var model = fixture.Controller.RenderState.Pages.Clipboard;
         Click(fixture, ContentCardLayout.ClipboardAction(ContentCardLayout.ClipboardRow(page, model, 1, FontScaleMetrics.One), 0, FontScaleMetrics.One));
         fixture.Controller.HandleWheel(1000, false, false);
+        fixture.RunToRest();
         model = fixture.Controller.RenderState.Pages.Clipboard;
         Click(fixture, ContentCardLayout.ClipboardRow(page, model, 2, FontScaleMetrics.One));
 

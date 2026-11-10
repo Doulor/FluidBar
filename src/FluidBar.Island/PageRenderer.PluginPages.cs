@@ -35,7 +35,6 @@ internal sealed partial class PageRenderer
             canvas.Restore();
         }
 
-        DrawContentScrollIndicator(canvas, body, (float)model.ScrollOffset, PluginListLayout.MaxScroll(model, m));
     }
 
     private void DrawFileShelfToolbar(SKCanvas canvas, PluginPageRowModel item, SKRect row, int index)

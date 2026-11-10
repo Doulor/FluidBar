@@ -96,15 +96,6 @@ internal sealed partial class PageRenderer
         return (value[..cut].TrimEnd(), value[cut..].TrimStart());
     }
 
-    private void DrawContentScrollIndicator(SKCanvas canvas, SKRect body, float scroll, float maxScroll)
-    {
-        if (maxScroll <= 0) return;
-        var height = Math.Max(24, body.Height * body.Height / (body.Height + maxScroll));
-        var top = body.Top + (body.Height - height) * Math.Clamp(scroll / maxScroll, 0, 1);
-        _fill.Color = Alpha(_theme.ForegroundSecondary, 0.35f * _opacity);
-        canvas.DrawRoundRect(new SKRect(body.Right + 5, top, body.Right + 7, top + height), 1, 1, _fill);
-    }
-
     // -------------------------------------------------------------------- agent
 
     private void DrawAgent(SKCanvas canvas, AgentPageModel model, SKRect page)
@@ -136,7 +127,7 @@ internal sealed partial class PageRenderer
         for (var i = first; i < count; i++)
         {
             var row = PageMetricsLayout.AgentRow(page, i, scroll, m);
-            if (row.Top >= body.Bottom || row.Bottom > body.Bottom)
+            if (row.Top >= body.Bottom)
             {
                 break;
             }

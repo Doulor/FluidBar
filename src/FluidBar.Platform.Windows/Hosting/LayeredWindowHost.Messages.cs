@@ -28,6 +28,11 @@ public sealed partial class LayeredWindowHost
             }
 
             var instance = NativeMethods.Kernel32.GetModuleHandleW(null);
+            // C# embeds ApplicationIcon under IDI_APPLICATION (32512) in the executable resources.
+            // Use that shared resource for the native island as well as the Avalonia app windows.
+            var applicationIcon = NativeMethods.User32.LoadIconW(instance, NativeMethods.IDI_APPLICATION);
+            if (applicationIcon == IntPtr.Zero)
+                applicationIcon = NativeMethods.User32.LoadIconW(IntPtr.Zero, NativeMethods.IDI_APPLICATION);
             if (_classNamePointer == IntPtr.Zero)
             {
                 // The class keeps a pointer to this string for the lifetime of the registration.
@@ -40,6 +45,8 @@ public sealed partial class LayeredWindowHost
                 style = NativeMethods.CS_DBLCLKS,
                 lpfnWndProc = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
                 hInstance = instance,
+                hIcon = applicationIcon,
+                hIconSm = applicationIcon,
                 hCursor = NativeMethods.User32.LoadCursorW(IntPtr.Zero, NativeMethods.IDC_ARROW),
                 lpszClassName = _classNamePointer,
             };

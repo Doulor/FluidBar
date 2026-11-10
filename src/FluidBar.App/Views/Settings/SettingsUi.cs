@@ -672,43 +672,9 @@ internal static class SettingsWidgets
         return panel;
     }
 
-    /// <summary><c>.about-mark</c>: 72 px rounded tile with an accent bloom behind the island glyph.</summary>
+    /// <summary><c>.about-mark</c>: the same 72 px brand image as the executable and title bar.</summary>
     public static Control AboutMark(Color accent, SettingsPalette palette)
-    {
-        var host = new Grid { Width = SettingsMetrics.AboutMark, Height = SettingsMetrics.AboutMark };
-        var tile = new Border
-        {
-            Width = SettingsMetrics.AboutMark,
-            Height = SettingsMetrics.AboutMark,
-            CornerRadius = new CornerRadius(SettingsMetrics.AboutMarkRadius),
-            Background = new SolidColorBrush(palette.Mark),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)),
-            BorderThickness = new Thickness(1),
-            ClipToBounds = true,
-        };
-        var bloom = new Border
-        {
-            Width = 40,
-            Height = 40,
-            CornerRadius = new CornerRadius(20),
-            Background = new SolidColorBrush(accent, 0.4),
-            VerticalAlignment = VerticalAlignment.Bottom,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 0, -10, -10),
-        };
-        tile.Child = bloom;
-        host.Children.Add(tile);
-        host.Children.Add(new SettingsIcon
-        {
-            Kind = SettingsIconKind.Island,
-            Brush = Brushes.White,
-            Width = SettingsMetrics.AboutMarkGlyph,
-            Height = SettingsMetrics.AboutMarkGlyph,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        return host;
-    }
+        => AppBranding.CreateLogo(SettingsMetrics.AboutMark);
 
     /// <summary>Uppercase kicker text (<c>.nav-kicker</c>, <c>.ap-head</c>, <c>.featured-kicker</c>).</summary>
     public static TextBlock Kicker(string text, double size, double tracking, IBrush brush, FontWeight weight = FontWeight.SemiBold)

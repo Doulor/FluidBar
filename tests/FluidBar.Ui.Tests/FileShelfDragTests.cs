@@ -53,6 +53,7 @@ public sealed class FileShelfDragTests
         Assert.True(outcome.ContentScroll);
         Assert.False(outcome.Paged);
         Assert.Equal(6, fixture.Controller.Pager.SelectedIndex);
+        fixture.RunToRest();
         state = fixture.Controller.RenderState;
         var plugin = state.Pages.PluginPageAt(6)!;
         Assert.True(plugin.ScrollOffset > 0);

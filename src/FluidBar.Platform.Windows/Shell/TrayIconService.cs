@@ -121,8 +121,10 @@ public sealed class TrayIconService : IAsyncDisposable
     {
         if (!string.IsNullOrWhiteSpace(iconFilePath))
         {
-            var loaded = NativeMethods.User32.LoadImageW(IntPtr.Zero, iconFilePath, NativeMethods.IMAGE_ICON, 0, 0,
-                NativeMethods.LR_LOADFROMFILE | NativeMethods.LR_DEFAULTSIZE);
+            var width = Math.Max(16, NativeMethods.User32.GetSystemMetrics(49)); // SM_CXSMICON
+            var height = Math.Max(16, NativeMethods.User32.GetSystemMetrics(50)); // SM_CYSMICON
+            var loaded = NativeMethods.User32.LoadImageW(IntPtr.Zero, iconFilePath, NativeMethods.IMAGE_ICON, width, height,
+                NativeMethods.LR_LOADFROMFILE);
             if (loaded != IntPtr.Zero)
             {
                 return SafeIconHandle.Owned(loaded);

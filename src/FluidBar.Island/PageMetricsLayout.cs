@@ -376,7 +376,7 @@ public static class PageMetricsLayout
         lock (NotificationWrapGate)
         {
             foreach (var cached in NotificationWrapCache)
-                if (ReferenceEquals(cached.Text, value) && cached.Width == width && cached.Scale == metrics.Value && cached.Title == title) return cached.Lines;
+                if (string.Equals(cached.Text, value, StringComparison.Ordinal) && cached.Width == width && cached.Scale == metrics.Value && cached.Title == title) return cached.Lines;
             using var engine = new TextEngine();
             var style = metrics.Style(title ? NotificationTitleStyle : NotificationBodyStyle);
             var lines = new List<string>();
@@ -387,7 +387,15 @@ public static class PageMetricsLayout
                 for (var start = 0; start < starts.Length;)
                 {
                     var low = start + 1;
-                    var high = starts.Length;
+                    var high = low;
+                    // Bound shaping to roughly one line; bisecting the entire remaining paragraph
+                    // shaped thousands of invisible glyphs for every visible line of a long toast.
+                    while (high < starts.Length)
+                    {
+                        if (engine.Measure(paragraph[starts[start]..starts[high]], style) > width) break;
+                        low = high;
+                        high = Math.Min(starts.Length, start + 2 * (high - start));
+                    }
                     var best = low;
                     while (low <= high)
                     {
@@ -403,7 +411,7 @@ public static class PageMetricsLayout
             }
             var result = lines.ToArray();
             NotificationWrapCache.Enqueue((value, width, metrics.Value, title, result));
-            while (NotificationWrapCache.Count > 4) NotificationWrapCache.Dequeue();
+            while (NotificationWrapCache.Count > 24) NotificationWrapCache.Dequeue();
             return result;
         }
     }

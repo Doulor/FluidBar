@@ -360,7 +360,7 @@ public sealed partial class SkiaIslandController : IDisposable
     public bool HasSpinningSplitRing => _hasRenderState && IslandMetrics.HasSpinningSplitRing(_renderState);
 
     /// <summary>Whether motion, the pager, the strip or dynamic content still needs frames.</summary>
-    public bool IsAnimating => MaterialSwapActive || !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
+    public bool IsAnimating => IsContentScrollAnimating || MaterialSwapActive || !_motion.IsAtRest || _pager.IsAnimating || _archipelago.IsAnimating
         || (_archipelago.IsVisible && _railMotion.IsAnimating) || IsWaveActive() || IsKaraokeAnimating
         || IsLyricTransitionAnimating || HasSpinningSplitRing
         || IsMediaProgressAnimating || IsTrackTransitionAnimating
@@ -596,12 +596,12 @@ public sealed partial class SkiaIslandController : IDisposable
             ApplyInput(IslandInput.PeekDwellElapsed());
         }
 
-        if (!_nativeFileDragActive && state.AutoCollapseDeadline is { } collapse && now >= collapse)
+        if (!_nativeFileDragActive && !HasContentScrollDrag && state.AutoCollapseDeadline is { } collapse && now >= collapse)
         {
             ApplyInput(IslandInput.AutoCollapseElapsed());
         }
 
-        if (!_nativeFileDragActive && state.AutoHideDeadline is { } hide && now >= hide)
+        if (!_nativeFileDragActive && !HasContentScrollDrag && state.AutoHideDeadline is { } hide && now >= hide)
         {
             ApplyInput(IslandInput.AutoHideElapsed());
         }
@@ -907,7 +907,9 @@ public sealed partial class SkiaIslandController : IDisposable
         StepRailFollow(dt);
         StepRailSelection(dt);
         var mediaProgressChanged = ApplyMediaProgress();
+        var contentScrolled = StepContentScroll(dt);
         BuildRenderState();
+        if (contentScrolled) InvalidateDirty(ContentDamage());
 
         if (notificationWasAnimating || _notificationDragActive)
         {
@@ -1385,6 +1387,7 @@ public sealed partial class SkiaIslandController : IDisposable
     {
         _pointerX = xDip;
         _pointerY = yDip;
+        if (HasContentScrollDrag) { MoveContentScrollDrag((float)yDip); return; }
 
         // The card is moving away from the pointer during the dismiss gesture. Re-running hover and
         // zone hit tests against the painted (offset) shell would make the notification leave Peek
@@ -1599,6 +1602,12 @@ public sealed partial class SkiaIslandController : IDisposable
             return true;
         }
 
+        if (hit.Control == IslandPageControl.Scrollbar)
+        {
+            BeginContentScrollDrag(hit.PageIndex, (float)yDip);
+            return true;
+        }
+
         // Press feedback for every painted control (transport, toggles, list buttons).
         if (hit.Kind is IslandHitKind.PageControl or IslandHitKind.Compact or IslandHitKind.PageTab)
         {
@@ -1713,6 +1722,16 @@ public sealed partial class SkiaIslandController : IDisposable
     /// <param name="yDip">Client Y in DIP.</param>
     public void HandlePointerReleased(double xDip, double yDip)
     {
+        if (HasContentScrollDrag)
+        {
+            MoveContentScrollDrag((float)yDip);
+            _contentScrollDragPage = -1;
+            _pressedControl = IslandPageControl.None;
+            _pressedPage = -1;
+            _motion.SetPressed(false);
+            InvalidateDirty(ContentDamage());
+            return;
+        }
         if (_controlPlacementPress)
         {
             var isClick = !SkiaDragThreshold.Exceeds(_clickXDip, _clickYDip, xDip, yDip);
@@ -1814,6 +1833,7 @@ public sealed partial class SkiaIslandController : IDisposable
     /// </remarks>
     public SkiaDragKind HandleDragStarted(double xDip, double yDip, long timestampMs)
     {
+        if (HasContentScrollDrag) return SkiaDragKind.None;
         if (_pendingFileDrag is not null) return SkiaDragKind.FileCandidate;
         if (!_hasRenderState)
         {
@@ -2153,6 +2173,9 @@ public sealed partial class SkiaIslandController : IDisposable
             return SkiaWheelOutcome.None;
         }
 
+        if (HasContentScrollDrag)
+            return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, true, false);
+
         if (TryHandleNotificationWheel(deltaDip, horizontal, shift))
         {
             return new SkiaWheelOutcome(true, false, _pager.SelectedIndex, false, false);
@@ -2213,7 +2236,7 @@ public sealed partial class SkiaIslandController : IDisposable
             var page = _pager.SelectedIndex;
             var max = MaxScrollForPage(page);
             if (page < _pageScroll.Length)
-                _pageScroll[page] = Math.Clamp(_pageScroll[page] + deltaDip, 0, max);
+                QueueContentScroll(page, deltaDip, max);
             _pages = ApplyPageScroll(_pages);
             BuildRenderState();
             InvalidateFull();
@@ -3872,10 +3895,6 @@ private void HandlePageControl(in IslandHitTarget hit)
         return 0;
     }
 
-    /// <summary>Scrollable list content height minus the 232 DIP body, 0 when every row fits.</summary>
-    private static double ListMaxScroll(int count, double rowHeight, double gap)
-        => count <= 0 ? 0 : Math.Max(0, (count * (rowHeight + gap)) - gap - PageMetricsLayout.BodyHeight);
-
     /// <summary>A page rect with the expanded content size (vertical extents do not depend on x/shell).</summary>
     private static SkiaSharp.SKRect MetricPageRect() => new(
         0, (float)IslandMetrics.ContentTop,
@@ -3883,25 +3902,8 @@ private void HandlePageControl(in IslandHitTarget hit)
         (float)(IslandMetrics.ContentTop + IslandMetrics.ContentHeight));
 
     private double MaxScrollForPage(int page, ExpandedPageContent? source = null)
-    {
-        source ??= _pages;
-        var metrics = FontScaleMetrics.From(_settings.Current.FontScale);
-        if (source.PluginPageAt(page) is { } plugin)
-            return PluginListLayout.MaxScroll(plugin, metrics);
-        var kind = source.PageSlotAt(page)?.Kind;
-        return kind switch
-        {
-            PageSlotKind.Home => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Home, metrics),
-            PageSlotKind.Media => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Media, metrics),
-            PageSlotKind.Notifications => source.Notifications.Detail is { } detail
-                ? PageMetricsLayout.NotificationDetailMaxScroll(MetricPageRect(), detail, metrics)
-                : PageMetricsLayout.NotificationMaxScroll(source.Notifications.Items?.Count ?? 0, metrics),
-            PageSlotKind.Clipboard => ContentCardLayout.ClipboardMaxScroll(source.Clipboard, metrics),
-            PageSlotKind.Agent => ListMaxScroll(source.Agent.Items?.Count ?? 0, PageMetricsLayout.AgentRowHeight(metrics), 6),
-            PageSlotKind.Widgets => PageMetricsLayout.MaxScroll(MetricPageRect(), PageSlotKind.Widgets, metrics, source.Widgets.Tasks?.Count ?? 0),
-            _ => 0,
-        };
-    }
+        => ContentScrollLayout.Measure(source ?? _pages, page, MetricPageRect(),
+            FontScaleMetrics.From(_settings.Current.FontScale)).Maximum;
 
     // ------------------------------------------------------------------ render state
 
@@ -4299,6 +4301,8 @@ private void HandlePageControl(in IslandHitTarget hit)
         _motion.PanelRadius = _settings.Current.PanelRadius;
         var form = ResolveVisualForm();
         var expanded = form == ShellForm.Expanded;
+        if (!expanded || _contentScrollDragPage != _pager.SelectedIndex)
+            _contentScrollDragPage = -1;
         var shellRadii = !expanded && _compact.Kind == ActivityKind.Notification
             ? CornerRadii.Uniform(LayoutTokens.NotificationCornerRadius)
             : _motion.ShellRadii;

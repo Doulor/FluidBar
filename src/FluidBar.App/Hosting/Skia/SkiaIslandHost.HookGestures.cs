@@ -86,6 +86,12 @@ public sealed partial class SkiaIslandHost
             MapHookPoint(entry, screenX, screenY, out var x, out var y);
             _hookDragX = x;
             _hookDragY = y;
+            if (_controller.HasContentScrollDrag)
+            {
+                _controller.HandlePointerMoved(x, y);
+                EnsureFrameLoop();
+                return;
+            }
             if (_hookDragKind == SkiaDragKind.FileCandidate
                 && SkiaDragThreshold.Exceeds(_hookPressX, _hookPressY, x, y))
             {
