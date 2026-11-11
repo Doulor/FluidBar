@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Text;
 using FluidBar.Platform.Windows.Diagnostics;
 using FluidBar.Platform.Windows.Threading;
 
@@ -75,86 +73,6 @@ public interface IUpdateInstallerLauncher
     /// <summary>Starts the installer; returns false when the process could not be created.</summary>
     /// <param name="installerPath">Absolute path of an already verified installer.</param>
     bool Launch(string installerPath);
-}
-
-/// <summary>ShellExecute-based installer launcher (explicit user action only).</summary>
-public sealed class ProcessUpdateInstallerLauncher : IUpdateInstallerLauncher
-{
-    /// <inheritdoc />
-    public bool Launch(string installerPath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(installerPath);
-        if (TryLaunchSelfReplace(installerPath))
-        {
-            return true;
-        }
-
-        var info = new ProcessStartInfo(installerPath) { UseShellExecute = true };
-        return Process.Start(info) is not null;
-    }
-
-    /// <summary>
-    /// The preview ships a portable <c>FluidBar.exe</c>, not a setup package. Launching it directly
-    /// while the old instance is still alive loses the race with the single-instance mutex, so a tiny
-    /// PowerShell helper waits for this PID, copies the verified download over the running exe and
-    /// starts it again. A future real installer still goes through ShellExecute.
-    /// </summary>
-    private static bool TryLaunchSelfReplace(string installerPath)
-    {
-        var current = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(current)
-            || !string.Equals(Path.GetFileName(current), "FluidBar.exe", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(Path.GetFileName(installerPath), "FluidBar.exe", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFullPath(current), Path.GetFullPath(installerPath), StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        try
-        {
-            var scriptPath = Path.Combine(Path.GetTempPath(), $"fluidbar-update-{Guid.NewGuid():N}.ps1");
-            var script = BuildSelfReplaceScript(installerPath, current, Environment.ProcessId);
-            // Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI; a Chinese/Unicode install path
-            // would then be mojibake and Copy-Item would target the wrong file.
-            WriteSelfReplaceScript(scriptPath, script);
-            var info = new ProcessStartInfo("powershell.exe")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-            };
-            return Process.Start(info) is not null;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>Writes a PowerShell helper as UTF-8 with BOM (Windows PowerShell 5.1 reads ANSI otherwise).</summary>
-    internal static void WriteSelfReplaceScript(string path, string script)
-        => File.WriteAllText(path, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-
-    /// <summary>Builds the self-replace helper script; pure so escaping is unit-testable.</summary>
-    internal static string BuildSelfReplaceScript(string installerPath, string currentPath, int pid, bool restart = true)
-    {
-        var lines = new List<string>
-        {
-            "$ErrorActionPreference = 'Stop'",
-            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue",
-            "Start-Sleep -Milliseconds 800",
-            $"Copy-Item -LiteralPath '{EscapePowerShellLiteral(installerPath)}' -Destination '{EscapePowerShellLiteral(currentPath)}' -Force",
-        };
-        if (restart)
-        {
-            lines.Add($"Start-Process -FilePath '{EscapePowerShellLiteral(currentPath)}'");
-        }
-
-        lines.Add("Remove-Item -LiteralPath $PSCommandPath -Force");
-        return string.Join(Environment.NewLine, lines);
-    }
-
-    private static string EscapePowerShellLiteral(string value) => value.Replace("'", "''");
 }
 
 /// <summary>

@@ -2,15 +2,24 @@
   <img src="src/FluidBar.App/Assets/fluidbar.png" width="112" height="112" alt="FluidBar 蓝色液面图标" />
 </p>
 
-<h1 align="center">FluidBar 5.0</h1>
+<h1 align="center">FluidBar 5.1</h1>
 
 > Windows 上的灵动岛：把媒体、通知、剪贴板和常用控制收进一颗小胶囊，需要时再展开。
 
-[官方网站](https://fluidbar.doulor.cn/) · [下载 5.0.0](https://github.com/Doulor/FluidBar/releases/tag/v5.0.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
+[官方网站](https://fluidbar.doulor.cn/) · [下载 5.1.0](https://github.com/Doulor/FluidBar/releases/tag/v5.1.0) · [插件市场](https://fluidbar.doulor.cn/market/) · [问题反馈](https://github.com/Doulor/FluidBar/issues)
 
-**当前版本：5.0.0（2026-11-10）**。统一软件图标，完善所有详情页的滚动操作，修复液态玻璃背景意外变透明，以及通知中回车显示为方框的问题。详见 [5.0.0 发布说明](<docs/rewrite/RELEASE-5.0.0.md>)。
+**当前版本：5.1.0（2026-11-11）**。修复下载更新后程序退出、未完成替换且没有重启的问题。详见 [5.1.0 发布说明](<docs/rewrite/RELEASE-5.1.0.md>)。
 
-## 5.0.0 更新
+## 5.1.0 更新
+
+- **支持改名的程序**：即使浏览器将下载文件保存为 `FluidBar (1).exe`，或用户自行改名，更新也会替换实际运行的文件。
+- **确认就绪再退出**：助手先暂存新版、核对文件并确认就绪，主程序才退出；助手启动或准备失败时保留当前程序运行。
+- **文件锁重试与恢复**：等待旧进程结束，替换遇到占用时最多重试 60 秒；使用原子替换保留旧文件，替换或启动失败时尝试恢复并重新打开旧版。
+- **可排查的安装日志**：更新后的助手将过程写入 `%APPDATA%\FluidBar\updates\install.log`，记录重试、重启和恢复结果。
+
+**4.3 / 原 5.0 用户：** 旧客户端仍使用旧更新器。如果点击“重启并安装”后程序消失，请退出旧实例，从本发行页下载 5.1.0 手动覆盖升级一次；设置和插件数据保留。不要直接在更新缓存目录内长期运行程序。
+
+## 继续保留的 5.0 功能
 
 - **统一图标**：使用蓝色液面图标，EXE、系统托盘、窗口 / 任务栏、设置标题栏和关于页共用同一套资源，包含适合不同 DPI 的多尺寸 ICO。[SVG 源文件](<src/FluidBar.App/Assets/fluidbar.svg>)与[图标维护说明](<src/FluidBar.App/Assets/README.md>)一并保留。
 - **更顺手的详情页**：滚动条支持拖动与点击定位；拖出窗口后仍可继续拖动，松手结束。鼠标滚轮平滑滚动、反向立即响应，触控板连续输入直接跟随；普通纵向滚轮在列表边界也不会误切页。
@@ -18,7 +27,7 @@
 - **更清晰的通知**：顶部通知将回车、换行等不可见分隔符合并为空格，避免“群名□发消息人”；详情和复制内容保留原始换行，冒号与 emoji 不受影响。
 - **长通知阅读优化**：复用相同正文的换行结果，缩小首次排版的测量范围，减少详情滚动中的重复排版。
 
-继续保留 4.3 的通知 / 剪贴板 / 文件暂存卡片、独立岛体缩放，以及更新缓存修复。5.0.0 沿用现有用户数据目录，升级不要求重置设置或插件。
+继续保留 4.3 的通知 / 剪贴板 / 文件暂存卡片、独立岛体缩放，以及更新缓存修复。5.1.0 沿用现有用户数据目录，升级不要求重置设置或插件。
 
 ## 实际界面
 
@@ -80,10 +89,12 @@
 
 ### 启动与更新
 
-1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v5.0.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-5.0.0-win-x64.zip`。
+1. 从 [GitHub Releases](https://github.com/Doulor/FluidBar/releases/tag/v5.1.0) 下载 `FluidBar.exe`，或下载并解压 `FluidBar-5.1.0-win-x64.zip`。
 2. 将程序放在打算长期保留的目录中运行；已有旧版时，先从系统托盘退出旧版。
 3. 点击小岛展开；通过设置按钮、托盘菜单或 `Ctrl + Alt + S` 打开设置。开机启动、语言和更新偏好均可在设置中调整。
-4. 可使用应用内更新，或退出后手动替换程序。构建版本与下载校验值见发行页附带的 `publish-5.0.0.json`；升级说明见 [发布说明](<docs/rewrite/RELEASE-5.0.0.md>)。
+4. 可使用应用内更新，或退出后手动替换程序。构建版本与下载校验值见发行页附带的 `publish-5.1.0.json`；升级说明见 [发布说明](<docs/rewrite/RELEASE-5.1.0.md>)。
+
+4.3 / 原 5.0 用户若在“重启并安装”后程序退出且未更新，请退出旧实例后手动覆盖到 5.1.0 一次。如果旧程序名为 `FluidBar (1).exe`，替换时可保留该文件名，避免原快捷方式仍指向旧程序；升级后支持继续使用改名路径。
 
 4.1 用户如果仍被提示“已是最新版”，可先退出重启再检查；仍检测不到时，从上方发行页手动覆盖升级一次，保留用户数据目录即可。
 
@@ -146,10 +157,10 @@ dotnet run --project tests/FluidBar.Soak -c Release
 使用与正式发布流程一致的 [发布脚本](<build/publish.ps1>)：
 
 ```powershell
-pwsh -File ./build/publish.ps1 -Version 5.0.0 -SelfContained
+pwsh -File ./build/publish.ps1 -Version 5.1.0 -SelfContained
 ```
 
-脚本执行第一方项目的编译警告门禁及完整解决方案回归，并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `5.0.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
+脚本执行第一方项目的编译警告门禁及完整解决方案回归，并生成单文件 win-x64 程序、ZIP 和 SHA-256 / 构建报告，分别位于 `build/publish/win-x64`、`build/artifacts` 和 `build/reports`。版本默认读取 `Directory.Build.props`，显式版本的基础版本必须与其一致；预发布使用如 `5.1.0-rc.1` 的后缀，不再用预览轮次替代主版本号。
 
 版本采用 `主版本.次版本.修订号`，兼容性与迁移要求会在发布说明中列出。测试轮次使用 `-preview.N` 或 `-rc.N`，正式版本发布后不覆盖原标签和资产。
 
@@ -179,7 +190,7 @@ docs/                         发布、设计、插件、隐私与截图文档
 
 ## 文档与贡献
 
-- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-5.0.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
+- **用户与发布**：[发布说明](<docs/rewrite/RELEASE-5.1.0.md>) · [变更记录](<CHANGELOG.md>) · [可选插件](<docs/plugin/optional-cards.md>)
 - **开发与维护**：[文档索引](<docs/rewrite/README.md>) · [当前状态](<docs/rewrite/STATUS.md>) · [项目方向与约束](<PROJECT-NOTES.md>) · [架构决策](<docs/rewrite/DECISIONS.md>)
 - **插件作者**：[快速开始](<docs/plugin/quickstart.md>) · [审核清单](<docs/plugin/review-checklist.md>) · [插件文档](<docs/plugin/>)
 - **视觉参考**：[浏览器交互原型](<docs/rewrite/prototype2/index.html>)使用示例数据，供交互参考，不等同于原生应用。旧版实现可在 `v1-final` 标签与 Git 历史中查阅。
